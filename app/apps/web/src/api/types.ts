@@ -126,6 +126,7 @@ export interface ItemView {
   dryRun: boolean;
   dataDir: string;
   budgets: BudgetState;
+  meId: string; // the signed-in Slack user, shown as "You"
 }
 
 export interface UsageRow {

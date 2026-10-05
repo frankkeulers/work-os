@@ -130,7 +130,7 @@ export function SnoozeMenu({ onPick, now }: { onPick: (iso: string) => void; now
   );
 }
 
-export function CorrectForm({ item, onDone, compact }: { item: ItemSummary; onDone: (labelCount: number, lane: string) => void; compact?: boolean }) {
+export function CorrectForm({ item, onDone, compact, inline }: { item: ItemSummary; onDone: (labelCount: number, lane: string) => void; compact?: boolean; inline?: boolean }) {
   const t = item.triage;
   const [attention, setAttention] = useState<Attention>(t?.attention ?? 'none');
   const [conf, setConf] = useState(!!t?.confluence);
@@ -150,7 +150,7 @@ export function CorrectForm({ item, onDone, compact }: { item: ItemSummary; onDo
   );
   const lane = attention === 'now' ? 'Now' : attention === 'today' ? 'Today' : conf || vault ? 'File' : 'Everything else';
   return (
-    <div className={cx('flex flex-col gap-3', compact ? 'w-[300px] p-2' : '')}>
+    <div className={cx(inline ? 'flex flex-wrap items-end gap-x-5 gap-y-3' : 'flex flex-col gap-3', compact && 'w-[300px] p-2')}>
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-ink-2">Attention</span>
         <Segmented<Attention>
@@ -171,7 +171,7 @@ export function CorrectForm({ item, onDone, compact }: { item: ItemSummary; onDo
           {toggle(vault, 'Vault', setVault)}
         </div>
       </div>
-      <div className="text-xs leading-relaxed text-muted">
+      <div className={cx('text-xs leading-relaxed text-muted', inline && 'flex-[1_1_200px] self-center')}>
         Moves to <strong className="text-ink">{lane}</strong> and adds one line to the labelled set.
       </div>
       <Button

@@ -140,7 +140,7 @@ function Journeys({ onStart }: { onStart: () => void }) {
   const groups = [...new Set(JOURNEYS.map((j) => j.group))];
   return (
     <div className="flex flex-col gap-4">
-      <p className="m-0 text-xs leading-relaxed text-muted">Each Start resets the demo data, sets up the scenario and opens the right page. Steps and what to watch for are in JOURNEYS.md.</p>
+      <p className="m-0 text-xs leading-relaxed text-muted">Each Start resets the demo data, sets up the scenario, opens the right page and closes this drawer (press ` to reopen). Steps and what to watch for are in JOURNEYS.md.</p>
       {groups.map((g) => (
         <div key={g} className="flex flex-col gap-1">
           <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">{g}</span>
@@ -152,6 +152,7 @@ function Journeys({ onStart }: { onStart: () => void }) {
                 size="sm"
                 variant="ghost"
                 className="text-accent"
+                aria-label={`Start ${j.id} ${j.title}`}
                 onClick={() => {
                   const to = j.start(mockControls);
                   navigate(to);
@@ -246,7 +247,7 @@ export function ScenarioDrawer() {
             />
           </div>
           <div className={cx('flex-1 overflow-y-auto px-4 py-4')}>
-            {tab === 'journeys' && <Journeys onStart={() => setTab('controls')} />}
+            {tab === 'journeys' && <Journeys onStart={() => setOpen(false)} />}
             {tab === 'controls' && <Controls />}
             {tab === 'events' && <EventLog />}
           </div>

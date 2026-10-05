@@ -518,6 +518,7 @@ export class MockServer implements WorkOsApi, MockControls {
       dryRun: this.s.settings.dryRun,
       dataDir: this.s.settings.dataDir,
       budgets,
+      meId: FRANK,
     };
   }
 
