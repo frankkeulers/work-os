@@ -51,7 +51,7 @@ export function buildState(preset: Preset = 'default'): MockState {
     checkedAt: '2026-10-05T07:02:00.000Z',
     labelCount: 200,
     correctionCount: 38,
-    source: { status: 'healthy', lastPollAt: '2026-10-05T08:42:00.000Z', nextPollAt: '2026-10-05T08:52:00.000Z', rateLimitedToday: 0, cursor: '1759653720.000100' },
+    source: { status: 'healthy', lastPollAt: '2026-10-05T08:42:00.000Z', nextPollAt: '2026-10-05T08:52:00.000Z', rateLimitedToday: 0, cursor: '1791189720.000100' },
     poll: { phase: 'idle' },
     pollsSkippedToday: 9,
     timeline: TIMELINE.map((t) => ({ at: addMins(clock, t.afterMins), thread: t.thread, reply: t.reply })),

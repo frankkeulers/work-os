@@ -544,7 +544,7 @@ function ActionPanel({ view, type, setType, onDirty }: { view: ItemView; type: A
         <SafetyChips d={draft} allowListed={allowListed} dryRun={view.dryRun} />
         {prev?.failureReason === 'conflict' && action.status === 'ready' && (
           <Banner tone="info" icon="info">
-            Re-drafted after a conflict: {view.results[prev.id] ?? prev.error}
+            <strong>Re-drafted after a conflict.</strong> {(view.results[prev.id] ?? prev.error ?? '').replace(/ Re-drafting instead of writing\.$/, '')} Review this new draft before approving.
           </Banner>
         )}
         {stale && (
