@@ -5,14 +5,14 @@ export default defineConfig({
   fullyParallel: true,
   reporter: [['list']],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: 'http://127.0.0.1:4391',
     viewport: { width: 1440, height: 1000 },
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } }],
   webServer: {
     command: 'npm run build && npm run preview',
-    url: 'http://127.0.0.1:4173',
+    url: 'http://127.0.0.1:4391',
     reuseExistingServer: true,
     timeout: 120_000,
   },

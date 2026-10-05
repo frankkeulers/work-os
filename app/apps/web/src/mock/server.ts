@@ -461,7 +461,7 @@ export class MockServer implements WorkOsApi, MockControls {
       .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
     return {
       items,
-      poll: this.s.poll,
+      poll: { ...this.s.poll, lastPollAt: this.s.source.lastPollAt, nextPollAt: this.s.source.nextPollAt },
       source: this.sourceHealth(),
       budgets,
       dryRun: this.s.settings.dryRun,
