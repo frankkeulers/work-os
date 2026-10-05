@@ -1,0 +1,1191 @@
+import {
+  Rules,
+  Settings as SettingsSchema,
+  effectiveTriage,
+  laneFor,
+  type Action,
+  type ActionType,
+  type EvalReport,
+  type Rule,
+  type Settings,
+  type UsagePurpose,
+  type UsageRecord,
+  type WorkEvent,
+} from '@work-os/shared';
+import { ApiError, type FieldIssue } from '../api/errors';
+import type {
+  ActionSummary,
+  BudgetState,
+  CorrectionInput,
+  Criterion,
+  DraftProgress,
+  HealthView,
+  InboxView,
+  ItemSummary,
+  ItemView,
+  Notice,
+  SettingsView,
+  StartupCheck,
+  UsageRow,
+  UsageView,
+  WorkOsApi,
+} from '../api/types';
+import { inTimeRange, isWorkHours, londonParts } from '../lib/time';
+import { MIN, addMins, buildDecision, makeEvent, newRec, slackTs } from './build';
+import type { MockControls, PollOutcome, StateFlag } from './controls';
+import { buildDraft } from './drafts';
+import { costOf } from './pricing';
+import { firstMatchingRule } from './rules';
+import { FRANK } from './seed/people';
+import { SEED_CLOCK, STATE_VERSION, buildState, type Preset } from './seed';
+import { BATCH_TWELVE, REPLIES, VIP_DM } from './seed/threads';
+import type { DraftOutcome, ItemRec, MockState, ReplySeed, ThreadSeed } from './types';
+
+const STORAGE_KEY = 'workos.mock';
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const QUERY_MS = 30;
+const COMMAND_MS = 160;
+const STAGE_MS = 1500;
+
+const DRAFT_STAGES: Record<ActionType, string[]> = {
+  vault_note: ['Reading the thread', 'Finding related notes in the vault', 'Drafting the note'],
+  confluence_entry: ['Reading the thread', 'Finding the page and section', 'Drafting the entry', 'People check (Haiku)'],
+};
+
+const ACTIVE: Action['status'][] = ['drafting', 'ready', 'approved', 'executing'];
+
+export class MockServer implements WorkOsApi, MockControls {
+  private s: MockState;
+  private listeners = new Set<(n: Notice) => void>();
+  private clockAnchor = 0; // mock epoch ms at realAnchor
+  private realAnchor = 0;
+  private progress: Record<string, DraftProgress> = {};
+  private draftTimers = new Map<string, ReturnType<typeof setTimeout>[]>();
+  private saveTimer?: ReturnType<typeof setTimeout>;
+  private tickTimer?: ReturnType<typeof setInterval>;
+  private polling = false;
+
+  constructor() {
+    this.s = this.load() ?? buildState('default');
+    this.anchorClock(this.s.clock);
+    this.resumeAfterLoad();
+    this.tickTimer = setInterval(() => this.tick(), 2000);
+  }
+
+  // ---------------------------------------------------------------- clock & persistence
+
+  now(): Date {
+    return new Date(this.clockAnchor + (Date.now() - this.realAnchor));
+  }
+  private iso() {
+    return this.now().toISOString();
+  }
+  private anchorClock(iso: string) {
+    this.clockAnchor = Date.parse(iso);
+    this.realAnchor = Date.now();
+  }
+
+  private load(): MockState | undefined {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return undefined;
+      const parsed = JSON.parse(raw) as MockState;
+      return parsed.schemaVersion === STATE_VERSION ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private save() {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = setTimeout(() => {
+      this.s.clock = this.iso();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.s));
+      } catch {
+        /* storage full or blocked: the session still works in memory */
+      }
+    }, 150);
+  }
+
+  private resumeAfterLoad() {
+    this.s.poll.phase = 'idle';
+    this.s.evalRunning = false;
+    for (const a of Object.values(this.s.actions)) {
+      if (a.status === 'drafting') this.startDrafting(a, 'normal');
+      if (a.status === 'approved' || a.status === 'executing') void this.execute(a.id, 0);
+    }
+    if (this.s.flags.connection === 'reconnecting') this.scheduleReconnect();
+  }
+
+  // ---------------------------------------------------------------- notices
+
+  subscribe(onNotice: (n: Notice) => void) {
+    this.listeners.add(onNotice);
+    return () => {
+      this.listeners.delete(onNotice);
+    };
+  }
+  private emit(...notices: Notice[]) {
+    this.save();
+    for (const n of notices) for (const l of this.listeners) l(n);
+  }
+  private emitAll() {
+    this.emit({ topic: 'health' }, { topic: 'inbox' }, { topic: 'usage' }, { topic: 'settings' }, { topic: 'evals' }, { topic: 'clock' });
+    for (const id of Object.keys(this.s.items)) this.emit({ topic: 'item', id });
+  }
+  private event(type: WorkEvent['type'], extra: Parameters<typeof makeEvent>[3] = {}) {
+    this.s.seq += 1;
+    this.s.events.push(makeEvent(this.s.seq, type, this.iso(), extra));
+    if (this.s.events.length > 2000) this.s.events.splice(0, this.s.events.length - 2000);
+  }
+
+  private async gate(ms: number) {
+    await sleep(ms);
+    if (this.s.flags.connection !== 'up') throw new ApiError('network', 'Work OS server is not reachable on 127.0.0.1.');
+  }
+
+  private rec(id: string): ItemRec {
+    const r = this.s.items[id];
+    if (!r) throw new ApiError('not_found', 'Item not found. It may have been removed by retention.');
+    return r;
+  }
+
+  // ---------------------------------------------------------------- scheduler
+
+  private intervalMins(at = this.now()) {
+    const sch = this.s.settings.schedule;
+    return isWorkHours(at, sch.workHours) ? sch.intervalWorkMinutes : sch.intervalOffMinutes;
+  }
+
+  private tick() {
+    if (this.s.flags.connection !== 'up' || this.s.flags.startupFailure) return;
+    const now = this.iso();
+    let changed = false;
+    for (const rec of Object.values(this.s.items)) {
+      if (rec.status === 'snoozed' && rec.snoozedUntil && rec.snoozedUntil <= now) {
+        rec.status = 'open';
+        rec.snoozedUntil = undefined;
+        rec.backFromSnooze = true;
+        changed = true;
+        this.emit({ topic: 'item', id: rec.item.id });
+      }
+    }
+    if (changed) this.emit({ topic: 'inbox' });
+
+    const src = this.s.source;
+    if (this.s.flags.firstRun || src.status === 'auth_failed' || this.polling) return;
+    if (src.status === 'backoff') {
+      if (src.retryAt && src.retryAt > now) return;
+      src.status = 'healthy';
+      src.retryAt = undefined;
+      this.emit({ topic: 'inbox' }, { topic: 'usage' });
+    }
+    const interval = this.intervalMins();
+    const last = src.lastPollAt ? Date.parse(src.lastPollAt) : 0;
+    // A clock jump of more than twice the interval means the laptop slept (FR-2.7).
+    const woke = last > 0 && Date.parse(now) - last > 2 * interval * MIN;
+    if (woke) void this.runPoll('wake');
+    else if (!src.nextPollAt || src.nextPollAt <= now) void this.runPoll('scheduled');
+  }
+
+  // ---------------------------------------------------------------- polling & triage
+
+  private async runPoll(reason: 'manual' | 'scheduled' | 'wake' | 'first', inject: { threads?: ThreadSeed[]; replies?: ReplySeed[] } = {}) {
+    if (this.polling) return;
+    this.polling = true;
+    try {
+      this.s.poll = { ...this.s.poll, phase: 'polling', reason };
+      this.emit({ topic: 'inbox' });
+      await sleep(reason === 'wake' ? 1600 : 1100);
+      const now = this.iso();
+      let fetched = 0;
+
+      if (this.s.flags.firstRun) {
+        for (const seed of this.s.firstRunSeeds) {
+          this.ingestThread(seed, '', true);
+          fetched += seed.messages.length;
+        }
+        this.s.firstRunSeeds = [];
+        this.s.flags.firstRun = false;
+      }
+      const due = this.s.timeline.filter((t) => t.at <= now);
+      this.s.timeline = this.s.timeline.filter((t) => t.at > now);
+      for (const t of due) {
+        if (t.thread) fetched += this.ingestThread(t.thread, `-${this.s.seq}`);
+        if (t.reply) fetched += this.ingestReply(t.reply);
+      }
+      for (const t of inject.threads ?? []) fetched += this.ingestThread(t, `-${this.s.seq}`);
+      for (const r of inject.replies ?? []) fetched += this.ingestReply(r);
+
+      const interval = this.intervalMins();
+      this.s.source = { ...this.s.source, status: 'healthy', lastPollAt: now, nextPollAt: addMins(now, interval), cursor: slackTs(now) };
+      this.event('source.polled', { data: { fetched, reason } });
+
+      const quiet = this.s.settings.triage.quietMinutes;
+      const eligible = Object.values(this.s.items).filter(
+        (r) => r.triageState === 'pending' && Date.parse(now) - Date.parse(r.item.lastActivityAt) >= quiet * MIN,
+      );
+      let triaged = 0;
+      let calls = 0;
+      if (eligible.length && !this.budgets().triage.hit) {
+        this.s.poll = { ...this.s.poll, phase: 'triaging', triagingCount: eligible.length };
+        this.emit({ topic: 'inbox' });
+        await sleep(1400);
+        const res = this.triageBatch(eligible);
+        triaged = res.triaged;
+        calls = res.calls;
+      } else if (!eligible.length) {
+        this.s.pollsSkippedToday += 1;
+      }
+      this.s.poll = {
+        phase: 'idle',
+        lastPollAt: now,
+        nextPollAt: this.s.source.nextPollAt,
+        lastResult: { at: now, fetched, triaged, calls, reason },
+      };
+      this.emit({ topic: 'inbox' }, { topic: 'usage' });
+    } finally {
+      this.polling = false;
+    }
+  }
+
+  /** Stores a new thread; fixed-outcome rules decide at once and bypass the quiet window (§5.3). */
+  private ingestThread(seed: ThreadSeed, uniq: string, keepOriginalTimes = false): number {
+    const rec = newRec(seed, this.iso(), uniq);
+    if (!keepOriginalTimes) rec.arrivedAt = this.iso();
+    const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings);
+    if (rule?.outcome.type === 'drop') {
+      this.s.ruleHits[rule.id] = (this.s.ruleHits[rule.id] ?? 0) + 1;
+      return seed.messages.length; // dropped at ingest, never stored (FR-2.10)
+    }
+    this.s.items[rec.item.id] = rec;
+    this.event('item.upserted', { itemId: rec.item.id, data: { revision: rec.item.revision } });
+    if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
+      this.s.ruleHits[rule.id] = (this.s.ruleHits[rule.id] ?? 0) + 1;
+      this.applyDecision(rec, buildDecision(rec, this.iso(), { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
+    }
+    this.emit({ topic: 'item', id: rec.item.id });
+    return seed.messages.length;
+  }
+
+  private ingestReply(reply: ReplySeed): number {
+    const rec = Object.values(this.s.items).find((r) => r.key === reply.targetKey);
+    if (!rec) return 0;
+    const now = this.iso();
+    const item = rec.item;
+    item.messages.push({ id: `${rec.key}-r${item.revision + 1}`, authorId: reply.by, ts: now, text: reply.text });
+    item.messageCount += 1;
+    item.revision += 1;
+    item.lastActivityAt = now;
+    if (!item.participants.some((p) => p.id === reply.by)) {
+      item.participants.push({ id: reply.by, name: this.personName(reply.by) });
+    }
+    if (reply.decision) rec.script = { ...rec.script, ...reply.decision };
+    this.event('item.upserted', { itemId: item.id, data: { revision: item.revision } });
+    // Re-triage only when the new messages are not from Frank alone (§5.3).
+    if (reply.by !== FRANK) {
+      rec.triageState = 'pending';
+      rec.newReplies = true;
+      const rule = firstMatchingRule(item, this.s.rules, this.s.settings);
+      if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
+        this.applyDecision(rec, buildDecision(rec, now, { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
+      }
+    }
+    this.emit({ topic: 'item', id: item.id });
+    return 1;
+  }
+
+  private personName(id: string) {
+    for (const r of Object.values(this.s.items)) {
+      const p = r.item.participants.find((x) => x.id === id);
+      if (p) return p.name;
+    }
+    return id;
+  }
+
+  /** One batched Haiku call per maxThreadsPerCall threads (CL-4, §5.3). */
+  private triageBatch(recs: ItemRec[]) {
+    const max = this.s.settings.triage.maxThreadsPerCall;
+    let triaged = 0;
+    let calls = 0;
+    for (let i = 0; i < recs.length; i += max) {
+      const chunk = recs.slice(i, i + max);
+      const at = this.iso();
+      const batchId = `batch-${at}`;
+      calls += 1;
+      this.recordUsage('triage', this.s.settings.models.triage, 2200 + chunk.length * 900, 120 + chunk.length * 95, chunk.map((r) => r.item.id), 'triage v3');
+      for (const rec of chunk) {
+        rec.batch = { at, threads: recs.length, calls: Math.ceil(recs.length / max) };
+        // CL-7: retry once, then mark the item triage_failed.
+        if (rec.failTriage > 0) {
+          rec.failTriage -= Math.min(rec.failTriage, 2);
+          rec.failCount += 2;
+          rec.triageState = 'failed';
+          this.event('triage.failed', { itemId: rec.item.id, data: { attempts: 2, reason: 'schema validation failed' } });
+          this.emit({ topic: 'item', id: rec.item.id });
+          continue;
+        }
+        const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings);
+        this.applyDecision(
+          rec,
+          buildDecision(rec, at, {
+            kind: 'model',
+            batchId,
+            ruleId: rule?.id,
+            min: rule?.outcome.type === 'model' ? rule.outcome.min : undefined,
+            model: this.s.settings.models.triage,
+          }),
+        );
+        if (rule) this.s.ruleHits[rule.id] = (this.s.ruleHits[rule.id] ?? 0) + 1;
+        triaged += 1;
+      }
+    }
+    return { triaged, calls };
+  }
+
+  private applyDecision(rec: ItemRec, d: NonNullable<ItemRec['decision']>) {
+    if (rec.correction && d.itemRevision > rec.correction.itemRevision) rec.correctedFrom = rec.correction.attention;
+    rec.decision = d;
+    rec.triageState = 'triaged';
+    // Defaults for revision collisions; see JOURNEYS.md open questions 1–2.
+    if (rec.status === 'done' && rec.newReplies) {
+      rec.status = 'open';
+      rec.doneAt = undefined;
+    }
+    if (rec.status === 'snoozed' && d.attention === 'now') {
+      rec.status = 'open';
+      rec.snoozedUntil = undefined;
+      rec.backFromSnooze = true;
+    }
+    this.event('triage.decided', { itemId: rec.item.id, data: { attention: d.attention, by: d.decidedBy, ruleId: d.ruleId ?? null, revision: d.itemRevision } });
+    const eff = effectiveTriage(rec.decision, rec.correction);
+    if (eff?.attention === 'now' && !rec.notified) {
+      rec.notified = true; // at most one notification per item (FR-11.2)
+      const n = this.s.settings.notifications;
+      if (n.enabled && !inTimeRange(this.now(), n.quietHours)) {
+        this.emit({ topic: 'notification', itemId: rec.item.id, title: rec.item.title, summary: d.summary });
+      }
+    }
+    this.emit({ topic: 'item', id: rec.item.id });
+  }
+
+  private recordUsage(purpose: UsagePurpose, model: UsageRecord['model'], input: number, output: number, itemIds: string[], promptVersion: string, durationMs = 2600) {
+    const cache = purpose === 'triage' ? 1800 : 3200;
+    this.s.usage.push({
+      id: `u-${this.s.seq}-${this.s.usage.length}`,
+      at: this.iso(),
+      purpose,
+      model,
+      inputTokens: input,
+      outputTokens: output,
+      cacheTokens: cache,
+      costEquivalent: costOf(model, input, output, cache),
+      durationMs,
+      itemIds,
+      promptVersion,
+    });
+  }
+
+  // ---------------------------------------------------------------- views
+
+  private budgets(): BudgetState {
+    const today = londonParts(this.now()).dateKey;
+    const rows = this.s.usage.filter((u) => londonParts(u.at).dateKey === today);
+    const b = this.s.settings.budgets;
+    const triage = rows.filter((u) => u.purpose === 'triage').length;
+    const drafts = rows.filter((u) => u.purpose === 'draft_vault' || u.purpose === 'draft_confluence').length;
+    const cost = rows.reduce((sum, u) => sum + u.costEquivalent, 0);
+    const baseline = this.s.settings.baselineCostPerDay;
+    return {
+      triage: { used: triage, limit: b.triageCallsPerDay, hit: this.s.flags.forceTriageBudget || triage >= b.triageCallsPerDay },
+      drafts: { used: drafts, limit: b.draftsPerDay, hit: this.s.flags.forceDraftBudget || drafts >= b.draftsPerDay },
+      cost: { used: cost, limit: b.costEquivalentPerDay, hit: cost >= b.costEquivalentPerDay },
+      baseline,
+      pctOfBaseline: baseline ? Math.round((cost / baseline) * 100) : null,
+    };
+  }
+
+  private actionsFor(itemId: string) {
+    return Object.values(this.s.actions)
+      .filter((a) => a.itemId === itemId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  private summaryOf(rec: ItemRec, budgets: BudgetState): ItemSummary {
+    const d = rec.decision;
+    const actions: ItemSummary['actions'] = {};
+    for (const a of this.actionsFor(rec.item.id)) {
+      if (actions[a.type] || a.status === 'discarded') continue;
+      const s: ActionSummary = { id: a.id, type: a.type, status: a.status, failureReason: a.failureReason, stale: a.status === 'ready' && a.itemRevision < rec.item.revision };
+      actions[a.type] = s;
+    }
+    const quietUntil = rec.triageState === 'pending' ? addMins(rec.item.lastActivityAt, this.s.settings.triage.quietMinutes) : undefined;
+    const first = rec.item.messages[0]?.text ?? '';
+    return {
+      id: rec.item.id,
+      kind: rec.item.kind,
+      title: rec.item.title,
+      permalink: rec.item.permalink,
+      lastActivityAt: rec.item.lastActivityAt,
+      revision: rec.item.revision,
+      lane: laneFor(rec),
+      status: rec.status,
+      triageState: rec.triageState,
+      summary: d?.summary ?? (first.length > 110 ? `${first.slice(0, 107)}…` : first),
+      reason: d?.reason,
+      triage: effectiveTriage(d, rec.correction),
+      correctedFrom: rec.correctedFrom,
+      containsPeopleObservations: d?.containsPeopleObservations ?? false,
+      targetHints: { confluence: d?.confluence.targetHint, vault: d?.vault.targetHint },
+      actions,
+      newReplies: rec.newReplies,
+      backFromSnooze: rec.backFromSnooze,
+      modelPaused: rec.triageState === 'pending' && budgets.triage.hit && !!quietUntil && quietUntil <= this.iso(),
+      snoozedUntil: rec.snoozedUntil,
+      quietUntil,
+      doneAt: rec.doneAt,
+    };
+  }
+
+  async getHealth(): Promise<HealthView> {
+    await sleep(QUERY_MS);
+    return { connection: this.s.flags.connection, startupFailure: this.s.flags.startupFailure };
+  }
+
+  async getInbox(): Promise<InboxView> {
+    await this.gate(QUERY_MS);
+    const budgets = this.budgets();
+    const items = Object.values(this.s.items)
+      .map((r) => this.summaryOf(r, budgets))
+      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+    return {
+      items,
+      poll: this.s.poll,
+      source: this.sourceHealth(),
+      budgets,
+      dryRun: this.s.settings.dryRun,
+      notices: { rebuilt: this.s.flags.rebuiltNotice, fileVaultOff: this.s.flags.fileVaultOff },
+      labelCount: this.s.labelCount,
+      firstRun: this.s.flags.firstRun,
+      workHours: isWorkHours(this.now(), this.s.settings.schedule.workHours),
+    };
+  }
+
+  private sourceHealth() {
+    const src = this.s.source;
+    const messages: Record<string, string | undefined> = {
+      backoff: 'Slack returned 429. Waiting for Retry-After before the next poll.',
+      auth_failed: 'Slack rejected the user token (invalid_auth). Re-install the app and update the Keychain entry.',
+      never: 'Not polled yet.',
+    };
+    return {
+      id: 'slack' as const,
+      status: src.status,
+      mode: this.s.settings.slack.fetchMode,
+      lastPollAt: src.lastPollAt,
+      nextPollAt: src.nextPollAt,
+      retryAt: src.retryAt,
+      rateLimitedToday: src.rateLimitedToday,
+      cursor: src.cursor,
+      message: messages[src.status],
+    };
+  }
+
+  async getItem(id: string): Promise<ItemView> {
+    await this.gate(QUERY_MS);
+    const rec = this.rec(id);
+    const budgets = this.budgets();
+    const summary = this.summaryOf(rec, budgets);
+    // Opening an item counts as seeing it.
+    if (rec.newReplies && rec.triageState === 'triaged') rec.newReplies = false;
+    rec.backFromSnooze = false;
+    const actions = this.actionsFor(id);
+    const drafts = Object.fromEntries(actions.filter((a) => this.s.drafts[a.id]).map((a) => [a.id, this.s.drafts[a.id]]));
+    const progress = Object.fromEntries(actions.filter((a) => this.progress[a.id]).map((a) => [a.id, this.progress[a.id]]));
+    const results = Object.fromEntries(actions.filter((a) => this.s.results[a.id]).map((a) => [a.id, this.s.results[a.id]]));
+    return {
+      summary,
+      item: structuredClone(rec.item),
+      decision: rec.decision,
+      correction: rec.correction,
+      batch: rec.batch,
+      actions: structuredClone(actions),
+      drafts: structuredClone(drafts),
+      progress: { ...progress },
+      results,
+      allowListedPageIds: this.s.settings.confluence.pages.map((p) => p.id),
+      dryRun: this.s.settings.dryRun,
+      dataDir: this.s.settings.dataDir,
+      budgets,
+    };
+  }
+
+  async getUsage(): Promise<UsageView> {
+    await this.gate(QUERY_MS);
+    const now = this.now();
+    const todayKey = londonParts(now).dateKey;
+    const today = this.s.usage.filter((u) => londonParts(u.at).dateKey === todayKey);
+    const budgets = this.budgets();
+    const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence';
+
+    const days: UsageView['days'] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 3600_000);
+      const key = londonParts(d).dateKey;
+      const rows = this.s.usage.filter((u) => londonParts(u.at).dateKey === key);
+      days.push({
+        date: key,
+        label: londonParts(d).weekday,
+        triage: rows.filter((u) => !isDraft(u.purpose)).reduce((s, u) => s + u.costEquivalent, 0),
+        drafts: rows.filter((u) => isDraft(u.purpose)).reduce((s, u) => s + u.costEquivalent, 0),
+      });
+    }
+
+    const group = new Map<string, UsageRow>();
+    for (const u of today) {
+      const k = `${u.purpose}|${u.model}`;
+      const row = group.get(k) ?? { purpose: u.purpose, model: u.model, calls: 0, tokens: 0, costEquivalent: 0 };
+      row.calls += 1;
+      row.tokens += u.inputTokens + u.outputTokens + u.cacheTokens;
+      row.costEquivalent += u.costEquivalent;
+      group.set(k, row);
+    }
+
+    const last = this.s.evals[this.s.evals.length - 1];
+    const tok = today.reduce(
+      (t, u) => ({ input: t.input + u.inputTokens, output: t.output + u.outputTokens, cache: t.cache + u.cacheTokens }),
+      { input: 0, output: 0, cache: 0 },
+    );
+    return {
+      today: {
+        costEquivalent: budgets.cost.used,
+        pctOfBaseline: budgets.pctOfBaseline,
+        triageCalls: budgets.triage.used,
+        threadsTriaged: today.filter((u) => u.purpose === 'triage').reduce((s, u) => s + Math.max(1, Math.round((u.inputTokens - 2200) / 900)), 0),
+        pollsSkipped: this.s.pollsSkippedToday,
+        draftsVault: today.filter((u) => u.purpose === 'draft_vault').length,
+        draftsConfluence: today.filter((u) => u.purpose === 'draft_confluence').length,
+        tokens: { ...tok, total: tok.input + tok.output + tok.cache },
+      },
+      days,
+      budgets,
+      byPurpose: [...group.values()].sort((a, b) => b.costEquivalent - a.costEquivalent),
+      source: this.sourceHealth(),
+      criteria: this.criteria(last, budgets),
+      lastEval: last,
+      evalRunning: this.s.evalRunning,
+    };
+  }
+
+  private criteria(last: EvalReport | undefined, budgets: BudgetState): Criterion[] {
+    const pct = (v: number) => `${Math.round(v * 100)}%`;
+    const c = last?.confusion;
+    const precision = c ? (c[0][0] + c[1][1]) / (c[0][0] + c[1][0] + c[2][0] + c[0][1] + c[1][1] + c[2][1]) : undefined;
+    const recall = c ? c[0][0] / (c[0][0] + c[0][1] + c[0][2]) : undefined;
+    const written = Object.values(this.s.actions).filter((a) => a.type === 'confluence_entry' && a.status === 'done').length;
+    return [
+      precision === undefined
+        ? { id: 'S1', name: 'Precision, now + today', value: '—', target: '≥ 80%', status: 'pending', statusLabel: 'No eval yet' }
+        : { id: 'S1', name: 'Precision, now + today', value: pct(precision), target: '≥ 80%', status: precision >= 0.8 ? 'on_track' : 'at_risk', statusLabel: precision >= 0.8 ? 'On track' : 'At risk' },
+      recall === undefined
+        ? { id: 'S2', name: 'Recall, now', value: '—', target: '≥ 90%', status: 'pending', statusLabel: 'No eval yet' }
+        : { id: 'S2', name: 'Recall, now', value: pct(recall), target: '≥ 90%', status: recall >= 0.9 ? 'on_track' : 'at_risk', statusLabel: recall >= 0.9 ? 'On track' : 'At risk' },
+      budgets.pctOfBaseline === null
+        ? { id: 'S3', name: 'Daily usage vs baseline', value: '—', target: '≤ 100%', status: 'pending', statusLabel: 'Baseline not measured' }
+        : {
+            id: 'S3',
+            name: 'Daily usage vs baseline',
+            value: `${budgets.pctOfBaseline}%`,
+            target: '≤ 100%',
+            status: budgets.pctOfBaseline <= 100 ? 'on_track' : 'at_risk',
+            statusLabel: budgets.pctOfBaseline <= 100 ? 'On track' : 'Over baseline',
+          },
+      { id: 'S4', name: 'Dashboard opened', value: '4 / 5', target: '≥ 4 of 5 days', status: 'on_track', statusLabel: 'On track' },
+      { id: 'S5', name: 'Writes without approval', value: '0', target: '0', status: 'met', statusLabel: 'Met' },
+      { id: 'S6', name: 'People observations in Confluence', value: '0', target: '0', status: 'met', statusLabel: `Met · ${written} entries checked` },
+      { id: 'S7', name: 'Slack digest task', value: 'Enabled', target: 'Disabled', status: 'pending', statusLabel: 'Parallel run 2/3' },
+    ];
+  }
+
+  async getEvalReports(): Promise<EvalReport[]> {
+    await this.gate(QUERY_MS);
+    return [...this.s.evals].reverse();
+  }
+
+  async getSettings(): Promise<SettingsView> {
+    await this.gate(QUERY_MS);
+    const f = this.s.flags;
+    const checks: StartupCheck[] = [
+      f.fileVaultOff
+        ? { id: 'filevault', label: 'FileVault on', status: 'warn', note: 'off: local files hold company messages' }
+        : { id: 'filevault', label: 'FileVault on', status: 'ok', note: 'ok' },
+      f.startupFailure === 'api_key'
+        ? { id: 'api_key', label: 'ANTHROPIC_API_KEY not set', status: 'fail', note: 'set in environment' }
+        : { id: 'api_key', label: 'ANTHROPIC_API_KEY not set', status: 'ok', note: 'ok' },
+      f.startupFailure === 'slack_token' || this.s.source.status === 'auth_failed'
+        ? { id: 'slack_token', label: 'Slack token in Keychain', status: 'fail', note: f.startupFailure === 'slack_token' ? 'missing' : 'rejected by Slack' }
+        : { id: 'slack_token', label: 'Slack token in Keychain', status: 'ok', note: 'ok' },
+      f.startupFailure === 'claude_login'
+        ? { id: 'claude_login', label: 'Claude login works', status: 'fail', note: 'not logged in' }
+        : { id: 'claude_login', label: 'Claude login works', status: 'ok', note: 'haiku · 1 call' },
+    ];
+    return {
+      settings: structuredClone(this.s.settings),
+      rules: structuredClone(this.s.rules),
+      ruleHits: { ...this.s.ruleHits },
+      savedAt: this.s.savedAt,
+      checks,
+      checkedAt: this.s.checkedAt,
+      labelCount: this.s.labelCount,
+      correctionCount: this.s.correctionCount,
+      vaultConventionsLoaded: true,
+    };
+  }
+
+  // ---------------------------------------------------------------- item commands
+
+  async pollNow() {
+    await this.gate(COMMAND_MS);
+    const src = this.s.source;
+    if (src.status === 'auth_failed') {
+      this.event('source.failed', { data: { error: 'invalid_auth' } });
+      this.emit({ topic: 'inbox' });
+      throw new ApiError('forbidden', 'Slack rejected the token. Fix it in the Keychain, then poll again.');
+    }
+    if (src.status === 'backoff' && src.retryAt && src.retryAt > this.iso()) {
+      throw new ApiError('conflict', 'Slack is rate-limiting. The next poll runs after Retry-After.');
+    }
+    if (this.polling) return;
+    void this.runPoll(this.s.flags.firstRun ? 'first' : 'manual');
+  }
+
+  async markDone(itemId: string) {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(itemId);
+    rec.status = 'done';
+    rec.doneAt = this.iso();
+    rec.snoozedUntil = undefined;
+    rec.newReplies = false;
+    rec.backFromSnooze = false;
+    this.event('item.done', { itemId });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+  }
+
+  async reopen(itemId: string) {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(itemId);
+    rec.status = 'open';
+    rec.doneAt = undefined;
+    rec.snoozedUntil = undefined;
+    this.event('item.reopened', { itemId });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+  }
+
+  async snooze(itemId: string, untilIso: string) {
+    await this.gate(COMMAND_MS);
+    if (untilIso <= this.iso()) throw new ApiError('validation', 'Pick a time in the future.', [{ path: 'until', message: 'Pick a time in the future' }]);
+    const rec = this.rec(itemId);
+    rec.status = 'snoozed';
+    rec.snoozedUntil = untilIso;
+    rec.backFromSnooze = false;
+    this.event('item.snoozed', { itemId, data: { until: untilIso } });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+  }
+
+  async correctTriage(itemId: string, input: CorrectionInput) {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(itemId);
+    rec.correction = { itemId, itemRevision: rec.item.revision, ...input, correctedAt: this.iso() };
+    rec.correctedFrom = undefined;
+    if (rec.triageState === 'failed') rec.triageState = 'triaged';
+    this.s.labelCount += 1;
+    this.s.correctionCount += 1;
+    this.event('triage.corrected', { itemId, data: { attention: input.attention, confluence: input.confluence, vault: input.vault, revision: rec.item.revision } });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId }, { topic: 'settings' });
+    return { labelCount: this.s.labelCount };
+  }
+
+  async retryTriage(itemId: string) {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(itemId);
+    if (this.budgets().triage.hit) throw new ApiError('budget', 'Triage budget reached for today. Rules still run; model triage resumes tomorrow.');
+    rec.triageState = 'pending';
+    rec.failTriage = 0;
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+    await sleep(1200);
+    this.triageBatch([rec]);
+    this.emit({ topic: 'inbox' }, { topic: 'usage' }, { topic: 'item', id: itemId });
+  }
+
+  // ---------------------------------------------------------------- drafts & actions
+
+  private takeOutcome(applies: (o: DraftOutcome) => boolean): DraftOutcome {
+    const o = this.s.nextDraftOutcome;
+    if (o !== 'normal' && applies(o)) {
+      this.s.nextDraftOutcome = 'normal';
+      return o;
+    }
+    return 'normal';
+  }
+
+  async requestDraft(itemId: string, type: ActionType): Promise<Action> {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(itemId);
+    const existing = this.actionsFor(itemId).find((a) => a.type === type && ACTIVE.includes(a.status));
+    if (existing) return structuredClone(existing);
+    if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
+    if (type === 'confluence_entry' && rec.decision?.containsPeopleObservations) {
+      throw new ApiError('forbidden', 'This thread contains observations about people, so it can only go to the vault (FR-10.1).');
+    }
+    const outcome = this.takeOutcome((o) => o === 'model_error' || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list')));
+    return structuredClone(this.createAction(rec, type, outcome));
+  }
+
+  private createAction(rec: ItemRec, type: ActionType, outcome: DraftOutcome, supersedes?: string): Action {
+    const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : 'c'}${this.s.seq + 1}`;
+    const now = this.iso();
+    const action: Action = {
+      id,
+      itemId: rec.item.id,
+      itemRevision: rec.item.revision,
+      type,
+      status: 'drafting',
+      target: {},
+      draftRef: `drafts/${id}.json`,
+      supersedes,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.s.actions[id] = action;
+    this.event('action.requested', { itemId: rec.item.id, actionId: id, data: { type } });
+    this.startDrafting(action, outcome);
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: rec.item.id });
+    return action;
+  }
+
+  private startDrafting(action: Action, outcome: DraftOutcome) {
+    const stages = DRAFT_STAGES[action.type];
+    this.progress[action.id] = { stages, stage: 0, startedAt: Date.now() };
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    // People check fails on its own stage, so the failure lands where it happens.
+    const lastStage = outcome === 'people_check' ? stages.length - 1 : stages.length;
+    for (let i = 1; i < stages.length; i++) {
+      timers.push(
+        setTimeout(() => {
+          const p = this.progress[action.id];
+          if (!p) return;
+          this.progress[action.id] = { ...p, stage: i };
+          this.emit({ topic: 'item', id: action.itemId });
+        }, i * STAGE_MS),
+      );
+    }
+    timers.push(setTimeout(() => this.finishDraft(action.id, outcome), lastStage * STAGE_MS + (outcome === 'people_check' ? 900 : 400)));
+    this.draftTimers.set(action.id, timers);
+  }
+
+  private clearDraftTimers(actionId: string) {
+    for (const t of this.draftTimers.get(actionId) ?? []) clearTimeout(t);
+    this.draftTimers.delete(actionId);
+    delete this.progress[actionId];
+  }
+
+  private finishDraft(actionId: string, outcome: DraftOutcome) {
+    const action = this.s.actions[actionId];
+    this.clearDraftTimers(actionId);
+    if (!action || action.status !== 'drafting') return;
+    const rec = this.s.items[action.itemId];
+    if (!rec) return;
+    const now = this.iso();
+    const model = action.type === 'vault_note' ? this.s.settings.models.draftVault : this.s.settings.models.draftConfluence;
+    const purpose: UsagePurpose = action.type === 'vault_note' ? 'draft_vault' : 'draft_confluence';
+    action.updatedAt = now;
+
+    if (outcome === 'model_error') {
+      this.recordUsage(purpose, model, 21000, 900, [rec.item.id], 'draft v2', 44000);
+      action.status = 'failed';
+      action.failureReason = 'model_error';
+      action.error = 'The draft did not match the expected format twice, so it was dropped.';
+      this.s.results[actionId] = action.error;
+      this.event('action.failed', { itemId: rec.item.id, actionId, data: { reason: 'model_error' } });
+    } else {
+      const attempt = this.actionsFor(rec.item.id).filter((a) => a.type === action.type).length;
+      const draft = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
+      this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
+      if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-4.5', 2100, 60, [rec.item.id], 'people-check v1', 1900);
+      if (outcome === 'people_check') {
+        action.status = 'failed';
+        action.failureReason = 'people_check';
+        action.error = 'The people check found observations about named people in the draft. Nothing will be written to Confluence.';
+        this.s.results[actionId] = action.error;
+        this.event('action.failed', { itemId: rec.item.id, actionId, data: { reason: 'people_check' } });
+      } else {
+        this.s.drafts[actionId] = draft;
+        action.target = draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path };
+        action.status = 'ready';
+        this.event('action.drafted', { itemId: rec.item.id, actionId, data: { type: action.type, tokens: draft.tokens } });
+      }
+    }
+    this.emit({ topic: 'item', id: rec.item.id }, { topic: 'inbox' }, { topic: 'usage' });
+    if (action.status === 'ready') {
+      this.emit({ topic: 'draft_ready', itemId: rec.item.id, actionId, type: action.type, title: rec.item.title });
+    }
+  }
+
+  private action(id: string) {
+    const a = this.s.actions[id];
+    if (!a) throw new ApiError('not_found', 'Action not found.');
+    return a;
+  }
+
+  async cancelDraft(actionId: string) {
+    await this.gate(COMMAND_MS);
+    const a = this.action(actionId);
+    if (a.status !== 'drafting') return;
+    this.clearDraftTimers(actionId);
+    a.status = 'discarded';
+    a.updatedAt = this.iso();
+    this.event('action.discarded', { itemId: a.itemId, actionId, data: { reason: 'cancelled' } });
+    this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+  }
+
+  async saveDraftEdit(actionId: string, content: string) {
+    await this.gate(COMMAND_MS);
+    const a = this.action(actionId);
+    const d = this.s.drafts[actionId];
+    if (a.status !== 'ready' || !d) throw new ApiError('conflict', 'This draft can no longer be edited.');
+    this.s.drafts[actionId] = { ...d, content, edited: true };
+    a.updatedAt = this.iso();
+    this.event('action.edited', { itemId: a.itemId, actionId });
+    this.emit({ topic: 'item', id: a.itemId });
+  }
+
+  async redraft(actionId: string): Promise<Action> {
+    await this.gate(COMMAND_MS);
+    const a = this.action(actionId);
+    if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today.');
+    if (ACTIVE.includes(a.status) || a.status === 'failed') {
+      this.clearDraftTimers(actionId);
+      if (a.status !== 'failed') {
+        a.status = 'discarded';
+        this.event('action.discarded', { itemId: a.itemId, actionId, data: { reason: 'redraft' } });
+      }
+    }
+    const rec = this.rec(a.itemId);
+    const outcome = this.takeOutcome((o) => o === 'model_error' || (a.type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list')));
+    return structuredClone(this.createAction(rec, a.type, outcome, a.id));
+  }
+
+  async discardAction(actionId: string) {
+    await this.gate(COMMAND_MS);
+    const a = this.action(actionId);
+    this.clearDraftTimers(actionId);
+    a.status = 'discarded';
+    a.updatedAt = this.iso();
+    this.event('action.discarded', { itemId: a.itemId, actionId, data: { reason: 'discarded' } });
+    this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+  }
+
+  async approveAction(actionId: string) {
+    await this.gate(COMMAND_MS);
+    const a = this.action(actionId);
+    if (a.status !== 'ready') throw new ApiError('conflict', 'This draft is no longer ready to approve.');
+    a.status = 'approved';
+    a.updatedAt = this.iso();
+    this.event('action.approved', { itemId: a.itemId, actionId });
+    this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+    void this.execute(actionId, 500);
+  }
+
+  /** The executor: code writes, after re-validating the target (NF-5, FR-9.4, FR-10.5, FR-10.6). */
+  private async execute(actionId: string, delay: number) {
+    await sleep(delay);
+    const a = this.s.actions[actionId];
+    if (!a) return;
+    a.status = 'executing';
+    this.emit({ topic: 'item', id: a.itemId });
+    await sleep(delay ? 1300 : 0);
+    const d = this.s.drafts[actionId];
+    const rec = this.s.items[a.itemId];
+    if (!d || !rec) return;
+    a.updatedAt = this.iso();
+    const conflict = this.takeOutcome((o) => (a.type === 'vault_note' ? o === 'vault_conflict' : o === 'confluence_conflict'));
+    const dry = this.s.settings.dryRun;
+
+    if (conflict !== 'normal') {
+      a.status = 'failed';
+      a.failureReason = 'conflict';
+      a.error =
+        d.kind === 'confluence'
+          ? `The page changed after drafting (v${d.baseVersion} → v${d.baseVersion + 2}). Re-drafting instead of writing.`
+          : d.kind === 'vault_append'
+            ? `${d.path} changed after drafting (file hash differs). Re-drafting instead of writing.`
+            : `A note now exists at ${d.path}. Re-drafting instead of overwriting it.`;
+      this.s.results[actionId] = a.error;
+      this.event('action.failed', { itemId: a.itemId, actionId, data: { reason: 'conflict' } });
+      this.emit({ topic: 'item', id: a.itemId });
+      await sleep(900);
+      this.createAction(rec, a.type, 'normal', a.id);
+      return;
+    }
+
+    if (d.kind === 'confluence' && !this.s.settings.confluence.pages.some((p) => p.id === d.pageId)) {
+      a.status = 'failed';
+      a.failureReason = 'allow_list';
+      a.error = `Page ${d.pageId} (${d.pageTitle}) is not on the Confluence allow-list. The executor refused the write.`;
+      this.s.results[actionId] = a.error;
+      this.event('action.failed', { itemId: a.itemId, actionId, data: { reason: 'allow_list', pageId: d.pageId } });
+      this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+      return;
+    }
+
+    a.status = 'done';
+    let msg: string;
+    if (d.kind === 'confluence') {
+      msg = dry
+        ? `Dry-run: write logged only. ${d.pageTitle} stays at v${d.baseVersion}. Logged action.executed.`
+        : `Written to ${d.pageTitle}, now v${d.baseVersion + 1}. Logged action.executed.`;
+      this.event('action.executed', { itemId: a.itemId, actionId, data: { dryRun: dry, pageId: d.pageId, pageVersion: dry ? d.baseVersion : d.baseVersion + 1 } });
+    } else {
+      const where = dry ? `${this.s.settings.dataDir}/sandbox/vault/${d.path}` : `${this.s.settings.vaultPath}/${d.path}`;
+      msg = `${dry ? 'Dry-run: ' : ''}${d.kind === 'vault_append' ? `Appended under ${d.heading} in` : 'Created'} ${where}. Logged action.executed.`;
+      this.event('action.executed', { itemId: a.itemId, actionId, data: { dryRun: dry, path: where } });
+    }
+    this.s.results[actionId] = msg;
+    this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+  }
+
+  // ---------------------------------------------------------------- usage, eval, settings
+
+  async runEval() {
+    await this.gate(COMMAND_MS);
+    if (this.s.evalRunning) return;
+    this.s.evalRunning = true;
+    this.emit({ topic: 'usage' }, { topic: 'evals' });
+    setTimeout(() => {
+      const prev = this.s.evals[this.s.evals.length - 1];
+      const labels = this.s.labelCount;
+      const base = prev?.confusion ?? [
+        [20, 3, 1],
+        [5, 42, 10],
+        [2, 10, 100],
+      ];
+      // A little better on "today" each run, to make the comparison visible.
+      const confusion = base.map((row, i) => (i === 1 ? [row[0], row[1] + 2, Math.max(0, row[2] - 1)] : [...row]));
+      const pr = (i: number) => {
+        const tp = confusion[i][i];
+        const col = confusion.reduce((s, r) => s + r[i], 0);
+        const row = confusion[i].reduce((s, v) => s + v, 0);
+        return { precision: col ? tp / col : 0, recall: row ? tp / row : 0, support: row };
+      };
+      const report: EvalReport = {
+        id: `eval-${this.iso()}`,
+        at: this.iso(),
+        labelCount: labels,
+        promptVersion: 'triage v3',
+        model: this.s.settings.models.triage,
+        categories: {
+          now: pr(0),
+          today: pr(1),
+          none: pr(2),
+          confluence: { precision: 0.8, recall: 0.83, support: 35 },
+          vault: { precision: 0.81, recall: 0.86, support: 45 },
+        },
+        confusion,
+        tokens: 446000,
+        costEquivalent: 0.67,
+      };
+      this.s.evals.push(report);
+      this.recordUsage('eval', this.s.settings.models.triage, 420000, 26000, [], 'triage v3', 52000);
+      this.s.evalRunning = false;
+      this.emit({ topic: 'usage' }, { topic: 'evals' });
+    }, 5000);
+  }
+
+  async rebuildState() {
+    await this.gate(COMMAND_MS);
+    await sleep(1800);
+    const time = this.now().toLocaleTimeString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit' });
+    this.s.flags.rebuiltNotice = `Inbox state rebuilt from ${this.s.events.length.toLocaleString('en-GB')} events at ${time}. Nothing was lost.`;
+    this.emit({ topic: 'inbox' });
+    return { events: this.s.events.length };
+  }
+
+  async saveSettings(settings: Settings, rules: Rule[]) {
+    await this.gate(COMMAND_MS + 200);
+    const issues: FieldIssue[] = [];
+    const sp = SettingsSchema.safeParse(settings);
+    if (!sp.success) for (const i of sp.error.issues) issues.push({ path: ['settings', ...i.path].join('.'), message: i.message });
+    const rp = Rules.safeParse(rules);
+    if (!rp.success) for (const i of rp.error.issues) issues.push({ path: ['rules', ...i.path].join('.'), message: i.message });
+    if (issues.length) throw new ApiError('validation', `${issues.length} ${issues.length === 1 ? 'field needs' : 'fields need'} fixing before saving.`, issues);
+
+    const settingsChanged = JSON.stringify(this.s.settings) !== JSON.stringify(sp.data);
+    const rulesChanged = JSON.stringify(this.s.rules) !== JSON.stringify(rp.data);
+    if (settingsChanged) {
+      const intervalsChanged = JSON.stringify(this.s.settings.schedule) !== JSON.stringify(sp.data!.schedule);
+      this.s.settings = sp.data!;
+      this.event('settings.changed', { data: { dryRun: sp.data!.dryRun } });
+      if (intervalsChanged && this.s.source.lastPollAt) this.s.source.nextPollAt = addMins(this.s.source.lastPollAt, this.intervalMins());
+    }
+    if (rulesChanged) {
+      this.s.rules = rp.data!;
+      this.event('rules.changed', { data: { count: rp.data!.length } });
+    }
+    this.s.savedAt = this.iso();
+    this.emit({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
+    return { savedAt: this.s.savedAt };
+  }
+
+  // ---------------------------------------------------------------- scenario controls (MockControls)
+
+  reset(preset: Preset = 'default') {
+    for (const id of [...this.draftTimers.keys()]) this.clearDraftTimers(id);
+    this.polling = false;
+    this.s = buildState(preset);
+    this.anchorClock(SEED_CLOCK);
+    this.emitAll();
+  }
+
+  advanceClock(mins: number) {
+    this.clockAnchor += mins * MIN;
+    this.emit({ topic: 'clock' });
+    this.tick();
+    this.emitAll();
+  }
+
+  setClockLondon(hhmm: string) {
+    const [h, m] = hhmm.split(':').map(Number);
+    const p = londonParts(this.now());
+    const cur = p.hours * 60 + p.minutes;
+    let delta = h * 60 + m - cur;
+    if (delta <= 0) delta += 24 * 60;
+    // Move without triggering a catch-up poll: pretend the last poll happened just now.
+    this.clockAnchor += delta * MIN;
+    const now = this.iso();
+    this.s.source.lastPollAt = now;
+    this.s.source.nextPollAt = addMins(now, this.intervalMins());
+    this.emitAll();
+  }
+
+  wakeFromSleep() {
+    this.advanceClock(180);
+  }
+
+  simulatePoll(outcome: PollOutcome) {
+    if (outcome === 'nothing') {
+      this.s.timeline = [];
+      void this.runPoll('manual');
+      return;
+    }
+    if (outcome === 'vip_dm') return void this.runPoll('manual', { threads: [VIP_DM] });
+    if (outcome === 'batch12') return void this.runPoll('manual', { threads: BATCH_TWELVE });
+    if (outcome === 'reply_done') return void this.runPoll('manual', { replies: [REPLIES.done] });
+    if (outcome === 'reply_snoozed') return void this.runPoll('manual', { replies: [REPLIES.snoozed] });
+    if (outcome === 'reply_drafted') return void this.runPoll('manual', { replies: [REPLIES.drafted] });
+    if (outcome === 'reply_corrected') {
+      let target = Object.values(this.s.items)
+        .filter((r) => r.correction)
+        .sort((a, b) => (b.correction!.correctedAt > a.correction!.correctedAt ? 1 : -1))[0];
+      if (!target) {
+        // Nothing corrected yet: correct the Head of Sales DM to "none" first, as Frank would.
+        target = Object.values(this.s.items).find((r) => r.key === 't3')!;
+        target.correction = { itemId: target.item.id, itemRevision: target.item.revision, attention: 'none', confluence: false, vault: false, correctedAt: this.iso() };
+        this.event('triage.corrected', { itemId: target.item.id, data: { attention: 'none', confluence: false, vault: false, revision: target.item.revision } });
+      }
+      const by = target.item.participants.find((p) => p.id !== FRANK)?.id ?? 'U09SALES';
+      return void this.runPoll('manual', {
+        replies: [{ targetKey: target.key, by, text: 'Following up: Thursday 14:00 works for the team. Can you confirm?', decision: { attention: 'today' } }],
+      });
+    }
+  }
+
+  setNextDraftOutcome(o: DraftOutcome) {
+    this.s.nextDraftOutcome = o;
+    this.emit({ topic: 'clock' });
+  }
+
+  setFlag(flag: StateFlag) {
+    const f = this.s.flags;
+    switch (flag) {
+      case 'triage_budget':
+        f.forceTriageBudget = !f.forceTriageBudget;
+        break;
+      case 'drafts_budget':
+        f.forceDraftBudget = !f.forceDraftBudget;
+        break;
+      case 'slack_429':
+        this.s.source = { ...this.s.source, status: 'backoff', retryAt: addMins(this.iso(), 3), rateLimitedToday: this.s.source.rateLimitedToday + 1 };
+        this.event('source.failed', { data: { error: 'ratelimited', retryAfterSeconds: 180 } });
+        break;
+      case 'slack_auth':
+        this.s.source = { ...this.s.source, status: 'auth_failed' };
+        this.event('source.failed', { data: { error: 'invalid_auth' } });
+        break;
+      case 'slack_healthy':
+        this.s.source = { ...this.s.source, status: 'healthy', retryAt: undefined };
+        break;
+      case 'server_down':
+        f.connection = 'down';
+        break;
+      case 'reconnecting':
+        f.connection = 'reconnecting';
+        this.scheduleReconnect();
+        break;
+      case 'server_up':
+        f.connection = 'up';
+        break;
+      case 'api_key':
+      case 'slack_token':
+      case 'claude_login':
+        f.startupFailure = f.startupFailure === flag ? undefined : flag;
+        break;
+      case 'startup_ok':
+        f.startupFailure = undefined;
+        break;
+      case 'filevault_off':
+        f.fileVaultOff = !f.fileVaultOff;
+        break;
+      case 'rebuilt_notice':
+        f.rebuiltNotice = f.rebuiltNotice ? undefined : `Inbox state rebuilt from the event log at startup: snapshot.json was unreadable. ${this.s.events.length.toLocaleString('en-GB')} events replayed.`;
+        break;
+    }
+    this.emitAll();
+  }
+
+  private scheduleReconnect() {
+    setTimeout(() => {
+      if (this.s.flags.connection === 'reconnecting') {
+        this.s.flags.connection = 'up';
+        this.emitAll();
+      }
+    }, 4000);
+  }
+
+  dismissRebuiltNotice() {
+    this.s.flags.rebuiltNotice = undefined;
+    this.emit({ topic: 'inbox' });
+  }
+
+  getEvents(): WorkEvent[] {
+    return [...this.s.events].reverse().slice(0, 200);
+  }
+
+  getControlsState() {
+    return {
+      clock: this.iso(),
+      nextDraftOutcome: this.s.nextDraftOutcome,
+      flags: { ...this.s.flags },
+      slack: this.s.source.status,
+      timelinePending: this.s.timeline.length,
+    };
+  }
+
+  itemIdForKey(key: string): string | undefined {
+    return Object.values(this.s.items).find((r) => r.key === key)?.item.id;
+  }
+
+  dispose() {
+    clearInterval(this.tickTimer);
+  }
+}
