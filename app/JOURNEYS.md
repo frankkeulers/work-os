@@ -8,9 +8,10 @@ This is the script for the UX round on the frontend prototype. It runs on mock d
 cd app
 npm install
 npm run dev        # http://127.0.0.1:5173
+npm run e2e        # Playwright against a production build on http://127.0.0.1:4391
 ```
 
-- **Scenarios drawer.** Open it with the button at the bottom left or the `` ` `` key. Every journey below has a **Start** link in the drawer. The link resets the demo data, sets up the scenario and opens the right page.
+- **Scenarios drawer.** Open it with the button at the bottom left or the `` ` `` key. Every journey below has a **Start** link in the drawer. The link resets the demo data, sets up the scenario, opens the right page and closes the drawer. Press `` ` `` to reopen it.
 - **Mock clock.** The clock starts at **Mon 5 Oct 2026, 09:45 (London)** and runs in real time. The drawer moves it forward.
 - **State.** State survives a reload. **Reset demo data** in the drawer starts again.
 - **Event log.** The drawer's Event log tab shows the events each action emits. Check them against PLAN.md §4.4.
@@ -28,7 +29,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J03 | Snooze and return | Snooze a Today card for 1 hour. Open the Snoozed row. In the drawer, add 1 h. | Does the item come back, and is it clear that it came back from a snooze? | FR-8.3 | |
 | J04 | Correct triage from a card | On an Everything else row, click Correct triage and set Today. Then on a File card use ⋯ → Correct triage and clear Confluence. | Does the item move straight away? Is the labelled-set toast clear? Check `triage.corrected` in the log. | FR-6.2 | |
 | J05 | Correct triage in detail | Open the Labs graduation item. Click Correct triage and change the attention. | Does the triage band recolour and its headline change? | FR-6.2 | |
-| J06 | Keyboard triage | On the Inbox, use `j`/`k` to move, `Enter` to open, `e` for Done, `s` for Snooze, `c` for Correct, `Esc` to close. | Are the shortcuts worth having? Is the focus ring visible? | (new) | |
+| J06 | Keyboard triage | On the Inbox, use `j`/`k` to move, `Enter` to open, `e` for Done, `s` for Snooze, `c` for Correct, `Esc` to close. The cursor starts on the last card you touched. | Are the shortcuts worth having? Is the focus ring visible? | (new) | |
 
 ### Filing to the vault
 
@@ -58,7 +59,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J18 | Quiet hours | Start J18 (clock set to 19:30), then send a VIP DM. | No notification, but the item is in Now. | FR-11.2 | |
 | J19 | Quiet window and batch | Click Poll now. Watch the header and the "Waiting for quiet window" row. Add 10 min. | Is it clear why new threads aren't triaged yet? Does the header say "1 call" for the batch? | FR-5.1, §5.3 | |
 | J20 | Nothing eligible | Poll outcome → Nothing eligible. | The header says no Claude call was made. Usage does not move. | Story 5.1 | |
-| J21 | Revision collisions | Poll outcome → New reply on: a done item, a snoozed item, a corrected item, a drafted item. | Each case follows the defaults under Open questions. Are they right? | FR-5.4 | |
+| J21 | Revision collisions | Poll outcome → New reply on: a done item, a snoozed item, a corrected item, a drafted item. Then Clock → +10 min: replies wait out the 10-minute quiet window like any thread, and the next scheduled poll re-triages all four in one call. | Each case follows the defaults under Open questions. Are they right? | FR-5.4 | |
 | J22 | Wake from sleep | Clock → Wake from 3 h sleep. | Is the catch-up poll visible straight away? | FR-2.7, Story 2.1 | |
 | J23 | Failed triage | Find the Failed row (#data-products-ops). Click Retry. | Does the item land in a lane? Is the failure wording clear? | CL-7 | |
 
@@ -117,23 +118,27 @@ These came out of the prototype. They are not yet applied to PLAN.md.
   - `Action.failureReason`: `conflict | people_check | allow_list | model_error`;
   - `Item.contentExpired`, for items past retention.
 - **Success criteria:** the usage page shows S6, which the design leaves out.
+- **Item view:** the item endpoint returns `meId`, your Slack user ID, so the thread can label your own messages "You".
 - **Client preferences:** theme, board/list view and scope are client-side preferences, not part of `settings.json`.
 
 ## Deviations from the designs
 
 **Added:**
-- the Snoozed row and the "Waiting for quiet window" row;
+- the Snoozed, Done and "Waiting for quiet window" rows (Done offers Reopen);
 - the Undo toast;
 - the "N new" pill;
 - the poll-in-flight header states;
 - keyboard shortcuts;
 - Reopen and "Mark done and next item" in Item detail;
 - a stale-draft banner;
-- S6 in the success criteria.
+- S6 in the success criteria;
+- a cost baseline field in Settings › Budgets, so P0-3's measurement has somewhere to go;
+- the item page keeps its draft tab in the URL (`?tab=`), so it doesn't jump when a draft finishes.
 
 **Changed:**
 - Dry-run defaults to on (FR-1.6). The Settings artboard shows it off.
 - The Usage page has the left nav. The artboard only has "Back to inbox".
+- The default channel exclude list is `#random`, `#alerts-prod`, `#social`. The artboard also excludes `#general`, but the seed data has `#general` threads you need to see.
 
 **Not designed, built from the design tokens:**
 - the Eval report page;
