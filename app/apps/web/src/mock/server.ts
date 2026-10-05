@@ -604,7 +604,7 @@ export class MockServer implements WorkOsApi, MockControls {
           },
       { id: 'S4', name: 'Dashboard opened', value: '4 / 5', target: '≥ 4 of 5 days', status: 'on_track', statusLabel: 'On track' },
       { id: 'S5', name: 'Writes without approval', value: '0', target: '0', status: 'met', statusLabel: 'Met' },
-      { id: 'S6', name: 'People observations in Confluence', value: '0', target: '0', status: 'met', statusLabel: `Met · ${written} entries checked` },
+      { id: 'S6', name: 'People observations in Confluence', value: '0', target: '0', status: 'met', statusLabel: `Met · ${written} ${written === 1 ? 'entry' : 'entries'} checked` },
       { id: 'S7', name: 'Slack digest task', value: 'Enabled', target: 'Disabled', status: 'pending', statusLabel: 'Parallel run 2/3' },
     ];
   }
