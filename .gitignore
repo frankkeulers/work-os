@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+dist/
+*.tsbuildinfo
+app/apps/web/test-results/
+app/apps/web/playwright-report/
+app/apps/web/e2e/__screens__/tmp/
+.vite/
