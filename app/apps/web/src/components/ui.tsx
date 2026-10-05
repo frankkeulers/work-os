@@ -138,7 +138,7 @@ export function Segmented<T extends string>({
             aria-pressed={on}
             onClick={() => onChange(o.value)}
             className={cx(
-              'inline-flex flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3 text-[13px] font-medium cursor-pointer',
+              'inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-[7px] px-3 text-[13px] font-medium cursor-pointer',
               size === 'sm' ? 'min-h-8' : 'min-h-9',
               on ? 'bg-seg-on text-ink shadow-[0_1px_2px_rgba(20,23,28,0.12)]' : 'text-muted hover:text-ink',
             )}
@@ -171,8 +171,9 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
   );
 }
 
-export const inputClass =
-  'w-full min-h-10 rounded-lg border border-line-strong bg-surface px-2.5 text-sm text-ink outline-none focus:border-accent aria-[invalid=true]:border-red';
+/** Input styling without a width, for fields that set their own. */
+export const inputBase = 'min-h-10 rounded-lg border border-line-strong bg-surface px-2.5 text-sm text-ink outline-none focus:border-accent aria-[invalid=true]:border-red';
+export const inputClass = `w-full ${inputBase}`;
 
 export function Field({ label, help, error, children, className }: { label: ReactNode; help?: ReactNode; error?: string; children: ReactNode; className?: string }) {
   return (
