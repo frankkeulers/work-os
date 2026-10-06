@@ -76,8 +76,50 @@ Stop or redesign if any of these hold:
 | P0-6 | List the Confluence pages the app may write to (allow-list of page IDs) and the space. | Frank | Limits the blast radius of Confluence writes. |
 | P0-7 | Confirm FileVault is on. | Frank | Local files will hold company messages. |
 | P0-8 | Create a personal Atlassian API token for Confluence REST writes, and store it in the macOS Keychain. | Frank | Deterministic writes without an LLM in the loop. |
-| P0-9 | Spike: confirm the claude.ai Microsoft 365 connector loads in a headless Agent SDK run started by launchd, and that a relay call (R2.5) returns the raw `outlook_email_search` result through a `PostToolUse` hook. Record whether the SDK init message reports connector status, and the tokens and latency per relay call. Gates Phase 2 email only. | Claude Code | Our own Graph app registration is unlikely to get admin consent. The connector is already approved for the tenant. |
-| P0-10 | Spike: map Wispr Flow's local database (`~/Library/Application Support/Wispr Flow/flow.sqlite`). Identify the note and meeting tables and columns, choose cursor columns, confirm a read-only reader is safe in WAL mode while the app writes, and capture a schema fingerprint. Gates Phase 2 Wispr Flow only. | Claude Code | Local reads need no network, no tokens and no MCP, but the schema is undocumented. |
+| P0-9 | Spike: confirm the claude.ai Microsoft 365 connector loads in a headless Agent SDK run started by launchd, and that a relay call (R2.5) returns the raw `outlook_email_search` result through a `PostToolUse` hook. Record whether the SDK init message reports connector status, and the tokens and latency per relay call. Gates Phase 2 email only. **Done, passed (findings below).** | Claude Code | Our own Graph app registration is unlikely to get admin consent. The connector is already approved for the tenant. |
+| P0-10 | Spike: map Wispr Flow's local database (`~/Library/Application Support/Wispr Flow/flow.sqlite`). Identify the note and meeting tables and columns, choose cursor columns, confirm a read-only reader is safe in WAL mode while the app writes, and capture a schema fingerprint. Gates Phase 2 Wispr Flow only. **Done, passed (findings below).** | Claude Code | Local reads need no network, no tokens and no MCP, but the schema is undocumented. |
+
+### Phase 0 findings
+
+**P0-9: Microsoft 365 connector relay (6 Oct 2026, Agent SDK 0.3.291, Claude Code 2.1.282).** Passed, from a shell and from a one-shot launchd job in the login session.
+
+Results:
+- **Auth:** subscription login (`apiKeySource: none`), with no Keychain prompt under launchd.
+- **Connector:** `connected`. The model made exactly one `outlook_email_search` call and replied "OK".
+- **Hook:** the `PostToolUse` hook captured the raw result; the model saw only "ok".
+- **Per call:** $0.009 cost-equivalent, about 6 s, about 6.9k input tokens.
+- **Per day:** about $0.25 at the default schedule.
+
+Findings that change the design (R2.5, CL-9):
+- **claude.ai connectors load asynchronously in headless runs.** A short call finishes before they connect, and the init message lists no servers. `ENABLE_CLAUDEAI_MCP_SERVERS` only disables them. So the relay must declare the connector explicitly: `mcpServers: { ms365: { type: 'claudeai-proxy', url: 'https://mcp-proxy.anthropic.com/v1/mcp/<serverId>', id: '<serverId>' } }` with `strictMcpConfig: true`. This also keeps the other connectors out of the call.
+- **The server id is account-specific, not a secret.** It goes in `settings.sources.outlook.connectorId`, captured by a one-off setup command. The spike read it from the CLI debug log. In implementation, try `query().mcpServerStatus()` first: it reports each server's config, including `id`.
+- **Trim the tool list.** Loading the connector exposes all 50 Microsoft 365 tools (about 31k tokens, $0.068 per call). Passing the other 49 in `disallowedTools`, read from the init message's tool list, removes them from the model's context and cuts the cost about 7×. Also set `tools: []`, so no Claude Code built-in tools load.
+- **Don't list the relay tool in `allowedTools`.** That auto-approves it and bypasses `canUseTool` (the SDK warns about this). Gate it with `canUseTool` alone, which allows only that tool.
+- **Confirmed option names:** `PostToolUse` returns `hookSpecificOutput.updatedToolOutput`. The init message carries `mcp_servers[{name, status}]` and `apiKeySource`.
+- **Result shape:** an array of text blocks, one JSON email per block, plus a final paging item (`nextOffset`). Each email has `uri`, `id`, `subject`, `sender`, `recipients`, `receivedDateTime`, `sentDateTime`, `summary` (a short preview), `hasAttachments`, `importance`, `isRead`, `webLink` and `internetMessageId`. That is enough for triage. Full bodies need a second tool, `read_resource`, only when drafting.
+- **Pagination:** at most 25 per page. Use `afterDateTime` with `folderName: 'Inbox'` (no `query`) and page with `offset`. Dedupe on `internetMessageId`.
+
+**P0-10: Wispr Flow database (6 Oct 2026, Wispr Flow 1.6.1034).** Passed.
+
+Database:
+- **Access:** WAL mode. A read-only `node:sqlite` connection (`readOnly: true`, `query_only`) opened and read every meeting in 12 ms while the app was running.
+- **No side effects:** the database, `-wal` and `-shm` files were unchanged afterwards, and a write attempt was refused. Tested on Node 24.16; confirm the minimum Node version for `node:sqlite` with `readOnly` before relying on Node 22.
+
+Where the data is:
+- **`Meetings` table** holds everything: 22 rows, 21 not deleted, since 30 Sep 2026. Useful columns:
+  - `id`, `title`, `createdAt`, `modifiedAt`, `endedAt`
+  - `finalized`, `refineStatus` (`complete`, or `transcribing` while in progress), `isDeleted`
+  - `summary` (markdown text with headings and bullets, about 3 KB)
+  - `notes` (short text), `participantNames` (currently empty)
+- **Other tables:** `Notes`, `NoteVersions`, `MeetingVersions` and `Todos` exist but are empty for this account. Keep them on the allow-list, but expect them to be empty.
+- **Transcripts** are outside the database, in `meetings/<id>/refined.ndjson`, one JSON line per utterance (`id`, `speaker`, `text`, `timestamp`). Each folder also holds raw audio (`upload.ogg`), which is never read.
+
+Read rules:
+- **Cursor:** `Meetings.modifiedAt` plus `id`. It is stored as text in `YYYY-MM-DD HH:MM:SS.mmm +00:00`, always UTC, so it sorts lexically.
+- **Filter:** `isDeleted = 0 AND finalized = 1 AND refineStatus = 'complete'`. A meeting still transcribing is picked up when its `modifiedAt` changes.
+- **Triage input:** triage reads `summary` and `notes` (R2.3). The transcript is read only for vault drafts.
+
+Schema fingerprint: SHA-256 over `PRAGMA table_info` of `Meetings`, `Notes` and `Todos`, prefix `fd93d2789cea77ff`. A concurrent-writer test belongs to the reader's unit tests, against a synthetic database.
 
 ---
 
@@ -292,7 +334,13 @@ interface WorkEvent {
 - **CL-6** Daily budgets in settings (`budgets.triageCallsPerDay`, `budgets.draftsPerDay`, `budgets.costEquivalentPerDay`). When a budget is hit, the triage queue pauses, rules-only triage continues, and the UI shows a banner.
 - **CL-7** Model outputs are validated with zod. On a schema failure, retry once, then mark the item `triage_failed` and show it in the inbox untriaged.
 - **CL-8** The adapter is swappable. One setting switches the backend to an API key or Bedrock without changes elsewhere, in case subscription terms change.
-- **CL-9** Relay calls (R2.5) allow exactly one connector tool and deny every other tool. A `PostToolUse` hook hands the raw result to code and replaces it with "ok" before the model sees it, so source content never enters the model's context. Relay calls are logged with purpose `fetch`.
+- **CL-9** Relay calls (R2.5) allow exactly one connector tool and deny every other tool.
+  - **Connector:** declared explicitly (`claudeai-proxy`, `strictMcpConfig: true`).
+  - **Other tools:** `tools: []`; the connector's other tools go in `disallowedTools`; the relay tool is gated by `canUseTool`, never `allowedTools`.
+  - **Result:** a `PostToolUse` hook hands the raw result to code and replaces it with "ok" (`updatedToolOutput`) before the model sees it, so source content never enters the model's context.
+  - **Logging:** relay calls are logged with purpose `fetch`.
+
+  See the P0-9 findings.
 - **CL-10** Every call has a timeout (triage 120 s, drafts 240 s) and is aborted on sleep or shutdown. Claude calls do not start during a brief Power Nap wake: the machine must have been awake for at least 45 s (FR-14.2).
 
 ### 5.3 Batching rules (to stay under the baseline)
@@ -657,10 +705,15 @@ Requirements:
 - **R2.2** Triage prompts gain per-source sections. The eval set gains labelled examples per source before the source goes live.
 - **R2.3** Meeting items are triaged on the transcript summary, not the full transcript. Summarise with Haiku, or use Plaud's own summary.
 - **R2.4** If a Graph permission is refused, the source stays on the existing scheduled task. No workarounds that bypass IT. Using a connector IT has already approved is not a workaround, but tell IT before polling through it.
-- **R2.5** Relay fetch: for a source only reachable through a claude.ai connector, `claude/relay.ts` runs one Haiku call that may use exactly one connector tool (CL-9). Code captures the raw tool result through a `PostToolUse` hook, and the model sees only "ok". The adapter still normalises, dedupes and advances its cursor only after persisting. A connector that is missing or needs re-authentication shows as `auth_failed`, with the fix "reconnect it on claude.ai". The relay is built and tested on fixtures in the MVP and first used in Phase 2.
+- **R2.5** Relay fetch: for a source only reachable through a claude.ai connector, `claude/relay.ts` runs one Haiku call that may use exactly one connector tool (CL-9).
+  - **The call:** the connector is declared explicitly by its server id (`settings.sources.<id>.connectorId`), because claude.ai connectors load asynchronously in headless runs. Code captures the raw tool result through a `PostToolUse` hook, and the model sees only "ok".
+  - **The adapter:** still normalises, dedupes and advances its cursor only after persisting.
+  - **Failures:** a connector that is not `connected` in the init message, or needs re-authentication, shows as `auth_failed`, with the fix "reconnect it on claude.ai".
+  - **When:** built and tested on fixtures in the MVP, first used in Phase 2.
+  - **Measured cost** (P0-9): about $0.009 and 6 s per call.
 - **R2.6** Local reads: a source that keeps its data in a local database is read directly, read-only.
   - **Access:** `node:sqlite` with `readOnly`, `query_only`, a 2 s busy timeout and one short transaction per run.
-  - **Tables:** allow-listed tables only. For Wispr Flow that means notes and meetings, never the dictation `History`.
+  - **Tables:** allow-listed tables only. For Wispr Flow: `Meetings` (plus `Notes` and `Todos`, empty today), never the dictation `History`. Transcripts are read from `meetings/<id>/refined.ndjson` for vault drafts only; audio files are never read (P0-10 findings).
   - **Schema check:** a fingerprint compared on every run. A mismatch after an app update marks the source `degraded` (`schema_changed`) and sends a notification.
   - **Never** writes to the source database.
 
@@ -701,7 +754,7 @@ Requirements:
 | Scope creep before committed work lands | High | Delays MVI V2, Apidog and other commitments | Phase 0 first; phases gated on success criteria. |
 | The server silently stops running (sleep, network loss, crash, bad settings) | Medium | Items missed while Frank thinks the app is watching | E13: launchd autostart, wake catch-up, degraded mode with a visible banner and rate-limited alerts, safe mode instead of a crash loop. |
 | A Wispr Flow update changes its database schema | Medium | The Wispr Flow source stops | Schema fingerprint check, `degraded` status and a notification (R2.6). Other sources are unaffected. |
-| claude.ai connectors don't load headless, or relay calls cost too much | Medium | No email source | Spike P0-9 before building. Fallback: Apple Mail local store. |
+| A Claude Code or SDK update changes how claude.ai connectors load headless | Low | The email source stops | P0-9 passed with an explicit connector declaration. The relay checks the connector's status in the init message and shows `auth_failed` with a fix. Fallback: Apple Mail local store. |
 
 ---
 
@@ -712,5 +765,5 @@ Requirements:
 3. Is the Obsidian MCP server usable from the Agent SDK, or should vault reads use scoped file tools?
 4. How does Haiku usage weigh against plan limits compared with Sonnet and Opus? Measure from the usage log.
 5. Which Confluence pages go on the initial allow-list (P0-6)?
-6. Do claude.ai connectors load in a headless Agent SDK run under launchd, and what does one relay call cost? (Spike P0-9.)
+6. ~~Do claude.ai connectors load in a headless Agent SDK run under launchd, and what does one relay call cost?~~ Answered by P0-9: yes, if declared explicitly; about $0.009 per call. Still open: does `mcpServerStatus()` expose the connector id, so setup needs no debug log?
 7. Does Node's `fsync` on macOS issue `F_FULLFSYNC`? If not, record the remaining power-loss window as an accepted limit (it affects only the last moments before a power cut, which the startup recovery already handles).
