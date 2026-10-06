@@ -4,6 +4,7 @@ import type { SourceAdapter } from '../sources/types';
 import type { ItemFiles } from '../store/items';
 import type { Store } from '../store/store';
 import type { CursorFile } from './cursors';
+import { crashPoint } from '../runtime/crash';
 import { meFrom, ruleDecision, ruleReason, ruleVerdict, type RuleVerdict } from './rules';
 
 // One poll of one source (FR-2.8). Idempotent: message IDs (Slack ts) are the dedupe key, so a
@@ -50,7 +51,10 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
   const messages = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id.localeCompare(b.id)).slice(-MAX_STORED_MESSAGES);
   const participants = [...(stored?.participants ?? [])];
   for (const p of fetched.participants) if (!participants.some((q) => q.id === p.id)) participants.push(p);
-  const lastActivityAt = [stored?.lastActivityAt, fetched.lastActivityAt].filter((x): x is string => !!x).sort().at(-1)!;
+  const lastActivityAt = [stored?.lastActivityAt, fetched.lastActivityAt]
+    .filter((x): x is string => !!x)
+    .sort()
+    .at(-1)!;
   return {
     newIds,
     item: {
@@ -127,8 +131,11 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   }
   const durationMs = Math.round(performance.now() - t0);
   drafts.push({ type: 'source.polled', data: { source: source.id, reason, fetched: result.items.length, cursor: result.nextCursor, durationMs } });
+  crashPoint('after-items');
   await d.store.append(...drafts);
+  crashPoint('after-events');
   if (result.nextCursor) await d.cursors.set(source.id, result.nextCursor);
+  crashPoint('after-cursor');
   d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, dropped, ruleDecided, durationMs }, 'Polled');
   return { fetched: result.items.length, changed, dropped, ruleDecided, cursor: result.nextCursor, durationMs };
 }

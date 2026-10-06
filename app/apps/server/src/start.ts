@@ -12,6 +12,7 @@ import { createLogger, type Logger } from './log';
 import { HealthAlerts } from './notify/alerts';
 import { silentNotifier, type Notifier } from './notify/macos';
 import { Notifications } from './notify/notifications';
+import { armCrash } from './runtime/crash';
 import { RetentionJob } from './store/retention';
 import { probeNetwork, type FetchFn } from './net/probe';
 import { exec as systemExec, runChecks, type Exec } from './runtime/checks';
@@ -128,13 +129,15 @@ export async function run(deps: RunDeps): Promise<RunResult> {
 
   let extraRoutes: ((app: FastifyInstance) => void) | undefined;
   if (deps.fakes) {
-    const { fakesRefusal, fakeWorld } = await import('./fakes');
+    const { fakeAnchor, fakesRefusal, fakeWorld } = await import('./fakes');
     const refusal = fakesRefusal(config);
     if (refusal) {
       process.stderr.write(`Work OS did not start: ${refusal}\n`);
       return { running: false, code: exitCode(EXIT.config, underLaunchd) };
     }
-    const world = fakeWorld(now());
+    // The made-up threads are anchored to the first start, so a restart sees the same ones.
+    const world = fakeWorld(await fakeAnchor(config.dataDir, now()));
+    armCrash(deps.env.WORKOS_CRASH_AT);
     deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude };
     extraRoutes = world.routes;
   }

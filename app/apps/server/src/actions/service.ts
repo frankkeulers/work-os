@@ -15,6 +15,7 @@ import type { DraftStore, StoredDraft } from '../store/drafts';
 import type { ItemFiles } from '../store/items';
 import type { Store } from '../store/store';
 import { writeFileAtomic } from '../store/atomic';
+import { crashPoint } from '../runtime/crash';
 import { ConfluenceError, type ConfluenceApi } from './confluenceApi';
 import { draftConfluenceEntry } from './confluenceDrafter';
 import { marker, planConfluenceWrite } from './confluenceExecutor';
@@ -458,7 +459,9 @@ export class ActionService {
         const attempt = this.nextAttempt(a.id);
         await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHash: plan.expectedHash }));
         await this.d.store.append({ type: 'action.executing', itemId: a.itemId, actionId: a.id, data: { attempt, expectedHash: plan.expectedHash } });
+        crashPoint('before-write');
         await writeVaultFile(plan);
+        crashPoint('after-write');
       }
       await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file });
     } catch (err) {

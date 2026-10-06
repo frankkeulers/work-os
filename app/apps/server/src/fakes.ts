@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -78,6 +78,18 @@ export function fakeWorld(now: Date) {
   };
 
   return { slack, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory) }, claude: fakeClaude().query, routes };
+}
+
+/** When the fake world began: the first start in this data dir, kept in fake-world.json. */
+export async function fakeAnchor(dataDir: string, now: Date): Promise<Date> {
+  const file = join(dataDir, 'fake-world.json');
+  try {
+    return new Date((JSON.parse(await readFile(file, 'utf8')) as { anchor: string }).anchor);
+  } catch {
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(file, JSON.stringify({ anchor: now.toISOString() }));
+    return now;
+  }
 }
 
 /** The one allow-listed page in a `--fakes` run, on a made-up site. */

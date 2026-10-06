@@ -682,6 +682,47 @@ As built (M3 step 19):
 - **FR-13.1** After 3 working days of parallel running, compare the Work OS output with the Slack digest. Then disable the digest scheduled task.
 - **FR-13.2** Measure S1–S7 for 2 working weeks and record the results in this file.
 
+**Before the soak (Frank).** Before the soak can start, Frank needs to:
+
+1. Store the Slack user token (P0-1) and, if Confluence filing is wanted, the Confluence `email:token` (P0-8, Keychain account `confluence-api-token`).
+2. Fill in the allow-list (P0-6) and vault conventions (P0-5).
+3. Optionally, `brew install terminal-notifier` and copy psg-context-builder to `~/WorkOS-data/config/psg-context-builder.md`.
+4. Deploy and install:
+
+   ```
+   cd app
+   npm run deploy
+   npm run agent:install
+   npm run agent:status
+   ```
+
+Keep dry-run on for the first day; turn it off in Settings once the drafts look right.
+
+**Soak checklist (M4 step 21).** Each line is one check, with what should happen. `agent:status` means `npm run agent:status` from `app/`. "The log" means today's `~/WorkOS-data/events/<UTC date>.jsonl`.
+
+| # | Do this | Expect |
+|---|---|---|
+| 1 | Reboot and log in. | Within 30 s `agent:status` is all ✓: plist, launchd running, no `ANTHROPIC_API_KEY`, health `normal`. |
+| 2 | Close the lid for 3 h or more, then open it. | Within 1 minute: `system.woke`, then `source.polled` with `reason: wake`. No gap: threads from the sleep are in the inbox. With 3 or more Now items, one summary notification. |
+| 3 | Wi-Fi off for 20 minutes. Meanwhile, approve a vault note and a Confluence entry. Then Wi-Fi on. | While off: the inbox, Done and Snooze work; the header says offline; nothing fails. On reconnect: a `reconnect` poll, then each action written once (one `action.executed` each). The Confluence page is one version up, with the message `Work OS <actionId>`. |
+| 4 | Stay offline for over 30 minutes during work hours. | One "Work OS is offline" notification, then "Network is back" on reconnect. |
+| 5 | Join a hotel or café captive portal without signing in. | Network shows offline with "Sign in to the Wi-Fi portal". No error notification. |
+| 6 | Turn the VPN on and off during a poll. | At most a degraded blip in Usage & health; the next poll succeeds. |
+| 7 | Log out and back in. | `system.stopped` (SIGTERM), then `system.started`. Not counted as a crash. |
+| 8 | Run `pkill -9 -f server.mjs` during a poll (Poll now, then kill at once). | launchd restarts it within 30 s. No duplicate items, and no skipped messages on the next poll. |
+| 9 | Approve a Confluence entry with dry-run off, and `pkill -9 -f server.mjs` right after. | After the restart the action ends `done`. The page went up exactly one version. |
+| 10 | Change the clock forward 2 h, then back. Change the time zone. | No burst of polls, and the log notes the clock change. Work and quiet hours stay on London time for now: FR-14.8's system zone is still open. |
+| 11 | Lock the login Keychain (Keychain Access › Lock), then Check again. | Keychain shows degraded with "Unlock the login Keychain". Work continues on the cached token. |
+| 12 | Sign Claude Code out (`/logout` in a `claude` session), then wait for a triage. | One "Claude needs you" notification. Rules still decide. Items wait as pending. After signing back in and Check again: "Claude is back", and triage resumes. |
+| 13 | `launchctl setenv ANTHROPIC_API_KEY x`, then `launchctl kickstart -k gui/$(id -u)/com.polestar.workos`. Afterwards run `launchctl unsetenv ANTHROPIC_API_KEY` and kickstart again. | A "Work OS did not start" notification, `state/refused.json`, and no restart loop (`agent:status` shows exit 0). |
+| 14 | Leave it running overnight. | `state/retention.json` shows today's date after 03:00 (or after waking). Item files older than `retentionDays` are gone, and those items show as expired. |
+
+Automated tests cover the same ground with fakes:
+
+- **Crash injection** (`apps/server/src/crash.test.ts`, with `WORKOS_CRASH_AT` in `--fakes` runs only): SIGKILL after the item files, after the events and after the cursor, and before and after a vault write. After each, the test checks that nothing was duplicated, skipped or written twice.
+- **Wake and offline:** `runtime/wake.test.ts`.
+- **Real Confluence writes:** `commands.test.ts` covers lost answers, 409 races and dropped connections.
+
 ### 7.14 E13 Runtime robustness (M1)
 
 The server runs unattended on a laptop that sleeps, travels and loses its network. These requirements make that safe.
