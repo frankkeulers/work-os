@@ -1,8 +1,9 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, HealthView, InboxView, ItemView } from '@work-os/shared';
+import type { ApiErrorBody, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
 import type { Exec } from './runtime/checks';
 import type { Clock } from './runtime/power';
@@ -13,14 +14,16 @@ import { FakeSlack } from './sources/slack/fakeSlack';
 import { isoToTs } from './sources/slack/normalise';
 import { run, type RunResult } from './start';
 
-// The server end to end against a fake Slack: poll, inbox, item, done, reopen, snooze and the snooze
-// return (M1 step 10). The clock is fake; ticks are driven by hand.
+// The server end to end against a fake Slack and a fake Claude: poll, inbox, item, done, reopen,
+// snooze and the snooze return (M1 step 10), and triage (M2 step 15). The clock is fake; ticks are
+// driven by hand.
 
 const START = Date.parse('2026-10-06T08:00:00Z'); // Tuesday 09:00 London
 const MIN = 60_000;
 let dir: string;
 let res: Extract<RunResult, { running: true }>;
 let slack: FakeSlack;
+let claude: FakeClaude;
 let wall: number;
 let mono: number;
 const clock: Clock = { now: () => new Date(wall), mono: () => mono };
@@ -51,6 +54,7 @@ beforeEach(async () => {
     .post('C01PROD', { ts: isoToTs(START - 40 * MIN), thread_ts: P, user: 'U02DANA', text: '@Frank can you check the ETA wording?' })
     .post('D01DANA', { ts: isoToTs(START - 20 * MIN), user: 'U02DANA', text: 'Quick one before standup' });
   const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token });
+  claude = fakeClaude();
   const directory = new SlackDirectory(new SlackApi(secrets, slack.fetch));
   const r = await run({
     env: { WORKOS_INSTANCE: 'dev', WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' },
@@ -61,6 +65,7 @@ beforeEach(async () => {
     followZone: () => undefined,
     fetch: slack.fetch,
     sources: { slack: slackFactory(directory) },
+    claude: claude.query,
   });
   if (!r.running) throw new Error('expected a start');
   res = r;
@@ -147,5 +152,86 @@ describe('done, reopen and snooze (FR-8.2, FR-8.3)', () => {
     const r = await call<ApiErrorBody>('POST', '/api/items/slack%3AC9%3A1/done');
     expect(r.status).toBe(404);
     expect(r.body.code).toBe('not_found');
+  });
+});
+
+describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const lanes = async () => Object.fromEntries((await inbox()).items.map((i) => [i.title, i.lane]));
+
+  it('labels every quiet thread in one call, with the rule floor, and logs the usage', async () => {
+    expect(claude.calls).toHaveLength(1);
+    // "@Frank" makes the mention rule send it to the model with a floor of Today.
+    expect(await lanes()).toEqual({ '#product': 'today', 'Dana Lee': 'else' });
+    const prod = (await inbox()).items.find((i) => i.id === PROD)!;
+    expect(prod).toMatchObject({ triageState: 'triaged', summary: 'Release notes draft is up', reason: 'Fake triage for tests.', triage: { attention: 'today', vault: true } });
+    // CL-4: no tools, no servers, no settings; the prompt file's version is logged.
+    expect(claude.calls[0].options).toMatchObject({ tools: [], mcpServers: {}, settingSources: [], maxTurns: 1, persistSession: false });
+    expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v1 -->/);
+    const usage = (await call<UsageView>('GET', '/api/usage')).body;
+    expect(usage.budgets.triage.used).toBe(1);
+    expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('ok');
+  });
+
+  it('waits for the quiet window, then triages again; Frank’s own replies need no call', async () => {
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'UFRANK', text: 'Looks fine to me' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    await tick();
+    expect(claude.calls).toHaveLength(1);
+    slack.post('C01PROD', { ts: isoToTs(START + 2 * MIN), thread_ts: P, user: 'U02DANA', text: 'Great, shipping it. Go/no-go?' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ triageState: 'pending', lane: 'today' }); // keeps its lane meanwhile
+    for (let i = 0; i < 12 * 9; i++) await tick(); // quiet at +12 min; now about +9
+    expect(claude.calls).toHaveLength(1);
+    for (let i = 0; i < 12 * 4; i++) await tick();
+    expect(claude.calls).toHaveLength(2);
+    expect(claude.calls[1].prompt).toContain('Go/no-go?');
+    expect(await lanes()).toMatchObject({ '#product': 'now' });
+  });
+
+  it('stops calling once the day’s budget is spent; rules still decide (CL-6)', async () => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    const settings = { ...view.settings, budgets: { ...view.settings.budgets, triageCallsPerDay: 1 } };
+    expect((await call('PUT', '/api/settings', { settings, rules: view.rules })).status).toBe(200);
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'One more thing?' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    expect(claude.calls).toHaveLength(1);
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ triageState: 'pending', modelPaused: true });
+    const retry = await call<ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/retry-triage`);
+    expect(retry.status).toBe(429);
+    expect(retry.body.code).toBe('budget');
+  });
+
+  it('marks a batch failed after two bad answers, and "Try again" triages it (CL-7)', async () => {
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'Updated the draft' });
+    claude.nextTexts.push('not json', '{"decisions":[{"id":"x"}]}');
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    expect(claude.calls).toHaveLength(3); // the first triage, then the bad answer and its retry
+    // Failed, keeping the lane of its earlier decision (laneFor).
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ triageState: 'failed', lane: 'today' });
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    expect(claude.calls).toHaveLength(3); // failed items wait for Frank
+    expect((await call('POST', `/api/items/${encodeURIComponent(PROD)}/retry-triage`)).status).toBe(204);
+    expect(claude.calls).toHaveLength(4);
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ triageState: 'triaged', lane: 'today' });
+  });
+
+  it('reports a lost Claude login to health and leaves the items waiting', async () => {
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'Updated the draft' });
+    claude.failNext = Object.assign(new Error('Not logged in · Please run /login'), {});
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 11; i++) await tick();
+    const dep = (await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude');
+    expect(dep?.state).toBe('auth_failed');
+    expect((await inbox()).items.find((i) => i.id === PROD)?.triageState).toBe('pending');
+    const retry = await call<ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/retry-triage`);
+    expect(retry.status).toBe(503);
   });
 });

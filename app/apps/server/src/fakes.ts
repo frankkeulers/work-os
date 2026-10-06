@@ -4,6 +4,7 @@ import { dirname, sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { tokenAccount } from './api/auth';
+import { fakeClaude } from './claude/fakeClaude';
 import type { RuntimeConfig } from './config/env';
 import { memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
 import type { Exec } from './runtime/checks';
@@ -15,7 +16,8 @@ import { isoToTs } from './sources/slack/normalise';
 
 // `server.mjs --fakes` (M1 step 11): the real server against a made-up Slack workspace, for the
 // e2e:server tests. Never near real data: refused unless dry-run is forced (the dev instance) and
-// the data directory is under the system temp folder. The Keychain is an in-memory one.
+// the data directory is under the system temp folder. The Keychain is an in-memory one, and Claude
+// is a keyword-matching fake: no live calls.
 
 export const FAKE_API_TOKEN = 'workos-fakes-token-0123456789abcdefghijklmnop';
 
@@ -71,5 +73,5 @@ export function fakeWorld(now: Date) {
     });
   };
 
-  return { slack, secrets, exec, fetch: slack.fetch, sources: { slack: slackFactory(directory) }, routes };
+  return { slack, secrets, exec, fetch: slack.fetch, sources: { slack: slackFactory(directory) }, claude: fakeClaude().query, routes };
 }

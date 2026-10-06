@@ -1,7 +1,7 @@
 import { access, chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Rule, Settings } from '@work-os/shared';
-import { writeJsonAtomic } from '../store/atomic';
+import { writeFileAtomic, writeJsonAtomic } from '../store/atomic';
 
 // The data directory layout (PLAN.md §4.3). Created on first run with owner-only permissions (FR-1.1).
 
@@ -27,7 +27,7 @@ const exists = (p: string) =>
   );
 
 /** Creates any missing directories and default config files. Never overwrites an existing file. */
-export async function initDataDir(dataDir: string, defaults: { settings: Settings; rules: Rule[] }): Promise<{ created: string[] }> {
+export async function initDataDir(dataDir: string, defaults: { settings: Settings; rules: Rule[]; prompts?: Record<string, string> }): Promise<{ created: string[] }> {
   const created: string[] = [];
   const fresh = !(await exists(dataDir));
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
@@ -41,6 +41,12 @@ export async function initDataDir(dataDir: string, defaults: { settings: Setting
   if (!(await exists(p.rules))) {
     await writeJsonAtomic(p.rules, defaults.rules);
     created.push('config/rules.json');
+  }
+  for (const [file, text] of Object.entries(defaults.prompts ?? {})) {
+    const path = join(dataDir, 'config/prompts', file);
+    if (await exists(path)) continue;
+    await writeFileAtomic(path, text);
+    created.push(`config/prompts/${file}`);
   }
   return { created };
 }

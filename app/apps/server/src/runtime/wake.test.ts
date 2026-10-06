@@ -56,6 +56,7 @@ let probes: number;
 let checks: StartupCheck[];
 let checkRuns: number;
 let sources: SourceAdapter[];
+let triaged: number[]; // wall-clock ms since START of each triage run
 
 const adapter = (id: SourceId, needsNetwork: boolean): SourceAdapter => ({
   id,
@@ -101,6 +102,10 @@ async function build(opts: { wispr?: boolean; safeMode?: boolean; lastPollAt?: P
     safeMode: opts.safeMode,
     clearSafeMode: async () => undefined,
     random: () => 0.5,
+    triage: async () => {
+      triaged.push(clock.wall - START);
+      return { calls: 1, triaged: 1, failed: 0, paused: 0 };
+    },
   });
 }
 
@@ -125,6 +130,7 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'workos-wake-'));
   clock = new FakeClock();
   polls = [];
+  triaged = [];
   online = true;
   probes = 0;
   checkRuns = 0;
@@ -229,6 +235,33 @@ describe('sleep and wake', () => {
     expect(runtime.canUseClaude()).toBe(false);
     await awake(TICK_MS);
     expect(runtime.canUseClaude()).toBe(true);
+  });
+
+  it('triages only after 45 s awake: the wake poll runs at once, its triage waits (CL-10)', async () => {
+    await build();
+    await awake(TICK_MS);
+    expect(triaged.length).toBeGreaterThan(0); // the first poll is triaged straight away
+    clock.sleep(3 * HOUR);
+    const woke = clock.wall - START;
+    const before = triaged.length;
+    await awake(POWER_NAP_MS - TICK_MS);
+    expect(polls.filter((p) => p.at >= woke).map((p) => p.reason)).toContain('wake');
+    expect(triaged.length).toBe(before);
+    await awake(2 * TICK_MS);
+    expect(triaged.length).toBe(before + 1);
+    expect(triaged.at(-1)! - woke).toBeGreaterThanOrEqual(POWER_NAP_MS);
+  });
+
+  it('a Power Nap wake that sleeps again within 45 s fetches but never triages', async () => {
+    await build();
+    await awake(TICK_MS);
+    const before = triaged.length;
+    clock.sleep(HOUR);
+    await awake(20_000);
+    expect(reasons().at(-1)).toBe('wake');
+    clock.sleep(2 * HOUR);
+    await awake(20_000);
+    expect(triaged.length).toBe(before);
   });
 
   it('when offline at wake: local sources catch up, Slack on reconnect', async () => {

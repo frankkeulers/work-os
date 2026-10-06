@@ -152,6 +152,21 @@ describe('pollSource (FR-2.8)', () => {
     expect(store.projection.items[ID].revision).toBe(1);
   });
 
+  it('recovers a new reply whose file was written but never logged', async () => {
+    next = { items: [item([msg('1', 30)])], nextCursor: '5' };
+    await pollSource(d, source, 'first', signal());
+    // The reply reached the file as revision 2, then the process died before the append.
+    await d.items.write({ item: item([msg('1', 30), msg('2', 10, 'UFRANK')], { revision: 2 }), schemaVersion: 1 });
+    next = { items: [item([msg('1', 30), msg('2', 10, 'UFRANK')])], nextCursor: '6' };
+    expect((await pollSource(d, source, 'scheduled', signal())).changed).toBe(1);
+    const ups = (await events()).filter((e) => e.type === 'item.upserted');
+    expect(ups.map((e) => [e.data.revision, e.data.fromMeOnly])).toEqual([
+      [1, false],
+      [2, false], // the author of what was lost is not known: triaged again
+    ]);
+    expect(store.projection.items[ID]).toMatchObject({ revision: 2, triageState: 'pending' });
+  });
+
   it('uses the newer of cursors.json and the log', async () => {
     await store.append({ type: 'source.polled', data: { source: 'slack', reason: 'scheduled', fetched: 0, cursor: '1791277000.000200' } });
     await d.cursors.set('slack', '1791276000.000100'); // stale file

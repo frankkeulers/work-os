@@ -26,9 +26,14 @@ import { buildSources, type AdapterFactory } from './sources/registry';
 import { slackFactory } from './sources/slack/adapter';
 import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
-import type { SourceId } from '@work-os/shared';
 import { createServer, type WorkOsServer } from './server';
+import { budgetsOf, type SourceId } from '@work-os/shared';
+import { ClaudeAdapter, type QueryFn } from './claude/adapter';
+import { noClaude } from './claude/fakeClaude';
+import { DEFAULT_TRIAGE_PROMPT, loadPrompt } from './claude/prompts';
 import { UsageLog } from './claude/usage';
+import { meFrom } from './pipeline/rules';
+import { runTriage, type TriageDeps } from './pipeline/triage';
 import { ItemFiles } from './store/items';
 import { Store, type RecoveryReport } from './store/store';
 
@@ -53,6 +58,8 @@ export interface RunDeps {
   sources?: Partial<Record<SourceId, AdapterFactory>>;
   /** Run against a made-up Slack (`--fakes`, e2e:server). Refused outside a temp data dir. */
   fakes?: boolean;
+  /** The Agent SDK's query(), or a fake. Tests must pass one: they never call Claude. */
+  claude?: QueryFn;
 }
 
 export type RunResult =
@@ -103,11 +110,11 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       return { running: false, code: exitCode(EXIT.config, underLaunchd) };
     }
     const world = fakeWorld(now());
-    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, exec: world.exec, sources: world.sources };
+    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, exec: world.exec, sources: world.sources, claude: world.claude };
     extraRoutes = world.routes;
   }
 
-  const init = await initDataDir(config.dataDir, { settings: defaultSettings(config.dataDir), rules: DEFAULT_RULES });
+  const init = await initDataDir(config.dataDir, { settings: defaultSettings(config.dataDir), rules: DEFAULT_RULES, prompts: { 'triage.md': DEFAULT_TRIAGE_PROMPT } });
   const { logger, flush } = createLogger({ dir: paths(config.dataDir).logs, echo: deps.echoLogs, now, base: { instance: config.instance } });
   if (init.created.length) logger.info({ created: init.created }, 'Created default config');
 
@@ -155,12 +162,39 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // settings change, but the token, Frank's identity and names stay cached.
   const slackDirectory = new SlackDirectory(new SlackApi(secrets, deps.fetch ?? fetch));
   const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger) };
-  const runtime = new Runtime({
+  // Claude (M2): one adapter for the process; triage reads the prompt file on every run.
+  const claude = new ClaudeAdapter({
+    usage,
+    settings: () => settings.editable.settings,
+    secrets,
+    now,
+    logger,
+    cwd: join(config.dataDir, 'sandbox'),
+    client: `work-os/${config.version}`,
+    // Belt and braces: a test that forgot its fake fails instead of calling Claude for real.
+    query: deps.claude ?? (process.env.VITEST ? noClaude : undefined),
+  });
+  const triageDeps: TriageDeps = {
+    store,
+    items,
+    claude,
+    now,
+    logger,
+    config: () => ({ settings: settings.editable.settings, rules: settings.rules }),
+    me: () => meFrom(runtime.whoAmI('slack')),
+    prompt: () => loadPrompt(config.dataDir, 'triage.md', DEFAULT_TRIAGE_PROMPT),
+    budgetHit: () => {
+      const b = budgetsOf(usage.records(), settings.editable.settings, now());
+      return b.triage.hit || b.cost.hit;
+    },
+  };
+  const runtime: Runtime = new Runtime({
     clock,
     store,
     settings,
     logger,
     sources: () => buildSources(settings.settings, factories),
+    triage: (signal, only) => runTriage(triageDeps, signal, { only }),
     poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }) }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),

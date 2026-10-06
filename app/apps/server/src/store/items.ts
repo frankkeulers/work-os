@@ -31,6 +31,28 @@ export class ItemFiles {
     return join(this.dir, source, fileNameFor(id));
   }
 
+  private locks = new Map<string, Promise<unknown>>();
+
+  /**
+   * Reads, changes and writes one item's file, one change at a time per item, so a poll merging new
+   * messages and triage saving its text can't overwrite each other. `fn` returns the new contents,
+   * or undefined to leave the file as it is.
+   */
+  update<T extends StoredItem | undefined>(source: string, id: string, fn: (stored: StoredItem | undefined) => T | Promise<T>): Promise<T> {
+    const prev = this.locks.get(id) ?? Promise.resolve();
+    const run = prev.then(async () => {
+      const next = await fn(await this.read(source, id));
+      if (next) await this.write(next);
+      return next;
+    });
+    const settled = run.catch(() => undefined);
+    this.locks.set(id, settled);
+    void settled.then(() => {
+      if (this.locks.get(id) === settled) this.locks.delete(id);
+    });
+    return run;
+  }
+
   async write(stored: StoredItem) {
     const s = StoredItem.parse(stored);
     await mkdir(join(this.dir, s.item.source), { recursive: true, mode: 0o700 });

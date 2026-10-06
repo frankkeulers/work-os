@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
-// The built web app against the real server, Slack faked (M1 step 11): the inbox loads, a poll
-// adds a thread, Done sticks, and after a server restart the page goes reconnecting, then up.
+// The built web app against the real server, Slack and Claude faked (M1 step 11, M2 step 15): the
+// seeded threads are triaged into their lanes, a poll adds a thread that waits for its quiet
+// window, Done sticks, and after a server restart the page goes reconnecting, then up.
 
 const APP = resolve(import.meta.dirname, '../../..');
 const PORT = 4399;
@@ -48,6 +49,8 @@ async function stopServer() {
 }
 
 const stillActive = (page: Page, n: number) => page.getByRole('button', { name: `${n} still active` });
+const group = (page: Page, name: 'Needs you' | 'To file') => page.getByRole('region', { name, exact: true });
+const lane = (page: Page, name: 'now' | 'today') => group(page, 'Needs you').locator(`[data-row][data-lane="${name}"]`);
 
 test.beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'workos-e2e-server-'));
@@ -60,24 +63,29 @@ test.afterAll(async () => {
 
 test('inbox, poll, done and a server restart against the real server', async ({ page, request }) => {
   await page.goto('/');
-  // Nothing is triaged yet (M2), so the polled threads wait under "still active".
-  await expect(stillActive(page, 3)).toBeVisible();
+  // The fake model triages the three quiet threads: Matt's go/no-go is Now, the #product review is
+  // Today, and the #mvi-launch licensing note is To file (Confluence).
+  await expect(lane(page, 'now')).toHaveCount(1);
+  await expect(lane(page, 'now')).toContainText('Matt M.');
+  await expect(lane(page, 'today')).toHaveCount(1);
+  await expect(lane(page, 'today')).toContainText('#product');
+  await expect(group(page, 'To file').locator('[data-row]')).toHaveCount(1);
+  await expect(group(page, 'To file')).toContainText('#mvi-launch');
   await expect(page.getByRole('link', { name: /Dry-run on/ })).toBeVisible();
-  await stillActive(page, 3).click();
-  const waiting = page.getByRole('region', { name: 'Waiting for quiet window' });
-  await expect(waiting.locator('[data-row]')).toHaveCount(3);
-  await expect(waiting).toContainText('#product');
-  await expect(waiting).toContainText('Matt M.');
   await page.screenshot({ path: join(APP, 'screenshots/server-inbox-light.png') });
 
-  // A new message in Slack, then Poll now: the thread arrives over SSE.
+  // A new message in Slack, then Poll now: the thread arrives over SSE and waits for its quiet window.
   const posted = await request.post(`${BASE}/api/fake/slack/messages`, { headers: auth, data: { channel: 'C02LAUNCH', text: 'Pricing page copy needs a decision today.', user: 'U02DANA' } });
   expect(posted.status()).toBe(201);
   await page.getByRole('button', { name: 'Poll now' }).click();
-  await expect(waiting.locator('[data-row]')).toHaveCount(4);
+  await expect(stillActive(page, 1)).toBeVisible();
+  await stillActive(page, 1).click();
+  const waiting = page.getByRole('region', { name: 'Waiting for quiet window' });
+  await expect(waiting.locator('[data-row]')).toHaveCount(1);
+  await expect(waiting).toContainText('#mvi-launch');
 
   // Done on #product sticks on the server.
-  await waiting.locator('[data-row]').filter({ hasText: '#product' }).click();
+  await lane(page, 'today').filter({ hasText: '#product' }).click();
   const panel = page.getByRole('complementary', { name: 'Item panel' });
   await panel.getByRole('button', { name: /^Done e$/ }).click();
   await expect(panel.getByRole('region', { name: 'Status' })).toContainText('Done');
@@ -88,5 +96,7 @@ test('inbox, poll, done and a server restart against the real server', async ({ 
   await stopServer();
   await expect(page.getByRole('heading', { name: /Reconnecting to Work OS|Can’t reach the Work OS server/ })).toBeVisible({ timeout: 20_000 });
   await startServer();
-  await expect(stillActive(page, 3)).toBeVisible({ timeout: 20_000 });
+  await expect(stillActive(page, 1)).toBeVisible({ timeout: 20_000 });
+  await expect(lane(page, 'now')).toHaveCount(1);
+  await expect(lane(page, 'today')).toHaveCount(0);
 });

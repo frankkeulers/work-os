@@ -4,7 +4,7 @@ import type { SourceAdapter } from '../sources/types';
 import type { ItemFiles } from '../store/items';
 import type { Store } from '../store/store';
 import type { CursorFile } from './cursors';
-import { meFrom, ruleDecision, ruleReason, ruleVerdict } from './rules';
+import { meFrom, ruleDecision, ruleReason, ruleVerdict, type RuleVerdict } from './rules';
 
 // One poll of one source (FR-2.8). Idempotent: message IDs (Slack ts) are the dedupe key, so a
 // replayed or overlapping fetch changes nothing, and an item's revision only moves when it has a
@@ -59,7 +59,8 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
       messages,
       messageCount: Math.max(stored?.messageCount ?? 0, fetched.messageCount, messages.length),
       lastActivityAt,
-      revision: newIds.length || prevRevision === undefined ? (prevRevision ?? 0) + 1 : prevRevision,
+      // A file ahead of the log (a crash between the two) keeps its revision, so the poll logs it.
+      revision: newIds.length || prevRevision === undefined ? (prevRevision ?? 0) + 1 : Math.max(prevRevision, stored?.revision ?? 0),
     },
   };
 }
@@ -80,21 +81,29 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   let ruleDecided = 0;
   for (const fetched of result.items) {
     const prev = d.store.projection.items[fetched.id];
-    const stored = await d.items.read(fetched.source, fetched.id);
-    // Without the file (retention, or a crash before it was written) the merge starts afresh.
-    const { item, newIds } = mergeItem(stored?.item, fetched, prev?.revision);
-    if (prev && !newIds.length) continue;
-    const byId = new Map(item.messages.map((m) => [m.id, m]));
-    const fromMeOnly = !!prev && !!me && newIds.every((id) => byId.get(id)?.authorId === me);
-    const verdict = rules && !fromMeOnly ? ruleVerdict(item, rules.rules, rules.settings, meFrom(identity)) : undefined;
-    if (verdict?.kind === 'drop' && !prev) {
-      dropped++;
-      continue;
-    }
-    const fixed = verdict?.kind === 'fixed' ? verdict : undefined;
-    // A rule's decision replaces the text of any earlier one, which described older messages.
-    const text = fixed ? { summary: excerpt(item.messages[0]?.text) || item.title, reason: ruleReason(fixed) } : stored?.text;
-    await d.items.write({ item, text, schemaVersion: 1 });
+    // Read, merge and write under the item's lock: triage may be saving its text meanwhile.
+    const r: { item?: Item; fromMeOnly?: boolean; fixed?: Extract<RuleVerdict, { kind: 'fixed' }>; dropped?: boolean } = {};
+    await d.items.update(fetched.source, fetched.id, (stored) => {
+      // Without the file (retention, or a crash before it was written) the merge starts afresh.
+      const { item, newIds } = mergeItem(stored?.item, fetched, prev?.revision);
+      if (prev && item.revision === prev.revision) return undefined; // nothing the log doesn't have
+      const byId = new Map(item.messages.map((m) => [m.id, m]));
+      // Recovering a file the log never heard of: who wrote what is unknown, so triage it again.
+      const fromMeOnly = !!prev && !!me && newIds.length > 0 && newIds.every((id) => byId.get(id)?.authorId === me);
+      const verdict = rules && !fromMeOnly ? ruleVerdict(item, rules.rules, rules.settings, meFrom(identity)) : undefined;
+      if (verdict?.kind === 'drop' && !prev) {
+        r.dropped = true;
+        return undefined;
+      }
+      const fixed = verdict?.kind === 'fixed' ? verdict : undefined;
+      Object.assign(r, { item, fromMeOnly, fixed });
+      // A rule's decision replaces the text of any earlier one, which described older messages.
+      const text = fixed ? { summary: excerpt(item.messages[0]?.text) || item.title, reason: ruleReason(fixed) } : stored?.text;
+      return { item, text, schemaVersion: 1 as const };
+    });
+    if (r.dropped) dropped++;
+    if (!r.item) continue;
+    const { item, fromMeOnly, fixed } = r;
     changed++;
     drafts.push({
       type: 'item.upserted',
@@ -108,7 +117,7 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
         lastActivityAt: item.lastActivityAt,
         revision: item.revision,
         messageCount: item.messageCount,
-        fromMeOnly,
+        fromMeOnly: !!fromMeOnly,
       },
     });
     if (fixed) {

@@ -4,6 +4,8 @@ import type { Logger } from '../log';
 import type { Failure } from '../net/classify';
 import { Health, type HealthChange } from '../net/health';
 import type { ProbeResult } from '../net/probe';
+import { ClaudeError } from '../claude/errors';
+import type { TriageRun } from '../pipeline/triage';
 import { SourceError } from '../sources/errors';
 import type { SourceAdapter } from '../sources/types';
 import type { Store } from '../store/store';
@@ -18,6 +20,9 @@ import { Scheduler } from './scheduler';
 // others when it returns.
 // Claude calls and approved writes wait until the Mac has been awake for 45 s, so a Power Nap's
 // brief wake only fetches.
+//
+// Triage runs after every poll and when the next waiting thread goes quiet, one run at a time,
+// only while Claude may be called and its breaker lets it through (FR-5.1, CL-6, CL-10).
 
 export const TICK_MS = 5000;
 export const SETTLE_MS = 10_000;
@@ -25,6 +30,8 @@ export const PROBE_RETRY_MS = 5000;
 export const PROBE_TRIES = 3;
 export const POWER_NAP_MS = 45_000;
 export const RECHECK_MS = 5 * 60_000;
+export const BUDGET_RECHECK_MS = 15 * 60_000; // a spent budget frees up at midnight
+export const TRIAGE_BUG_BACKOFF_MS = 5 * 60_000;
 const ZONE_EVERY_TICKS = 12; // once a minute
 
 export interface RuntimeDeps {
@@ -37,6 +44,8 @@ export interface RuntimeDeps {
   poll: (s: SourceAdapter, reason: PollReason, signal: AbortSignal) => Promise<unknown>;
   /** Work due by the wall clock, run on every tick (snooze returns). */
   due?: (now: Date) => Promise<unknown>;
+  /** Model triage of what is due, or of `only` those items. Throws ClaudeError for health. */
+  triage?: (signal: AbortSignal, only?: string[]) => Promise<TriageRun>;
   probe: (signal: AbortSignal) => Promise<ProbeResult>;
   checks: () => Promise<StartupCheck[]>;
   wakeTime?: () => string | undefined;
@@ -70,6 +79,9 @@ export class Runtime {
   private inFlight = new Set<Promise<unknown>>();
   private probing?: Promise<void>;
   private checking?: Promise<void>;
+  private triaging?: Promise<TriageRun | undefined>;
+  private triageWanted = true; // after a poll, a settings change, a failure the breaker now allows
+  private nextTriageAt?: number; // wall ms: when the next waiting thread goes quiet
 
   constructor(private readonly d: RuntimeDeps) {
     this.safeMode = !!d.safeMode;
@@ -126,14 +138,17 @@ export class Runtime {
     }
     if (mono >= this.nextCheckMono) this.track(this.runChecks());
     if (this.phase === 'running') this.scheduler.tick();
+    if (this.phase === 'running' || this.phase === 'catching_up') this.maybeTriage();
     if (this.d.due && this.phase !== 'stopping') this.track(this.d.due(this.d.clock.now()).catch((err) => this.d.logger?.error({ err }, 'Due work failed')));
     if (this.d.store.snapshotDue()) this.track(this.d.store.snapshot().catch((err) => this.d.logger?.error({ err }, 'Snapshot failed')));
   }
 
   /** Waits for the work the last ticks started. For tests. */
   async settled() {
-    while (this.inFlight.size) await Promise.all(this.inFlight);
-    await this.scheduler.idle();
+    do {
+      while (this.inFlight.size) await Promise.all(this.inFlight);
+      await this.scheduler.idle(); // a poll that finishes may start triage
+    } while (this.inFlight.size);
   }
 
   /** Whether Claude may be called now: not within 45 s of a wake (CL-10). */
@@ -172,6 +187,9 @@ export class Runtime {
     try {
       await this.d.poll(s, reason, signal);
       for (const dep of s.deps) if (this.health.state(dep) !== 'ok') this.health.ok(dep);
+      // Triage what this poll made quiet or new, without waiting for the next tick (FR-5.1).
+      this.triageWanted = true;
+      this.maybeTriage();
     } catch (err) {
       // Cut off by sleep: not a failure; the wake catch-up polls again.
       if (signal.aborted) return;
@@ -217,6 +235,74 @@ export class Runtime {
   /** Settings were saved: check them again on the next tick. */
   settingsChanged() {
     this.nextCheckMono = 0;
+    this.triageWanted = true; // the quiet window or the budget may have changed
+  }
+
+  /** Whether the model may be asked now: awake long enough, online, and the breaker allows it. */
+  private claudeReady(): boolean {
+    return this.canUseClaude() && this.health.state('network') !== 'offline' && this.health.ready('claude');
+  }
+
+  private maybeTriage() {
+    if (!this.d.triage || this.triaging || !this.claudeReady()) return;
+    const due = this.triageWanted || (this.nextTriageAt !== undefined && this.d.clock.now().getTime() >= this.nextTriageAt);
+    // ready(), not allowed(): a run with nothing to send would hold the half-open trial for good.
+    // Runs are one at a time, so a half-open breaker still gets exactly one trial call.
+    if (!due) return;
+    this.triageWanted = false;
+    this.track((this.triaging = this.triageOnce().finally(() => (this.triaging = undefined))));
+  }
+
+  /** One triage run, reported to health. Resolves undefined when it didn't finish. */
+  private async triageOnce(only?: string[]): Promise<TriageRun | undefined> {
+    const signal = this.sleepSignal;
+    const now = () => this.d.clock.now().getTime();
+    try {
+      const r = await this.d.triage!(signal, only);
+      if (r.calls > 0 && this.health.state('claude') !== 'ok') this.health.ok('claude');
+      if (!only) this.nextTriageAt = r.paused ? now() + BUDGET_RECHECK_MS : r.nextReadyAt?.getTime();
+      return r;
+    } catch (err) {
+      if (signal.aborted) {
+        this.triageWanted = true; // cut off by sleep: again once awake
+        return undefined;
+      }
+      if (err instanceof ClaudeError) {
+        await this.reportFailure('claude', err.failure);
+        this.triageWanted = true; // runs again when the breaker lets it
+        if (only) throw err;
+        return undefined;
+      }
+      this.d.logger?.error({ err }, 'Triage failed');
+      this.health.fail('claude', { state: 'degraded', reason: 'internal' });
+      this.nextTriageAt = now() + TRIAGE_BUG_BACKOFF_MS;
+      if (only) throw err;
+      return undefined;
+    }
+  }
+
+  /**
+   * "Try again" on one item: triage it now, whatever its quiet window. Waits for a run in
+   * progress first. Says why it couldn't when it can't.
+   */
+  async retryTriage(id: string): Promise<{ ok: true } | { ok: false; reason: 'unavailable' | 'budget'; message: string }> {
+    if (!this.d.triage) return { ok: false, reason: 'unavailable', message: 'Triage is not running.' };
+    if (!this.claudeReady()) return { ok: false, reason: 'unavailable', message: this.health.get('claude').fix ?? 'Claude can’t be called right now. Triage resumes on its own.' };
+    await this.triaging;
+    const run = this.triageOnce([id]);
+    this.track(run);
+    try {
+      const r = await run;
+      if (r?.paused) return { ok: false, reason: 'budget', message: 'Triage budget reached for today. Rules still run; model triage resumes tomorrow.' };
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, reason: 'unavailable', message: err instanceof ClaudeError ? err.message : 'Triage failed.' };
+    }
+  }
+
+  /** Who Frank is in a source, once it knows: ID and handle. */
+  whoAmI(id: SourceId): { id: string; name?: string } | undefined {
+    return this.d.sources().find((s) => s.id === id)?.identity?.();
   }
 
   mode(): HealthView['mode'] {
@@ -243,7 +329,7 @@ export class Runtime {
   pollStatus(id: SourceId = 'slack'): PollStatus {
     const cur = this.scheduler.current;
     return {
-      phase: cur ? 'polling' : 'idle',
+      phase: cur ? 'polling' : this.triaging ? 'triaging' : 'idle',
       reason: cur?.reason,
       lastPollAt: this.d.store.projection.sources[id]?.lastPollAt,
       nextPollAt: this.scheduler.nextPollAt(id),

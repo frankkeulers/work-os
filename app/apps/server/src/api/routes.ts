@@ -58,6 +58,15 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(204).send();
   });
 
+  // "Try again" on an item (CL-7): triaged now, whatever its quiet window. Answers once it is done.
+  app.post<{ Params: { id: string } }>('/api/items/:id/retry-triage', async (req, reply) => {
+    const id = item(req.params.id);
+    if (!d.runtime) throw new HttpError('unavailable', 'The runtime is not running.');
+    const r = await d.runtime.retryTriage(id);
+    if (!r.ok) throw new HttpError(r.reason, r.message);
+    return reply.code(204).send();
+  });
+
   app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));
 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {

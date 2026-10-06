@@ -381,6 +381,17 @@ As built (M2 step 13):
 - The queue (`pipeline/eligibility.ts`) holds pending items that have been quiet for `quietMinutes`, oldest first, and reports when the next one goes quiet.
 - Truncation keeps the first message, the last `keepLastMessages`, and every message that mentions Frank (`<@id>` or "@handle"). It sends a count of the rest, and cuts any single message at 2,000 characters. Threads are packed in order within `maxThreadsPerCall` and `maxInputTokens` (estimated at four characters per token, prompt included); a thread too big for any batch goes alone.
 
+As built (M2 step 15):
+
+- Triage runs from the 5 s tick and straight after each poll, one run at a time. It runs only when Claude may be used: awake for 45 s (CL-10), not offline, and the `claude` breaker ready. The breaker's half-open trial is used only by a run that actually calls the model.
+- The prompt lives in `config/prompts/triage.md`, written on first run and read on every call. Its version is the declared name plus a hash of the text, so an edit shows in the usage log even if the name isn't bumped.
+- The budget (CL-6) is checked before every batch. Once it is spent, the queue waits and is rechecked every 15 minutes; rules still decide at ingest.
+- Each decision is for the revision the model saw. The decision's text goes into the item file under the item's lock, and only if the file is still that revision; then `triage.decided` is logged. A thread that moved on during the call is triaged again at its new revision.
+- An answer that fails zod twice logs `triage.failed` for its batch (CL-7). An item missing from the answer, or whose file is gone, fails on its own. "Try again" (`POST /api/items/:id/retry-triage`) triages that item at once, whatever its quiet window. It answers 429 when the budget is spent, and 503 when Claude can't be called.
+- A model rule's `min` is a floor on the model's answer. A thread with observations about people never gets a Confluence suggestion.
+- The poll now writes each item under the same per-item lock. A reply whose file was written but never logged (a crash in between) is recovered on the next poll.
+- Tests and `--fakes` runs use a keyword-based fake model and never call Claude.
+
 ---
 
 ## 6. MVP scope (Slack only)
