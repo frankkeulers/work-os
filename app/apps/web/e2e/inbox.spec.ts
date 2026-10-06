@@ -118,7 +118,9 @@ test('the next step offers a snooze timed to the deadline', async ({ page }) => 
   const step = itemPanel(page).getByRole('region', { name: 'Next step' });
   await expect(step).toContainText('Marketing waiting');
   await step.getByRole('button', { name: 'Snooze until 11:30' }).click();
-  await expect(page.getByText(/^Snoozed until Mon 5 Oct 11:30/)).toBeVisible();
+  // The toast and the panel's status both say it; the row was already open, so they can land together.
+  await expect(page.getByRole('status').getByText(/^Snoozed until Mon 5 Oct 11:30 · #mvi-launch/)).toBeVisible();
+  await expect(itemPanel(page).getByRole('region', { name: 'Status' })).toContainText('Snoozed until Mon 5 Oct 11:30');
   await expect(rows(page, 'Now')).toHaveCount(2);
 });
 
