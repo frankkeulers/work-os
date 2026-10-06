@@ -9,7 +9,8 @@
     "dev": "WORKOS_INSTANCE=dev tsx watch src/main.ts",
     "rebuild-state": "tsx src/cli/rebuild-state.ts",
     "deploy": "tsx src/cli/deploy.ts",
-    "agent": "tsx src/cli/agent.ts"
+    "agent": "tsx src/cli/agent.ts",
+    "spike:slack": "tsx src/cli/slack-spike.ts"
   },
   "dependencies": {
     "@work-os/shared": "*",

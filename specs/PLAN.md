@@ -152,7 +152,7 @@ Schema fingerprint: SHA-256 over `PRAGMA table_info` of `Meetings`, `Notes` and 
 | Frontend | React, TypeScript, Vite, Tailwind | Served by the backend in production, Vite dev server in development. |
 | Shared types | `packages/shared` with zod schemas | One source of truth for Item, Decision, Action, Event. |
 | Claude | `@anthropic-ai/claude-agent-sdk` (TypeScript) | Authenticates through the local Claude Code login. |
-| Slack | `@slack/web-api` with a user token | Read-only scopes. |
+| Slack | A small Web API client on `fetch` with a user token | Read-only scopes. Chosen over `@slack/web-api`: our breaker is the only retry policy, every call takes the deadline and sleep signal, and there is no axios in the bundle. |
 | Confluence writes | Confluence Cloud REST API v2 | Atlassian API token from Keychain. |
 | Secrets | macOS Keychain (`security` CLI or `keytar`) | Never in settings files or logs. |
 | Real-time UI | Server-Sent Events | No websockets needed. |
@@ -429,7 +429,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 **FR-2.4** Fallback fetch (setting `slack.fetchMode = "history"`): `conversations.history` for included channels and DMs, plus `conversations.replies` for active threads.
 
-**FR-2.5** Spike in M1: verify that search returns thread replies and DMs reliably, and how long it lags. Pick the primary mode based on the result and record the finding in this file.
+**FR-2.5** Spike in M1: verify that search returns thread replies and DMs reliably, and how long it lags. Pick the primary mode based on the result and record the finding in this file. Run it with `npm run spike:slack` once the token is in the Keychain (P0-1). It prints counts only. Until then the adapter assumes search lags by up to 15 minutes (each poll looks back that far before the cursor) and keeps search to conversations Frank is a member of, plus any in `includeChannels`. Also to confirm: that a query with only `after:` works.
 
 **FR-2.6** Messages are grouped into items by thread (`thread_ts`) or, for DMs without threads, into windows separated by a gap of 30+ minutes.
 
