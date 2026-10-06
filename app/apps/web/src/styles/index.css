@@ -95,3 +95,46 @@ a:hover {
 .wos-prose[contenteditable='true'] {
   min-height: 160px;
 }
+
+/* Inbox item panel: slides in from the right and back out. Over the list (narrow windows) it moves;
+   docked beside the list it grows from the right edge, so the list doesn't jump. */
+@keyframes item-panel-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes item-panel-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes item-panel-dock-in {
+  from {
+    flex-basis: 0;
+  }
+}
+@keyframes item-panel-dock-out {
+  to {
+    flex-basis: 0;
+  }
+}
+.item-panel {
+  animation: item-panel-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.item-panel[data-state='closed'] {
+  animation: item-panel-out 180ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@media (min-width: 1320px) {
+  .item-panel {
+    animation-name: item-panel-dock-in;
+  }
+  .item-panel[data-state='closed'] {
+    animation-name: item-panel-dock-out;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .item-panel,
+  .item-panel[data-state='closed'] {
+    animation-duration: 1ms;
+  }
+}

@@ -194,3 +194,37 @@ test('click the draft text to edit it in place; Save and Cancel sit under the ed
   await expect(action.getByLabel('Draft text preview')).not.toContainText('Note: ');
   await expect(action.getByRole('button', { name: 'Approve and write to sandbox' })).toBeVisible();
 });
+
+test('the panel slides in, and a click outside it closes it', async ({ page }) => {
+  const slider = page.locator('.item-panel');
+  // Docked beside the list at this width, the panel grows in from the right edge.
+  await expect(slider).toHaveCSS('animation-name', 'item-panel-dock-in');
+
+  // Rows switch the item; they don't close the panel.
+  const second = rows(page, 'Now').nth(1);
+  await second.click();
+  await expect(selected(page)).toHaveAttribute('data-row', (await second.getAttribute('data-row'))!);
+  await expect(itemPanel(page)).toBeVisible();
+
+  // Toasts sit above the page: Undo on the Done toast keeps the panel.
+  await itemPanel(page).getByRole('button', { name: /^Done e$/ }).click();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(itemPanel(page)).toBeVisible();
+
+  // A click anywhere else closes it, after the slide-out.
+  await page.getByRole('heading', { name: 'Inbox', level: 1 }).click();
+  await expect(itemPanel(page)).toHaveCount(0);
+  await expect(page).toHaveURL((u) => !u.searchParams.has('item'));
+});
+
+test('a click outside the panel with unsaved draft edits asks first', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Action' }).getByRole('button', { name: 'Edit text' }).click();
+  await page.getByLabel('Draft text').fill('Unsaved change');
+  await page.getByRole('heading', { name: 'Inbox', level: 1 }).click();
+  const leave = page.getByRole('dialog', { name: 'Leave with unsaved edits?' });
+  await expect(leave).toBeVisible();
+  await leave.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByLabel('Draft text')).toHaveText('Unsaved change');
+});

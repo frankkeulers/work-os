@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useBlocker, useNavigate, useSearchParams, type BlockerFunction } from 'react-router';
 import type { ActionType, Lane } from '@work-os/shared';
-import { api, type InboxView, type ItemSummary } from '../api';
+import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
 import { parseType } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
 import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo } from '../components/item';
@@ -385,13 +385,19 @@ function CommitmentsGroup() {
 
 const keyOf = (q: URLSearchParams) => `${q.get('item')}:${parseType(q.get('file'))}`;
 
+/**
+ * Clicks here aren't "outside" the item panel: rows switch the item, links leave the page anyway
+ * (closing would rewrite the URL mid-navigation), and layers (toasts, dialogs, menus, the scenario
+ * drawer) sit above it.
+ */
+const NOT_OUTSIDE = '[data-row], a[href], [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
+
 export function InboxPage() {
   const { inbox: q } = useShell();
   const inbox = q.data;
   const now = useNow(30_000);
   const navigate = useNavigate();
   const full = usePrefs((s) => s.scope === 'full');
-  const panelOpen = usePrefs((s) => s.panelOpen);
   const setPanelOpen = usePrefs((s) => s.setPanelOpen);
   const [search, setSearch] = useSearchParams();
   const sel = search.get('item');
@@ -419,6 +425,9 @@ export function InboxPage() {
   // Where the cursor was, so j/k carry on from there after the item leaves the list.
   const [anchor, setAnchor] = useState(0);
   if (idx >= 0 && idx !== anchor) setAnchor(idx);
+  // The panel's last content, kept on screen while it slides out.
+  const [shown, setShown] = useState<{ item: ItemSummary; view?: ItemView; pos: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const detail = useApiQuery(() => (sel ? api.getItem(sel) : Promise.resolve(undefined)), (n) => (n.topic === 'item' && n.id === sel) || n.topic === 'settings' || n.topic === 'usage', [sel]);
 
@@ -487,13 +496,16 @@ export function InboxPage() {
   );
 
   // The panel opens on the first item until it's closed. A stale ?item= (after a reset) moves on.
+  // The preference is read, not watched: picking a row sets it a moment before the URL changes,
+  // and reacting to that would open the first item over the one you picked.
   const first = order[0];
   const missing = !!inbox && !!sel && !selItem;
   useEffect(() => {
     if (!inbox) return;
-    if (missing) setSearch(panelOpen && first ? { item: first } : {}, { replace: true });
-    else if (!sel && panelOpen && first) setSearch({ item: first }, { replace: true });
-  }, [inbox, missing, sel, panelOpen, first, setSearch]);
+    const open = usePrefs.getState().panelOpen;
+    if (missing) setSearch(open && first ? { item: first } : {}, { replace: true });
+    else if (!sel && open && first) setSearch({ item: first }, { replace: true });
+  }, [inbox, missing, sel, first, setSearch]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -516,6 +528,20 @@ export function InboxPage() {
     return () => document.removeEventListener('keydown', onKey);
   }, [step, close, sel, navigate]);
 
+  // A click outside the panel closes it. On click rather than mousedown, so the control you
+  // clicked still gets the click before the list widens.
+  useEffect(() => {
+    if (!sel) return;
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t?.isConnected || panelRef.current?.contains(t) || t.closest(NOT_OUTSIDE)) return;
+      if (!(window.getSelection()?.isCollapsed ?? true)) return; // the end of a text selection
+      close();
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, [sel, close]);
+
   useEffect(() => {
     document.title = 'Inbox · Work OS';
   }, []);
@@ -526,6 +552,9 @@ export function InboxPage() {
   const deadline = nextDeadline(all, now);
   const row = (i: ItemSummary) => <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} onPick={() => pick(i.id)} />;
   const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
+  if (selItem && (shown?.item !== selItem || shown.view !== view || shown.pos !== idx + 1)) setShown({ item: selItem, view, pos: idx + 1 });
+  const closing = !selItem && !!shown;
+  const panel = selItem ? { item: selItem, view, pos: idx + 1 } : shown;
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-surface">
@@ -630,13 +659,20 @@ export function InboxPage() {
           )}
         </section>
 
-        {selItem && (
-          <div className="fixed inset-y-0 right-0 z-30 flex w-full max-w-[600px] min-[1320px]:static min-[1320px]:z-auto min-[1320px]:max-w-none min-[1320px]:flex-[0_1_600px]">
-            <div className="flex min-w-0 flex-1 flex-col">
+        {panel && (
+          <div
+            ref={panelRef}
+            data-state={closing ? 'closed' : 'open'}
+            inert={closing}
+            onAnimationEnd={(e) => e.target === e.currentTarget && closing && setShown(null)}
+            className="item-panel fixed inset-y-0 right-0 z-30 flex w-full max-w-[600px] min-[1320px]:static min-[1320px]:z-auto min-[1320px]:max-w-none min-[1320px]:flex-[0_1_600px] min-[1320px]:justify-end min-[1320px]:overflow-hidden"
+          >
+            {/* Docked, the content keeps its width while the column grows, so it slides in rather than reflowing. */}
+            <div className="flex min-w-0 flex-1 flex-col min-[1320px]:w-[600px] min-[1320px]:flex-none">
               <ItemPanel
-                item={selItem}
-                view={view}
-                pos={idx + 1}
+                item={panel.item}
+                view={panel.view}
+                pos={panel.pos}
                 total={order.length}
                 filing={filing}
                 setFiling={setFiling}

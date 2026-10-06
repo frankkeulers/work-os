@@ -372,7 +372,7 @@ export function Dialog({ title, children, onClose, footer, width = 560 }: { titl
     };
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(15,17,21,0.45)] px-4 py-[8vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div data-overlay className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(15,17,21,0.45)] px-4 py-[8vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={id} className="flex w-full flex-col rounded-[14px] border border-line bg-surface shadow-[0_24px_64px_rgba(20,23,28,0.25)]" style={{ maxWidth: width }}>
         <div className="flex items-center gap-2 border-b border-line-soft px-5 py-4">
           <h2 id={id} className="m-0 flex-1 text-[17px] font-semibold">
