@@ -3,14 +3,23 @@ import { initDataDir, paths } from './config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from './config/defaults';
 import { join, resolve } from 'node:path';
 import { loadApiToken } from './api/auth';
+import { settingsCheck } from './api/views';
 import { macKeychain, type SecretStore } from './config/keychain';
 import { loadSettings } from './config/settings';
 import { SettingsState } from './config/settingsState';
 import { createLogger, type Logger } from './log';
 import { silentNotifier, type Notifier } from './notify/macos';
+import { probeNetwork, type FetchFn } from './net/probe';
+import { exec as systemExec, runChecks, type Exec } from './runtime/checks';
+import { clearCrashes, recordCleanStop, recordStart } from './runtime/crashLoop';
 import { Lifecycle } from './runtime/lifecycle';
 import { acquireLock, systemProbe, type ProcessProbe } from './runtime/lock';
+import { readWakeTime, systemClock, type Clock } from './runtime/power';
 import { apiKeySet, clearRefusal, refuseApiKey } from './runtime/refuse';
+import { Runtime } from './runtime/runtime';
+import { followSystemZone } from './runtime/tz';
+import { buildSources, type AdapterFactory } from './sources/registry';
+import type { SourceId } from '@work-os/shared';
 import { createServer, type WorkOsServer } from './server';
 import { ItemFiles } from './store/items';
 import { Store, type RecoveryReport } from './store/store';
@@ -26,6 +35,14 @@ export interface RunDeps {
   secrets?: SecretStore;
   now?: () => Date;
   echoLogs?: boolean;
+  /** Fakes for tests: the clocks, the network probe's fetch, and the commands the checks run. */
+  clock?: Clock;
+  fetch?: FetchFn;
+  exec?: Exec;
+  wakeTime?: () => string | undefined;
+  followZone?: () => string | undefined;
+  /** The source adapters by id. Slack arrives in M1 step 9; until then nothing polls. */
+  sources?: Partial<Record<SourceId, AdapterFactory>>;
 }
 
 export type RunResult =
@@ -38,6 +55,7 @@ export type RunResult =
       store: Store;
       items: ItemFiles;
       settings: SettingsState;
+      runtime: Runtime;
       recovery: RecoveryReport;
       token: string;
       logger: Logger;
@@ -45,15 +63,13 @@ export type RunResult =
       flush(): void;
     };
 
-/** How often to check whether a snapshot is due. The scheduler's tick takes this over (step 7). */
-const SNAPSHOT_CHECK_MS = 5000;
-
 /** Vite's dev server, which proxies /api to the development instance. */
 const DEV_ORIGINS = 'http://localhost:5173,http://127.0.0.1:5173';
 
 export async function run(deps: RunDeps): Promise<RunResult> {
   const notifier = deps.notifier ?? silentNotifier;
-  const now = deps.now ?? (() => new Date());
+  const clock = deps.clock ?? (deps.now ? { now: deps.now, mono: () => performance.now() } : systemClock);
+  const now = () => clock.now();
   const underLaunchd = deps.env.WORKOS_LAUNCHD === '1';
 
   let config: RuntimeConfig;
@@ -86,21 +102,47 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   lifecycle.onStop('log', () => flush());
   await clearRefusal(config.dataDir);
 
+  // A run that ends without a clean stop counts as a crash; too many and the scheduler stays off.
+  const runs = await recordStart(config.dataDir, now());
+  let crashed = false;
+  lifecycle.onStop('crash-loop', () => (crashed ? undefined : recordCleanStop(config.dataDir)));
+  if (runs.safeMode) {
+    logger.error({ crashes: runs.crashes }, 'Safe mode: crashed too often, polling is off');
+    await notifier.notify({ title: 'Work OS is in safe mode', message: `It crashed ${runs.crashes} times in 10 minutes. Polling is off; open Work OS and choose Check again.` });
+  }
+  const zone = (deps.followZone ?? followSystemZone)();
+  if (zone) logger.info({ zone }, 'Using the system time zone');
+
   const load = await loadSettings(config.dataDir);
   if (load.status !== 'ok') {
     logger.warn({ issues: load.issues }, load.status === 'fallback' ? 'Settings invalid: using the last good copy' : 'Settings invalid and no good copy: sources paused');
   }
   const settings = await SettingsState.create(config.dataDir, load, config.forceDryRun);
-  const { token, persisted } = await loadApiToken(deps.secrets ?? macKeychain(), config.instance, logger);
+  const secrets = deps.secrets ?? macKeychain();
+  const { token, persisted } = await loadApiToken(secrets, config.instance, logger);
 
   // Recover the store before binding, so the first request already sees the replayed inbox.
   const { store, recovery } = await Store.open({ dataDir: config.dataDir, logger, now });
   lifecycle.onStop('store', () => store.close());
-  const snapshots = setInterval(() => {
-    if (store.snapshotDue()) store.snapshot().catch((err) => logger.error({ err }, 'Snapshot failed'));
-  }, SNAPSHOT_CHECK_MS);
-  snapshots.unref();
-  lifecycle.onStop('snapshot-timer', () => clearInterval(snapshots));
+  const factories = deps.sources ?? {};
+  const runtime = new Runtime({
+    clock,
+    store,
+    settings,
+    logger,
+    sources: () => buildSources(settings.settings, factories),
+    // The poll pipeline arrives in M1 step 10, with the first adapter; no source is registered yet.
+    poll: async (s) => {
+      throw new Error(`No poll pipeline yet for ${s.id}`);
+    },
+    probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
+    checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings) }),
+    wakeTime: deps.wakeTime ?? readWakeTime,
+    followZone: deps.followZone ?? followSystemZone,
+    safeMode: runs.safeMode,
+    clearSafeMode: () => clearCrashes(config.dataDir),
+    tokenPersisted: persisted,
+  });
 
   const items = new ItemFiles(join(config.dataDir, 'items'));
   const server = await createServer({
@@ -110,6 +152,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     store,
     items,
     settings,
+    runtime,
     recovery,
     token,
     tokenPersisted: persisted,
@@ -122,13 +165,21 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     url = await server.listen();
   } catch (e) {
     logger.error({ err: e }, 'Could not bind the HTTP port');
+    crashed = true; // launchd retries, and it counts towards safe mode
     await lifecycle.stop('bind_failed');
     // Not a deliberate stop: launchd retries after its throttle interval.
     return { running: false, code: EXIT.crash };
   }
-  logger.info({ url, version: config.version, dataDir: config.dataDir }, 'Work OS started');
+  logger.info({ url, version: config.version, dataDir: config.dataDir, safeMode: runs.safeMode }, 'Work OS started');
+  await store.append({ type: 'system.started', data: { version: config.version, instance: config.instance } });
+  // Stops first: in-flight calls abort before the HTTP server and the store (which snapshots) close.
+  lifecycle.onStop('runtime', async (reason) => {
+    await runtime.stop();
+    await store.append({ type: 'system.stopped', data: { reason } }).catch((err) => logger.error({ err }, 'Could not log the stop'));
+  });
+  runtime.start();
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, recovery, token, logger, lifecycle, flush };
 }

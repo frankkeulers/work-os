@@ -1,16 +1,32 @@
-// All times display in Europe/London, whatever the browser's zone, so the mock clock reads the same everywhere.
+// Work hours, quiet hours, budget days and snooze presets are wall-clock times in one zone.
+// The web app and the mock use Europe/London, so the mock clock reads the same everywhere. The
+// server uses the Mac's own zone and follows it when Frank travels (runtime/tz.ts). The "london"
+// names below predate that and mean "the zone in force".
 export const TZ = 'Europe/London';
 
-const partsFmt = new Intl.DateTimeFormat('en-GB', {
-  timeZone: TZ,
-  weekday: 'short',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
+const formatFor = (timeZone: string) =>
+  new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+
+let zone = TZ;
+let partsFmt = formatFor(zone);
+
+/** The zone in force. */
+export const timeZone = () => zone;
+
+/** Switches every helper here to another IANA zone. Throws on an unknown zone. */
+export function setTimeZone(next: string) {
+  partsFmt = formatFor(next);
+  zone = next;
+}
 
 export function londonParts(d: Date | string) {
   const parts = Object.fromEntries(partsFmt.formatToParts(new Date(d)).map((p) => [p.type, p.value]));

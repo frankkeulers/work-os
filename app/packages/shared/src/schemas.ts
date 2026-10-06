@@ -229,6 +229,15 @@ export type ModelId = z.infer<typeof ModelId>;
 const minutes = z.number({ error: 'Enter a number' }).int('Whole minutes only').positive('Must be more than 0');
 const timeRange = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d[–-]([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM–HH:MM');
 
+// Per-source polling (FR-1.3). Every field is optional and falls back to the defaults in
+// sourceSchedule(), so settings written before sources existed stay valid at schemaVersion 1.
+export const SourceSchedule = z.object({
+  enabled: z.boolean(),
+  intervalWorkMinutes: minutes,
+  intervalOffMinutes: minutes.nullable(), // null: polled in work hours only
+});
+export type SourceSchedule = z.infer<typeof SourceSchedule>;
+
 export const ConfluencePage = z.object({
   title: z.string().min(1, 'Enter a page title'),
   id: z.string().regex(/^\d{5,12}$/, 'Page IDs are 5–12 digits'),
@@ -279,9 +288,27 @@ export const Settings = z.object({
     quietHours: timeRange,
   }),
   dryRun: z.boolean(),
+  sources: z.partialRecord(SourceId, SourceSchedule.partial()).optional(),
   schemaVersion: z.literal(1),
 });
 export type Settings = z.infer<typeof Settings>;
+
+const SOURCE_DEFAULTS: Record<SourceId, SourceSchedule> = {
+  slack: { enabled: true, intervalWorkMinutes: 10, intervalOffMinutes: 60 },
+  outlook: { enabled: false, intervalWorkMinutes: 30, intervalOffMinutes: 120 },
+  teams: { enabled: false, intervalWorkMinutes: 30, intervalOffMinutes: 120 },
+  plaud: { enabled: false, intervalWorkMinutes: 180, intervalOffMinutes: null },
+  wispr: { enabled: false, intervalWorkMinutes: 180, intervalOffMinutes: null },
+};
+
+/** A source's schedule with defaults filled in. Slack's defaults are the global schedule. */
+export function sourceSchedule(settings: Pick<Settings, 'schedule' | 'sources'>, id: SourceId): SourceSchedule {
+  const base =
+    id === 'slack'
+      ? { enabled: true, intervalWorkMinutes: settings.schedule.intervalWorkMinutes, intervalOffMinutes: settings.schedule.intervalOffMinutes }
+      : SOURCE_DEFAULTS[id];
+  return { ...base, ...settings.sources?.[id] };
+}
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------
 

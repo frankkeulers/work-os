@@ -5,6 +5,9 @@ import { execFile } from 'node:child_process';
 
 export const KEYCHAIN_SERVICE = 'com.polestar.workos';
 
+/** The Slack user token's account name under KEYCHAIN_SERVICE (P0-1). */
+export const SLACK_TOKEN_ACCOUNT = 'slack-user-token';
+
 export interface SecretStore {
   /** The secret, or undefined if there is none. Throws if the Keychain can't be read. */
   get(account: string): Promise<string | undefined>;

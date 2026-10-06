@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inTimeRange, isWorkHours, londonAt, londonParts, tomorrowAt9 } from './time';
+import { inTimeRange, isWorkHours, londonAt, londonParts, setTimeZone, timeZone, tomorrowAt9 } from './time';
 
 // London is UTC+1 until 25 Oct 2026 (BST), then UTC+0 (GMT).
 
@@ -56,5 +56,21 @@ describe('tomorrowAt9 and londonAt', () => {
   it('places a London time on the same or a later day', () => {
     expect(londonAt(new Date('2026-10-05T10:00:00.000Z'), '17:00')).toBe('2026-10-05T16:00:00.000Z');
     expect(londonAt(new Date('2026-10-05T10:00:00.000Z'), '09:00', 2)).toBe('2026-10-07T08:00:00.000Z');
+  });
+});
+
+describe('setTimeZone', () => {
+  it('moves work hours with the zone, for when Frank travels', () => {
+    const at = '2026-10-05T07:30:00.000Z'; // 08:30 in London, 09:30 in Paris, 03:30 in New York
+    try {
+      expect(isWorkHours(at, 'Mon–Fri 08:00–18:30')).toBe(true);
+      setTimeZone('America/New_York');
+      expect(timeZone()).toBe('America/New_York');
+      expect(isWorkHours(at, 'Mon–Fri 08:00–18:30')).toBe(false);
+      expect(() => setTimeZone('Mars/Olympus')).toThrow();
+      expect(timeZone()).toBe('America/New_York');
+    } finally {
+      setTimeZone('Europe/London');
+    }
   });
 });

@@ -13,6 +13,20 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
 
   app.get('/api/health', async (_req, reply) => reply.headers(noStore).send(healthView(d, d.lifecycle.isStopping)));
 
+  // "Check again" (FR-12.2): reruns the checks and lets every breaker try once.
+  app.post('/api/health/recheck', async (_req, reply) => {
+    if (!d.runtime) throw new HttpError('unavailable', 'The runtime is not running.');
+    await d.runtime.recheck();
+    return reply.code(204).send();
+  });
+
+  // "Poll now" (FR-2.6): queued behind any poll in progress; the result arrives over SSE.
+  app.post('/api/poll', async (_req, reply) => {
+    if (!d.runtime) throw new HttpError('unavailable', 'The runtime is not running.');
+    d.runtime.pollNow();
+    return reply.code(202).send();
+  });
+
   app.get('/api/inbox', async (_req, reply) => reply.headers(noStore).send(inboxView(d)));
 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {
@@ -45,6 +59,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (saved.settingsChanged) events.push({ type: 'settings.changed' as const, data: { dryRun: saved.settings.dryRun } });
     if (saved.rulesChanged) events.push({ type: 'rules.changed' as const, data: { count: saved.rules.length } });
     if (events.length) await d.store.append(...events);
+    if (saved.settingsChanged) d.runtime?.settingsChanged();
     return reply.headers(noStore).send({ savedAt: d.settings.savedAt });
   });
 }

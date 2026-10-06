@@ -20,6 +20,7 @@ import {
 } from '@work-os/shared';
 import type { RuntimeConfig } from '../config/env';
 import type { SettingsState } from '../config/settingsState';
+import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { RecoveryReport, Store } from '../store/store';
 import { HttpError } from './errors';
@@ -40,6 +41,8 @@ export interface ViewDeps {
   startedAt: string;
   now: () => Date;
   meId?: string; // the Slack user, once the Slack adapter knows it (M1 step 9)
+  /** Health, wake state and the scheduler. Absent in tests of the HTTP layer alone. */
+  runtime?: Runtime;
 }
 
 function budgets(d: ViewDeps): BudgetState {
@@ -59,6 +62,20 @@ function actionsByItem(d: ViewDeps): Map<string, ActionState[]> {
 
 export function slackHealth(d: ViewDeps): SourceHealth {
   const src = d.store.projection.sources.slack;
+  if (d.runtime) {
+    const st = d.runtime.sourceStatus('slack');
+    return {
+      id: 'slack',
+      status: st.status,
+      mode: d.settings.editable.settings.slack.fetchMode,
+      lastPollAt: src?.lastPollAt,
+      nextPollAt: d.runtime.scheduler.nextPollAt('slack'),
+      retryAt: st.retryAt,
+      rateLimitedToday: 0,
+      cursor: src?.cursor,
+      message: st.message,
+    };
+  }
   return {
     id: 'slack',
     status: src?.lastPollAt ? 'healthy' : 'never',
@@ -92,9 +109,26 @@ function keychainDep(d: ViewDeps): DependencyHealth[] {
   ];
 }
 
+/** The checks for the UI: settings live, the rest from the last run (they run every 5 min). */
+function checksOf(d: ViewDeps): StartupCheck[] {
+  return [settingsCheck(d.settings), ...(d.runtime?.checks.filter((c) => c.id !== 'settings') ?? [])];
+}
+
 export function healthView(d: ViewDeps, stopping: boolean): HealthView {
+  const common = {
+    connection: 'up' as const,
+    checks: checksOf(d),
+    outbox: { approved: 0, waiting: 0 },
+    instance: d.config.instance,
+    version: d.config.version,
+    startedAt: d.startedAt,
+  };
+  if (d.runtime) {
+    const r = d.runtime.view();
+    return { ...common, ...r, checks: common.checks, phase: stopping ? 'stopping' : r.phase };
+  }
   const deps = keychainDep(d);
-  const checks = [settingsCheck(d.settings)];
+  const checks = common.checks;
   return {
     connection: 'up',
     mode: d.settings.status === 'ok' && !deps.length ? 'normal' : 'degraded',
@@ -131,7 +165,7 @@ export function inboxView(d: ViewDeps): InboxView {
   const source = slackHealth(d);
   return {
     items,
-    poll: { phase: 'idle', lastPollAt: source.lastPollAt },
+    poll: d.runtime?.pollStatus('slack') ?? { phase: 'idle', lastPollAt: source.lastPollAt },
     source,
     sources: [source],
     budgets: b,
@@ -236,8 +270,8 @@ export async function settingsView(d: ViewDeps): Promise<SettingsView> {
     rules,
     ruleHits: Object.fromEntries(rules.map((r) => [r.id, 0])),
     savedAt: d.settings.savedAt,
-    checks: [settingsCheck(d.settings)],
-    checkedAt: d.startedAt,
+    checks: checksOf(d),
+    checkedAt: d.runtime?.checkedAt ?? d.startedAt,
     labelCount: 0,
     correctionCount: 0,
     vaultConventionsLoaded: conventions,
