@@ -300,29 +300,45 @@ const LOWER: Record<Lower, { title: string; note: string }> = {
   waiting: { title: 'Waiting for quiet window', note: 'Still active. Triage runs once each thread has been quiet for a while.' },
 };
 
+/** Low priority leads as an outlined button; Snoozed and Done are quiet links at the far end. */
 function FooterLinks({ by, open, onToggle }: { by: Record<Lower, ItemSummary[]>; open: Lower | null; onToggle: (g: Lower) => void }) {
   const now = useNow(30_000);
   const back = by.snoozed[0]?.snoozedUntil;
-  const links: { id: Lower; label: string }[] = [
-    { id: 'else', label: `${by.else.length} low priority` },
-    ...(by.snoozed.length ? [{ id: 'snoozed' as const, label: `${by.snoozed.length} snoozed${back ? ` · next back ${fmtWhen(back, now)}` : ''}` }] : []),
-    ...(by.done.length ? [{ id: 'done' as const, label: `${by.done.length} done` }] : []),
+  const chevron = (id: Lower) => <Icon name="down" size={12} className={cx('transition-transform', open !== id && '-rotate-90')} />;
+  const quiet: { id: Lower; icon: 'clock' | 'check'; label: string }[] = [
+    ...(by.snoozed.length ? [{ id: 'snoozed' as const, icon: 'clock' as const, label: `${by.snoozed.length} snoozed${back ? ` · next back ${fmtWhen(back, now)}` : ''}` }] : []),
+    ...(by.done.length ? [{ id: 'done' as const, icon: 'check' as const, label: `${by.done.length} done` }] : []),
   ];
   return (
-    <div data-testid="inbox-footer" className="flex flex-wrap items-center gap-x-1 gap-y-1 px-4 py-2 text-xs text-muted">
-      {links.map((l, n) => (
-        <span key={l.id} className="inline-flex items-center gap-x-1">
-          {n > 0 && <span aria-hidden="true">·</span>}
-          <button
-            type="button"
-            aria-expanded={open === l.id}
-            onClick={() => onToggle(l.id)}
-            className={cx('inline-flex min-h-7 items-center gap-1 rounded-md px-2 cursor-pointer hover:bg-surface-2 hover:text-ink-2', open === l.id && 'bg-surface-2 text-ink-2')}
-          >
-            {l.label}
-            <Icon name="down" size={12} className={cx('transition-transform', open !== l.id && '-rotate-90')} />
-          </button>
+    <div data-testid="inbox-footer" className="flex flex-wrap items-center gap-x-2 gap-y-2 px-6 py-3">
+      <button
+        type="button"
+        aria-expanded={open === 'else'}
+        onClick={() => onToggle('else')}
+        className={cx(
+          'inline-flex min-h-8 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium text-ink-2 cursor-pointer hover:bg-surface-2 hover:text-ink',
+          open === 'else' && 'bg-surface-2 text-ink',
+        )}
+      >
+        <Icon name="inbox" size={14} className="text-muted" />
+        <span>
+          <span className="font-semibold text-ink">{by.else.length}</span> low priority
         </span>
+        {chevron('else')}
+      </button>
+      <span className="flex-1" />
+      {quiet.map((l) => (
+        <button
+          key={l.id}
+          type="button"
+          aria-expanded={open === l.id}
+          onClick={() => onToggle(l.id)}
+          className={cx('inline-flex min-h-7 items-center gap-1.5 rounded-md px-2 text-xs text-muted cursor-pointer hover:bg-surface-2 hover:text-ink-2', open === l.id && 'bg-surface-2 text-ink-2')}
+        >
+          <Icon name={l.icon} size={13} />
+          {l.label}
+          {chevron(l.id)}
+        </button>
       ))}
     </div>
   );
