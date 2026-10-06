@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router';
 import type { UsagePurpose } from '@work-os/shared';
 import { api, type BudgetLine, type Criterion, type UsageView } from '../api';
 import { BrandIcon } from '../components/BrandIcon';
+import { HealthBanner } from '../components/HealthBanner';
 import { Banner, Button, MvpTag, PhaseTag, SectionCard, Spinner, cx } from '../components/ui';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
 import { useHashScroll } from '../hooks/useHashScroll';
@@ -344,6 +345,7 @@ export function UsagePage() {
         </div>
         <MvpTag>MVP · E7, E12</MvpTag>
       </header>
+      <HealthBanner />
       {noBaseline && (
         <Banner tone="info" icon="info" action={<Link to="/settings/budgets" className="text-[13px] font-medium">Budgets</Link>}>
           <strong>Baseline not measured yet.</strong> Percentages appear once Phase 0 records the average daily usage of your current scheduled tasks (P0-3). Until then, usage shows as cost-equivalent only.

@@ -5,6 +5,7 @@ import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
 import { parseType } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
 import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo } from '../components/item';
+import { HealthBanner } from '../components/HealthBanner';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
 import { Banner, Button, ConfirmDialog, IconButton, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
@@ -206,7 +207,13 @@ function Banners({ inbox }: { inbox: InboxView }) {
         <strong>FileVault is off.</strong> Work OS keeps running, but thread text in the data directory isn’t encrypted at rest.
       </Banner>,
     );
-  return out.length ? <div className="flex flex-col gap-2 px-6 pt-3">{out}</div> : null;
+  // empty: drops the padding when the health banner has nothing to say either.
+  return (
+    <div className="flex flex-col gap-2 px-6 pt-3 empty:hidden">
+      <HealthBanner />
+      {out}
+    </div>
+  );
 }
 
 // ---------- Empty and first-run states ----------

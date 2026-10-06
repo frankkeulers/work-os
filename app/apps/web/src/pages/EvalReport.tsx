@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link, useParams } from 'react-router';
 import type { EvalReport } from '@work-os/shared';
 import { api } from '../api';
+import { HealthBanner } from '../components/HealthBanner';
 import { Icon } from '../components/icons';
 import { SectionCard, cx } from '../components/ui';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
@@ -71,6 +72,7 @@ export function EvalReportPage() {
           {fmtDate(r.at)} {fmtTime(r.at)} · {r.labelCount} labels · {r.model} · {r.promptVersion} · {fmtTokens(r.tokens)} tokens · {fmtMoney(r.costEquivalent)} cost-equivalent
         </div>
       </header>
+      <HealthBanner />
 
       <section aria-label="Headline" className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         {(

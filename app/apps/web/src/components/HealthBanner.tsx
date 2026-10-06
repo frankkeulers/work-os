@@ -7,7 +7,8 @@ import { Banner, Button, Spinner } from './ui';
 
 // Degraded and safe mode (FR-12.2, FR-14.6): the server keeps running and says what is wrong, with
 // the fix and a "Check again" button, instead of a blocking screen. Slack's own token and
-// rate-limit trouble has its banner on the inbox, so it isn't repeated here.
+// rate-limit trouble has its banner on the inbox, so it isn't repeated here. Each page renders it
+// under its own header, so the 64px top bars stay lined up with the sidebar's.
 
 const DEP_LABEL: Record<DependencyHealth['id'], string> = {
   network: 'Network',
@@ -74,36 +75,30 @@ export function HealthBanner() {
 
   if (h.mode === 'safe') {
     return (
-      <div className="px-6 pt-3">
-        <Banner tone="bad" icon="alert" action={action}>
-          <strong>Safe mode.</strong> Work OS crashed several times in a few minutes, so polling is off. The inbox still works. Check again to resume; if it keeps crashing, the log in <span className="font-mono text-[12px]">~/WorkOS-data/logs</span> says why.
-        </Banner>
-      </div>
+      <Banner tone="bad" icon="alert" action={action}>
+        <strong>Safe mode.</strong> Work OS crashed several times in a few minutes, so polling is off. The inbox still works. Check again to resume; if it keeps crashing, the log in <span className="font-mono text-[12px]">~/WorkOS-data/logs</span> says why.
+      </Banner>
     );
   }
   if (h.phase === 'waking' || h.phase === 'catching_up') {
     return (
-      <div className="px-6 pt-3">
-        <Banner tone="info" icon="clock">
-          <strong>Catching up after sleep.</strong> Checking the network, then polling what fell due while the Mac was asleep.
-        </Banner>
-      </div>
+      <Banner tone="info" icon="clock">
+        <strong>Catching up after sleep.</strong> Checking the network, then polling what fell due while the Mac was asleep.
+      </Banner>
     );
   }
   const problems = h.mode === 'degraded' ? problemsOf(h) : [];
   if (!problems.length) return null;
   const [first, ...rest] = problems;
   return (
-    <div className="px-6 pt-3">
-      <Banner tone="warn" icon="alert" action={action}>
-        <strong>Running with a problem.</strong> {first.title}.{first.fix ? ` ${first.fix}` : ''}
-        {rest.length > 0 && (
-          <span className="text-ink-2">
-            {' '}
-            Also: {rest.map((p) => p.title).join('; ')}.
-          </span>
-        )}
-      </Banner>
-    </div>
+    <Banner tone="warn" icon="alert" action={action}>
+      <strong>Running with a problem.</strong> {first.title}.{first.fix ? ` ${first.fix}` : ''}
+      {rest.length > 0 && (
+        <span className="text-ink-2">
+          {' '}
+          Also: {rest.map((p) => p.title).join('; ')}.
+        </span>
+      )}
+    </Banner>
   );
 }

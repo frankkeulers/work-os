@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Navigate, NavLink, useBlocker, useLocation, useParams } from 'react-router';
 import type { Settings } from '@work-os/shared';
 import { api, isApiError } from '../api';
+import { HealthBanner } from '../components/HealthBanner';
 import { Icon } from '../components/icons';
 import { ConfirmDialog, Spinner, cx } from '../components/ui';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
@@ -130,6 +131,9 @@ export function SettingsPage() {
           <SaveStatus st={st} savedAt={view.savedAt} onRetry={ctx.flush} />
         </div>
       </header>
+      <div className="max-w-[1072px] px-8 pt-6 empty:hidden">
+        <HealthBanner />
+      </div>
       <div className="flex max-w-[1072px] items-start gap-12 px-8 pb-24 pt-8">
         <nav aria-label="Settings sections" className="sticky top-8 flex w-[200px] shrink-0 flex-col gap-6">
           {GROUPS.map((g) => (
