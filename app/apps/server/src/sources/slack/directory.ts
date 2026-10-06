@@ -15,7 +15,7 @@ export class SlackDirectory {
   private convsAt = 0;
 
   constructor(
-    private readonly api: SlackApi,
+    readonly api: SlackApi,
     private readonly now: () => number = Date.now,
   ) {}
 

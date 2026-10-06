@@ -25,6 +25,8 @@ export interface SourceAdapter {
   fetchSince(cursor: string | undefined, ctx: FetchContext): Promise<FetchResult>;
   /** A cheap health check for "Check again". */
   probe(signal: AbortSignal): Promise<DepState>;
+  /** Frank's own ID in this source, once known: his own messages don't need triage again (§5.3). */
+  identity?(): { id: string; name?: string } | undefined;
 }
 
 /** Priority for catch-up after a wake: one source after another, so a wake is not a burst. */

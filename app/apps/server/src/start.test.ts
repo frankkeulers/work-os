@@ -18,7 +18,7 @@ const started: RunResult[] = [];
 const env = (over: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({ WORKOS_INSTANCE: 'dev', WORKOS_DATA_DIR: dir, WORKOS_PORT: '0', ...over });
 // FileVault on, Power Nap off; no real commands, network or time zone change in tests.
 const exec: Exec = async (cmd) => ({ code: 0, stdout: cmd.endsWith('fdesetup') ? 'FileVault is On.\n' : ' powernap 0\n' });
-const fakes = { exec, wakeTime: () => 'boot', followZone: () => undefined, fetch: () => Promise.reject(new Error('no network in tests')) };
+const fakes = { exec, wakeTime: () => 'boot', followZone: () => undefined, fetch: () => Promise.reject(new Error('no network in tests')), sources: {} };
 const start = async (over?: NodeJS.ProcessEnv) => {
   const res = await run({ env: env(over), notifier, secrets, ...fakes }); // never the real Keychain in tests
   started.push(res);

@@ -5,3 +5,7 @@ import { z } from 'zod';
 
 export const SettingsSave = z.object({ settings: z.unknown(), rules: z.unknown() }).strict();
 export type SettingsSave = z.infer<typeof SettingsSave>;
+
+/** POST /api/items/:id/snooze (FR-8.2). The UI turns presets into an instant before sending. */
+export const SnoozeInput = z.object({ until: z.iso.datetime() }).strict();
+export type SnoozeInput = z.infer<typeof SnoozeInput>;

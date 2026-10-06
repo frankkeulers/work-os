@@ -4,6 +4,7 @@ import type { Logger } from '../log';
 import type { Failure } from '../net/classify';
 import { Health, type HealthChange } from '../net/health';
 import type { ProbeResult } from '../net/probe';
+import { SourceError } from '../sources/errors';
 import type { SourceAdapter } from '../sources/types';
 import type { Store } from '../store/store';
 import { PowerMonitor, type Clock, type PowerEvent } from './power';
@@ -32,8 +33,10 @@ export interface RuntimeDeps {
   settings: SettingsState;
   logger?: Logger;
   sources: () => SourceAdapter[];
-  /** The poll pipeline for one source (M1 step 10). */
-  poll: (s: SourceAdapter, reason: PollReason, signal: AbortSignal) => Promise<void>;
+  /** The poll pipeline for one source. A SourceError says what failed; health and the log hear of it here. */
+  poll: (s: SourceAdapter, reason: PollReason, signal: AbortSignal) => Promise<unknown>;
+  /** Work due by the wall clock, run on every tick (snooze returns). */
+  due?: (now: Date) => Promise<unknown>;
   probe: (signal: AbortSignal) => Promise<ProbeResult>;
   checks: () => Promise<StartupCheck[]>;
   wakeTime?: () => string | undefined;
@@ -83,8 +86,7 @@ export class Runtime {
       settings: () => d.settings.settings,
       lastPollAt: (id) => d.store.projection.sources[id]?.lastPollAt,
       canPoll: (s) => this.canPoll(s),
-      poll: (s, reason) => d.poll(s, reason, this.sleepSignal),
-      onError: (id, err) => d.logger?.error({ err, source: id }, 'Poll failed'),
+      poll: (s, reason) => this.pollOne(s, reason),
     });
     if (d.tokenPersisted === false) this.health.set('keychain', 'degraded', 'unreadable');
   }
@@ -124,6 +126,7 @@ export class Runtime {
     }
     if (mono >= this.nextCheckMono) this.track(this.runChecks());
     if (this.phase === 'running') this.scheduler.tick();
+    if (this.d.due && this.phase !== 'stopping') this.track(this.d.due(this.d.clock.now()).catch((err) => this.d.logger?.error({ err }, 'Due work failed')));
     if (this.d.store.snapshotDue()) this.track(this.d.store.snapshot().catch((err) => this.d.logger?.error({ err }, 'Snapshot failed')));
   }
 
@@ -161,6 +164,35 @@ export class Runtime {
       this.health.fail(dep, { state: 'offline', reason: r.failure.reason });
       this.owesCatchUp = true;
     }
+  }
+
+  /** Runs one poll and reports how it went to health (FR-2.9, FR-14.3). */
+  private async pollOne(s: SourceAdapter, reason: PollReason) {
+    const signal = this.sleepSignal;
+    try {
+      await this.d.poll(s, reason, signal);
+      for (const dep of s.deps) if (this.health.state(dep) !== 'ok') this.health.ok(dep);
+    } catch (err) {
+      // Cut off by sleep: not a failure; the wake catch-up polls again.
+      if (signal.aborted) return;
+      if (err instanceof SourceError) {
+        await this.reportFailure(err.dep, err.failure);
+        // Being offline is not a source failure: the cursor stays and polling resumes on reconnect.
+        if (this.health.state('network') === 'offline' || err.failure.state === 'offline') return;
+        const retry = err.failure.retryAfterMs;
+        await this.d.store.append({ type: 'source.failed', data: { source: s.id, error: err.failure.reason, ...(retry !== undefined && { retryAfterSeconds: Math.ceil(retry / 1000) }) } });
+        return;
+      }
+      this.d.logger?.error({ err, source: s.id }, 'Poll failed');
+      // A bug of ours, or a full disk: shown on the source so it doesn't go unnoticed.
+      this.health.fail(s.deps.at(-1)!, { state: 'degraded', reason: 'internal' });
+      await this.d.store.append({ type: 'source.failed', data: { source: s.id, error: 'internal' } }).catch(() => undefined);
+    }
+  }
+
+  /** Frank's own ID in a source, once that source knows it. */
+  identity(id: SourceId): string | undefined {
+    return this.d.sources().find((s) => s.id === id)?.identity?.()?.id;
   }
 
   /** "Poll now" (FR-2.6). */

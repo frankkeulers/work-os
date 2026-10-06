@@ -18,7 +18,13 @@ import { readWakeTime, systemClock, type Clock } from './runtime/power';
 import { apiKeySet, clearRefusal, refuseApiKey } from './runtime/refuse';
 import { Runtime } from './runtime/runtime';
 import { followSystemZone } from './runtime/tz';
+import { CursorFile } from './pipeline/cursors';
+import { returnSnoozed } from './pipeline/due';
+import { pollSource } from './pipeline/poll';
 import { buildSources, type AdapterFactory } from './sources/registry';
+import { slackFactory } from './sources/slack/adapter';
+import { SlackApi } from './sources/slack/api';
+import { SlackDirectory } from './sources/slack/directory';
 import type { SourceId } from '@work-os/shared';
 import { createServer, type WorkOsServer } from './server';
 import { ItemFiles } from './store/items';
@@ -41,7 +47,7 @@ export interface RunDeps {
   exec?: Exec;
   wakeTime?: () => string | undefined;
   followZone?: () => string | undefined;
-  /** The source adapters by id. Slack arrives in M1 step 9; until then nothing polls. */
+  /** The source adapters by id; Slack by default. Tests pass fakes, or none. */
   sources?: Partial<Record<SourceId, AdapterFactory>>;
 }
 
@@ -124,17 +130,20 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Recover the store before binding, so the first request already sees the replayed inbox.
   const { store, recovery } = await Store.open({ dataDir: config.dataDir, logger, now });
   lifecycle.onStop('store', () => store.close());
-  const factories = deps.sources ?? {};
+  const items = new ItemFiles(join(config.dataDir, 'items'));
+  const cursors = await CursorFile.open(paths(config.dataDir).cursors);
+  // One Slack client and directory for the life of the process: the adapter is rebuilt when
+  // settings change, but the token, Frank's identity and names stay cached.
+  const slackDirectory = new SlackDirectory(new SlackApi(secrets, deps.fetch ?? fetch));
+  const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger) };
   const runtime = new Runtime({
     clock,
     store,
     settings,
     logger,
     sources: () => buildSources(settings.settings, factories),
-    // The poll pipeline arrives in M1 step 10, with the first adapter; no source is registered yet.
-    poll: async (s) => {
-      throw new Error(`No poll pipeline yet for ${s.id}`);
-    },
+    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger }, s, reason, signal),
+    due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
     checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings) }),
     wakeTime: deps.wakeTime ?? readWakeTime,
@@ -144,7 +153,6 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     tokenPersisted: persisted,
   });
 
-  const items = new ItemFiles(join(config.dataDir, 'items'));
   const server = await createServer({
     config,
     logger,
@@ -157,6 +165,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     token,
     tokenPersisted: persisted,
     now,
+    meId: () => runtime.identity('slack'),
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
     devOrigins: config.instance === 'dev' ? (deps.env.WORKOS_DEV_ORIGINS ?? DEV_ORIGINS).split(',') : [],
   });

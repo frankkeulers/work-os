@@ -1,12 +1,12 @@
-import { SettingsSave, seenChanges, type EvalReport } from '@work-os/shared';
+import { SettingsSave, SnoozeInput, seenChanges, type EvalReport } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
 import { healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
 
-// One route per WorkOsApi method (PLAN.md API table). Commands arrive with the steps that
-// implement them; this step has the reads and saving settings.
+// One route per WorkOsApi method (PLAN.md API table). Triage, draft and eval commands arrive with
+// M2 and M3.
 
 export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: Lifecycle }) {
   const noStore = { 'cache-control': 'no-store' };
@@ -22,9 +22,39 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
 
   // "Poll now" (FR-2.6): queued behind any poll in progress; the result arrives over SSE.
   app.post('/api/poll', async (_req, reply) => {
-    if (!d.runtime) throw new HttpError('unavailable', 'The runtime is not running.');
-    d.runtime.pollNow();
+    const rt = d.runtime;
+    if (!rt) throw new HttpError('unavailable', 'The runtime is not running.');
+    if (rt.safeMode) throw new HttpError('unavailable', 'Safe mode: polling is off after repeated crashes. Choose Check again first.');
+    const slack = rt.health.get('slack');
+    if (slack.state === 'auth_failed') throw new HttpError('forbidden', 'Slack rejected the token. Fix it in the Keychain, then poll again.');
+    if (slack.state === 'rate_limited' && slack.retryAt && slack.retryAt > d.now().toISOString()) {
+      throw new HttpError('conflict', 'Slack is rate-limiting. The next poll runs after Retry-After.');
+    }
+    rt.pollNow();
     return reply.code(202).send();
+  });
+
+  // Done, reopen and snooze (FR-8.2): local only, so they work offline. Each is one fsynced event.
+  const item = (id: string) => {
+    if (!d.store.projection.items[id]) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
+    return id;
+  };
+  app.post<{ Params: { id: string } }>('/api/items/:id/done', async (req, reply) => {
+    await d.store.append({ type: 'item.done', itemId: item(req.params.id), data: undefined });
+    return reply.code(204).send();
+  });
+  app.post<{ Params: { id: string } }>('/api/items/:id/reopen', async (req, reply) => {
+    await d.store.append({ type: 'item.reopened', itemId: item(req.params.id), data: undefined });
+    return reply.code(204).send();
+  });
+  app.post<{ Params: { id: string } }>('/api/items/:id/snooze', async (req, reply) => {
+    const id = item(req.params.id);
+    const body = SnoozeInput.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { until } as an ISO time.', [{ path: 'until', message: 'Pick a time' }]);
+    const until = new Date(body.data.until).toISOString();
+    if (until <= d.now().toISOString()) throw new HttpError('validation', 'Pick a time in the future.', [{ path: 'until', message: 'Pick a time in the future' }]);
+    await d.store.append({ type: 'item.snoozed', itemId: id, data: { until } });
+    return reply.code(204).send();
   });
 
   app.get('/api/inbox', async (_req, reply) => reply.headers(noStore).send(inboxView(d)));

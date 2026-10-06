@@ -40,7 +40,7 @@ export interface ViewDeps {
   tokenPersisted: boolean;
   startedAt: string;
   now: () => Date;
-  meId?: string; // the Slack user, once the Slack adapter knows it (M1 step 9)
+  meId?: () => string | undefined; // the Slack user, once the first poll has asked Slack
   /** Health, wake state and the scheduler. Absent in tests of the HTTP layer alone. */
   runtime?: Runtime;
 }
@@ -227,7 +227,7 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
     dataDir: d.config.dataDir,
     targets: { confluenceSite: s.confluence.siteUrl, spaceKey: s.confluence.spaceKey, vaultPath: s.vaultPath },
     budgets: b,
-    meId: d.meId ?? '',
+    meId: d.meId?.() ?? '',
   };
 }
 

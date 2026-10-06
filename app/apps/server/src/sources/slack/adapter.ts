@@ -218,4 +218,5 @@ interface ItemDraft {
   permalink: string;
 }
 
-export const slackFactory = (api: SlackApi, logger?: Logger, directory?: SlackDirectory) => (settings: Settings) => new SlackAdapter({ api, settings, logger, directory });
+/** Builds the adapter for the settings in force, sharing one directory (token, identity, names). */
+export const slackFactory = (directory: SlackDirectory, logger?: Logger) => (settings: Settings) => new SlackAdapter({ api: directory.api, settings, logger, directory });
