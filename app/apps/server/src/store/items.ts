@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Item, NextStep, type DecisionText } from '@work-os/shared';
 import { z } from 'zod';
@@ -83,6 +83,31 @@ export class ItemFiles {
     await rm(this.path(source, id), { force: true });
     this.lru.delete(id);
     this.texts.delete(id);
+  }
+
+  /** Whether the item still has its file, without reading it. */
+  hasFile(source: string, id: string): Promise<boolean> {
+    return stat(this.path(source, id)).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  /**
+   * Retention (FR-12.1): removes the item's file if the file itself says it was last active before
+   * `before`. Runs under the item's lock and reads the file, not the projection, so a poll merging a
+   * new message into an old thread at the same moment keeps it.
+   */
+  async expire(source: string, id: string, before: string): Promise<boolean> {
+    let removed = false;
+    await this.update(source, id, async (stored) => {
+      if (stored && stored.item.lastActivityAt < before) {
+        await this.remove(source, id);
+        removed = true;
+      }
+      return undefined;
+    });
+    return removed;
   }
 
   /** The short texts for the inbox, if this item has been read or written since the start. */

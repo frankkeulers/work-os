@@ -12,6 +12,7 @@ import { createLogger, type Logger } from './log';
 import { HealthAlerts } from './notify/alerts';
 import { silentNotifier, type Notifier } from './notify/macos';
 import { Notifications } from './notify/notifications';
+import { RetentionJob } from './store/retention';
 import { probeNetwork, type FetchFn } from './net/probe';
 import { exec as systemExec, runChecks, type Exec } from './runtime/checks';
 import { clearCrashes, recordCleanStop, recordStart } from './runtime/crashLoop';
@@ -93,6 +94,7 @@ export type RunResult =
       actions: ActionService;
       notifications: Notifications;
       alerts: HealthAlerts;
+      retention: RetentionJob;
       recovery: RecoveryReport;
       token: string;
       logger: Logger;
@@ -239,10 +241,11 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   lifecycle.onStop('evals', () => evals.stop());
   // Actions (M3): drafted when Claude may be called, written by the outbox after approval.
   let publish: (n: Notice) => void = () => undefined; // the SSE hub, once the server exists
+  const drafts = new DraftStore(join(config.dataDir, 'drafts'));
   const actions = new ActionService({
     store,
     items,
-    drafts: new DraftStore(join(config.dataDir, 'drafts')),
+    drafts,
     claude,
     dataDir: config.dataDir,
     now,
@@ -289,6 +292,9 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     settingsPaused: () => !settings.settings,
     logger,
   });
+  // Retention (FR-12.1): nightly, on the first tick after 03:00.
+  const retention = new RetentionJob({ dataDir: config.dataDir, store, items, drafts, settings: () => settings.editable.settings, now, logger });
+  lifecycle.onStop('retention', () => retention.settled());
   lifecycle.onStop('notifications', async () => {
     notifications.stop();
     await Promise.all([notifications.settled(), alerts.settled()]);
@@ -300,7 +306,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
     sources: () => buildSources(settings.settings, factories),
     triage: (signal, only) => runTriage(triageDeps, signal, { only }),
-    onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick()]),
+    onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),
     onHealthChange: (c) => alerts.onChange(c),
     poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }) }, s, reason, signal),
@@ -359,5 +365,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, actions, notifications, alerts, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, actions, notifications, alerts, retention, recovery, token, logger, lifecycle, flush };
 }

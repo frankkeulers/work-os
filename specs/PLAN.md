@@ -660,6 +660,19 @@ As built (M3 step 19):
 ### 7.12 E11 Hardening
 
 - **FR-12.1** Retention job runs daily (section 4.3).
+  As built (M4 step 20):
+
+  - **What is removed.** `store/retention.ts` removes what holds message text and is older than `retentionDays`:
+    - item files, by the thread's last activity;
+    - the drafts of finished actions (done, failed, discarded) on those items;
+    - `sandbox/` files, by modification time;
+    - `logs/app-<date>.log` by date.
+  - **What stays.** Events, the usage log, eval reports and labels stay: the first three hold no message text, and labels are kept on purpose (§7.7, still for Frank to confirm). Drafts still in play (drafting, ready, approved, executing) stay too, whatever their age.
+  - **No race with a poll.** An item file is removed under the item's lock, and only if the file itself says the thread is old. A poll that has just merged a new reply into an old thread keeps it.
+  - **What the inbox shows.** The item stays, from its events, with `contentExpired`.
+  - **launchd logs.** `logs/launchd.{out,err}.log` are cut in place to their last 1 MB of whole lines once over 5 MB. In place, because launchd keeps them open.
+  - **When it runs.** The first tick at or after 03:00 on a day it hasn't run yet. The last run day is kept in `state/retention.json`, so a restart doesn't repeat it, and a Mac asleep at 03:00 runs it on the first tick after waking. "03:00" is London time, like the budgets and work hours (see the London-only note); FR-14.8 asks for the system time zone, which is still open.
+
 - **FR-12.2** Startup checks: FileVault on (warn if not), no `ANTHROPIC_API_KEY`, Slack token present, Claude login works (one minimal Haiku call, logged), settings valid, Keychain readable, and a note if Power Nap is on. Checks run after the API is up, so they never delay first paint. Except for the API key, a failed check puts the server in degraded mode and is re-checked: Keychain and token every 5 minutes, the Claude login on a 15–60 minute backoff, and on wake, on settings save and on demand from the UI (FR-14.6).
 - **FR-12.3** launchd LaunchAgent so the server starts at login. **Required in the MVP and built in M1** (FR-14.1).
 - **FR-12.4** Tests: unit tests for rules, quiet window, grouping, cursor handling, atomic writes and executors. Contract tests for model output schemas, using recorded fixtures. There is no live-model call in CI.

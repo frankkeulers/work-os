@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Draft } from '@work-os/shared';
 import { z } from 'zod';
@@ -39,6 +39,15 @@ export class DraftStore {
     } catch {
       return undefined;
     }
+  }
+
+  /** Deletes the draft file (retention), after any change in progress. True if there was one. */
+  async remove(actionId: string): Promise<boolean> {
+    await this.locks.get(actionId);
+    return rm(this.file(actionId)).then(
+      () => true,
+      () => false,
+    );
   }
 
   /** Reads, applies `fn` and writes atomically, one change at a time per draft. */
