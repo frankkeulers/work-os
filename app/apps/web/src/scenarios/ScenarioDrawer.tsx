@@ -186,7 +186,7 @@ function EventLog() {
               {e.itemId && <span>{e.itemId.split(':').slice(1).join(':')} </span>}
               {e.data &&
                 Object.entries(e.data)
-                  .map(([k, v]) => `${k}=${v}`)
+                  .map(([k, v]) => `${k}=${typeof v === 'object' && v !== null ? JSON.stringify(v) : v}`)
                   .join(' ')}
             </div>
           )}

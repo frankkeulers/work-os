@@ -25,7 +25,7 @@ function stableNumber(seed: string, min: number, max: number) {
   return min + (h % (max - min));
 }
 
-const SOURCE_LABEL = { slack: 'Slack', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud' } as const;
+const SOURCE_LABEL = { slack: 'Slack', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud', wispr: 'Wispr Flow' } as const;
 
 export function buildDraft(
   rec: ItemRec,

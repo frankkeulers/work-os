@@ -61,13 +61,19 @@ export function BrandIcon({ brand, size = 18, decorative, className }: { brand: 
   );
 }
 
-/** The mark for an item's source. Plaud has no published mark, so it gets a neutral recorder glyph. */
+/** The mark for an item's source. Plaud and Wispr Flow get neutral glyphs (recorder, voice wave), not their marks. */
 export function SourceMark({ source, size = 18, decorative }: { source: SourceId; size?: number; decorative?: boolean }) {
   if (source === 'plaud')
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" role={decorative ? undefined : 'img'} aria-label={decorative ? undefined : 'Plaud'} aria-hidden={decorative || undefined}>
         <rect x="9" y="3" width="6" height="11" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+      </svg>
+    );
+  if (source === 'wispr')
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" role={decorative ? undefined : 'img'} aria-label={decorative ? undefined : 'Wispr Flow'} aria-hidden={decorative || undefined}>
+        <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
       </svg>
     );
   return <BrandIcon brand={source} size={size} decorative={decorative} />;

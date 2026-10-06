@@ -237,7 +237,7 @@ Rules for file storage:
 - **Write order in a poll**: item files, then events, then `source.polled` with the cursor, then `cursors.json`. A crash at any point re-fetches and dedupes.
 - **Startup recovery**: a torn last line in a JSONL file is truncated and quarantined, leftover `*.tmp` files are deleted, and a missing item file is re-fetched.
 - **Single instance**: take a lock on `state/lock` at startup and refuse to start if it's held by a live process. A lock left by a dead process, a reused pid or a previous boot is stale and taken over.
-- **Retention**: delete raw content in `items/` older than `retention.rawContentDays` (default 30). Events keep IDs, decisions and permalinks, never message bodies.
+- **Retention**: delete raw content in `items/` older than `retention.rawContentDays` (default 30). Events keep IDs, decisions and permalinks, never message bodies. Decisions are logged without their free text (summary, reason, the wording of the next step): that text paraphrases the messages, so it is stored with the raw content in `items/` and expires with it.
 - **Schema versioning**: every file and event carries `schemaVersion`.
 - **No secrets** in any file under the data directory.
 

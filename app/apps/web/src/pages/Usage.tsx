@@ -17,6 +17,7 @@ export const PURPOSE_LABEL: Record<UsagePurpose, string> = {
   people_check: 'People check',
   eval: 'Eval run',
   startup_check: 'Startup check',
+  fetch: 'Connector fetch',
 };
 
 export const evalPath = (id: string) => `/usage/eval/${encodeURIComponent(id)}`;
@@ -181,6 +182,9 @@ const SLACK = {
   backoff: { label: 'Backing off (429)', dot: 'var(--amber)', cls: 'text-amber-fg' },
   auth_failed: { label: 'Token rejected', dot: 'var(--red)', cls: 'text-red-fg' },
   never: { label: 'Not polled yet', dot: 'var(--gray-mid)', cls: 'text-muted' },
+  offline: { label: 'Offline', dot: 'var(--gray-mid)', cls: 'text-muted' },
+  degraded: { label: 'Errors, retrying', dot: 'var(--amber)', cls: 'text-amber-fg' },
+  paused: { label: 'Paused', dot: 'var(--gray-mid)', cls: 'text-muted' },
 } as const;
 
 function SourceHealth({ u }: { u: UsageView }) {

@@ -1,4 +1,4 @@
-import type { Attention, Item, Message, TriageDecision, WorkEvent } from '@work-os/shared';
+import type { Attention, EventData, EventType, Item, Message, TriageDecision, WorkEvent } from '@work-os/shared';
 import type { ItemRec, ScriptedDecision, SeedMessage, ThreadSeed } from './types';
 import { CHANNELS, PEOPLE } from './seed/people';
 
@@ -109,6 +109,21 @@ export function buildDecision(
   };
 }
 
-export function makeEvent(seq: number, type: WorkEvent['type'], at: string, extra: Partial<Omit<WorkEvent, 'id' | 'type' | 'at' | 'schemaVersion'>> = {}): WorkEvent {
-  return { id: `ev-${seq}`, type, at, schemaVersion: 1, ...extra };
+export type EventIds = { itemId?: string; actionId?: string };
+
+export function makeEvent<T extends EventType>(seq: number, type: T, at: string, data: EventData<T>, ids: EventIds = {}): WorkEvent {
+  return { seq, id: `ev-${seq}`, type, at, ...ids, data, schemaVersion: 1 } as WorkEvent;
 }
+
+/** item.upserted payload: the item's metadata, never message bodies. */
+export const upserted = (item: Item, fromMeOnly: boolean): EventData<'item.upserted'> => ({
+  source: item.source,
+  kind: item.kind,
+  title: item.title,
+  permalink: item.permalink,
+  participants: item.participants,
+  lastActivityAt: item.lastActivityAt,
+  revision: item.revision,
+  messageCount: item.messageCount,
+  fromMeOnly,
+});

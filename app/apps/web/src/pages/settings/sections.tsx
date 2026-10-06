@@ -75,6 +75,9 @@ const SLACK_STATUS: Record<SlackStatus, { dot: string; text: string }> = {
   backoff: { dot: 'bg-amber', text: 'Rate-limited, retrying' },
   auth_failed: { dot: 'bg-red', text: 'Token rejected' },
   never: { dot: 'bg-gray-mid', text: 'Not polled yet' },
+  offline: { dot: 'bg-gray-mid', text: 'Offline, polls when the network is back' },
+  degraded: { dot: 'bg-amber', text: 'Slack errors, retrying' },
+  paused: { dot: 'bg-gray-mid', text: 'Paused' },
 };
 
 function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {

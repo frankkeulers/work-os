@@ -8,14 +8,18 @@ import {
   isWorkHours,
   laneFor,
   londonParts,
+  toLoggedDecision,
   type Action,
   type ActionSummary,
   type ActionType,
   type BudgetState,
   type CorrectionInput,
+  type DependencyHealth,
   type Criterion,
   type DraftProgress,
+  type EventData,
   type EvalReport,
+  type EventType,
   type HealthView,
   type InboxView,
   type ItemSummary,
@@ -33,7 +37,7 @@ import {
   type WorkOsApi,
 } from '@work-os/shared';
 import { ApiError, type FieldIssue } from '../api/errors';
-import { MIN, addMins, buildDecision, makeEvent, newRec, slackTs } from './build';
+import { MIN, addMins, buildDecision, makeEvent, newRec, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
 import { ME } from './me';
@@ -65,6 +69,7 @@ export class MockServer implements WorkOsApi, MockControls {
   private saveTimer?: ReturnType<typeof setTimeout>;
   private tickTimer?: ReturnType<typeof setInterval>;
   private polling = false;
+  private readonly startedAt = new Date().toISOString();
 
   constructor() {
     this.s = this.load() ?? buildState('default');
@@ -145,9 +150,9 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'health' }, { topic: 'inbox' }, { topic: 'usage' }, { topic: 'settings' }, { topic: 'evals' }, { topic: 'clock' });
     for (const id of Object.keys(this.s.items)) this.emit({ topic: 'item', id });
   }
-  private event(type: WorkEvent['type'], extra: Parameters<typeof makeEvent>[3] = {}) {
+  private event<T extends EventType>(type: T, data: EventData<T>, ids: EventIds = {}) {
     this.s.seq += 1;
-    this.s.events.push(makeEvent(this.s.seq, type, this.iso(), extra));
+    this.s.events.push(makeEvent(this.s.seq, type, this.iso(), data, ids));
     if (this.s.events.length > 2000) this.s.events.splice(0, this.s.events.length - 2000);
   }
 
@@ -231,7 +236,7 @@ export class MockServer implements WorkOsApi, MockControls {
 
       const interval = this.intervalMins();
       this.s.source = { ...this.s.source, status: 'healthy', lastPollAt: now, nextPollAt: addMins(now, interval), cursor: slackTs(now) };
-      this.event('source.polled', { data: { fetched, reason } });
+      this.event('source.polled', { source: 'slack', reason, fetched, cursor: slackTs(now) });
 
       const quiet = this.s.settings.triage.quietMinutes;
       const eligible = Object.values(this.s.items).filter(
@@ -271,7 +276,7 @@ export class MockServer implements WorkOsApi, MockControls {
       return seed.messages.length; // dropped at ingest, never stored (FR-2.10)
     }
     this.s.items[rec.item.id] = rec;
-    this.event('item.upserted', { itemId: rec.item.id, data: { revision: rec.item.revision } });
+    this.event('item.upserted', upserted(rec.item, false), { itemId: rec.item.id });
     if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
       this.s.ruleHits[rule.id] = (this.s.ruleHits[rule.id] ?? 0) + 1;
       this.applyDecision(rec, buildDecision(rec, this.iso(), { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
@@ -293,7 +298,7 @@ export class MockServer implements WorkOsApi, MockControls {
       item.participants.push({ id: reply.by, name: this.personName(reply.by) });
     }
     if (reply.decision) rec.script = { ...rec.script, ...reply.decision };
-    this.event('item.upserted', { itemId: item.id, data: { revision: item.revision } });
+    this.event('item.upserted', upserted(item, reply.by === FRANK), { itemId: item.id });
     // Re-triage only when the new messages are not from Frank alone (§5.3).
     if (reply.by !== FRANK) {
       rec.triageState = 'pending';
@@ -333,7 +338,7 @@ export class MockServer implements WorkOsApi, MockControls {
           rec.failTriage -= Math.min(rec.failTriage, 2);
           rec.failCount += 2;
           rec.triageState = 'failed';
-          this.event('triage.failed', { itemId: rec.item.id, data: { attempts: 2, reason: 'schema validation failed' } });
+          this.event('triage.failed', { revision: rec.item.revision, attempts: 2, reason: 'schema validation failed' }, { itemId: rec.item.id });
           this.emit({ topic: 'item', id: rec.item.id });
           continue;
         }
@@ -369,7 +374,7 @@ export class MockServer implements WorkOsApi, MockControls {
       rec.snoozedUntil = undefined;
       rec.backFromSnooze = true;
     }
-    this.event('triage.decided', { itemId: rec.item.id, data: { attention: d.attention, by: d.decidedBy, ruleId: d.ruleId ?? null, revision: d.itemRevision } });
+    this.event('triage.decided', { decision: toLoggedDecision(d) }, { itemId: rec.item.id });
     const eff = effectiveTriage(rec.decision, rec.correction);
     if (eff?.attention === 'now' && !rec.notified) {
       rec.notified = true; // at most one notification per item (FR-11.2)
@@ -463,7 +468,37 @@ export class MockServer implements WorkOsApi, MockControls {
 
   async getHealth(): Promise<HealthView> {
     await sleep(QUERY_MS);
-    return { connection: this.s.flags.connection, startupFailure: this.s.flags.startupFailure };
+    const f = this.s.flags;
+    const since = this.s.checkedAt;
+    const dep = (id: DependencyHealth['id'], state: DependencyHealth['state'], reason?: string): DependencyHealth => ({ id, state, since, failures: state === 'ok' ? 0 : 1, reason });
+    const slack = this.s.source.status;
+    const deps = [
+      dep('network', 'ok'),
+      dep('slack', slack === 'auth_failed' ? 'auth_failed' : slack === 'backoff' ? 'rate_limited' : f.startupFailure === 'slack_token' ? 'auth_failed' : 'ok'),
+      dep('claude', f.startupFailure === 'claude_login' ? 'auth_failed' : 'ok'),
+      dep('keychain', f.startupFailure === 'slack_token' ? 'degraded' : 'ok', f.startupFailure === 'slack_token' ? 'Slack token missing' : undefined),
+      dep('storage', 'ok'),
+    ];
+    const pending = Object.values(this.s.actions).filter((a) => a.status === 'approved' || a.status === 'executing');
+    return {
+      connection: f.connection,
+      startupFailure: f.startupFailure,
+      mode: deps.some((d) => d.state !== 'ok') ? 'degraded' : 'normal',
+      phase: 'running',
+      deps,
+      checks: this.startupChecks(),
+      checkedAt: this.s.checkedAt,
+      outbox: { approved: pending.length, waiting: 0, oldestAt: pending.map((a) => a.updatedAt).sort()[0] },
+      instance: 'mock',
+      version: '0.1.0',
+      startedAt: this.startedAt,
+    };
+  }
+
+  async recheck() {
+    await this.gate(COMMAND_MS);
+    this.s.checkedAt = this.iso();
+    this.emit({ topic: 'health' }, { topic: 'settings' });
   }
 
   async getInbox(): Promise<InboxView> {
@@ -476,6 +511,7 @@ export class MockServer implements WorkOsApi, MockControls {
       items,
       poll: { ...this.s.poll, lastPollAt: this.s.source.lastPollAt, nextPollAt: this.s.source.nextPollAt },
       source: this.sourceHealth(),
+      sources: [this.sourceHealth()],
       budgets,
       dryRun: this.s.settings.dryRun,
       notices: { rebuilt: this.s.flags.rebuiltNotice, fileVaultOff: this.s.flags.fileVaultOff },
@@ -628,10 +664,9 @@ export class MockServer implements WorkOsApi, MockControls {
     return [...this.s.evals].reverse();
   }
 
-  async getSettings(): Promise<SettingsView> {
-    await this.gate(QUERY_MS);
+  private startupChecks(): StartupCheck[] {
     const f = this.s.flags;
-    const checks: StartupCheck[] = [
+    return [
       f.fileVaultOff
         ? { id: 'filevault', label: 'FileVault on', status: 'warn', note: 'off: local files hold company messages' }
         : { id: 'filevault', label: 'FileVault on', status: 'ok', note: 'ok' },
@@ -645,12 +680,16 @@ export class MockServer implements WorkOsApi, MockControls {
         ? { id: 'claude_login', label: 'Claude login works', status: 'fail', note: 'not logged in' }
         : { id: 'claude_login', label: 'Claude login works', status: 'ok', note: 'haiku · 1 call' },
     ];
+  }
+
+  async getSettings(): Promise<SettingsView> {
+    await this.gate(QUERY_MS);
     return {
       settings: structuredClone(this.s.settings),
       rules: structuredClone(this.s.rules),
       ruleHits: { ...this.s.ruleHits },
       savedAt: this.s.savedAt,
-      checks,
+      checks: this.startupChecks(),
       checkedAt: this.s.checkedAt,
       labelCount: this.s.labelCount,
       correctionCount: this.s.correctionCount,
@@ -664,7 +703,7 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(COMMAND_MS);
     const src = this.s.source;
     if (src.status === 'auth_failed') {
-      this.event('source.failed', { data: { error: 'invalid_auth' } });
+      this.event('source.failed', { source: 'slack', error: 'invalid_auth' });
       this.emit({ topic: 'inbox' });
       throw new ApiError('forbidden', 'Slack rejected the token. Fix it in the Keychain, then poll again.');
     }
@@ -683,7 +722,7 @@ export class MockServer implements WorkOsApi, MockControls {
     rec.snoozedUntil = undefined;
     rec.newReplies = false;
     rec.backFromSnooze = false;
-    this.event('item.done', { itemId });
+    this.event('item.done', undefined, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
 
@@ -693,7 +732,7 @@ export class MockServer implements WorkOsApi, MockControls {
     rec.status = 'open';
     rec.doneAt = undefined;
     rec.snoozedUntil = undefined;
-    this.event('item.reopened', { itemId });
+    this.event('item.reopened', undefined, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
 
@@ -704,7 +743,7 @@ export class MockServer implements WorkOsApi, MockControls {
     rec.status = 'snoozed';
     rec.snoozedUntil = untilIso;
     rec.backFromSnooze = false;
-    this.event('item.snoozed', { itemId, data: { until: untilIso } });
+    this.event('item.snoozed', { until: untilIso }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
 
@@ -716,7 +755,7 @@ export class MockServer implements WorkOsApi, MockControls {
     if (rec.triageState === 'failed') rec.triageState = 'triaged';
     this.s.labelCount += 1;
     this.s.correctionCount += 1;
-    this.event('triage.corrected', { itemId, data: { attention: input.attention, confluence: input.confluence, vault: input.vault, revision: rec.item.revision } });
+    this.event('triage.corrected', { correction: rec.correction }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId }, { topic: 'settings' });
     return { labelCount: this.s.labelCount };
   }
@@ -773,7 +812,7 @@ export class MockServer implements WorkOsApi, MockControls {
       updatedAt: now,
     };
     this.s.actions[id] = action;
-    this.event('action.requested', { itemId: rec.item.id, actionId: id, data: { type } });
+    this.event('action.requested', { type, revision: rec.item.revision }, { itemId: rec.item.id, actionId: id });
     this.startDrafting(action, outcome);
     this.emit({ topic: 'inbox' }, { topic: 'item', id: rec.item.id });
     return action;
@@ -822,7 +861,7 @@ export class MockServer implements WorkOsApi, MockControls {
       action.failureReason = 'model_error';
       action.error = 'The draft did not match the expected format twice, so it was dropped.';
       this.s.results[actionId] = action.error;
-      this.event('action.failed', { itemId: rec.item.id, actionId, data: { reason: 'model_error' } });
+      this.event('action.failed', { reason: 'model_error' }, { itemId: rec.item.id, actionId });
     } else {
       const attempt = this.actionsFor(rec.item.id).filter((a) => a.type === action.type).length;
       const draft = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
@@ -833,12 +872,12 @@ export class MockServer implements WorkOsApi, MockControls {
         action.failureReason = 'people_check';
         action.error = 'The people check found observations about named people in the draft. Nothing will be written to Confluence.';
         this.s.results[actionId] = action.error;
-        this.event('action.failed', { itemId: rec.item.id, actionId, data: { reason: 'people_check' } });
+        this.event('action.failed', { reason: 'people_check' }, { itemId: rec.item.id, actionId });
       } else {
         this.s.drafts[actionId] = draft;
         action.target = draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path };
         action.status = 'ready';
-        this.event('action.drafted', { itemId: rec.item.id, actionId, data: { type: action.type, tokens: draft.tokens } });
+        this.event('action.drafted', { type: action.type, revision: rec.item.revision, draftRef: action.draftRef, tokens: draft.tokens }, { itemId: rec.item.id, actionId });
       }
     }
     this.emit({ topic: 'item', id: rec.item.id }, { topic: 'inbox' }, { topic: 'usage' });
@@ -860,7 +899,7 @@ export class MockServer implements WorkOsApi, MockControls {
     this.clearDraftTimers(actionId);
     a.status = 'discarded';
     a.updatedAt = this.iso();
-    this.event('action.discarded', { itemId: a.itemId, actionId, data: { reason: 'cancelled' } });
+    this.event('action.discarded', { reason: 'cancelled' }, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
   }
 
@@ -871,7 +910,7 @@ export class MockServer implements WorkOsApi, MockControls {
     if (a.status !== 'ready' || !d) throw new ApiError('conflict', 'This draft can no longer be edited.');
     this.s.drafts[actionId] = { ...d, content, edited: true };
     a.updatedAt = this.iso();
-    this.event('action.edited', { itemId: a.itemId, actionId });
+    this.event('action.edited', undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId });
   }
 
@@ -883,7 +922,7 @@ export class MockServer implements WorkOsApi, MockControls {
       this.clearDraftTimers(actionId);
       if (a.status !== 'failed') {
         a.status = 'discarded';
-        this.event('action.discarded', { itemId: a.itemId, actionId, data: { reason: 'redraft' } });
+        this.event('action.discarded', { reason: 'redraft' }, { itemId: a.itemId, actionId });
       }
     }
     const rec = this.rec(a.itemId);
@@ -897,7 +936,7 @@ export class MockServer implements WorkOsApi, MockControls {
     this.clearDraftTimers(actionId);
     a.status = 'discarded';
     a.updatedAt = this.iso();
-    this.event('action.discarded', { itemId: a.itemId, actionId, data: { reason: 'discarded' } });
+    this.event('action.discarded', { reason: 'discarded' }, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
   }
 
@@ -907,7 +946,7 @@ export class MockServer implements WorkOsApi, MockControls {
     if (a.status !== 'ready') throw new ApiError('conflict', 'This draft is no longer ready to approve.');
     a.status = 'approved';
     a.updatedAt = this.iso();
-    this.event('action.approved', { itemId: a.itemId, actionId });
+    this.event('action.approved', undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
     void this.execute(actionId, 500);
   }
@@ -937,7 +976,7 @@ export class MockServer implements WorkOsApi, MockControls {
             ? `${d.path} changed after drafting (file hash differs). Re-drafting instead of writing.`
             : `A note now exists at ${d.path}. Re-drafting instead of overwriting it.`;
       this.s.results[actionId] = a.error;
-      this.event('action.failed', { itemId: a.itemId, actionId, data: { reason: 'conflict' } });
+      this.event('action.failed', { reason: 'conflict' }, { itemId: a.itemId, actionId });
       this.emit({ topic: 'item', id: a.itemId });
       await sleep(900);
       this.createAction(rec, a.type, 'normal', a.id);
@@ -949,7 +988,7 @@ export class MockServer implements WorkOsApi, MockControls {
       a.failureReason = 'allow_list';
       a.error = `Page ${d.pageId} (${d.pageTitle}) is not on the Confluence allow-list. The executor refused the write.`;
       this.s.results[actionId] = a.error;
-      this.event('action.failed', { itemId: a.itemId, actionId, data: { reason: 'allow_list', pageId: d.pageId } });
+      this.event('action.failed', { reason: 'allow_list', pageId: d.pageId }, { itemId: a.itemId, actionId });
       this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
       return;
     }
@@ -960,11 +999,11 @@ export class MockServer implements WorkOsApi, MockControls {
       msg = dry
         ? `Dry-run: write logged only. ${d.pageTitle} stays at v${d.baseVersion}. Logged action.executed.`
         : `Written to ${d.pageTitle}, now v${d.baseVersion + 1}. Logged action.executed.`;
-      this.event('action.executed', { itemId: a.itemId, actionId, data: { dryRun: dry, pageId: d.pageId, pageVersion: dry ? d.baseVersion : d.baseVersion + 1 } });
+      this.event('action.executed', { dryRun: dry, pageId: d.pageId, pageVersion: dry ? d.baseVersion : d.baseVersion + 1 }, { itemId: a.itemId, actionId });
     } else {
       const where = dry ? `${this.s.settings.dataDir}/sandbox/vault/${d.path}` : `${this.s.settings.vaultPath}/${d.path}`;
       msg = `${dry ? 'Dry-run: ' : ''}${d.kind === 'vault_append' ? `Appended under ${d.heading} in` : 'Created'} ${where}. Logged action.executed.`;
-      this.event('action.executed', { itemId: a.itemId, actionId, data: { dryRun: dry, path: where } });
+      this.event('action.executed', { dryRun: dry, path: where }, { itemId: a.itemId, actionId });
     }
     this.s.results[actionId] = msg;
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
@@ -1040,12 +1079,12 @@ export class MockServer implements WorkOsApi, MockControls {
     if (settingsChanged) {
       const intervalsChanged = JSON.stringify(this.s.settings.schedule) !== JSON.stringify(sp.data!.schedule);
       this.s.settings = sp.data!;
-      this.event('settings.changed', { data: { dryRun: sp.data!.dryRun } });
+      this.event('settings.changed', { dryRun: sp.data!.dryRun });
       if (intervalsChanged && this.s.source.lastPollAt) this.s.source.nextPollAt = addMins(this.s.source.lastPollAt, this.intervalMins());
     }
     if (rulesChanged) {
       this.s.rules = rp.data!;
-      this.event('rules.changed', { data: { count: rp.data!.length } });
+      this.event('rules.changed', { count: rp.data!.length });
     }
     this.s.savedAt = this.iso();
     this.emit({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
@@ -1106,7 +1145,7 @@ export class MockServer implements WorkOsApi, MockControls {
         // Nothing corrected yet: correct the Head of Sales DM to "none" first, as Frank would.
         target = Object.values(this.s.items).find((r) => r.key === 't3')!;
         target.correction = { itemId: target.item.id, itemRevision: target.item.revision, attention: 'none', confluence: false, vault: false, correctedAt: this.iso() };
-        this.event('triage.corrected', { itemId: target.item.id, data: { attention: 'none', confluence: false, vault: false, revision: target.item.revision } });
+        this.event('triage.corrected', { correction: target.correction }, { itemId: target.item.id });
       }
       const by = target.item.participants.find((p) => p.id !== FRANK)?.id ?? 'U09SALES';
       return void this.runPoll('manual', {
@@ -1131,11 +1170,11 @@ export class MockServer implements WorkOsApi, MockControls {
         break;
       case 'slack_429':
         this.s.source = { ...this.s.source, status: 'backoff', retryAt: addMins(this.iso(), 3), rateLimitedToday: this.s.source.rateLimitedToday + 1 };
-        this.event('source.failed', { data: { error: 'ratelimited', retryAfterSeconds: 180 } });
+        this.event('source.failed', { source: 'slack', error: 'ratelimited', retryAfterSeconds: 180 });
         break;
       case 'slack_auth':
         this.s.source = { ...this.s.source, status: 'auth_failed' };
-        this.event('source.failed', { data: { error: 'invalid_auth' } });
+        this.event('source.failed', { source: 'slack', error: 'invalid_auth' });
         break;
       case 'slack_healthy':
         this.s.source = { ...this.s.source, status: 'healthy', retryAt: undefined };

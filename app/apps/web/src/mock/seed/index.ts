@@ -1,5 +1,5 @@
-import { firstMatchingRule, isWorkHours, type WorkEvent } from '@work-os/shared';
-import { addMins, buildDecision, makeEvent, newRec } from '../build';
+import { firstMatchingRule, isWorkHours, toLoggedDecision, type EventData, type EventType, type WorkEvent } from '@work-os/shared';
+import { addMins, buildDecision, makeEvent, newRec, upserted, type EventIds } from '../build';
 import { buildDraft } from '../drafts';
 import { ME } from '../me';
 import type { ItemRec, MockState, ThreadSeed } from '../types';
@@ -8,7 +8,7 @@ import { BATCH_TWELVE, SEED_THREADS, TIMELINE } from './threads';
 import { SEED_EVALS, seedUsage } from './usage';
 
 export const SEED_CLOCK = '2026-10-05T08:45:00.000Z'; // Mon 5 Oct 2026, 09:45 London
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6; // 6: events carry seq and typed payloads
 
 export type Preset = 'default' | 'firstRun' | 'inboxZero' | 'heavy' | 'noBaseline';
 
@@ -30,8 +30,8 @@ export function buildState(preset: Preset = 'default'): MockState {
 
   let seq = 0;
   const events: WorkEvent[] = [];
-  const ev = (type: WorkEvent['type'], at: string, extra: Parameters<typeof makeEvent>[3] = {}) =>
-    events.push(makeEvent(++seq, type, at, extra));
+  const ev = <T extends EventType>(type: T, at: string, data: EventData<T>, ids: EventIds = {}) =>
+    events.push(makeEvent(++seq, type, at, data, ids));
 
   const state: MockState = {
     schemaVersion: STATE_VERSION,
@@ -90,7 +90,7 @@ export function buildState(preset: Preset = 'default'): MockState {
     rec.arrivedAt = rec.item.messages[0]?.ts ?? clock;
     byKey[seed.key] = rec;
     state.items[rec.item.id] = rec;
-    ev('item.upserted', rec.item.lastActivityAt, { itemId: rec.item.id, data: { revision: 1 } });
+    ev('item.upserted', rec.item.lastActivityAt, upserted(rec.item, false), { itemId: rec.item.id });
   }
 
   byKey.f1.item.revision = 2;
@@ -103,7 +103,7 @@ export function buildState(preset: Preset = 'default'): MockState {
     if (rec.key === 'x1') {
       rec.triageState = 'failed';
       rec.failCount = 2;
-      ev('triage.failed', at, { itemId: rec.item.id, data: { attempts: 2, reason: 'schema validation failed' } });
+      ev('triage.failed', at, { revision: rec.item.revision, attempts: 2, reason: 'schema validation failed' }, { itemId: rec.item.id });
       continue;
     }
     const rule = firstMatchingRule(rec.item, rules, settings, ME);
@@ -124,7 +124,7 @@ export function buildState(preset: Preset = 'default'): MockState {
     rec.decision = decision;
     rec.triageState = 'triaged';
     rec.notified = decision.attention === 'now';
-    ev('triage.decided', decision.decidedAt, { itemId: rec.item.id, data: { attention: decision.attention, by: decision.decidedBy, ruleId: decision.ruleId ?? null } });
+    ev('triage.decided', decision.decidedAt, { decision: toLoggedDecision(decision) }, { itemId: rec.item.id });
   }
   for (const [batchId, recs] of Object.entries(batches)) {
     for (const rec of recs) rec.batch = { at: batchId.slice(6), threads: recs.length, calls: 1 };
@@ -134,7 +134,7 @@ export function buildState(preset: Preset = 'default'): MockState {
   const snooze = (rec: ItemRec, until: string, at: string) => {
     rec.status = 'snoozed';
     rec.snoozedUntil = until;
-    ev('item.snoozed', at, { itemId: rec.item.id, data: { until } });
+    ev('item.snoozed', at, { until }, { itemId: rec.item.id });
   };
   snooze(byKey.s1, addMins(clock, 40), addMins(clock, -20));
   snooze(byKey.s2, '2026-10-06T08:00:00.000Z', addMins(clock, -60));
@@ -142,7 +142,7 @@ export function buildState(preset: Preset = 'default'): MockState {
   const done = (rec: ItemRec, at: string) => {
     rec.status = 'done';
     rec.doneAt = at;
-    ev('item.done', at, { itemId: rec.item.id });
+    ev('item.done', at, undefined, { itemId: rec.item.id });
   };
   done(byKey.d1, addMins(byKey.d1.item.lastActivityAt, 2));
   done(byKey.d2, addMins(byKey.d2.item.lastActivityAt, 60 * 24));
@@ -167,11 +167,11 @@ export function buildState(preset: Preset = 'default'): MockState {
       createdAt: at,
       updatedAt: at,
     };
-    ev('action.requested', at, { itemId: rec.item.id, actionId: id, data: { type } });
-    ev('action.drafted', addMins(at, 1), { itemId: rec.item.id, actionId: id, data: { type, tokens: draft.tokens } });
+    ev('action.requested', at, { type, revision: rec.item.revision }, { itemId: rec.item.id, actionId: id });
+    ev('action.drafted', addMins(at, 1), { type, revision: rec.item.revision, draftRef: `drafts/${id}.json`, tokens: draft.tokens }, { itemId: rec.item.id, actionId: id });
     if (status === 'done') {
-      ev('action.approved', addMins(at, 6), { itemId: rec.item.id, actionId: id });
-      ev('action.executed', addMins(at, 6), { itemId: rec.item.id, actionId: id, data: { dryRun: false, pageVersion: draft.kind === 'confluence' ? draft.baseVersion + 1 : null } });
+      ev('action.approved', addMins(at, 6), undefined, { itemId: rec.item.id, actionId: id });
+      ev('action.executed', addMins(at, 6), draft.kind === 'confluence' ? { dryRun: false, pageId: draft.pageId, pageVersion: draft.baseVersion + 1 } : { dryRun: false, path: draft.path }, { itemId: rec.item.id, actionId: id });
       state.results[id] = draft.kind === 'confluence' ? `Written to page v${draft.baseVersion + 1}. Logged action.executed.` : `Written to ${draft.path}.`;
     }
   };

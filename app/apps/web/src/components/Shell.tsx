@@ -12,7 +12,15 @@ import { Dot, IconButton, PhaseTag, Segmented, cx, phaseToast, type Phase } from
 export type ShellContext = { inbox: QueryState<InboxView> };
 export const useShell = () => useOutletContext<ShellContext>();
 
-const SLACK_DOT = { healthy: 'var(--green)', backoff: 'var(--amber)', auth_failed: 'var(--red)', never: 'var(--gray-mid)' } as const;
+const SLACK_DOT = {
+  healthy: 'var(--green)',
+  backoff: 'var(--amber)',
+  auth_failed: 'var(--red)',
+  never: 'var(--gray-mid)',
+  offline: 'var(--gray-mid)',
+  degraded: 'var(--amber)',
+  paused: 'var(--gray-mid)',
+} as const;
 
 /** A nav label: visible when expanded, kept for screen readers when the sidebar is collapsed. */
 const Label = ({ collapsed, children }: { collapsed: boolean; children: ReactNode }) => <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{children}</span>;
@@ -68,7 +76,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const count = inbox?.items.filter((i) => (full || i.source === 'slack') && (i.lane === 'now' || i.lane === 'today' || i.lane === 'file')).length;
   const slack = inbox?.source;
   const slackLabel =
-    !slack ? '' : slack.status === 'auth_failed' ? 'token rejected' : slack.status === 'never' ? 'not polled' : slack.status === 'backoff' ? 'backing off' : slack.lastPollAt ? `${fmtAgo(slack.lastPollAt, now)} ago`.replace('now ago', 'just now') : '';
+    !slack ? '' : slack.status === 'auth_failed' ? 'token rejected' : slack.status === 'never' ? 'not polled' : slack.status === 'backoff' ? 'backing off' : slack.status === 'offline' ? 'offline' : slack.status === 'degraded' ? 'retrying' : slack.status === 'paused' ? 'paused' : slack.lastPollAt ? `${fmtAgo(slack.lastPollAt, now)} ago`.replace('now ago', 'just now') : '';
   const slackDot = slack ? SLACK_DOT[slack.status] : 'var(--gray-mid)';
 
   // [ collapses and expands the sidebar, as in most tools with a sidebar.

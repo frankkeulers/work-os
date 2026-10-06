@@ -1,0 +1,108 @@
+import { z } from 'zod';
+import { ActionType, FailureReason, ItemKind, NextStep, Participant, SourceId, TriageCorrection, TriageDecision } from './schemas';
+
+// The event log (PLAN.md §4.3, §4.4). It is the source of truth: every event carries a gap-free
+// `seq` and a typed payload, so the inbox can be rebuilt from the log alone. Events never carry
+// message bodies (CLAUDE.md, file storage rules); bodies live only in items/.
+
+const isoDate = z.iso.datetime();
+const revision = z.number().int().positive();
+const none = z.object({}).strict().optional();
+
+export const PollReason = z.enum(['manual', 'scheduled', 'wake', 'reconnect', 'first']);
+export type PollReason = z.infer<typeof PollReason>;
+
+// Dependencies whose health the server tracks (FR-14.3, FR-14.6). wisprDb is the local Wispr Flow database (R2.6).
+export const DepId = z.enum(['network', 'slack', 'claude', 'confluence', 'keychain', 'storage', 'wisprDb']);
+export type DepId = z.infer<typeof DepId>;
+
+export const DepState = z.enum(['ok', 'unknown', 'offline', 'degraded', 'rate_limited', 'auth_failed', 'paused']);
+export type DepState = z.infer<typeof DepState>;
+
+// A decision as the log keeps it: without its free text (summary, reason, the wording of the next
+// step). That text paraphrases the messages, so it lives with the raw content in items/ and expires
+// with it (retention, §4.3). Strict, so text can't slip back in.
+export const LoggedDecision = TriageDecision.omit({ summary: true, reason: true, next: true })
+  .extend({ next: NextStep.pick({ need: true, dueAt: true }).strict().optional() })
+  .strict();
+export type LoggedDecision = z.infer<typeof LoggedDecision>;
+
+export function toLoggedDecision(d: TriageDecision): LoggedDecision {
+  const { summary: _summary, reason: _reason, next, ...rest } = d;
+  return { ...rest, ...(next && { next: { need: next.need, ...(next.dueAt && { dueAt: next.dueAt }) } }) };
+}
+
+export const EventPayloads = {
+  // Item metadata only, enough to show and rebuild the inbox after retention removes the raw content.
+  'item.upserted': z.object({
+    source: SourceId,
+    kind: ItemKind,
+    title: z.string().min(1),
+    permalink: z.url(),
+    participants: z.array(Participant),
+    lastActivityAt: isoDate,
+    revision,
+    messageCount: z.number().int().nonnegative(),
+    fromMeOnly: z.boolean(), // the new messages are all the user's own: no re-triage (§5.3)
+  }),
+  'item.done': none,
+  'item.reopened': none,
+  'item.snoozed': z.object({ until: isoDate }),
+  'item.notified': z.object({ kind: z.enum(['now', 'summary']) }), // at most one per item (FR-11.2)
+  'triage.decided': z.object({ decision: LoggedDecision }),
+  'triage.corrected': z.object({ correction: TriageCorrection }),
+  'triage.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
+  'action.requested': z.object({ type: ActionType, revision }),
+  'action.drafted': z.object({ type: ActionType, revision, draftRef: z.string().min(1), tokens: z.number().int().nonnegative() }),
+  'action.edited': none,
+  'action.approved': none,
+  // Synced before every write attempt, so a write interrupted by sleep or a crash is reconciled, not repeated (FR-14.5).
+  'action.executing': z.object({ attempt: z.number().int().positive(), expectedHash: z.string().optional() }),
+  'action.executed': z.object({
+    dryRun: z.boolean(),
+    path: z.string().optional(),
+    pageId: z.string().optional(),
+    pageVersion: z.number().int().positive().optional(),
+  }),
+  'action.failed': z.object({ reason: FailureReason, pageId: z.string().optional(), detail: z.string().optional() }),
+  'action.discarded': z.object({ reason: z.enum(['cancelled', 'redraft', 'discarded']) }),
+  'source.polled': z.object({
+    source: SourceId,
+    reason: PollReason,
+    fetched: z.number().int().nonnegative(),
+    cursor: z.string().optional(), // also kept here so cursors can be rebuilt from the log
+    durationMs: z.number().int().nonnegative().optional(),
+  }),
+  'source.failed': z.object({ source: SourceId, error: z.string().min(1), retryAfterSeconds: z.number().nonnegative().optional() }),
+  'settings.changed': z.object({ dryRun: z.boolean() }),
+  'rules.changed': z.object({ count: z.number().int().nonnegative() }),
+  'system.started': z.object({ version: z.string().min(1), instance: z.enum(['prod', 'dev']) }),
+  'system.stopped': z.object({ reason: z.string().min(1) }),
+  'system.woke': z.object({ sleptSeconds: z.number().nonnegative() }),
+  'health.changed': z.object({ dep: DepId, state: DepState, reason: z.string().optional() }),
+} as const;
+
+export type EventType = keyof typeof EventPayloads;
+export const EventType = z.enum(Object.keys(EventPayloads) as [EventType, ...EventType[]]);
+
+const base = {
+  seq: z.number().int().positive(),
+  id: z.string().min(1),
+  at: isoDate,
+  itemId: z.string().optional(),
+  actionId: z.string().optional(),
+  schemaVersion: z.literal(1),
+};
+
+const variant = <T extends EventType>(type: T) => z.object({ ...base, type: z.literal(type), data: EventPayloads[type] });
+
+export const WorkEvent = z.discriminatedUnion(
+  'type',
+  (Object.keys(EventPayloads) as EventType[]).map((t) => variant(t)) as unknown as [
+    ReturnType<typeof variant<EventType>>,
+    ...ReturnType<typeof variant<EventType>>[],
+  ],
+);
+
+export type EventData<T extends EventType> = z.infer<(typeof EventPayloads)[T]>;
+export type WorkEvent = { [T in EventType]: { seq: number; id: string; type: T; at: string; itemId?: string; actionId?: string; data: EventData<T>; schemaVersion: 1 } }[EventType];

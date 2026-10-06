@@ -1,3 +1,4 @@
+import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type {
   Action,
@@ -61,16 +62,17 @@ export type PollPhase = 'idle' | 'polling' | 'triaging';
 export interface PollStatus {
   phase: PollPhase;
   triagingCount?: number;
-  reason?: 'manual' | 'scheduled' | 'wake' | 'first';
+  reason?: PollReason;
   lastPollAt?: string;
   nextPollAt?: string;
   lastResult?: { at: string; fetched: number; triaged: number; calls: number; reason: PollStatus['reason'] };
 }
 
-export type SlackStatus = 'healthy' | 'backoff' | 'auth_failed' | 'never';
+// offline: no network, not a source failure (FR-2.9); degraded: reachable but failing; paused: settings invalid or safe mode.
+export type SlackStatus = 'healthy' | 'backoff' | 'auth_failed' | 'never' | 'offline' | 'degraded' | 'paused';
 
 export interface SourceHealth {
-  id: 'slack';
+  id: SourceId;
   status: SlackStatus;
   mode: Settings['slack']['fetchMode'];
   lastPollAt?: string;
@@ -98,7 +100,8 @@ export interface BudgetState {
 export interface InboxView {
   items: ItemSummary[];
   poll: PollStatus;
-  source: SourceHealth;
+  source: SourceHealth; // Slack, until the UI shows several sources
+  sources: SourceHealth[]; // every enabled source (R2.1)
   budgets: BudgetState;
   dryRun: boolean;
   notices: { rebuilt?: string; fileVaultOff: boolean };
@@ -172,7 +175,7 @@ export interface UsageView {
 export type CheckStatus = 'ok' | 'warn' | 'fail';
 
 export interface StartupCheck {
-  id: 'filevault' | 'api_key' | 'slack_token' | 'claude_login';
+  id: 'filevault' | 'api_key' | 'slack_token' | 'claude_login' | 'settings' | 'keychain' | 'power_nap';
   label: string;
   status: CheckStatus;
   note: string;
@@ -192,9 +195,32 @@ export interface SettingsView {
 
 export type StartupFailure = 'api_key' | 'slack_token' | 'claude_login';
 
+/** Health of one dependency (FR-14.6). */
+export interface DependencyHealth {
+  id: DepId;
+  state: DepState;
+  since: string;
+  lastOkAt?: string;
+  retryAt?: string;
+  failures: number;
+  reason?: string; // e.g. captive_portal, schema_changed
+  fix?: string; // what Frank can do about it
+}
+
 export interface HealthView {
-  connection: 'up' | 'down' | 'reconnecting';
-  startupFailure?: StartupFailure;
+  connection: 'up' | 'down' | 'reconnecting'; // the UI's link to the server
+  startupFailure?: StartupFailure; // blocking screen; only api_key once the server exists (CL-2)
+  mode: 'normal' | 'degraded' | 'safe';
+  phase: 'running' | 'waking' | 'catching_up' | 'stopping';
+  lastWakeAt?: string;
+  deps: DependencyHealth[];
+  checks: StartupCheck[];
+  checkedAt: string;
+  nextCheckAt?: string;
+  outbox: { approved: number; waiting: number; oldestAt?: string }; // approved writes not yet applied (FR-14.5)
+  instance: 'prod' | 'dev' | 'mock';
+  version: string;
+  startedAt: string;
 }
 
 export type Notice =
@@ -219,6 +245,8 @@ export interface WorkOsApi {
   now(): Date;
 
   getHealth(): Promise<HealthView>;
+  /** Re-runs the startup checks and dependency probes now (FR-12.2). */
+  recheck(): Promise<void>;
   getInbox(): Promise<InboxView>;
   getItem(id: string): Promise<ItemView>;
   getUsage(): Promise<UsageView>;

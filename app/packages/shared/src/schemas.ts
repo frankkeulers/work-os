@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const isoDate = z.iso.datetime();
 
-export const SourceId = z.enum(['slack', 'outlook', 'teams', 'plaud']);
+export const SourceId = z.enum(['slack', 'outlook', 'teams', 'plaud', 'wispr']);
 export type SourceId = z.infer<typeof SourceId>;
 
 export const ItemKind = z.enum(['thread', 'dm', 'email', 'meeting', 'chat']);
@@ -102,7 +102,8 @@ export const ActionStatus = z.enum(['drafting', 'ready', 'approved', 'executing'
 export type ActionStatus = z.infer<typeof ActionStatus>;
 
 // amendment: why an action failed, so the UI can offer the right recovery.
-export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', 'model_error']);
+// unreachable: the outbox gave up after repeated transient failures; draft_missing: the draft file was lost (FR-14.5, FR-14.7).
+export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', 'model_error', 'unreachable', 'draft_missing']);
 export type FailureReason = z.infer<typeof FailureReason>;
 
 export const Action = z.object({
@@ -160,39 +161,7 @@ export type VaultNewDraft = z.infer<typeof VaultNewDraft>;
 export type VaultAppendDraft = z.infer<typeof VaultAppendDraft>;
 export type ConfluenceDraft = z.infer<typeof ConfluenceDraft>;
 
-export const EventType = z.enum([
-  'item.upserted',
-  'triage.decided',
-  'triage.corrected',
-  'triage.failed',
-  'item.done',
-  'item.snoozed',
-  'item.reopened', // amendment
-  'action.requested',
-  'action.drafted',
-  'action.edited', // amendment
-  'action.approved',
-  'action.executed',
-  'action.failed',
-  'action.discarded',
-  'source.polled',
-  'source.failed',
-  'settings.changed', // amendment
-  'rules.changed', // amendment
-]);
-export type EventType = z.infer<typeof EventType>;
-
-// Events never carry message bodies (CLAUDE.md, file storage rules).
-export const WorkEvent = z.object({
-  id: z.string().min(1),
-  type: EventType,
-  at: isoDate,
-  itemId: z.string().optional(),
-  actionId: z.string().optional(),
-  data: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
-  schemaVersion: z.literal(1),
-});
-export type WorkEvent = z.infer<typeof WorkEvent>;
+// The event log (EventType, WorkEvent and their payloads) lives in events.ts.
 
 // ---------- Rules (FR-4.x) ----------
 
@@ -313,7 +282,7 @@ export type Settings = z.infer<typeof Settings>;
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------
 
-export const UsagePurpose = z.enum(['triage', 'draft_vault', 'draft_confluence', 'people_check', 'eval', 'startup_check']);
+export const UsagePurpose = z.enum(['triage', 'draft_vault', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch']); // fetch: connector relay (CL-9)
 export type UsagePurpose = z.infer<typeof UsagePurpose>;
 
 export const UsageRecord = z.object({
