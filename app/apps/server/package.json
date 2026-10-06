@@ -1,0 +1,20 @@
+{
+  "name": "@work-os/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Work OS local server: polls sources, triages with Claude, writes approved actions.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "dev": "WORKOS_INSTANCE=dev tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@work-os/shared": "*",
+    "fastify": "^5.12.5",
+    "pino": "^10.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

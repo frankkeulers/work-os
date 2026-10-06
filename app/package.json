@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.1.0",
-  "description": "Work OS: local Slack triage and filing assistant. Frontend prototype on mock data.",
+  "description": "Work OS: local Slack triage and filing assistant.",
   "engines": {
     "node": ">=22"
   },
@@ -13,10 +13,11 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @work-os/web",
-    "build": "npm run typecheck -w @work-os/shared && npm run build -w @work-os/web",
+    "build": "npm run typecheck -w @work-os/shared && npm run typecheck -w @work-os/server && npm run build -w @work-os/web",
     "lint": "eslint .",
     "test": "vitest run",
-    "e2e": "npm run e2e -w @work-os/web"
+    "e2e": "npm run e2e -w @work-os/web",
+    "dev:server": "npm run dev -w @work-os/server"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
