@@ -386,11 +386,12 @@ function CommitmentsGroup() {
 const keyOf = (q: URLSearchParams) => `${q.get('item')}:${parseType(q.get('file'))}`;
 
 /**
- * Clicks here aren't "outside" the item panel: rows switch the item, links leave the page anyway
- * (closing would rewrite the URL mid-navigation), and layers (toasts, dialogs, menus, the scenario
- * drawer) sit above it.
+ * Clicks here aren't "outside" the item panel: rows switch the item; links leave the page anyway
+ * (closing would rewrite the URL mid-navigation); the page header's and the sidebar's buttons
+ * (Poll, Usage, Scope) work alongside it; and layers (toasts, dialogs, menus, the scenario drawer)
+ * sit above it.
  */
-const NOT_OUTSIDE = '[data-row], a[href], [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
+const NOT_OUTSIDE = '[data-row], a[href], [data-inbox-header] button, nav button, [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
 
 export function InboxPage() {
   const { inbox: q } = useShell();
@@ -558,7 +559,7 @@ export function InboxPage() {
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-surface">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line px-6 py-[18px]">
+      <header data-inbox-header className="flex flex-wrap items-center gap-3 border-b border-line px-6 py-[18px]">
         <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
           <h1 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Inbox</h1>
           <div className="font-mono text-xs text-muted">
@@ -660,15 +661,16 @@ export function InboxPage() {
         </section>
 
         {panel && (
-          <div
-            ref={panelRef}
-            data-state={closing ? 'closed' : 'open'}
-            inert={closing}
-            onAnimationEnd={(e) => e.target === e.currentTarget && closing && setShown(null)}
-            className="item-panel fixed inset-y-0 right-0 z-30 flex w-full max-w-[600px] min-[1320px]:static min-[1320px]:z-auto min-[1320px]:max-w-none min-[1320px]:flex-[0_1_600px] min-[1320px]:justify-end min-[1320px]:overflow-hidden"
-          >
-            {/* Docked, the content keeps its width while the column grows, so it slides in rather than reflowing. */}
-            <div className="flex min-w-0 flex-1 flex-col min-[1320px]:w-[600px] min-[1320px]:flex-none">
+          <>
+            {/* Visual only: the list stays scrollable and its rows still switch the item. */}
+            <div aria-hidden="true" data-state={closing ? 'closed' : 'open'} className="item-panel-backdrop pointer-events-none absolute inset-0 z-20 bg-scrim" />
+            <div
+              ref={panelRef}
+              data-state={closing ? 'closed' : 'open'}
+              inert={closing}
+              onAnimationEnd={(e) => e.target === e.currentTarget && closing && setShown(null)}
+              className="item-panel absolute inset-y-0 right-0 z-30 flex w-full max-w-[600px] flex-col"
+            >
               <ItemPanel
                 item={panel.item}
                 view={panel.view}
@@ -684,7 +686,7 @@ export function InboxPage() {
                 onDirty={onDirty}
               />
             </div>
-          </div>
+          </>
         )}
       </div>
 

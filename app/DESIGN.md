@@ -55,7 +55,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
   - a grey need tag;
   - a deadline chip coloured by urgency: orange if within about 4 h or overdue, blue if later today, grey otherwise;
   - in To file, a teal target chip.
-- **Item panel motion:** the panel slides in from the right (240 ms) and back out (180 ms). Over the list, in narrow windows, it moves sideways. Docked beside the list, its column grows from the right edge while the content keeps its width. With reduced motion it just appears. A click outside closes it, except on rows (they switch item), links, toasts, dialogs, menus and the scenario drawer. Esc and × close it too.
+- **Item panel motion:** the panel slides in over the list from the right (240 ms) and back out (180 ms), below the page header so Poll and Usage stay in view. A faint backdrop (`--scrim`) fades in over the list. It is visual only: the list still scrolls, and a row click switches the item. With reduced motion it just appears. A click outside closes the panel, except on rows, links, header and sidebar buttons, toasts, dialogs, menus and the scenario drawer. Esc and × close it too.
 - **Item panel:** has one primary action, in the Next step card. Everything else is secondary (outline) or ghost. Done, Snooze and Done and next sit in a fixed footer with their shortcuts shown.
 - **Lower groups:** Failed, Waiting, Everything else, Snoozed and Done are collapsible headings in the same list. They are not separate boxes.
 - **Status:** dry-run is a small amber "Dry-run on" link in the header. Banners are only for things you need to act on (budgets, Slack failing, FileVault).

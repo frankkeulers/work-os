@@ -196,9 +196,14 @@ test('click the draft text to edit it in place; Save and Cancel sit under the ed
 });
 
 test('the panel slides in, and a click outside it closes it', async ({ page }) => {
-  const slider = page.locator('.item-panel');
-  // Docked beside the list at this width, the panel grows in from the right edge.
-  await expect(slider).toHaveCSS('animation-name', 'item-panel-dock-in');
+  // The panel slides over the list, with a backdrop behind it.
+  await expect(page.locator('.item-panel')).toHaveCSS('animation-name', 'item-panel-in');
+  await expect(page.locator('.item-panel-backdrop')).toBeVisible();
+
+  // Header and sidebar buttons work alongside the panel.
+  await page.getByRole('button', { name: 'Poll now' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
+  await expect(itemPanel(page)).toBeVisible();
 
   // Rows switch the item; they don't close the panel.
   const second = rows(page, 'Now').nth(1);
@@ -214,6 +219,7 @@ test('the panel slides in, and a click outside it closes it', async ({ page }) =
   // A click anywhere else closes it, after the slide-out.
   await page.getByRole('heading', { name: 'Inbox', level: 1 }).click();
   await expect(itemPanel(page)).toHaveCount(0);
+  await expect(page.locator('.item-panel-backdrop')).toHaveCount(0);
   await expect(page).toHaveURL((u) => !u.searchParams.has('item'));
 });
 

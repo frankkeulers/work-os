@@ -96,8 +96,7 @@ a:hover {
   min-height: 160px;
 }
 
-/* Inbox item panel: slides in from the right and back out. Over the list (narrow windows) it moves;
-   docked beside the list it grows from the right edge, so the list doesn't jump. */
+/* Inbox item panel: slides in from the right over the list, and back out. The backdrop fades with it. */
 @keyframes item-panel-in {
   from {
     transform: translateX(100%);
@@ -108,14 +107,14 @@ a:hover {
     transform: translateX(100%);
   }
 }
-@keyframes item-panel-dock-in {
+@keyframes backdrop-in {
   from {
-    flex-basis: 0;
+    opacity: 0;
   }
 }
-@keyframes item-panel-dock-out {
+@keyframes backdrop-out {
   to {
-    flex-basis: 0;
+    opacity: 0;
   }
 }
 .item-panel {
@@ -124,17 +123,17 @@ a:hover {
 .item-panel[data-state='closed'] {
   animation: item-panel-out 180ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
-@media (min-width: 1320px) {
-  .item-panel {
-    animation-name: item-panel-dock-in;
-  }
-  .item-panel[data-state='closed'] {
-    animation-name: item-panel-dock-out;
-  }
+.item-panel-backdrop {
+  animation: backdrop-in 240ms ease-out;
+}
+.item-panel-backdrop[data-state='closed'] {
+  animation: backdrop-out 180ms ease-in forwards;
 }
 @media (prefers-reduced-motion: reduce) {
   .item-panel,
-  .item-panel[data-state='closed'] {
+  .item-panel[data-state='closed'],
+  .item-panel-backdrop,
+  .item-panel-backdrop[data-state='closed'] {
     animation-duration: 1ms;
   }
 }
