@@ -2,6 +2,7 @@ import { ConfigError, EXIT, exitCode, resolveConfig, type RuntimeConfig } from '
 import { initDataDir, paths } from './config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from './config/defaults';
 import { join, resolve } from 'node:path';
+import type { FastifyInstance } from 'fastify';
 import { loadApiToken } from './api/auth';
 import { settingsCheck } from './api/views';
 import { macKeychain, type SecretStore } from './config/keychain';
@@ -49,6 +50,8 @@ export interface RunDeps {
   followZone?: () => string | undefined;
   /** The source adapters by id; Slack by default. Tests pass fakes, or none. */
   sources?: Partial<Record<SourceId, AdapterFactory>>;
+  /** Run against a made-up Slack (`--fakes`, e2e:server). Refused outside a temp data dir. */
+  fakes?: boolean;
 }
 
 export type RunResult =
@@ -89,6 +92,19 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   }
 
   if (apiKeySet(deps.env)) return { running: false, code: await refuseApiKey(config, notifier, now()) };
+
+  let extraRoutes: ((app: FastifyInstance) => void) | undefined;
+  if (deps.fakes) {
+    const { fakesRefusal, fakeWorld } = await import('./fakes');
+    const refusal = fakesRefusal(config);
+    if (refusal) {
+      process.stderr.write(`Work OS did not start: ${refusal}\n`);
+      return { running: false, code: exitCode(EXIT.config, underLaunchd) };
+    }
+    const world = fakeWorld(now());
+    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, exec: world.exec, sources: world.sources };
+    extraRoutes = world.routes;
+  }
 
   const init = await initDataDir(config.dataDir, { settings: defaultSettings(config.dataDir), rules: DEFAULT_RULES });
   const { logger, flush } = createLogger({ dir: paths(config.dataDir).logs, echo: deps.echoLogs, now, base: { instance: config.instance } });
@@ -167,6 +183,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     now,
     meId: () => runtime.identity('slack'),
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
+    extraRoutes,
     devOrigins: config.instance === 'dev' ? (deps.env.WORKOS_DEV_ORIGINS ?? DEV_ORIGINS).split(',') : [],
   });
   let url: string;

@@ -35,8 +35,9 @@ export function UnreachableScreen({ reconnecting, onRetry }: { reconnecting: boo
     <Screen icon="wifiOff" tone="bad" title="Can’t reach the Work OS server" action={<Button variant="solid" icon="poll" onClick={onRetry}>Try again</Button>}>
       <p className="m-0">The server runs on this Mac, bound to 127.0.0.1, and serves this page. It has stopped or hasn’t started yet.</p>
       <ol className="m-0 flex list-decimal flex-col gap-2 pl-5">
-        <li>Start it from the repo: <Code>npm run dev</Code></li>
-        <li>If it exits straight away, read the last lines of <span className="font-mono text-[13px]">~/WorkOS-data/logs/app-&lt;date&gt;.log</span>.</li>
+        <li>If it runs at login, ask launchd how it is: <Code>npm run agent:status</Code></li>
+        <li>In development, start it from the repo: <Code>npm run dev</Code></li>
+        <li>If it exits straight away, read the last lines of <span className="font-mono text-[13px]">~/WorkOS-data/logs/app-&lt;date&gt;.log</span> (or <span className="font-mono text-[13px]">launchd.err.log</span> next to it).</li>
         <li>Another instance may hold <span className="font-mono text-[13px]">state/lock</span>. Only one can run at a time.</li>
       </ol>
     </Screen>

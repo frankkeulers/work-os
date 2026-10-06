@@ -11,7 +11,7 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 1000 } } }],
   webServer: {
-    command: 'npm run build && npm run preview',
+    command: 'npm run build:mock && npm run preview:mock', // the UX tests run against the in-browser mock
     url: 'http://127.0.0.1:4391',
     reuseExistingServer: true,
     timeout: 120_000,

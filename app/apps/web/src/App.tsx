@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Outlet, RouterProvider, createBrowserRouter, useLocation, useNavigate } from 'react-router';
-import { api } from './api';
+import { API_MODE, api } from './api';
 import { Shell } from './components/Shell';
 import { Toasts } from './components/Toasts';
 import { onTopics, useApiQuery } from './hooks/useApiQuery';
@@ -14,6 +14,9 @@ import { UsagePage } from './pages/Usage';
 import { ScenarioDrawer } from './scenarios/ScenarioDrawer';
 import { usePrefs } from './store/prefs';
 import { toast, useToasts } from './store/toasts';
+
+// The Scenarios drawer drives the mock; the real app has nothing for it to drive (and, API_MODE
+// being a build-time constant, doesn't carry it).
 
 function useThemeAttribute() {
   const theme = usePrefs((s) => s.theme);
@@ -58,7 +61,7 @@ function Root() {
     <>
       {body}
       <Toasts />
-      <ScenarioDrawer />
+      {API_MODE === 'mock' && <ScenarioDrawer />}
     </>
   );
 }

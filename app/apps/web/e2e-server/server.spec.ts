@@ -1,0 +1,92 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { expect, test, type Page } from '@playwright/test';
+
+// The built web app against the real server, Slack faked (M1 step 11): the inbox loads, a poll
+// adds a thread, Done sticks, and after a server restart the page goes reconnecting, then up.
+
+const APP = resolve(import.meta.dirname, '../../..');
+const PORT = 4399;
+const BASE = `http://127.0.0.1:${PORT}`;
+const TOKEN = 'workos-fakes-token-0123456789abcdefghijklmnop'; // fakes.ts FAKE_API_TOKEN
+const auth = { authorization: `Bearer ${TOKEN}` };
+
+let dir: string;
+let server: ChildProcess | undefined;
+let output = '';
+
+async function startServer() {
+  output = '';
+  server = spawn(join(APP, 'node_modules/.bin/tsx'), [join(APP, 'apps/server/src/main.ts'), '--fakes'], {
+    env: { ...process.env, WORKOS_INSTANCE: 'dev', WORKOS_DATA_DIR: join(dir, 'data'), WORKOS_PORT: String(PORT), WORKOS_WEB_DIR: join(APP, 'apps/web/dist') },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  server.stdout?.on('data', (b) => (output += b));
+  server.stderr?.on('data', (b) => (output += b));
+  const until = Date.now() + 20_000;
+  while (Date.now() < until) {
+    if (server.exitCode !== null) throw new Error(`The server exited (${server.exitCode}):\n${output}`);
+    const ok = await fetch(`${BASE}/api/health`, { headers: auth }).then(
+      (r) => r.ok,
+      () => false,
+    );
+    if (ok) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`The server did not answer within 20 s:\n${output}`);
+}
+
+async function stopServer() {
+  const s = server;
+  server = undefined;
+  if (!s || s.exitCode !== null) return;
+  const exited = new Promise((r) => s.once('exit', r));
+  s.kill('SIGTERM');
+  await exited;
+}
+
+const stillActive = (page: Page, n: number) => page.getByRole('button', { name: `${n} still active` });
+
+test.beforeAll(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'workos-e2e-server-'));
+  await startServer();
+});
+test.afterAll(async () => {
+  await stopServer();
+  await rm(dir, { recursive: true, force: true });
+});
+
+test('inbox, poll, done and a server restart against the real server', async ({ page, request }) => {
+  await page.goto('/');
+  // Nothing is triaged yet (M2), so the polled threads wait under "still active".
+  await expect(stillActive(page, 3)).toBeVisible();
+  await expect(page.getByRole('link', { name: /Dry-run on/ })).toBeVisible();
+  await stillActive(page, 3).click();
+  const waiting = page.getByRole('region', { name: 'Waiting for quiet window' });
+  await expect(waiting.locator('[data-row]')).toHaveCount(3);
+  await expect(waiting).toContainText('#product');
+  await expect(waiting).toContainText('Matt M.');
+  await page.screenshot({ path: join(APP, 'screenshots/server-inbox-light.png') });
+
+  // A new message in Slack, then Poll now: the thread arrives over SSE.
+  const posted = await request.post(`${BASE}/api/fake/slack/messages`, { headers: auth, data: { channel: 'C02LAUNCH', text: 'Pricing page copy needs a decision today.', user: 'U02DANA' } });
+  expect(posted.status()).toBe(201);
+  await page.getByRole('button', { name: 'Poll now' }).click();
+  await expect(waiting.locator('[data-row]')).toHaveCount(4);
+
+  // Done on #product sticks on the server.
+  await waiting.locator('[data-row]').filter({ hasText: '#product' }).click();
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  await panel.getByRole('button', { name: /^Done e$/ }).click();
+  await expect(panel.getByRole('region', { name: 'Status' })).toContainText('Done');
+  const inbox = (await (await request.get(`${BASE}/api/inbox`, { headers: auth })).json()) as { items: { title: string; status: string }[] };
+  expect(inbox.items.find((i) => i.title === '#product')?.status).toBe('done');
+
+  // Restart: the page notices, waits, and comes back with the same state.
+  await stopServer();
+  await expect(page.getByRole('heading', { name: /Reconnecting to Work OS|Can’t reach the Work OS server/ })).toBeVisible({ timeout: 20_000 });
+  await startServer();
+  await expect(stillActive(page, 3)).toBeVisible({ timeout: 20_000 });
+});

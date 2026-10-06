@@ -17,6 +17,7 @@ export interface ServerDeps extends Omit<ViewDeps, 'startedAt'> {
   token: string;
   webDir?: string; // the built web app; development serves it from Vite instead
   devOrigins?: string[]; // Vite's origin in development
+  extraRoutes?: (app: FastifyInstance) => void; // --fakes only
 }
 
 export interface WorkOsServer {
@@ -48,6 +49,7 @@ export async function createServer(deps: ServerDeps): Promise<WorkOsServer> {
   deps.store.subscribe((events) => hub.publish(...noticesFor(events)));
 
   registerRoutes(app, { ...deps, startedAt });
+  deps.extraRoutes?.(app);
   registerSse(app, hub);
   await registerStatic(app, { dir: deps.webDir, token: deps.token });
 

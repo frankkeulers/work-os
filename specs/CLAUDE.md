@@ -45,7 +45,9 @@ Follow the milestones: M1 → M2 → M3 → M4. Do not start a milestone until t
 
 ## Commands (to be created in M1)
 
-- `npm run dev`: server and web in watch mode, dry-run on, data in `~/WorkOS-data-dev`.
+- `npm run dev`: server and web in watch mode, dry-run on, data in `~/WorkOS-data-dev`. Vite proxies `/api` to the server on 4318.
+- `npm run dev:mock`: the web app alone, against the in-browser mock (the Scenarios drawer works here).
+- `npm run e2e`: UX tests against the mock. `npm run e2e:server`: the built app against the real server with a fake Slack (`main.ts --fakes`, temp data dir only).
 - `npm test`: unit and contract tests.
 - `npm run e2e` (UX tests against the mock) and `npm run e2e:server` (against the built server with fakes).
 - `npm run perf`: performance budgets (NF-11).

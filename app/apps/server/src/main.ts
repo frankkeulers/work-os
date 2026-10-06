@@ -12,7 +12,8 @@ if (process.argv.includes('--version')) {
 }
 
 const notifier = osascriptNotifier(process.env.WORKOS_INSTANCE === 'prod' ? '' : '[dev] ');
-const res = await run({ env: process.env, notifier, echoLogs: process.env.WORKOS_LAUNCHD !== '1' });
+const fakes = process.argv.includes('--fakes');
+const res = await run({ env: process.env, notifier: fakes ? undefined : notifier, echoLogs: process.env.WORKOS_LAUNCHD !== '1', fakes });
 
 if (!res.running) {
   process.exitCode = res.code;

@@ -1,6 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import { api, mockControls } from '../api';
+import { api, mockControls as controls } from '../api';
+
+// Rendered in mock builds only (App.tsx), where the controls exist.
+const mockControls = controls!;
 import { Icon } from '../components/icons';
 import { Button, IconButton, Segmented, cx } from '../components/ui';
 import { fmtDayDate, fmtTime } from '../lib/format';

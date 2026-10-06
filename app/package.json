@@ -12,7 +12,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @work-os/web",
+    "dev": "npm run dev:server & npm run dev -w @work-os/web",
     "build": "npm run typecheck -w @work-os/shared && npm run typecheck -w @work-os/server && npm run build -w @work-os/web",
     "lint": "eslint .",
     "test": "vitest run",
@@ -23,7 +23,9 @@
     "agent:install": "npm run agent -w @work-os/server -- install",
     "agent:uninstall": "npm run agent -w @work-os/server -- uninstall",
     "agent:status": "npm run agent -w @work-os/server -- status",
-    "spike:slack": "npm run spike:slack -w @work-os/server"
+    "spike:slack": "npm run spike:slack -w @work-os/server",
+    "e2e:server": "npm run e2e:server -w @work-os/web",
+    "dev:mock": "npm run dev:mock -w @work-os/web"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

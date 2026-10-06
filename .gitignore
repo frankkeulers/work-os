@@ -6,3 +6,4 @@ app/apps/web/test-results/
 app/apps/web/playwright-report/
 app/apps/web/e2e/__screens__/tmp/
 .vite/
+app/apps/web/dist-mock/

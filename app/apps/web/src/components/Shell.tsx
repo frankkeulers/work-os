@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { NavLink, Outlet, useOutletContext } from 'react-router';
 import { api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
+import { HealthBanner } from './HealthBanner';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
 import { usePrefs } from '../store/prefs';
@@ -213,6 +214,7 @@ export function Shell() {
     <div className="flex min-h-screen bg-bg">
       <Nav inbox={inbox.data} />
       <main className="min-w-0 flex-1">
+        <HealthBanner />
         <Outlet context={{ inbox } satisfies ShellContext} />
       </main>
     </div>
