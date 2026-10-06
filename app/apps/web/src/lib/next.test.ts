@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
-import { dueInfo, needLabel, needsYouOrder, nextDeadline, openLabel, shownStep, suggestedSnooze } from './next';
+import { dueInfo, needLabel, needsYouOrder, nextDeadline, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
 
 // Mon 5 Oct 2026, 09:45 London (BST).
 const now = new Date('2026-10-05T08:45:00.000Z');
@@ -69,6 +69,32 @@ describe('needsYouOrder (FR-8.1)', () => {
   it('breaks ties with the newest activity', () => {
     const items = [item({ id: 'old', lastActivityAt: '2026-10-05T06:00:00.000Z' }), item({ id: 'new', lastActivityAt: '2026-10-05T08:00:00.000Z' })];
     expect(needsYouOrder(items, now).map((i) => i.id)).toEqual(['new', 'old']);
+  });
+});
+
+describe('sortItems', () => {
+  const items = [
+    item({ id: 'mid', lane: 'now', lastActivityAt: '2026-10-05T07:00:00.000Z' }),
+    item({ id: 'new', lane: 'today', lastActivityAt: '2026-10-05T08:30:00.000Z' }),
+    item({ id: 'old', lane: 'failed', lastActivityAt: '2026-10-04T16:00:00.000Z' }),
+  ];
+  it('sorts by last activity, newest or oldest first, whatever the lane', () => {
+    expect(sortItems(items, 'newest', true, now).map((i) => i.id)).toEqual(['new', 'mid', 'old']);
+    expect(sortItems(items, 'oldest', true, now).map((i) => i.id)).toEqual(['old', 'mid', 'new']);
+  });
+  it('uses the FR-8.1 order for Needs you under Priority, and keeps other groups as they came', () => {
+    expect(sortItems(items, 'priority', true, now).map((i) => i.id)).toEqual(['mid', 'old', 'new']);
+    expect(sortItems(items, 'priority', false, now).map((i) => i.id)).toEqual(['mid', 'new', 'old']);
+  });
+  it('keeps Needs you to its lanes in every order', () => {
+    const file = item({ id: 'file', lane: 'file' });
+    expect(sortItems([file], 'newest', true, now)).toEqual([]);
+    expect(sortItems([file], 'newest', false, now)).toEqual([file]);
+  });
+  it('does not change the list it was given', () => {
+    const copy = [...items];
+    sortItems(items, 'newest', false, now);
+    expect(items).toEqual(copy);
   });
 });
 

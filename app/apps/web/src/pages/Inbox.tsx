@@ -8,11 +8,11 @@ import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo } from '../component
 import { HealthBanner } from '../components/HealthBanner';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
-import { Banner, Button, ConfirmDialog, IconButton, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
+import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
-import { dueInfo, needLabel, needsYouOrder } from '../lib/next';
+import { INBOX_SORT_LABEL, dueInfo, needLabel, sortItems, type InboxSort } from '../lib/next';
 import { usePrefs } from '../store/prefs';
 import { errorToast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
@@ -85,6 +85,37 @@ function pollTooltip(inbox: InboxView) {
   else if (poll.nextPollAt) parts.push(`next ${fmtTime(poll.nextPollAt)}`);
   if (!inbox.workHours) parts.push('off-hours');
   return parts.join(' · ');
+}
+
+function SortMenu() {
+  const sort = usePrefs((s) => s.inboxSort);
+  const setSort = usePrefs((s) => s.setInboxSort);
+  const { open, setOpen, close, trigger, panel } = usePopover();
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        ref={trigger}
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={`Sort: ${INBOX_SORT_LABEL[sort]}`}
+        className={cx('inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-ink-2 cursor-pointer hover:bg-track', open && 'bg-track')}
+      >
+        {INBOX_SORT_LABEL[sort]}
+        <Icon name="down" size={12} className="text-muted" />
+      </button>
+      {open && (
+        <PopoverPanel panelRef={panel} role="menu" label="Sort" align="left" className="w-[200px]">
+          {(Object.keys(INBOX_SORT_LABEL) as InboxSort[]).map((k) => (
+            <MenuItem key={k} onClick={() => (setSort(k), close())} hint={k === sort && <Icon name="check" size={14} className="text-accent" />}>
+              {INBOX_SORT_LABEL[k]}
+            </MenuItem>
+          ))}
+        </PopoverPanel>
+      )}
+    </div>
+  );
 }
 
 function UsagePopover({ inbox }: { inbox: InboxView }) {
@@ -381,7 +412,7 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
     <button
       type="button"
       data-row={item.id}
-      data-lane={item.lane}
+      data-lane={item.lane} data-activity={item.lastActivityAt}
       aria-current={selected ? 'true' : undefined}
       onClick={onPick}
       className={cx(
@@ -487,15 +518,17 @@ export function InboxPage() {
   const [open, setOpen] = useState<Lower | null>(null);
   const toggle = (g: Lower) => setOpen(open === g ? null : g);
   const now = useNow(60_000);
+  const sort = usePrefs((s) => s.inboxSort);
 
   const by = useMemo(() => {
     const shown = all.filter((i) => !heldIds.has(i.id));
-    const m: Record<Group | Lower, ItemSummary[]> = { needs: needsYouOrder(shown, now), file: [], else: [], waiting: [], snoozed: [], done: [] };
+    const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(shown, sort, true, now), file: [], else: [], waiting: [], snoozed: [], done: [] };
     for (const i of shown) if (i.lane in m) m[i.lane as Group | Lower].push(i);
+    for (const g of ['file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
     m.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
     return m;
-  }, [all, heldIds, now]);
+  }, [all, heldIds, now, sort]);
   // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open.
   const order = useMemo(() => [...by.needs, ...by.file, ...(open ? by[open] : [])].map((i) => i.id), [by, open]);
   const selItem = sel ? all.find((i) => i.id === sel) : undefined;
@@ -627,9 +660,9 @@ export function InboxPage() {
   if (!inbox) return <div className="p-8 text-muted">{q.error ? 'Could not load the inbox.' : 'Loading…'}</div>;
 
   const topCount = by.needs.length + by.file.length;
-  // A darker hairline closes the Now block at the top of Needs you.
+  // Under Priority, a darker hairline closes the Now block at the top of Needs you.
   const row = (i: ItemSummary, n: number, list: ItemSummary[]) => (
-    <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} divide={n > 0 && list[n - 1].lane === 'now' && i.lane !== 'now'} onPick={() => pick(i.id)} />
+    <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} divide={sort === 'priority' && n > 0 && list[n - 1].lane === 'now' && i.lane !== 'now'} onPick={() => pick(i.id)} />
   );
   const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
   if (selItem && (shown?.item !== selItem || shown.view !== view || shown.pos !== idx + 1)) setShown({ item: selItem, view, pos: idx + 1 });
@@ -641,6 +674,7 @@ export function InboxPage() {
       {/* 64px, the height of the sidebar's header, so the two line up. */}
       <header data-inbox-header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-6">
         <h1 className="m-0 text-xl font-semibold tracking-[-0.01em]">Inbox</h1>
+        <SortMenu />
         <span className="flex-1" />
         <PollStatus inbox={inbox} />
         <StillActive count={by.waiting.length} open={open === 'waiting'} onToggle={() => toggle('waiting')} />

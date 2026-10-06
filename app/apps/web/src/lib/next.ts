@@ -65,6 +65,21 @@ export function needsYouOrder(items: ItemSummary[], now: Date): ItemSummary[] {
     .map((x) => x.i);
 }
 
+export type InboxSort = 'newest' | 'oldest' | 'priority';
+
+export const INBOX_SORT_LABEL: Record<InboxSort, string> = { newest: 'Newest first', oldest: 'Oldest first', priority: 'Priority' };
+
+/**
+ * A group's rows in the chosen order: by last activity, or Priority, which is the FR-8.1 order for
+ * Needs you and the server's order for the other groups.
+ */
+export function sortItems(items: ItemSummary[], sort: InboxSort, needs: boolean, now: Date): ItemSummary[] {
+  if (sort === 'priority') return needs ? needsYouOrder(items, now) : items;
+  const dir = sort === 'newest' ? -1 : 1;
+  const shown = needs ? items.filter((i) => i.lane in LANE_RANK) : items;
+  return [...shown].sort((a, b) => dir * a.lastActivityAt.localeCompare(b.lastActivityAt));
+}
+
 export function openLabel(i: Pick<ItemSummary, 'source' | 'kind'>): string {
   const app = SOURCE_NAME[i.source];
   if (i.source === 'outlook') return 'Reply in Outlook';

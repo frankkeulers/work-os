@@ -250,7 +250,33 @@ test('a click outside the panel with unsaved draft edits asks first', async ({ p
   await expect(page.getByLabel('Draft text')).toHaveText('Unsaved change');
 });
 
+async function sortBy(page: Page, name: 'Newest first' | 'Oldest first' | 'Priority') {
+  await page.getByRole('button', { name: /^Sort: / }).click();
+  await page.getByRole('menu', { name: 'Sort' }).getByRole('menuitem', { name }).click();
+  await expect(page.getByRole('button', { name: `Sort: ${name}` })).toBeVisible();
+}
+
+/** Each Needs you and To file row's last activity, in the order on screen. */
+async function activity(page: Page) {
+  const at = (g: string) => page.locator(`[data-group="${g}"] [data-row]`).evaluateAll((els) => els.map((e) => e.getAttribute('data-activity')!));
+  return { needs: await at('needs'), file: await at('file') };
+}
+
+test('Needs you and To file sort newest first by default, and the Sort menu changes it', async ({ page }) => {
+  await expect(page.getByRole('button', { name: 'Sort: Newest first' })).toBeVisible();
+  let by = await activity(page);
+  for (const list of Object.values(by)) expect(list).toEqual([...list].sort().reverse());
+
+  await sortBy(page, 'Oldest first');
+  by = await activity(page);
+  for (const list of Object.values(by)) expect(list).toEqual([...list].sort());
+
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Sort: Oldest first' })).toBeVisible();
+});
+
 test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {
+  await sortBy(page, 'Priority');
   const needs = group(page, 'Needs you').locator('[data-row]');
   const failed = needs.nth(3);
   await expect(failed).toHaveAttribute('data-lane', 'failed');
