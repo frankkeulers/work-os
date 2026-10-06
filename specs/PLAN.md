@@ -771,4 +771,4 @@ Requirements:
 4. How does Haiku usage weigh against plan limits compared with Sonnet and Opus? Measure from the usage log.
 5. Which Confluence pages go on the initial allow-list (P0-6)?
 6. ~~Do claude.ai connectors load in a headless Agent SDK run under launchd, and what does one relay call cost?~~ Answered by P0-9: yes, if declared explicitly; about $0.009 per call. Still open: does `mcpServerStatus()` expose the connector id, so setup needs no debug log?
-7. Does Node's `fsync` on macOS issue `F_FULLFSYNC`? If not, record the remaining power-loss window as an accepted limit (it affects only the last moments before a power cut, which the startup recovery already handles).
+7. ~~Does Node's `fsync` on macOS issue `F_FULLFSYNC`?~~ Answered (6 Oct 2026): libuv's macOS `fsync` and `fdatasync` both use `F_FULLFSYNC`, falling back to `F_BARRIERFSYNC`. Measured on this Mac (Node 24.16, libuv 1.52.1, APFS): `datasync` and `sync` both take 3.0 ms p50 and under 4 ms p95, which is drive-flush time, not the ~0.1 ms of a plain `fsync`. Group commit keeps this to one sync per batch, well inside the 30 ms command budget (NF-11).

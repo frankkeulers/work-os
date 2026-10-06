@@ -8,9 +8,10 @@ import { Lifecycle } from './runtime/lifecycle';
 import { acquireLock, systemProbe, type ProcessProbe } from './runtime/lock';
 import { apiKeySet, clearRefusal, refuseApiKey } from './runtime/refuse';
 import { createServer, type WorkOsServer } from './server';
+import { Store, type RecoveryReport } from './store/store';
 
 // The startup order (PLAN.md robustness §6): refuse an API key, take the lock, load settings
-// (falling back if invalid), then bind HTTP. Checks that need the network run after the server
+// (falling back if invalid), recover the store, then bind HTTP. Checks that need the network run after the server
 // is ready, so a slow or offline start still shows the UI.
 
 export interface RunDeps {
@@ -23,7 +24,20 @@ export interface RunDeps {
 
 export type RunResult =
   | { running: false; code: number }
-  | { running: true; url: string; config: RuntimeConfig; server: WorkOsServer; logger: Logger; lifecycle: Lifecycle; flush(): void };
+  | {
+      running: true;
+      url: string;
+      config: RuntimeConfig;
+      server: WorkOsServer;
+      store: Store;
+      recovery: RecoveryReport;
+      logger: Logger;
+      lifecycle: Lifecycle;
+      flush(): void;
+    };
+
+/** How often to check whether a snapshot is due. The scheduler's tick takes this over (step 7). */
+const SNAPSHOT_CHECK_MS = 5000;
 
 export async function run(deps: RunDeps): Promise<RunResult> {
   const notifier = deps.notifier ?? silentNotifier;
@@ -65,6 +79,15 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger.warn({ issues: settings.issues }, settings.status === 'fallback' ? 'Settings invalid: using the last good copy' : 'Settings invalid and no good copy: sources paused');
   }
 
+  // Recover the store before binding, so the first request already sees the replayed inbox.
+  const { store, recovery } = await Store.open({ dataDir: config.dataDir, logger, now });
+  lifecycle.onStop('store', () => store.close());
+  const snapshots = setInterval(() => {
+    if (store.snapshotDue()) store.snapshot().catch((err) => logger.error({ err }, 'Snapshot failed'));
+  }, SNAPSHOT_CHECK_MS);
+  snapshots.unref();
+  lifecycle.onStop('snapshot-timer', () => clearInterval(snapshots));
+
   const server = createServer({ config, logger, settings, lifecycle, now });
   let url: string;
   try {
@@ -76,5 +99,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     return { running: false, code: EXIT.crash };
   }
   logger.info({ url, version: config.version, dataDir: config.dataDir }, 'Work OS started');
-  return { running: true, url, config, server, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, recovery, logger, lifecycle, flush };
 }

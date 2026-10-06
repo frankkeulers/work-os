@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "e2e": "npm run e2e -w @work-os/web",
-    "dev:server": "npm run dev -w @work-os/server"
+    "dev:server": "npm run dev -w @work-os/server",
+    "rebuild-state": "npm run rebuild-state -w @work-os/server"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

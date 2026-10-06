@@ -91,6 +91,17 @@ describe('startup', () => {
     expect(notes[0].title).toBe('Work OS did not start');
   });
 
+  it('keeps the inbox across a restart, starting from the snapshot', async () => {
+    const first = await start();
+    if (!first.running) throw new Error('expected a start');
+    await first.store.append({ type: 'item.done', itemId: 'slack:C1:1', data: undefined }, { type: 'settings.changed', data: { dryRun: true } });
+    await first.lifecycle.stop('SIGTERM');
+    const second = await start();
+    if (!second.running) throw new Error('expected a restart');
+    expect(second.recovery).toMatchObject({ fromSnapshot: true, replayed: 0 });
+    expect(second.store.lastSeq).toBe(2);
+  });
+
   it('refuses new commands while stopping, but still answers health', async () => {
     const res = await start();
     if (!res.running) throw new Error('expected a start');

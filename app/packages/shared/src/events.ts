@@ -116,3 +116,6 @@ export const WorkEvent = z.discriminatedUnion(
 
 export type EventData<T extends EventType> = z.infer<(typeof EventPayloads)[T]>;
 export type WorkEvent = { [T in EventType]: { seq: number; id: string; type: T; at: string; itemId?: string; actionId?: string; data: EventData<T>; schemaVersion: 1 } }[EventType];
+
+/** An event before the log assigns its seq, id and time. */
+export type EventDraft = { [T in EventType]: { type: T; data: EventData<T>; itemId?: string; actionId?: string } }[EventType];

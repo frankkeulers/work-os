@@ -6,7 +6,8 @@
   "description": "Work OS local server: polls sources, triages with Claude, writes approved actions.",
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
-    "dev": "WORKOS_INSTANCE=dev tsx watch src/main.ts"
+    "dev": "WORKOS_INSTANCE=dev tsx watch src/main.ts",
+    "rebuild-state": "tsx src/cli/rebuild-state.ts"
   },
   "dependencies": {
     "@work-os/shared": "*",

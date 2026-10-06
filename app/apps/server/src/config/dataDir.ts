@@ -13,6 +13,8 @@ export const paths = (dataDir: string) => ({
   rules: join(dataDir, 'config/rules.json'),
   rulesLastGood: join(dataDir, 'config/rules.last-good.json'),
   lock: join(dataDir, 'state/lock'),
+  snapshot: join(dataDir, 'state/snapshot.json'),
+  events: join(dataDir, 'events'),
   refused: join(dataDir, 'state/refused.json'),
   logs: join(dataDir, 'logs'),
 });
