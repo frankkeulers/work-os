@@ -1,4 +1,5 @@
 import type { MockControls } from '../mock/controls';
+import { usePrefs } from '../store/prefs';
 
 // Start points for JOURNEYS.md. Each start resets the demo data, sets up the scenario and returns a path.
 export interface Journey {
@@ -16,7 +17,7 @@ export const JOURNEYS: Journey[] = [
   { id: 'J01', group: 'Inbox basics', title: 'Morning scan', start: (c) => (fresh(c), '/') },
   { id: 'J02', group: 'Inbox basics', title: 'Done and Undo', start: (c) => (fresh(c), '/') },
   { id: 'J03', group: 'Inbox basics', title: 'Snooze and return', start: (c) => (fresh(c), '/') },
-  { id: 'J04', group: 'Inbox basics', title: 'Correct triage from a card', start: (c) => (fresh(c), '/') },
+  { id: 'J04', group: 'Inbox basics', title: 'Correct triage in the panel', start: (c) => (fresh(c), '/') },
   { id: 'J05', group: 'Inbox basics', title: 'Correct triage in detail', start: (c) => (fresh(c), item(c, 't2')) },
   { id: 'J06', group: 'Inbox basics', title: 'Keyboard triage', start: (c) => (fresh(c), '/') },
   { id: 'J07', group: 'Vault', title: 'New vault note', start: (c) => (fresh(c), item(c, 'f4')) },
@@ -52,4 +53,10 @@ export const JOURNEYS: Journey[] = [
   { id: 'J37', group: 'Failure & empty', title: 'First run', start: (c) => (fresh(c, 'firstRun'), '/') },
   { id: 'J38', group: 'Failure & empty', title: 'Inbox zero', start: (c) => (fresh(c, 'inboxZero'), '/') },
   { id: 'J39', group: 'Failure & empty', title: 'Retention-expired item', start: (c) => (fresh(c), item(c, 'd2')) },
+  {
+    id: 'J40',
+    group: 'Inbox basics',
+    title: 'Outlook and Teams (P2)',
+    start: (c) => (fresh(c), usePrefs.getState().setScope('full'), `/?item=${encodeURIComponent(c.itemIdForKey('o1') ?? '')}`),
+  },
 ];

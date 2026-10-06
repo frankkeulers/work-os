@@ -11,6 +11,9 @@ export const slackTs = (iso: string) => `${Math.floor(Date.parse(iso) / 1000)}.0
 export const permalinkFor = (channelId: string, ts: string) =>
   `https://polestarglobal.slack.com/archives/${channelId}/p${ts.replace('.', '')}`;
 
+const OUTLOOK = 'https://outlook.office.com/mail/inbox/id/';
+const TEAMS = 'https://teams.microsoft.com/l/';
+
 export const titleFor = (seed: ThreadSeed) => seed.title || CHANNELS[seed.channelId] || seed.channelId;
 
 export function toMessages(seedMsgs: SeedMessage[], clock: string, idPrefix: string): Message[] {
@@ -27,12 +30,14 @@ export function makeItem(seed: ThreadSeed, clock: string, uniq = ''): Item {
   const first = messages[0]?.ts ?? clock;
   const ts = slackTs(first);
   const authorIds = [...new Set(messages.map((m) => m.authorId))];
+  const source = seed.source ?? 'slack';
+  const ref = `${seed.channelId}-${ts.replace('.', '')}`;
   return {
-    id: `slack:${seed.channelId}:${ts}`,
-    source: 'slack',
+    id: `${source}:${seed.channelId}:${ts}`,
+    source,
     kind: seed.kind,
     title: titleFor(seed),
-    permalink: permalinkFor(seed.channelId, ts),
+    permalink: source === 'outlook' ? `${OUTLOOK}${ref}` : source === 'teams' ? `${TEAMS}${seed.kind === 'meeting' ? 'meetingrecap' : 'chat'}/${ref}` : permalinkFor(seed.channelId, ts),
     participants: authorIds.map((id) => ({ id, name: PEOPLE[id] ?? id })),
     messages,
     messageCount: seed.messageCount ?? messages.length,
@@ -95,6 +100,7 @@ export function buildDecision(
     confluence: script.confluence && !script.people ? { suggested: true, targetHint: script.confluence } : { suggested: false },
     vault: script.vault ? { suggested: true, targetHint: script.vault } : { suggested: false },
     reason: script.reason,
+    next: script.next,
     decidedBy: 'model',
     ruleId: by.ruleId,
     model: by.model,

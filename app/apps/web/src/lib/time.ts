@@ -62,3 +62,13 @@ export function tomorrowAt9(d: Date): string {
   const nine = new Date(guess.getTime() - offsetMins * 60_000 + 24 * 3600_000);
   return nine.toISOString();
 }
+
+/** London HH:MM on d's London day, or `days` later, as ISO. */
+export function londonAt(d: Date, hhmm: string, days = 0): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const guess = new Date(`${londonParts(d).dateKey}T${hhmm}:00Z`);
+  const g = londonParts(guess);
+  let offsetMins = (g.hours * 60 + g.minutes - (h * 60 + m) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
+  if (offsetMins > MINUTES_IN_DAY / 2) offsetMins -= MINUTES_IN_DAY;
+  return new Date(guess.getTime() - offsetMins * 60_000 + days * MINUTES_IN_DAY * 60_000).toISOString();
+}

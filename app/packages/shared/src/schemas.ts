@@ -8,7 +8,7 @@ const isoDate = z.iso.datetime();
 export const SourceId = z.enum(['slack', 'outlook', 'teams', 'plaud']);
 export type SourceId = z.infer<typeof SourceId>;
 
-export const ItemKind = z.enum(['thread', 'dm', 'email', 'meeting']);
+export const ItemKind = z.enum(['thread', 'dm', 'email', 'meeting', 'chat']);
 export type ItemKind = z.infer<typeof ItemKind>;
 
 export const Participant = z.object({
@@ -49,6 +49,22 @@ const FilingSuggestion = z.object({
   targetHint: z.string().optional(),
 });
 
+// amendment: what the triage thinks Frank has to do next (Inbox redesign). Optional, so a
+// decision without it still drives the lanes; the UI then falls back to the lane defaults.
+export const Need = z.enum(['reply', 'approve', 'decide', 'prepare', 'review', 'actions', 'file']);
+export type Need = z.infer<typeof Need>;
+
+export const NextStep = z.object({
+  need: Need,
+  step: z.string().min(1), // "Choose wording A or B in the thread"
+  why: z.string().min(1),
+  dueAt: isoDate.optional(),
+  dueLabel: z.string().optional(), // "planning", or "this week" when there's no exact time
+  blocks: z.string().optional(), // who or what is waiting: "Marketing waiting"
+  actionItems: z.array(z.string()).optional(), // meeting action items assigned to Frank
+});
+export type NextStep = z.infer<typeof NextStep>;
+
 export const TriageDecision = z.object({
   itemId: z.string().min(1),
   itemRevision: z.number().int().positive(),
@@ -58,6 +74,7 @@ export const TriageDecision = z.object({
   containsPeopleObservations: z.boolean(),
   summary: z.string().min(1),
   reason: z.string().min(1),
+  next: NextStep.optional(), // amendment
   decidedBy: z.enum(['rule', 'model']),
   ruleId: z.string().optional(),
   model: z.string().optional(),

@@ -43,19 +43,30 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
   - A section with an unsaved invalid field shows a red dot.
 - Rows sit directly on the page surface with hairline dividers; there are no boxed cards.
 
+## Inbox (applied, from `specs/Inbox Redesign Options.html`)
+
+- **Layout:** one list and an item panel. The list is grouped into Now, Today and To file. Each group has a coloured dot, a title and a count, and its rows are separated by hairlines. There are no trays and no cards. Now rows have a faint orange wash; the selected row has an accent wash and a 3px accent bar.
+- **Rows:** read left to right. Source mark → where and kind · age → summary → chips. There are three chips:
+  - a grey need tag;
+  - a deadline chip coloured by urgency: orange if within about 4 h or overdue, blue if later today, grey otherwise;
+  - in To file, a teal target chip.
+- **Item panel:** has one primary action, in the Next step card. Everything else is secondary (outline) or ghost. Done, Snooze and Done and next sit in a fixed footer with their shortcuts shown.
+- **Lower groups:** Failed, Waiting, Everything else, Snoozed and Done are collapsible headings in the same list. They are not separate boxes.
+- **Status:** dry-run is a small amber "Dry-run on" link in the header. Banners are only for things you need to act on (budgets, Slack failing, FileVault).
+- **Brand marks:** sources show their real marks, never a recoloured glyph:
+  - **Slack:** the Slack logo.
+  - **Outlook and Teams:** Microsoft's Fluent product icons.
+  - **Write targets:** the Confluence and Obsidian marks.
+  - All of them live in `components/BrandIcon.tsx`.
+
 ## Impact on the other pages (proposed, not yet applied)
 
 **Shell**
 - Add group labels to the nav once P2–P4 items exist: Work (Inbox, Commitments, Briefs) and System (Usage, Settings).
 - Move the Scope control into the scenarios drawer. It's a prototype aid, not a product setting.
 
-**Inbox**
-- **Lanes:** drop the grey tray behind each lane. A coloured dot and the lane title are enough to mark it.
-- **Cards:** a hairline border and no shadow. Show the timestamp only on hover or focus.
-- **Lower sections:** Failed, Waiting, Everything else, Snoozed and Done become one list with dividers instead of five separate boxes.
-- **Dry-run banner:** becomes a slim inline status in the page header. Dry-run is the normal state during testing, so it shouldn't take a full-width banner.
-
 **Item detail**
+- **Match the Inbox panel.** Item detail is now the "open as a full page" view of the panel, so it should use the same blocks: the source line, the summary with its lane chip, the Next step card, and the messages.
 - **Triage band:** becomes a slim header line with the lane tag, headline and reason. Model, prompt version and revision go into a Meta line underneath, instead of a tinted block.
 - **Action panel:** remove the grey box around the white preview box. One bordered preview is enough.
 - **Thread:** sits directly on the page with dividers between messages, not in a card.

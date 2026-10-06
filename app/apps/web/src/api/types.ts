@@ -11,7 +11,9 @@ import type {
   ItemStatus,
   Lane,
   ModelId,
+  NextStep,
   Rule,
+  SourceId,
   Settings,
   TriageCorrection,
   TriageDecision,
@@ -32,6 +34,7 @@ export interface ActionSummary {
 
 export interface ItemSummary {
   id: string;
+  source: SourceId;
   kind: ItemKind;
   title: string;
   permalink: string;
@@ -42,6 +45,7 @@ export interface ItemSummary {
   triageState: TriageState;
   summary: string;
   reason?: string;
+  next?: NextStep; // the model's suggested next step (amendment)
   triage?: EffectiveTriage;
   correctedFrom?: Attention; // shown when a re-triage replaced Frank's correction
   containsPeopleObservations: boolean;

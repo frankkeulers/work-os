@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { BrandIcon, type Brand } from '../../components/BrandIcon';
 import { Icon } from '../../components/icons';
 import { FutureButton, PhaseTag, cx, inputBase, type Phase } from '../../components/ui';
 
@@ -174,11 +175,14 @@ export function Meter({ used, limit, text }: { used: number; limit: number; text
 }
 
 /** A later-phase setting, shown only in Full scope. */
-export function FutureRow({ title, phase, children, cta }: { title: string; phase: Phase; children: ReactNode; cta?: string }) {
+export function FutureRow({ title, phase, children, cta, marks = [] }: { title: string; phase: Phase; children: ReactNode; cta?: string; marks?: Brand[] }) {
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border-[1.5px] border-dashed border-violet-line bg-violet-wash px-4 py-3.5">
       <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
         <div className="flex items-center gap-2">
+          {marks.map((m) => (
+            <BrandIcon key={m} brand={m} size={16} decorative />
+          ))}
           <span className="text-sm font-medium">{title}</span>
           <PhaseTag phase={phase} />
         </div>

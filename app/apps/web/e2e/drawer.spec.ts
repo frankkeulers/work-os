@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const lane = (page: Page, name: 'Now' | 'Today' | 'File') => page.getByRole('region', { name: `${name} lane` });
+const group = (page: Page, name: 'Now' | 'Today' | 'To file') => page.getByRole('region', { name, exact: true });
+const rows = (page: Page, name: Parameters<typeof group>[1]) => group(page, name).locator('[data-row]');
 const drawer = (page: Page) => page.getByRole('complementary', { name: 'Scenarios' });
 
 async function tab(page: Page, name: 'Journeys' | 'Controls' | 'Event log') {
@@ -14,7 +15,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await tab(page, 'Controls');
   await ctl(page, 'Reset demo data').click();
-  await expect(lane(page, 'Now').getByRole('article')).toHaveCount(3);
+  await expect(rows(page, 'Now')).toHaveCount(3);
 });
 
 test('poll outcomes: nothing eligible, VIP DM, batch of 12, and the event log', async ({ page }) => {
@@ -22,7 +23,7 @@ test('poll outcomes: nothing eligible, VIP DM, batch of 12, and the event log', 
   await expect(page.getByTestId('poll-line')).toContainText('nothing new, no Claude call', { timeout: 10_000 });
 
   await ctl(page, 'VIP DM').click();
-  await expect(page.getByRole('button', { name: /new item/ }).or(lane(page, 'Now').getByText('exec sync'))).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: /new item/ }).or(group(page, 'Now').getByText('exec sync'))).toBeVisible({ timeout: 10_000 });
   await expect(page.getByLabel('Notifications').getByText(/Matt M\./)).toBeVisible();
 
   await ctl(page, '12 quiet threads').click();
@@ -41,7 +42,8 @@ test('state flags: budgets, Slack, FileVault and rebuilt notices show as banners
   await ctl(page, 'Triage budget hit').click();
   await expect(page.getByText(/Triage budget reached/)).toBeVisible();
   await ctl(page, 'Drafts budget hit').click();
-  await expect(page.getByText(/Drafts budget reached/)).toBeVisible();
+  // The banner; the panel also says it next to the disabled draft buttons.
+  await expect(page.getByText(/Drafts budget reached \(/)).toBeVisible();
   await expect(ctl(page, 'Drafts budget hit')).toHaveAttribute('aria-pressed', 'true');
 
   await ctl(page, '429 back-off').click();
@@ -65,7 +67,7 @@ test('server and startup states replace the app, and the drawer brings it back',
   await expect(page.getByRole('heading', { name: 'Can’t reach the Work OS server' })).toBeVisible();
   await ctl(page, 'Reconnecting').click();
   await expect(page.getByRole('heading', { name: 'Reconnecting to Work OS…' })).toBeVisible();
-  await expect(lane(page, 'Now')).toBeVisible({ timeout: 10_000 });
+  await expect(group(page, 'Now')).toBeVisible({ timeout: 10_000 });
 
   for (const [control, heading] of [
     ['API key set', 'Work OS refused to start'],
@@ -76,7 +78,7 @@ test('server and startup states replace the app, and the drawer brings it back',
     await expect(page.getByRole('heading', { name: heading })).toBeVisible();
   }
   await ctl(page, 'All pass').click();
-  await expect(lane(page, 'Now')).toBeVisible();
+  await expect(group(page, 'Now')).toBeVisible();
 });
 
 test('clock, draft outcome and data resets', async ({ page }) => {
@@ -96,7 +98,7 @@ test('clock, draft outcome and data resets', async ({ page }) => {
   await ctl(page, 'First run').click();
   await expect(page.getByRole('button', { name: 'Run first poll' })).toBeVisible();
   await ctl(page, 'Heavy day').click();
-  await expect(page.locator('article[data-card]').nth(10)).toBeVisible();
+  await expect(page.locator('[data-row]').nth(10)).toBeVisible();
   await ctl(page, 'No baseline').click();
   await expect(page.getByText('Baseline not measured yet.')).toBeVisible();
 });
@@ -118,7 +120,7 @@ test('revision collisions: replies on done, snoozed, corrected and drafted items
   for (const c of ['Reply on a done item', 'Reply on a snoozed item', 'Reply on a corrected item', 'Reply on a drafted item']) await pollWith(c);
   // Replies wait for the 10-minute quiet window like any other thread (§5.3), so nothing has moved yet.
   await expect(poll).toContainText('no Claude call needed');
-  await expect(lane(page, 'Now').getByRole('article')).toHaveCount(3);
+  await expect(rows(page, 'Now')).toHaveCount(3);
 
   // Past the quiet window the scheduled poll re-triages all four in one batch.
   await ctl(page, '+10 min').click();
@@ -126,11 +128,12 @@ test('revision collisions: replies on done, snoozed, corrected and drafted items
   const pill = page.getByRole('button', { name: /new items?$/ });
   if (await pill.isVisible()) await pill.click();
 
-  await expect(lane(page, 'Today').getByRole('article').filter({ hasText: 'logo swapped' })).toContainText('New replies');
-  await expect(lane(page, 'Now').getByRole('article').filter({ hasText: 'needed by 15:00' })).toBeVisible();
+  await expect(rows(page, 'Today').filter({ hasText: 'logo swapped' })).toContainText('New replies');
+  await expect(rows(page, 'Now').filter({ hasText: 'needed by 15:00' })).toBeVisible();
   await expect(page.getByText(/Re-triaged after new replies · you had set None/)).toBeVisible();
 
   await page.keyboard.press('Backquote');
-  await lane(page, 'File').getByRole('link', { name: /imo_str/ }).click();
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await page.getByRole('complementary', { name: 'Item panel' }).getByRole('button', { name: 'Review Confluence entry' }).click();
   await expect(page.getByText('New replies since this draft')).toBeVisible();
 });

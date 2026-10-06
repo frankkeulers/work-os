@@ -100,7 +100,8 @@ test('leaving with an invalid field asks first; valid changes never do', async (
   await page.getByLabel('Retention days').fill('14');
   // Leaving straight after typing still saves: the change is flushed as the page closes.
   await nav.getByRole('link', { name: /Inbox/ }).click();
-  await expect(page).toHaveURL(/\/$/);
+  // The inbox opens its item panel, so only the path is fixed.
+  await expect(page).toHaveURL((u) => u.pathname === '/');
   await nav.getByRole('link', { name: /Settings/ }).click();
   await sectionNav(page).getByRole('link', { name: 'Storage & data' }).click();
   await expect(page.getByLabel('Retention days')).toHaveValue('14');

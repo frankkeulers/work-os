@@ -24,12 +24,13 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
-| J01 | Morning scan | Open the Inbox. Scan Now, Today and File. Switch to List and back to Board. Expand Everything else. | Is the primary action on each card the obvious next step? Is it clear why each item is in its lane? | FR-3.1, FR-8.1 | |
-| J02 | Done and Undo | Click ✓ on a Now card. Click Undo in the toast. Mark it done again. | Does the card leave cleanly, and is Undo easy to find? | FR-8.2, FR-8.3 | |
-| J03 | Snooze and return | Snooze a Today card for 1 hour. Open the Snoozed row. In the drawer, add 1 h. | Does the item come back, and is it clear that it came back from a snooze? | FR-8.3 | |
-| J04 | Correct triage from a card | On an Everything else row, click Correct triage and set Today. Then on a File card use ⋯ → Correct triage and clear Confluence. | Does the item move straight away? Is the labelled-set toast clear? Check `triage.corrected` in the log. | FR-6.2 | |
+| J01 | Morning scan | Open the Inbox. The item panel opens on the first item. Scan Now, Today and To file, then click a few rows. Open Everything else. | Do the need tag and deadline on each row tell you what to do before you open it? Is the panel's Next step the obvious next step? | FR-3.1, FR-8.1 | |
+| J02 | Done and Undo | In the panel, click Done. Click Undo in the toast. Then try Done and next. | Does the row leave cleanly? Is it clear the panel still shows the done item until you move on? | FR-8.2, FR-8.3 | |
+| J03 | Snooze and return | Use the Next step's suggested snooze (for #mvi-launch it's "Snooze until 11:30"). Then Snooze → 1 hour on a Today item. Open the Snoozed group. In the drawer, add 1 h. | Is the suggested snooze time right? Does the item come back, marked "Back from snooze"? | FR-8.3 | |
+| J04 | Correct triage in the panel | Select an Everything else row, click Correct triage, set Today and save. Then on a To file item clear Confluence. | Does the item move straight away? Is the labelled-set toast clear? Check `triage.corrected` in the log. | FR-6.2 | |
 | J05 | Correct triage in detail | Open the Labs graduation item. Click Correct triage and change the attention. | Does the triage band recolour and its headline change? | FR-6.2 | |
-| J06 | Keyboard triage | On the Inbox, use `j`/`k` to move, `Enter` to open, `e` for Done, `s` for Snooze, `c` for Correct, `Esc` to close. The cursor starts on the last card you touched. | Are the shortcuts worth having? Is the focus ring visible? | (new) | |
+| J06 | Keyboard triage | On the Inbox, use `j`/`k` to move the panel, `e` for Done, `⇧E` for Done and next, `s` for Snooze, `c` for Correct triage, `o` to open the full page, `Esc` to close the panel. | Are the shortcuts worth having? After Done, does `j` carry on from where you were? | (new) | |
+| J40 | Outlook and Teams (P2) | Switch Scope to Full. The [Customer] email (Outlook) joins Now, the readiness review (Teams) joins Today and the roadmap review (Teams) joins To file. Open each. | Are the source marks recognisable at a glance? Do "Reply in Outlook" and "Open transcript in Teams" read right? Are the meeting's action items useful as checkboxes? | P2 | |
 
 ### Filing to the vault
 
@@ -43,13 +44,13 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
-| J10 | Happy path | Open the imo_str decision item. Review the ready Confluence draft and approve. | Are the target page, section and base version obvious? Is the dry-run wording clear? | FR-10.2, FR-10.3, FR-10.5 | |
+| J10 | Happy path | Open the imo_str decision item. Review the ready Confluence draft and approve. Then try the same from the Inbox panel: select the item and click Review Confluence entry. | Are the target page, section and base version obvious? Is the dry-run wording clear? | FR-10.2, FR-10.3, FR-10.5 | |
 | J11 | Blocked: people observations | Open the overloaded-engineers item (Today). | The Confluence button is disabled. Is the reason clear? Is the vault the obvious alternative? | FR-10.1, NF-2 | |
 | J12 | Blocked: people check | Start J12. Draft a Confluence entry on the Labs graduation item. | The draft is blocked at the people-check step. Is "Draft vault note instead" helpful? | FR-10.4 | |
 | J13 | Version conflict | Start J13. Draft and approve a Confluence entry on the Labs graduation item. | Page v42 changed to v44. Does the re-draft explain what happened? | FR-10.5 | |
 | J14 | Allow-list refusal | Open the roadmap ownership item (File). Draft a Confluence entry; the target is not on the allow-list. Approve anyway. | Is the red chip noticed before approving? Does the refusal point to Settings › Write targets? | FR-10.6 | |
 | J15 | Discard and re-draft | On a ready draft, edit the text, then click Re-draft, then Discard. Try to leave the page with unsaved edits. | Are the confirmations proportionate? | FR-9.3 | |
-| J16 | Draft ready while away | From a File card, click the draft button, then go back to the Inbox at once. | Does the "Draft ready" toast bring you back? Does the card button show the state? | FR-9.1 | |
+| J16 | Draft ready while away | On a To file item, click the draft button in the panel's File it section, then move to another item at once. | Does the "Draft ready" toast bring you back? Does the File it row show the state? | FR-9.1 | |
 
 ### Polling, triage and notifications
 
@@ -119,7 +120,9 @@ These came out of the prototype. They are not yet applied to PLAN.md.
   - `Item.contentExpired`, for items past retention.
 - **Success criteria:** the usage page shows S6, which the design leaves out.
 - **Item view:** the item endpoint returns `meId`, your Slack user ID, so the thread can label your own messages "You".
-- **Client preferences:** theme, board/list view and scope are client-side preferences, not part of `settings.json`.
+- **Next step (Inbox redesign):** `TriageDecision.next` (optional): `need` (reply, approve, decide, prepare, review, actions, file), `step`, `why`, `dueAt`, `dueLabel`, `blocks` and `actionItems`. Model triage returns it; rule decisions don't (no model call), so the Inbox falls back to a default from the lane. The item summary carries `source` and `next`.
+- **Item kinds:** `chat` joins `ItemKind`, for Teams chats.
+- **Client preferences:** theme, scope and whether the Inbox item panel is open are client-side preferences, not part of `settings.json`.
 
 ## Deviations from the designs
 
@@ -136,6 +139,14 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 - the item page keeps its draft tab in the URL (`?tab=`), so it doesn't jump when a draft finishes.
 
 **Changed:**
+- **Inbox redesign** (`specs/Inbox Redesign Options.html`). One list grouped into Now, Today and To file, with an item panel on the right. It replaces the Board/List lanes and the cards.
+  - **Rows:** source mark, where and kind, the summary, a need tag (Approve, Decide, Reply, 2 actions…), a deadline chip coloured by urgency and, in To file, the target.
+  - **Panel:** previous/next with position, open as a full page, more actions, close; the summary with its lane and reason; Correct triage inline; a Next step card with the primary action and a snooze timed to the deadline; action items; the latest messages with Show all; File it; the triage meta line; and a Done / Snooze / Done and next footer.
+  - **Kept from before, restyled to match:** Failed, Waiting for quiet window, Everything else, Snoozed and Done are collapsible groups below the three main groups (Failed starts open). The "N new" pill, poll states, banners and the P3 Commitments group stay.
+  - **Also changed:** dry-run is a small "Dry-run on" link in the header instead of a banner. Filing review and approval happen in the panel (`?item=…&file=confluence`), with Item detail one click away. The header shows the next deadline. The selection lives in the URL (`?item=`), and leaving with unsaved draft edits asks first.
+  - **Not from the design:** `o` opens the full page, `c` toggles Correct triage, and Done keeps the panel on the item (marked done, with Reopen) until you move on.
+- **Brand marks.** Sources use their real marks: Slack's logo, and Microsoft's own Outlook and Teams product icons from its Fluent brand-icon CDN. Confluence and Obsidian marks appear in File it. Gong and Plaud have no published mark, so they keep neutral glyphs.
+- **Outlook and Teams items** appear in Full scope only, tagged P2. MVP scope stays Slack-only, as in PLAN.md. The Inbox count follows the scope.
 - Dry-run defaults to on (FR-1.6). The Settings artboard shows it off.
 - The Usage page has the left nav. The artboard only has "Back to inbox".
 - **Settings autosave.** Each change saves on its own with a "Changes saved · Undo" toast; typing saves after a short pause or on blur. The artboard's sticky Save/Discard bar is gone. An invalid field shows its error inline and is held back while the other changes save. Leaving the page asks first only if an invalid field would be lost.
@@ -149,5 +160,6 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 - the Unreachable, startup and first-run screens;
 - action-panel states other than "ready" and "written";
 - the rule editor dialog;
-- the snooze, correct-triage and overflow popovers;
+- the snooze and overflow popovers;
+- Next step fallbacks for rule-decided items, and the panel states for done, snoozed, waiting and failed items;
 - the scenarios drawer.

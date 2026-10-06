@@ -38,5 +38,7 @@ function matches(c: RuleCondition, item: Item, s: Settings): boolean {
 }
 
 export function firstMatchingRule(item: Item, rules: Rule[], settings: Settings): Rule | undefined {
+  // Rules are written against Slack fields (FR-4.1); other sources go straight to the model.
+  if (item.source !== 'slack') return undefined;
   return rules.find((r) => r.enabled && r.conditions.every((c) => matches(c, item, settings)));
 }

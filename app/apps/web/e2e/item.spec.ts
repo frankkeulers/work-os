@@ -72,5 +72,6 @@ test('J08 edit a vault append, then the leave guard and re-draft confirmation', 
   await page.getByRole('link', { name: 'Back to inbox' }).click();
   await expect(page.getByRole('dialog', { name: 'Leave with unsaved edits?' })).toBeVisible();
   await page.getByRole('button', { name: 'Leave' }).click();
-  await expect(page).toHaveURL(/\/$/);
+  // The inbox opens its item panel, so only the path is fixed.
+  await expect(page).toHaveURL((u) => u.pathname === '/');
 });

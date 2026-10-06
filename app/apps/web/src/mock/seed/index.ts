@@ -9,7 +9,7 @@ import { SEED_EVALS, seedUsage } from './usage';
 import { isWorkHours } from '../../lib/time';
 
 export const SEED_CLOCK = '2026-10-05T08:45:00.000Z'; // Mon 5 Oct 2026, 09:45 London
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export type Preset = 'default' | 'firstRun' | 'inboxZero' | 'heavy' | 'noBaseline';
 
@@ -63,7 +63,7 @@ export function buildState(preset: Preset = 'default'): MockState {
   };
 
   if (preset === 'firstRun') {
-    state.firstRunSeeds = SEED_THREADS.filter((t) => !t.key.startsWith('d') && !t.key.startsWith('s'));
+    state.firstRunSeeds = SEED_THREADS.filter((t) => !t.source && !t.key.startsWith('d') && !t.key.startsWith('s'));
     state.flags.firstRun = true;
     state.source = { status: 'never', rateLimitedToday: 0 };
     state.evals = [];

@@ -6,6 +6,12 @@ import type { ReplySeed, ThreadSeed } from '../types';
 const H = 60;
 const YESTERDAY = 17 * H + 35; // Sun 4 Oct 16:10 → minutes before Mon 09:45
 
+/** A London wall-clock time in the seed week (BST, UTC+1). Day 5 is Mon 5 Oct. */
+const london = (day: number, hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return new Date(Date.UTC(2026, 9, day, h - 1, m)).toISOString();
+};
+
 export const SEED_THREADS: ThreadSeed[] = [
   // ---------- Now ----------
   {
@@ -37,6 +43,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       attention: 'now',
       summary: 'Custom-domain cutover is blocked until you approve the DNS change.',
       reason: '@-mention with a blocker on committed work.',
+      next: { need: 'approve', step: 'Approve the DNS change in the IT ticket', why: 'The cutover can’t start until you approve, and IT wants the sign-off in the ticket. Miss it and the Thursday window goes.', blocks: 'Blocks cutover' },
     },
   },
   {
@@ -53,6 +60,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       attention: 'now',
       summary: 'Release notes are blocked on your sign-off of the data-licensing wording, needed by 12:00.',
       reason: 'Blocker keyword and a same-day deadline.',
+      next: { need: 'approve', step: 'Confirm the data-licensing wording in the doc', why: 'Legal has suggested wording. The comms freeze is at 12:00, so marketing needs your sign-off before then.', dueAt: london(5, '12:00'), blocks: 'Marketing waiting' },
     },
   },
 
@@ -72,6 +80,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       vault: 'Areas/Meridia/Meridia IQ.md › Beta feedback',
       summary: 'Meridia IQ beta feedback shared; asks which three items go into FQ3 (Oct–Dec).',
       reason: 'Decision needed from you; worth keeping in the vault.',
+      next: { need: 'decide', step: 'Pick the three FQ3 items', why: 'The Meridia PM wants to lock the FQ3 plan this week. Two pilots call bulk export a blocker to paid.', dueAt: london(9, '17:00'), dueLabel: 'plan lock' },
     },
     drafts: {
       vault: {
@@ -99,6 +108,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       confluence: 'Pole Star Labs › Graduation gate',
       summary: 'Graduation request for a Labs prototype; needs the gate checklist.',
       reason: '@-mention, process question you own.',
+      next: { need: 'reply', step: 'Share the graduation gate checklist', why: 'You own the process and the current version can’t be found. The outcome is worth a Confluence entry.', dueLabel: 'today' },
     },
     drafts: {
       confluence: {
@@ -130,6 +140,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       attention: 'today',
       summary: 'Wants a 15-minute Insights APIs v2 walkthrough for the sales team this week.',
       reason: 'Direct request with a this-week deadline.',
+      next: { need: 'reply', step: 'Offer a time for the walkthrough', why: 'Wednesday or Thursday afternoon suits the sales team.', dueLabel: 'this week' },
     },
   },
   {
@@ -147,6 +158,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       people: true,
       summary: 'Team lead flags two overloaded engineers before MVI V2 and asks to move the export work.',
       reason: 'Asks for your view this week. Mentions named people, so vault only.',
+      next: { need: 'decide', step: 'Give your view on moving the export work', why: 'The team lead wants it before Thursday. Mentions named people, so it can only go to the private vault.', dueAt: london(8, '09:00') },
     },
     drafts: {
       vault: {
@@ -157,6 +169,71 @@ export const SEED_THREADS: ThreadSeed[] = [
         content:
           '- 2026-10-05 · Raised workload risk on the data products team before MVI V2; two engineers overloaded.\n  Proposal: move the export work to after launch. Asked for my view before Thursday. Confidential.',
       },
+    },
+  },
+
+  // ---------- P2 sources (Outlook, Teams), shown in Full scope ----------
+  {
+    key: 'o1',
+    source: 'outlook',
+    channelId: 'INBOX',
+    kind: 'email',
+    title: '[Customer] account lead',
+    messages: [
+      {
+        by: 'X01ACCOUNT',
+        minsAgo: 18,
+        text: 'Ahead of this afternoon: 1) Is v2 priced per vessel or per call? 2) Does historical backfill cost extra? 3) Can we keep v1 pricing until we migrate?',
+      },
+    ],
+    decision: {
+      attention: 'now',
+      summary: 'Three questions on Insights APIs v2 pricing to answer before the renewal call.',
+      reason: 'External sender, linked to a meeting at 14:00.',
+      next: { need: 'prepare', step: 'Answer the three pricing questions', why: 'They’re on the agenda for the [Customer] renewal call at 14:00.', dueAt: london(5, '14:00') },
+    },
+  },
+  {
+    key: 'm1',
+    source: 'teams',
+    channelId: 'MTG-MVIREADY',
+    kind: 'meeting',
+    title: 'MVI V2 readiness review',
+    messages: [
+      { by: 'X02RELEASE', minsAgo: 75, text: 'Rollback plan is written, but we still need a named owner for the rollback call on launch day. Frank, can you confirm who that is?' },
+      { by: 'X03SUPPORT', minsAgo: 64, text: 'Support needs the customer comms plan by Wednesday so we can brief the team.' },
+    ],
+    messageCount: 14,
+    decision: {
+      attention: 'today',
+      summary: 'Two action items assigned to you: confirm the rollback owner and share the comms plan.',
+      reason: 'The transcript names you as the owner.',
+      next: {
+        need: 'actions',
+        step: 'Confirm your two action items',
+        why: 'Both are assigned to you in the transcript.',
+        dueLabel: 'today',
+        actionItems: ['Confirm the rollback owner for MVI V2 · due Tue 6 Oct', 'Share the customer comms plan with Support · due Wed 7 Oct'],
+      },
+    },
+  },
+  {
+    key: 'm2',
+    source: 'teams',
+    channelId: 'MTG-INSIGHTSROADMAP',
+    kind: 'meeting',
+    title: 'Insights APIs roadmap review',
+    messages: [
+      { by: 'X04APILEAD', minsAgo: 3 * H + 10, text: 'Decision: webhooks for vessel-events move to v2.1 in FQ4. v2.0 ships with polling only.' },
+      { by: 'X05SALESENG', minsAgo: 3 * H + 5, text: 'Fine for the pilots, as long as we can tell customers a date.' },
+    ],
+    messageCount: 9,
+    decision: {
+      attention: 'none',
+      confluence: 'Insights APIs › Decisions',
+      summary: 'Decision: vessel-events webhooks move to v2.1; v2.0 ships with polling only.',
+      reason: 'Product decision recorded in the transcript.',
+      next: { need: 'file', step: 'Draft the Confluence entry', why: 'A product decision for Insights APIs › Decisions.' },
     },
   },
 
@@ -179,6 +256,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       vault: 'Areas/Insights APIs/Insights APIs v2.md › Decisions',
       summary: 'Decision: v2 vessel-events endpoint drops the legacy imo_str field.',
       reason: 'Product decision. Target: Insights APIs › Decisions.',
+      next: { need: 'file', step: 'Review the Confluence entry', why: 'A product decision for Insights APIs › Decisions. Both drafts are ready to review here.' },
     },
     drafts: {
       confluence: {
@@ -216,6 +294,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       vault: 'Areas/Product org/Roadmap process.md',
       summary: 'Roadmap ownership agreed ahead of FQ4 (Jan–Mar) planning.',
       reason: 'Planning context. Target: Product org › Roadmap process.',
+      next: { need: 'file', step: 'Draft the Confluence entry', why: 'Planning context for Product org › Roadmap process.' },
     },
     drafts: {
       // Not on the Confluence allow-list: approving exercises FR-10.6.
@@ -245,6 +324,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       vault: 'Areas/Meridia/Meridia IQ.md › Pricing',
       summary: 'Pricing decision: Meridia IQ beta stays free until GA, then per-vessel tiers.',
       reason: 'Pricing decision. Target: Meridia › Context: Decisions.',
+      next: { need: 'file', step: 'Draft the vault note', why: 'The Confluence entry is filed. The pricing tiers are also worth keeping in the vault.' },
     },
     drafts: {
       confluence: {
@@ -271,6 +351,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       vault: 'Resources/Claude Code/Subscription auth.md',
       summary: 'How-to: running Claude Code on the subscription with no API key.',
       reason: 'Reusable how-to. Target: a new note in Resources.',
+      next: { need: 'file', step: 'Draft a vault note', why: 'A reusable how-to. It becomes a new note in Resources.' },
     },
     drafts: {
       vault: {
@@ -341,6 +422,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       attention: 'today',
       summary: 'Customer asks how far back historical AIS backfill goes on v2.',
       reason: 'Customer question you can answer.',
+      next: { need: 'reply', step: 'Answer the backfill question', why: 'A customer is waiting on it. The answer is in the v2 docs.' },
     },
   },
   {
@@ -353,6 +435,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       attention: 'today',
       summary: 'Needs your input on the Apidog and Claude tooling spend by Wednesday.',
       reason: 'Direct request with a deadline this week.',
+      next: { need: 'reply', step: 'Send your tooling spend input', why: 'Due Wednesday. Snooze it to Wednesday morning if today is full.', dueAt: london(7, '17:00') },
     },
   },
 
@@ -470,13 +553,23 @@ export const REPLIES: Record<'done' | 'snoozed' | 'drafted', ReplySeed> = {
     targetKey: 'd1',
     by: 'U06PLATFORM',
     text: 'One more thing: marketing wants the logo swapped before launch. Can you confirm?',
-    decision: { attention: 'today', summary: 'Marketing wants the doc site logo swapped before launch; needs your confirmation.', reason: 'New question on an item you closed.' },
+    decision: {
+      attention: 'today',
+      summary: 'Marketing wants the doc site logo swapped before launch; needs your confirmation.',
+      reason: 'New question on an item you closed.',
+      next: { need: 'approve', step: 'Confirm the logo swap', why: 'Marketing wants it in before launch. A yes in the thread is enough.' },
+    },
   },
   snoozed: {
     targetKey: 's2',
     by: 'U14FINANCE',
     text: 'Sorry, the deadline moved to today 15:00.',
-    decision: { attention: 'now', summary: 'Tooling spend input now needed by 15:00 today.', reason: 'Deadline moved to today.' },
+    decision: {
+      attention: 'now',
+      summary: 'Tooling spend input now needed by 15:00 today.',
+      reason: 'Deadline moved to today.',
+      next: { need: 'reply', step: 'Send your tooling spend input', why: 'Finance moved the deadline to 15:00 today.', dueAt: london(5, '15:00') },
+    },
   },
   drafted: {
     targetKey: 'f1',

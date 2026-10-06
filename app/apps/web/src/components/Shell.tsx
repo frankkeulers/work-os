@@ -4,6 +4,7 @@ import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
 import { usePrefs } from '../store/prefs';
+import { BrandIcon } from './BrandIcon';
 import { Icon, type IconName } from './icons';
 import { Dot, PhaseTag, Segmented, cx, phaseToast, type Phase } from './ui';
 
@@ -46,7 +47,8 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const scope = usePrefs((s) => s.scope);
   const setScope = usePrefs((s) => s.setScope);
   const full = scope === 'full';
-  const count = inbox?.items.filter((i) => i.lane === 'now' || i.lane === 'today' || i.lane === 'file').length;
+  // Outlook and Teams items are P2: they count only in Full scope, as on the Inbox.
+  const count = inbox?.items.filter((i) => (full || i.source === 'slack') && (i.lane === 'now' || i.lane === 'today' || i.lane === 'file')).length;
   const slack = inbox?.source;
   const slackLabel =
     !slack ? '' : slack.status === 'auth_failed' ? 'token rejected' : slack.status === 'never' ? 'not polled' : slack.status === 'backoff' ? 'backing off' : slack.lastPollAt ? `${fmtAgo(slack.lastPollAt, now)} ago`.replace('now ago', 'just now') : '';
@@ -71,21 +73,22 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
       <div className="flex flex-col gap-2">
         <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Sources</div>
         <NavLink to="/usage#health" className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 !text-ink no-underline hover:bg-surface-2">
-          <Dot color={slack ? SLACK_DOT[slack.status] : 'var(--gray-mid)'} />
+          <BrandIcon brand="slack" size={16} decorative />
           <span className="flex-1">Slack</span>
+          <Dot color={slack ? SLACK_DOT[slack.status] : 'var(--gray-mid)'} />
           <span className={cx('font-mono text-[11px]', slack?.status === 'auth_failed' ? 'text-red-fg' : slack?.status === 'backoff' ? 'text-amber-fg' : 'text-muted')}>{slackLabel}</span>
         </NavLink>
         {full && (
           <div className="flex flex-col gap-0.5 rounded-lg border border-dashed border-violet-line bg-violet-wash py-1.5">
             {(
               [
-                ['Outlook', 'P2'],
-                ['Teams', 'P2'],
-                ['Gong · CRM', 'P4'],
+                ['Outlook', 'P2', 'outlook'],
+                ['Teams', 'P2', 'teams'],
+                ['Gong · CRM', 'P4', undefined],
               ] as const
-            ).map(([name, phase]) => (
+            ).map(([name, phase, brand]) => (
               <button key={name} type="button" onClick={() => phaseToast(phase, name)} className="flex items-center gap-2.5 px-2 py-1 text-left text-muted cursor-pointer">
-                <Dot color="" hollow />
+                {brand ? <BrandIcon brand={brand} size={16} decorative /> : <span className="flex w-4 justify-center"><Dot color="" hollow /></span>}
                 <span className="flex-1">{name}</span>
                 <span className="font-mono text-[10px] text-violet-fg">{phase}</span>
               </button>

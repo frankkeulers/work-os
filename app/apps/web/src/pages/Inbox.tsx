@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
-import type { Lane } from '@work-os/shared';
+import { Link, useBlocker, useNavigate, useSearchParams, type BlockerFunction } from 'react-router';
+import type { ActionType, Lane } from '@work-os/shared';
 import { api, type InboxView, type ItemSummary } from '../api';
-import { CorrectForm, FutureCommitmentCard, ItemCard, SourceIcon, itemPath, type CardHandle } from '../components/ItemCard';
+import { parseType } from '../components/ActionPanel';
+import { SourceMark } from '../components/BrandIcon';
+import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo } from '../components/item';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
-import { Banner, Button, IconButton, Kbd, PhaseTag, PopoverPanel, Segmented, Spinner, cx, phaseToast, usePopover } from '../components/ui';
+import { Banner, Button, ConfirmDialog, IconButton, Kbd, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
+import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
-import { fmtDayDate, fmtIn, fmtMoney, fmtTime, plural } from '../lib/format';
-import { LANE_META } from '../lib/lanes';
+import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, plural } from '../lib/format';
+import { dueInfo, needLabel, nextDeadline } from '../lib/next';
 import { usePrefs } from '../store/prefs';
-import { errorToast, toast } from '../store/toasts';
+import { errorToast } from '../store/toasts';
+import { DueChip, NeedTag, StatusChip } from './inbox/chips';
+import { ItemPanel } from './inbox/ItemPanel';
 
 const TOP_LANES = ['now', 'today', 'file'] as const satisfies Lane[];
 const isTop = (i: ItemSummary) => (TOP_LANES as readonly Lane[]).includes(i.lane);
+const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]');
 
 // ---------- Header ----------
 
@@ -180,159 +186,7 @@ function Banners({ inbox }: { inbox: InboxView }) {
         <strong>FileVault is off.</strong> Work OS keeps running, but thread text in the data directory isn’t encrypted at rest.
       </Banner>,
     );
-  if (inbox.dryRun)
-    out.push(
-      <Banner key="dry" tone="dry" icon="flask" action={<Link to="/settings/writing#dry-run" className="text-[13px] font-medium">Dry-run setting</Link>}>
-        <strong>Dry-run is on.</strong> Approved writes go to a sandbox folder, not to your vault or Confluence.
-      </Banner>,
-    );
-  return out.length ? <div className="flex flex-col gap-2">{out}</div> : null;
-}
-
-// ---------- Lanes ----------
-
-function LaneBox({ lane, count, children, layout }: { lane: (typeof TOP_LANES)[number]; count: number; children: ReactNode; layout: 'board' | 'list' }) {
-  const m = LANE_META[lane];
-  return (
-    <section aria-label={`${m.name} lane`} data-lane={lane} className={cx('flex flex-col rounded-xl border border-transparent bg-lane p-3', layout === 'board' ? 'gap-2.5' : 'gap-1.5')}>
-      <div className={cx('flex items-center gap-2 px-1 py-0.5', layout === 'list' && 'pb-1.5')}>
-        <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: m.dot }} />
-        <h2 className="m-0 text-[15px] font-semibold">{m.name}</h2>
-        <span className="font-mono text-xs text-muted">{count}</span>
-      </div>
-      {count === 0 ? <div className="px-1 py-3 text-[13px] text-muted">Nothing here.</div> : children}
-    </section>
-  );
-}
-
-function CommitmentsLane({ layout }: { layout: 'board' | 'list' }) {
-  return (
-    <section aria-label="Commitments lane (P3)" className={cx('flex flex-col rounded-xl border-[1.5px] border-dashed border-violet-line bg-violet-lane p-3', layout === 'board' ? 'gap-2.5' : 'gap-1.5')}>
-      <div className="flex items-center gap-2 px-1 py-0.5">
-        <span className="h-2.5 w-2.5 rounded-[3px] bg-violet-dot" />
-        <h2 className="m-0 text-[15px] font-semibold">Commitments</h2>
-        <span className="font-mono text-xs text-muted">2</span>
-        <span className="flex-1" />
-        <PhaseTag phase="P3" />
-      </div>
-      <FutureCommitmentCard where="from #mvi-launch" when="Fri 9 Oct" summary="Send MVI V2 release notes to Sales." reason="“I’ll send the notes by Friday.”" />
-      <FutureCommitmentCard where="from DM" when="Wed 7 Oct" summary="Review the PSPD-112 PRD draft." reason="“Will review before Wednesday.”" />
-    </section>
-  );
-}
-
-function Collapsible({
-  id,
-  dot,
-  title,
-  count,
-  note,
-  tone,
-  children,
-  defaultOpen = false,
-}: {
-  id: string;
-  dot: string;
-  title: string;
-  count: number;
-  note?: ReactNode;
-  tone?: 'red';
-  children: ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section aria-label={title} data-section={id} className={cx('flex flex-col rounded-xl border bg-surface', tone === 'red' ? 'border-red-line' : 'border-line')}>
-      <div className="flex flex-wrap items-center gap-2.5 px-3.5 py-2.5">
-        <span className="h-2.5 w-2.5 rounded-[3px]" style={{ background: dot }} />
-        <h2 className="m-0 text-[15px] font-semibold">{title}</h2>
-        <span className="font-mono text-xs text-muted">{count}</span>
-        <span className="min-w-0 flex-[1_1_200px] text-[13px] text-ink-2">{note}</span>
-        <Button onClick={() => setOpen(!open)} aria-expanded={open}>
-          {open ? 'Hide' : 'Show'}
-        </Button>
-      </div>
-      {open && <div className="flex flex-col border-t border-line">{children}</div>}
-    </section>
-  );
-}
-
-function Row({ item, children, meta }: { item: ItemSummary; children?: ReactNode; meta?: ReactNode }) {
-  return (
-    <div data-row={item.id} className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-line-soft-2 px-3.5 py-2.5 text-[13px] last:border-b-0">
-      <span className="flex w-[170px] min-w-0 items-center gap-1.5 font-mono text-xs text-muted">
-        <SourceIcon kind={item.kind} />
-        <span className="truncate">{item.title}</span>
-      </span>
-      <Link to={itemPath(item.id)} className="min-w-0 flex-[1_1_240px] !text-ink-2 no-underline hover:underline">
-        {item.summary}
-      </Link>
-      {meta && <span className="font-mono text-[11px] text-muted">{meta}</span>}
-      {children}
-    </div>
-  );
-}
-
-function ElseRow({ item }: { item: ItemSummary }) {
-  const { open: pOpen, setOpen: setPOpen, close: closeP, trigger: pTrigger, panel: pPanel } = usePopover();
-  return (
-    <Row item={item} meta={item.triage?.by === 'rule' ? 'by rule' : item.triage?.by === 'user' ? 'corrected' : undefined}>
-      <div className="relative">
-        <Button size="sm" ref={pTrigger} aria-expanded={pOpen} onClick={() => setPOpen(!pOpen)}>
-          Correct triage
-        </Button>
-        {pOpen && (
-          <PopoverPanel panelRef={pPanel} label="Correct triage">
-            <CorrectForm
-              compact
-              item={item}
-              onDone={(n, lane) => {
-                closeP(false);
-                toast(`Correction saved · moved to ${lane} · labelled set now ${n}`, { tone: 'success' });
-              }}
-            />
-          </PopoverPanel>
-        )}
-      </div>
-    </Row>
-  );
-}
-
-function FailedRow({ item }: { item: ItemSummary }) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <Row item={item} meta="output invalid twice · shown untriaged">
-      <Button
-        size="sm"
-        disabled={busy || item.triageState === 'pending'}
-        onClick={async () => {
-          setBusy(true);
-          try {
-            await api.retryTriage(item.id);
-          } catch (e) {
-            errorToast(e);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        {busy || item.triageState === 'pending' ? (
-          <>
-            <Spinner size={12} /> Retrying…
-          </>
-        ) : (
-          'Retry'
-        )}
-      </Button>
-    </Row>
-  );
-}
-
-function WaitingRows({ items }: { items: ItemSummary[] }) {
-  const now = useNow(5_000);
-  return items.map((i) => (
-    <Row key={i.id} item={i} meta={i.modelPaused ? 'paused · triage budget reached' : i.quietUntil && Date.parse(i.quietUntil) > now.getTime() ? `quiet ${fmtIn(i.quietUntil, now)}` : 'next poll'} />
-  ));
+  return out.length ? <div className="flex flex-col gap-2 px-6 pt-3">{out}</div> : null;
 }
 
 // ---------- Empty and first-run states ----------
@@ -340,7 +194,7 @@ function WaitingRows({ items }: { items: ItemSummary[] }) {
 function FirstRun({ inbox }: { inbox: InboxView }) {
   const busy = inbox.poll.phase !== 'idle';
   return (
-    <div className="flex flex-col items-start gap-4 rounded-xl border border-line bg-surface px-8 py-10">
+    <div className="mx-6 my-4 flex flex-col items-start gap-4 rounded-xl border border-line bg-surface px-8 py-10">
       <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-wash text-accent">
         <Icon name="inbox" size={22} />
       </span>
@@ -368,7 +222,7 @@ function FirstRun({ inbox }: { inbox: InboxView }) {
 
 function InboxZero({ inbox }: { inbox: InboxView }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-line bg-surface px-8 py-12 text-center" data-testid="inbox-zero">
+    <div className="mx-6 my-4 flex flex-col items-center gap-2 rounded-xl border border-line bg-surface px-8 py-12 text-center" data-testid="inbox-zero">
       <span className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-wash text-teal-ink">
         <Icon name="check" size={22} strokeWidth={2.5} />
       </span>
@@ -407,99 +261,260 @@ function useHeldItems(items: ItemSummary[] | undefined) {
   return { held, heldIds: new Set(held.map((i) => i.id)), showHeld, fresh };
 }
 
-// ---------- Keyboard ----------
+// ---------- Rows ----------
 
-function useKeyboard(order: string[], handleFor: (id: string) => CardHandle | undefined) {
-  const [focusId, setFocusId] = useState<string | null>(null);
-  const navigate = useNavigate();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement;
-      if (t.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]')) return;
-      if (!order.length) return;
-      const idx = focusId ? order.indexOf(focusId) : -1;
-      const move = (to: number) => {
-        const id = order[Math.max(0, Math.min(order.length - 1, to))];
-        setFocusId(id);
-        const el = document.querySelector<HTMLElement>(`[data-card="${CSS.escape(id)}"]`);
-        el?.focus({ preventScroll: true });
-        el?.scrollIntoView({ block: 'nearest' });
-      };
-      const handle = focusId ? handleFor(focusId) : undefined;
-      switch (e.key) {
-        case 'j':
-          e.preventDefault();
-          move(idx + 1);
-          break;
-        case 'k':
-          e.preventDefault();
-          move(idx < 0 ? 0 : idx - 1);
-          break;
-        case 'Enter':
-          if (handle && t.tagName !== 'BUTTON' && t.tagName !== 'A') {
-            e.preventDefault();
-            navigate(itemPath(focusId!));
-          }
-          break;
-        case 'e':
-          if (handle) {
-            e.preventDefault();
-            // Keep the cursor on the same position after the item leaves.
-            const next = order[idx + 1] ?? order[idx - 1] ?? null;
-            handle.done();
-            setFocusId(next);
-            if (next) document.querySelector<HTMLElement>(`[data-card="${CSS.escape(next)}"]`)?.focus({ preventScroll: true });
-          }
-          break;
-        case 's':
-          if (handle) {
-            e.preventDefault();
-            handle.snooze();
-          }
-          break;
-        case 'c':
-          if (handle) {
-            e.preventDefault();
-            handle.correct();
-          }
-          break;
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [order, focusId, handleFor, navigate]);
-  // Drop focus when the item leaves the lanes.
-  const current = focusId && order.includes(focusId) ? focusId : null;
-  return { focusId: current, setFocusId };
+const GROUPS: Record<(typeof TOP_LANES)[number], { title: string; dot: string }> = {
+  now: { title: 'Now', dot: 'var(--orange)' },
+  today: { title: 'Today', dot: 'var(--accent-bg)' },
+  file: { title: 'To file', dot: 'var(--teal-solid)' },
+};
+
+type Lower = 'failed' | 'waiting' | 'else' | 'snoozed' | 'done';
+
+const LOWER: { id: Lower; title: string; dot: string; note: string }[] = [
+  { id: 'failed', title: 'Failed', dot: 'var(--red)', note: 'Triage output was invalid twice. Shown untriaged.' },
+  { id: 'waiting', title: 'Waiting for quiet window', dot: 'var(--gray-mid)', note: 'Still active. Triage runs once each thread has been quiet for a while.' },
+  { id: 'else', title: 'Everything else', dot: 'var(--gray-mid)', note: 'No action and nothing to file. Correct any that are wrong.' },
+  { id: 'snoozed', title: 'Snoozed', dot: 'var(--gray-mid)', note: 'Each comes back at its snooze time, or early if a new reply makes it Now.' },
+  { id: 'done', title: 'Done', dot: 'var(--green)', note: 'Comes back if someone other than you replies.' },
+];
+
+/** "Insights APIs › Decisions" for Confluence, "Vault · Resources" for the vault. */
+function targetChip(i: ItemSummary): string | undefined {
+  if (i.lane !== 'file') return undefined;
+  if (i.triage?.confluence && i.targetHints.confluence && !i.containsPeopleObservations) return i.targetHints.confluence;
+  const v = i.targetHints.vault;
+  return v ? `Vault · ${v.split('/')[0]}` : undefined;
+}
+
+function lowerMeta(i: ItemSummary, now: Date): string | undefined {
+  if (i.lane === 'failed') return 'output invalid twice';
+  if (i.lane === 'waiting') return i.modelPaused ? 'paused · triage budget reached' : i.quietUntil && Date.parse(i.quietUntil) > now.getTime() ? `quiet ${fmtIn(i.quietUntil, now)}` : 'next poll';
+  if (i.lane === 'snoozed' && i.snoozedUntil) return `until ${fmtDayDate(i.snoozedUntil)} ${fmtTime(i.snoozedUntil)}`;
+  if (i.lane === 'done' && i.doneAt) return `done ${fmtDayDate(i.doneAt)} ${fmtTime(i.doneAt)}`;
+  if (i.triage?.by === 'rule') return 'by rule';
+  if (i.triage?.by === 'user') return 'corrected';
+  return undefined;
+}
+
+function QueueRow({ item, selected, fresh, onPick }: { item: ItemSummary; selected: boolean; fresh: boolean; onPick: () => void }) {
+  const now = useNow(30_000);
+  const top = isTop(item);
+  const due = top ? dueInfo(item.next, now) : undefined;
+  const target = targetChip(item);
+  const meta = top ? undefined : lowerMeta(item, now);
+  const ago = fmtAgo(item.lastActivityAt, now);
+  return (
+    <button
+      type="button"
+      data-row={item.id}
+      aria-current={selected ? 'true' : undefined}
+      onClick={onPick}
+      className={cx(
+        'flex w-full flex-wrap items-center gap-x-3.5 gap-y-1.5 border-t border-line-soft px-6 py-[11px] text-left cursor-pointer',
+        selected ? 'bg-accent-wash shadow-[inset_3px_0_0_var(--accent-bg)]' : item.lane === 'now' ? 'bg-orange-wash-2' : 'hover:bg-surface-2',
+      )}
+    >
+      <span className="flex w-5 justify-center">
+        <SourceMark source={item.source} size={18} />
+      </span>
+      <span className="flex min-w-[110px] flex-[0_1_170px] flex-col gap-px">
+        <span className="truncate text-xs font-medium text-ink-2">{item.title}</span>
+        <span className="text-[11px] text-muted">
+          {kindLabel(item.kind)} · {ago}
+        </span>
+      </span>
+      {/* Chips sit at the right edge, or wrap under the summary when the list is narrow. */}
+      <span className="flex min-w-0 flex-[1_1_260px] flex-wrap items-center gap-x-3.5 gap-y-1.5">
+        <span className={cx('flex min-w-0 flex-[1_1_240px] flex-col gap-1 text-[13px] leading-[1.4]', top ? 'font-medium text-ink' : 'text-ink-2')}>
+          <span>
+            {item.summary}
+            {fresh && <span className="ml-1.5 rounded bg-accent-bg px-1.5 py-px align-[1px] text-[10px] font-semibold text-on-solid">New</span>}
+          </span>
+          <ItemMarkers item={item} />
+        </span>
+        <span className="flex flex-wrap gap-1">
+          {top && <NeedTag>{item.next ? needLabel(item.next) : item.lane === 'file' ? 'File' : 'Reply'}</NeedTag>}
+          {due && <DueChip due={due} />}
+          {target && <StatusChip tone="file">{target}</StatusChip>}
+          {item.lane === 'failed' && <StatusChip tone="bad">Triage failed</StatusChip>}
+          {meta && <span className="font-mono text-[11px] text-muted">{meta}</span>}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function GroupHead({ dot, title, count }: { dot: string; title: string; count: number }) {
+  return (
+    <>
+      <span className="h-[9px] w-[9px] shrink-0 self-center rounded-[3px]" style={{ background: dot }} />
+      <h2 className="m-0 text-[15px] font-semibold">{title}</h2>
+      <span className="font-mono text-xs text-muted">{count}</span>
+    </>
+  );
+}
+
+function CommitmentsGroup() {
+  const rows = [
+    { where: 'from #mvi-launch', when: 'Fri 9 Oct', summary: 'Send MVI V2 release notes to Sales.', quote: '“I’ll send the notes by Friday.”' },
+    { where: 'from DM', when: 'Wed 7 Oct', summary: 'Review the PSPD-112 PRD draft.', quote: '“Will review before Wednesday.”' },
+  ];
+  return (
+    <section aria-label="Commitments (P3)" className="mx-4 mb-3 flex flex-col rounded-xl border-[1.5px] border-dashed border-violet-line bg-violet-wash">
+      <div className="flex items-baseline gap-2 px-4 pb-2 pt-3">
+        <GroupHead dot="var(--violet-dot)" title="Commitments" count={2} />
+        <span className="flex-1" />
+        <PhaseTag phase="P3" />
+      </div>
+      {rows.map((r) => (
+        <button key={r.summary} type="button" onClick={() => phaseToast('P3', 'Commitments')} className="flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t border-violet-line/30 px-4 py-2.5 text-left cursor-pointer">
+          <Icon name="commit" size={16} className="text-violet-fg" />
+          <span className="flex-[0_1_170px] text-xs text-ink-2">{r.where}</span>
+          <span className="min-w-0 flex-[1_1_260px] text-[13px] font-medium">
+            {r.summary} <span className="font-normal text-muted">{r.quote}</span>
+          </span>
+          <span className="font-mono text-[11px] text-muted">{r.when}</span>
+        </button>
+      ))}
+    </section>
+  );
 }
 
 // ---------- Page ----------
 
+const keyOf = (q: URLSearchParams) => `${q.get('item')}:${parseType(q.get('file'))}`;
+
 export function InboxPage() {
   const { inbox: q } = useShell();
   const inbox = q.data;
-  const view = usePrefs((s) => s.view);
-  const setView = usePrefs((s) => s.setView);
+  const now = useNow(30_000);
+  const navigate = useNavigate();
   const full = usePrefs((s) => s.scope === 'full');
-  const { held, heldIds, showHeld, fresh } = useHeldItems(inbox?.items);
-  const cards = useRef(new Map<string, CardHandle>());
-  const handleFor = useCallback((id: string) => cards.current.get(id), []);
-  const registerCard = useCallback((id: string, h: CardHandle | null) => {
-    if (h) cards.current.set(id, h);
-    else cards.current.delete(id);
-  }, []);
+  const panelOpen = usePrefs((s) => s.panelOpen);
+  const setPanelOpen = usePrefs((s) => s.setPanelOpen);
+  const [search, setSearch] = useSearchParams();
+  const sel = search.get('item');
+  const filing = parseType(search.get('file'));
 
-  const items = useMemo(() => (inbox?.items ?? []).filter((i) => !heldIds.has(i.id)), [inbox, heldIds]);
+  // Outlook and Teams are Phase 2 sources: their items only show in Full scope.
+  // Holding works on every item, so switching scope never makes items look newly arrived.
+  const { held: heldAll, heldIds, showHeld, fresh } = useHeldItems(inbox?.items);
+  const inScope = useCallback((i: ItemSummary) => full || i.source === 'slack', [full]);
+  const all = useMemo(() => (inbox?.items ?? []).filter(inScope), [inbox, inScope]);
+  const held = heldAll.filter(inScope);
+  const [expanded, setExpanded] = useState<Record<Lower, boolean>>({ failed: true, waiting: false, else: false, snoozed: false, done: false });
+
   const by = useMemo(() => {
     const m: Record<Lane, ItemSummary[]> = { now: [], today: [], file: [], else: [], failed: [], waiting: [], snoozed: [], done: [] };
-    for (const i of items) m[i.lane].push(i);
+    for (const i of all) if (!heldIds.has(i.id)) m[i.lane].push(i);
     m.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
     return m;
-  }, [items]);
-  const order = useMemo(() => TOP_LANES.flatMap((l) => by[l].map((i) => i.id)), [by]);
-  const { focusId, setFocusId } = useKeyboard(order, handleFor);
+  }, [all, heldIds]);
+  // j/k walk the rows on screen: the three top groups, then any lower group that's open.
+  const order = useMemo(() => [...TOP_LANES.flatMap((l) => by[l]), ...LOWER.filter((g) => expanded[g.id]).flatMap((g) => by[g.id])].map((i) => i.id), [by, expanded]);
+  const selItem = sel ? all.find((i) => i.id === sel) : undefined;
+  const idx = sel ? order.indexOf(sel) : -1;
+  // Where the cursor was, so j/k carry on from there after the item leaves the list.
+  const [anchor, setAnchor] = useState(0);
+  if (idx >= 0 && idx !== anchor) setAnchor(idx);
+
+  const detail = useApiQuery(() => (sel ? api.getItem(sel) : Promise.resolve(undefined)), (n) => (n.topic === 'item' && n.id === sel) || n.topic === 'settings' || n.topic === 'usage', [sel]);
+
+  // Unsaved draft edits belong to one item and filing target. The blocker reads them from a ref,
+  // so a keypress straight after typing can't slip past it before the next render.
+  const editKey = keyOf(search);
+  const [dirtyState, setDirtyState] = useState({ key: '', dirty: false });
+  const dirtyRef = useRef(dirtyState);
+  const dirty = dirtyState.key === editKey && dirtyState.dirty;
+  const onDirty = useCallback(
+    (d: boolean) => {
+      dirtyRef.current = { key: editKey, dirty: d };
+      setDirtyState(dirtyRef.current);
+    },
+    [editKey],
+  );
+  const shouldBlock = useCallback<BlockerFunction>(
+    ({ currentLocation, nextLocation }) =>
+      dirtyRef.current.dirty && dirtyRef.current.key === keyOf(new URLSearchParams(currentLocation.search)) && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search),
+    [],
+  );
+  const blocker = useBlocker(shouldBlock);
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
+  const pick = useCallback(
+    (id: string | undefined) => {
+      if (!id) return;
+      setPanelOpen(true);
+      setSearch({ item: id }, { replace: true });
+      const el = document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
+      el?.focus({ preventScroll: true });
+      el?.scrollIntoView({ block: 'nearest' });
+    },
+    [setPanelOpen, setSearch],
+  );
+  const step = useCallback(
+    (d: 1 | -1) => {
+      if (!order.length) return;
+      if (idx < 0) return pick(sel ? order[Math.max(0, Math.min(order.length - 1, d > 0 ? anchor : anchor - 1))] : order[0]);
+      pick(order[Math.max(0, Math.min(order.length - 1, idx + d))]);
+    },
+    [order, idx, sel, anchor, pick],
+  );
+  const close = useCallback(() => {
+    setPanelOpen(false);
+    setSearch({}, { replace: true });
+  }, [setPanelOpen, setSearch]);
+  const doneAndNext = useCallback(() => {
+    if (!selItem) return;
+    const next = idx >= 0 ? (order[idx + 1] ?? order[idx - 1]) : order[Math.min(anchor, order.length - 1)];
+    if (selItem.status === 'open') void markDoneWithUndo(selItem);
+    if (next && next !== selItem.id) pick(next);
+    else close();
+  }, [selItem, idx, order, anchor, pick, close]);
+  const setFiling = useCallback(
+    (t: ActionType | undefined) => {
+      if (!sel) return;
+      setSearch(t ? { item: sel, file: t === 'vault_note' ? 'vault' : 'confluence' } : { item: sel }, { replace: true });
+    },
+    [sel, setSearch],
+  );
+
+  // The panel opens on the first item until it's closed. A stale ?item= (after a reset) moves on.
+  const first = order[0];
+  const missing = !!inbox && !!sel && !selItem;
+  useEffect(() => {
+    if (!inbox) return;
+    if (missing) setSearch(panelOpen && first ? { item: first } : {}, { replace: true });
+    else if (!sel && panelOpen && first) setSearch({ item: first }, { replace: true });
+  }, [inbox, missing, sel, panelOpen, first, setSearch]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      if (e.key === 'j') {
+        e.preventDefault();
+        step(1);
+      } else if (e.key === 'k') {
+        e.preventDefault();
+        step(-1);
+      } else if (e.key === 'Escape' && sel) {
+        e.preventDefault();
+        close();
+      } else if (e.key === 'o' && sel) {
+        e.preventDefault();
+        navigate(itemPath(sel));
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [step, close, sel, navigate]);
 
   useEffect(() => {
     document.title = 'Inbox · Work OS';
@@ -507,48 +522,50 @@ export function InboxPage() {
 
   if (!inbox) return <div className="p-8 text-muted">{q.error ? 'Could not load the inbox.' : 'Loading…'}</div>;
 
-  const topCount = order.length;
-  const draftsHit = inbox.budgets.drafts.hit;
-  const renderLane = (lane: (typeof TOP_LANES)[number]) => (
-    <LaneBox key={lane} lane={lane} count={by[lane].length} layout={view}>
-      {by[lane].map((i) => (
-        <ItemCard key={i.id} ref={(h) => registerCard(i.id, h)} item={i} layout={view} draftsBudgetHit={draftsHit} focused={focusId === i.id} fresh={fresh.has(i.id)} onFocus={() => setFocusId(i.id)} />
-      ))}
-    </LaneBox>
-  );
+  const topCount = TOP_LANES.reduce((n, l) => n + by[l].length, 0);
+  const deadline = nextDeadline(all, now);
+  const row = (i: ItemSummary) => <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} onPick={() => pick(i.id)} />;
+  const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
 
   return (
-    <div className="flex flex-col gap-[18px] px-8 pb-12 pt-6">
-      <header className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-[1_1_240px] flex-col gap-1">
-          <h1 className="m-0 text-[26px] font-semibold tracking-[-0.015em]">Inbox</h1>
-          <div className="font-mono text-xs text-muted" data-testid="poll-line">
-            <PollLine inbox={inbox} />
+    <div className="flex h-screen min-h-0 flex-col bg-surface">
+      <header className="flex flex-wrap items-center gap-3 border-b border-line px-6 py-[18px]">
+        <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
+          <h1 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Inbox</h1>
+          <div className="font-mono text-xs text-muted">
+            {fmtDayDate(now)} · {fmtTime(now)}
+            {deadline && <> · next deadline {deadline}</>} ·{' '}
+            <span data-testid="poll-line">
+              <PollLine inbox={inbox} />
+            </span>
           </div>
         </div>
+        <span className="hidden text-xs text-muted 2xl:inline">
+          Click any row. <Kbd>j</Kbd> <Kbd>k</Kbd> move, <Kbd>Esc</Kbd> closes the panel.
+        </span>
+        {inbox.dryRun && (
+          <Link
+            to="/settings/writing#dry-run"
+            title="Approved writes go to a sandbox folder, not to your vault or Confluence."
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium !text-amber-fg no-underline hover:bg-amber-wash"
+          >
+            <Icon name="flask" size={14} /> Dry-run on
+          </Link>
+        )}
         {full && (
-          <label className="flex min-h-10 flex-[0_1_280px] items-center gap-2 rounded-lg border-[1.5px] border-dashed border-violet-line bg-surface px-3 text-muted">
+          <label className="flex min-h-10 flex-[0_1_240px] items-center gap-2 rounded-lg border-[1.5px] border-dashed border-violet-line bg-surface px-3 text-muted">
             <Icon name="search" />
             <span className="sr-only">Search items, decisions and vault</span>
             <input type="search" placeholder="Search" className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-ink outline-none" onFocus={(e) => (e.currentTarget.blur(), phaseToast('P4', 'Search'))} />
             <span className="font-mono text-[10px] text-violet-fg">P4</span>
           </label>
         )}
-        <Segmented
-          label="View style"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'board', label: 'Board' },
-            { value: 'list', label: 'List' },
-          ]}
-        />
         <PollButton inbox={inbox} />
         <UsagePopover inbox={inbox} />
       </header>
 
       {full && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border-[1.5px] border-dashed border-violet-line bg-violet-wash py-2 pl-3.5 pr-2 text-[13px]">
+        <div className="mx-6 mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border-[1.5px] border-dashed border-violet-line bg-violet-wash py-2 pl-3.5 pr-2 text-[13px]">
           <Icon name="calendar" className="text-violet-fg" />
           <span className="font-semibold">14:00</span>
           <span className="flex-[1_1_240px] text-ink-2">[Customer] renewal call. Account brief ready.</span>
@@ -558,101 +575,92 @@ export function InboxPage() {
           </Button>
         </div>
       )}
-
       <Banners inbox={inbox} />
 
-      {held.length > 0 && (
-        <div className="sticky top-3 z-30 flex justify-center">
-          <button
-            type="button"
-            onClick={showHeld}
-            className="inline-flex min-h-9 items-center gap-2 rounded-full bg-accent-bg px-4 text-[13px] font-semibold text-on-solid shadow-[0_8px_24px_rgba(20,23,28,0.2)] cursor-pointer hover:brightness-110"
-          >
-            <Icon name="arrow" size={14} className="-rotate-90" />
-            {held.length} new {held.length === 1 ? 'item' : 'items'}
-          </button>
-        </div>
-      )}
+      <div className="relative flex min-h-0 flex-1">
+        <section aria-label="Inbox list" className="min-w-0 flex-[1_1_480px] overflow-y-auto pb-6 pt-2">
+          {held.length > 0 && (
+            <div className="sticky top-2 z-10 flex justify-center">
+              <button
+                type="button"
+                onClick={showHeld}
+                className="inline-flex min-h-9 items-center gap-2 rounded-full bg-accent-bg px-4 text-[13px] font-semibold text-on-solid shadow-[0_8px_24px_rgba(20,23,28,0.2)] cursor-pointer hover:brightness-110"
+              >
+                <Icon name="arrow" size={14} className="-rotate-90" />
+                {held.length} new {held.length === 1 ? 'item' : 'items'}
+              </button>
+            </div>
+          )}
 
-      {inbox.firstRun ? (
-        <FirstRun inbox={inbox} />
-      ) : topCount === 0 && held.length === 0 ? (
-        <InboxZero inbox={inbox} />
-      ) : view === 'board' ? (
-        <section aria-label="Triage lanes" className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(264px,1fr))]">
-          {TOP_LANES.map(renderLane)}
-          {full && <CommitmentsLane layout="board" />}
+          {inbox.firstRun ? (
+            <FirstRun inbox={inbox} />
+          ) : (
+            <>
+              {topCount === 0 && held.length === 0 ? (
+                <InboxZero inbox={inbox} />
+              ) : (
+                TOP_LANES.map((l) => (
+                  <section key={l} aria-label={GROUPS[l].title} data-group={l} className="flex flex-col pb-3">
+                    <div className="flex items-baseline gap-2 px-6 pb-2 pt-3">
+                      <GroupHead dot={GROUPS[l].dot} title={GROUPS[l].title} count={by[l].length} />
+                    </div>
+                    <div className="border-b border-line-soft">{by[l].length ? by[l].map(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
+                  </section>
+                ))
+              )}
+              {full && <CommitmentsGroup />}
+              <div className="flex flex-col pt-2">
+                {LOWER.filter((g) => g.id === 'else' || by[g.id].length > 0).map((g) => (
+                  <section key={g.id} aria-label={g.title} data-group={g.id} className="flex flex-col">
+                    <button
+                      type="button"
+                      aria-expanded={expanded[g.id]}
+                      onClick={() => setExpanded({ ...expanded, [g.id]: !expanded[g.id] })}
+                      className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-line-soft px-6 py-2.5 text-left cursor-pointer hover:bg-surface-2"
+                    >
+                      <Icon name="down" size={14} className={cx('shrink-0 self-center text-muted transition-transform', !expanded[g.id] && '-rotate-90')} />
+                      <GroupHead dot={g.dot} title={g.title} count={by[g.id].length} />
+                      <span className="min-w-0 flex-[1_1_200px] pl-1 text-xs text-muted">{g.note}</span>
+                    </button>
+                    {expanded[g.id] && <div>{by[g.id].length ? by[g.id].map(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>}
+                  </section>
+                ))}
+              </div>
+            </>
+          )}
         </section>
-      ) : (
-        <section aria-label="Triage lanes, list view" className="flex flex-col gap-4">
-          {TOP_LANES.map(renderLane)}
-          {full && <CommitmentsLane layout="list" />}
-        </section>
-      )}
 
-      {!inbox.firstRun && (
-        <div className="flex flex-col gap-3">
-          {by.failed.length > 0 && (
-            <Collapsible id="failed" dot="var(--red)" title="Failed" tone="red" count={by.failed.length} note="Triage output was invalid twice. Shown untriaged." defaultOpen>
-              {by.failed.map((i) => (
-                <FailedRow key={i.id} item={i} />
-              ))}
-            </Collapsible>
-          )}
-          {by.waiting.length > 0 && (
-            <Collapsible id="waiting" dot="var(--gray-mid)" title="Waiting for quiet window" count={by.waiting.length} note="Still active. Triage runs once each thread has been quiet for a while.">
-              <WaitingRows items={by.waiting} />
-            </Collapsible>
-          )}
-          <Collapsible id="else" dot="var(--gray-mid)" title="Everything else" count={by.else.length} note="No action and nothing to file. Correct any that are wrong.">
-            {by.else.length ? by.else.map((i) => <ElseRow key={i.id} item={i} />) : <div className="px-3.5 py-3 text-[13px] text-muted">Nothing here.</div>}
-          </Collapsible>
-          {by.snoozed.length > 0 && (
-            <Collapsible id="snoozed" dot="var(--gray-mid)" title="Snoozed" count={by.snoozed.length} note="Each comes back at its snooze time, or early if a new reply makes it Now.">
-              {by.snoozed.map((i) => (
-                <Row key={i.id} item={i} meta={i.snoozedUntil && `until ${fmtDayDate(i.snoozedUntil)} ${fmtTime(i.snoozedUntil)}`}>
-                  <Button size="sm" onClick={() => void api.reopen(i.id).catch(errorToast)}>
-                    Unsnooze
-                  </Button>
-                </Row>
-              ))}
-            </Collapsible>
-          )}
-          {by.done.length > 0 && (
-            <Collapsible id="done" dot="var(--green)" title="Done" count={by.done.length} note="Comes back if someone other than you replies.">
-              {by.done.map((i) => (
-                <Row key={i.id} item={i} meta={i.doneAt && `done ${fmtDayDate(i.doneAt)} ${fmtTime(i.doneAt)}`}>
-                  <Button size="sm" onClick={() => void api.reopen(i.id).catch(errorToast)}>
-                    Reopen
-                  </Button>
-                </Row>
-              ))}
-            </Collapsible>
-          )}
-        </div>
-      )}
+        {selItem && (
+          <div className="fixed inset-y-0 right-0 z-30 flex w-full max-w-[600px] min-[1320px]:static min-[1320px]:z-auto min-[1320px]:max-w-none min-[1320px]:flex-[0_1_600px]">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <ItemPanel
+                item={selItem}
+                view={view}
+                pos={idx + 1}
+                total={order.length}
+                filing={filing}
+                setFiling={setFiling}
+                draftsBudgetHit={inbox.budgets.drafts.hit}
+                onPrev={() => step(-1)}
+                onNext={() => step(1)}
+                onClose={close}
+                onDoneNext={doneAndNext}
+                onDirty={onDirty}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
-      {!inbox.firstRun && topCount > 0 && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted" aria-label="Keyboard shortcuts">
-          <span>
-            <Kbd>j</Kbd> <Kbd>k</Kbd> move
-          </span>
-          <span>
-            <Kbd>↵</Kbd> open
-          </span>
-          <span>
-            <Kbd>e</Kbd> done
-          </span>
-          <span>
-            <Kbd>s</Kbd> snooze
-          </span>
-          <span>
-            <Kbd>c</Kbd> correct triage
-          </span>
-          <span>
-            <Kbd>Esc</Kbd> close
-          </span>
-        </div>
+      {blocker.state === 'blocked' && (
+        <ConfirmDialog
+          title="Leave with unsaved edits?"
+          body="Your changes to the draft text haven’t been saved. Leaving drops them."
+          confirmLabel="Leave"
+          danger
+          onCancel={() => blocker.reset()}
+          onConfirm={() => blocker.proceed()}
+        />
       )}
     </div>
   );

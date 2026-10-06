@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import type { UsagePurpose } from '@work-os/shared';
 import { api, type BudgetLine, type Criterion, type UsageView } from '../api';
+import { BrandIcon } from '../components/BrandIcon';
 import { Banner, Button, MvpTag, PhaseTag, SectionCard, Spinner, cx } from '../components/ui';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
 import { useHashScroll } from '../hooks/useHashScroll';
@@ -200,8 +201,9 @@ function SourceHealth({ u }: { u: UsageView }) {
       </h2>
       <div className="flex flex-col gap-1 rounded-lg bg-surface-2 px-3 py-2.5" data-testid="slack-health">
         <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full" style={{ background: st.dot }} />
+          <BrandIcon brand="slack" size={16} decorative />
           <span className="flex-1 font-semibold">Slack</span>
+          <span className="h-2 w-2 rounded-full" style={{ background: st.dot }} />
           <span className={cx('text-xs font-medium', st.cls)}>{st.label}</span>
         </div>
         <div className="font-mono text-[11px] leading-relaxed text-muted">{details.join(' · ')}</div>
@@ -210,13 +212,15 @@ function SourceHealth({ u }: { u: UsageView }) {
       {full &&
         (
           [
-            ['Outlook mail', 'retires Outlook digest', 'P2'],
-            ['Teams chats + transcripts', 'retires transcript sweep', 'P2'],
-            ['Gong · Salesforce · HubSpot', 'new, read-only', 'P4'],
+            ['Outlook mail', 'retires Outlook digest', 'P2', ['outlook']],
+            ['Teams chats + transcripts', 'retires transcript sweep', 'P2', ['teams']],
+            ['Gong · Salesforce · HubSpot', 'new, read-only', 'P4', ['salesforce', 'hubspot']],
           ] as const
-        ).map(([name, note, phase]) => (
+        ).map(([name, note, phase, marks]) => (
           <div key={name} className="flex items-center gap-2 rounded-lg border-[1.5px] border-dashed border-violet-line bg-violet-wash px-3 py-2.5">
-            <span className="box-border h-2 w-2 rounded-full border-[1.5px] border-gray-mid" />
+            {marks.map((m) => (
+              <BrandIcon key={m} brand={m} size={16} decorative />
+            ))}
             <span className="flex-1">{name}</span>
             <span className="text-xs text-muted">{note}</span>
             <span className="font-mono text-[10px] text-violet-fg">{phase}</span>

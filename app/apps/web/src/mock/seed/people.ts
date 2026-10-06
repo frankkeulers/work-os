@@ -22,6 +22,12 @@ export const PEOPLE: Record<string, string> = {
   U18PMM: 'Product marketing manager',
   U19LEGAL: 'Legal counsel',
   U20QA: 'QA engineer',
+  // Outlook and Teams participants (P2 sources).
+  X01ACCOUNT: 'Account lead, [Customer]',
+  X02RELEASE: 'Release manager',
+  X03SUPPORT: 'Support lead',
+  X04APILEAD: 'API lead',
+  X05SALESENG: 'Sales engineer',
 };
 
 export const CHANNELS: Record<string, string> = {

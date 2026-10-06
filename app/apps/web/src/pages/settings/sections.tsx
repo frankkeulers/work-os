@@ -135,13 +135,13 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
       </Group>
       {full && (
         <Group title="More sources">
-          <FutureRow title="Outlook mail" phase="P2" cta="Request consent">
+          <FutureRow title="Outlook mail" phase="P2" cta="Request consent" marks={['outlook']}>
             Graph delta query on the Inbox. Needs delegated Mail.Read with admin consent. Retires the daily Outlook digest.
           </FutureRow>
-          <FutureRow title="Teams chats and transcripts" phase="P2" cta="Request consent">
+          <FutureRow title="Teams chats and transcripts" phase="P2" cta="Request consent" marks={['teams']}>
             Graph delta on chats, plus transcripts for meetings you attended. Retires the daily Teams transcript sweep.
           </FutureRow>
-          <FutureRow title="Gong · Salesforce · HubSpot" phase="P4" cta="Connect">
+          <FutureRow title="Gong · Salesforce · HubSpot" phase="P4" cta="Connect" marks={['salesforce', 'hubspot']}>
             Read-only sources for pre-meeting account briefs. Needs data-rights checks.
           </FutureRow>
         </Group>

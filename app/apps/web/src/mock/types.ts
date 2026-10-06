@@ -5,6 +5,7 @@ import type {
   EvalReport,
   Item,
   ItemStatus,
+  NextStep,
   Rule,
   Settings,
   TriageCorrection,
@@ -24,6 +25,7 @@ export interface ScriptedDecision {
   people?: boolean; // containsPeopleObservations
   summary: string;
   reason: string;
+  next?: NextStep; // what the model says to do next (Inbox redesign)
 }
 
 export type VaultTemplate =
@@ -52,8 +54,9 @@ export interface SeedMessage {
 
 export interface ThreadSeed {
   key: string;
-  channelId: string;
-  kind: 'thread' | 'dm';
+  source?: 'outlook' | 'teams'; // default Slack. Outlook and Teams are P2 sources, shown in Full scope.
+  channelId: string; // Slack channel, or a mailbox folder / Teams chat for the P2 sources
+  kind: 'thread' | 'dm' | 'email' | 'meeting' | 'chat';
   title: string;
   messages: SeedMessage[];
   messageCount?: number;

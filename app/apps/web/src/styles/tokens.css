@@ -40,6 +40,7 @@
   --orange-fg:#9A3412;
   --orange-line:#F3C3A1;
   --orange-wash:#FFF1E8;
+  --orange-wash-2:#FFF8F3; /* Inbox redesign: Now rows */
   --red:#B91C1C;
   --red-fg:#B91C1C;
   --red-line:#F3C9C9;
@@ -107,6 +108,7 @@
   --orange-fg:#FDBA74;
   --orange-line:#5A3320;
   --orange-wash:#3A2014;
+  --orange-wash-2:#24170F;
   --red:#DC2626;
   --red-fg:#F87171;
   --red-line:#5A2626;
@@ -175,6 +177,8 @@
     --orange-fg:#FDBA74;
     --orange-line:#5A3320;
     --orange-wash:#3A2014;
+    --orange-wash-2:#24170F;
+  --orange-wash-2:#24170F;
     --red:#DC2626;
     --red-fg:#F87171;
     --red-line:#5A2626;
@@ -244,6 +248,7 @@
   --color-orange-fg: var(--orange-fg);
   --color-orange-line: var(--orange-line);
   --color-orange-wash: var(--orange-wash);
+  --color-orange-wash-2: var(--orange-wash-2);
   --color-red: var(--red);
   --color-red-fg: var(--red-fg);
   --color-red-line: var(--red-line);

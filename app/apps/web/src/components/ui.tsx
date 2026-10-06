@@ -301,6 +301,7 @@ export function PopoverPanel({
   role = 'dialog',
   label,
   align = 'right',
+  side = 'bottom',
 }: {
   panelRef: Ref<HTMLDivElement>;
   children: ReactNode;
@@ -308,6 +309,7 @@ export function PopoverPanel({
   role?: 'dialog' | 'menu';
   label: string;
   align?: 'left' | 'right';
+  side?: 'top' | 'bottom';
 }) {
   return (
     <div
@@ -315,7 +317,8 @@ export function PopoverPanel({
       role={role}
       aria-label={label}
       className={cx(
-        'absolute top-[calc(100%+4px)] z-40 rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(20,23,28,0.14)]',
+        'absolute z-40 rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_rgba(20,23,28,0.14)]',
+        side === 'bottom' ? 'top-[calc(100%+4px)]' : 'bottom-[calc(100%+4px)]',
         align === 'right' ? 'right-0' : 'left-0',
         className,
       )}
@@ -416,5 +419,9 @@ export function SectionCard({ children, className }: { children: ReactNode; clas
 }
 
 export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="rounded border border-line-strong bg-surface-2 px-1 font-mono text-[11px] text-ink-2">{children}</kbd>;
+  return (
+    <kbd className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-b-2 border-line-strong bg-surface px-[3px] font-mono text-[10px] leading-none text-muted">
+      {children}
+    </kbd>
+  );
 }

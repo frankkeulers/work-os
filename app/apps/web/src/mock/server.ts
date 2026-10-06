@@ -434,6 +434,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const first = rec.item.messages[0]?.text ?? '';
     return {
       id: rec.item.id,
+      source: rec.item.source,
       kind: rec.item.kind,
       title: rec.item.title,
       permalink: rec.item.permalink,
@@ -444,6 +445,7 @@ export class MockServer implements WorkOsApi, MockControls {
       triageState: rec.triageState,
       summary: d?.summary ?? (first.length > 110 ? `${first.slice(0, 107)}…` : first),
       reason: d?.reason,
+      next: d?.next,
       triage: effectiveTriage(d, rec.correction),
       correctedFrom: rec.correctedFrom,
       containsPeopleObservations: d?.containsPeopleObservations ?? false,

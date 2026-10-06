@@ -4,6 +4,7 @@ import { cardActions } from './lanes';
 
 const item = (over: Partial<ItemSummary>): ItemSummary => ({
   id: 'i',
+  source: 'slack',
   kind: 'thread',
   title: '#x',
   permalink: 'https://example.com',

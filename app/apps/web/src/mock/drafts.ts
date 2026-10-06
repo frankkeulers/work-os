@@ -25,6 +25,8 @@ function stableNumber(seed: string, min: number, max: number) {
   return min + (h % (max - min));
 }
 
+const SOURCE_LABEL = { slack: 'Slack', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud' } as const;
+
 export function buildDraft(
   rec: ItemRec,
   type: ActionType,
@@ -33,6 +35,8 @@ export function buildDraft(
   opts: { forceOffList?: boolean; attempt: number },
 ): Draft {
   const summary = rec.decision?.summary ?? rec.script.summary;
+  const src = SOURCE_LABEL[rec.item.source];
+  const what = rec.item.kind === 'email' ? 'email' : rec.item.kind === 'meeting' ? 'meeting transcript' : rec.item.kind === 'chat' || rec.item.kind === 'dm' ? 'chat' : 'thread';
   const tokens = stableNumber(rec.item.id + type + opts.attempt, type === 'vault_note' ? 26000 : 15000, type === 'vault_note' ? 36000 : 21000);
   const meta = {
     model: type === 'vault_note' ? settings.models.draftVault : settings.models.draftConfluence,
@@ -55,15 +59,15 @@ export function buildDraft(
         path,
         heading: `## ${heading}`,
         context: [`## ${heading}`, '- (earlier entries)'],
-        content: `- ${londonDate(clock)} · ${summary}\n  Source: [Slack ${rec.item.title}](permalink)`,
+        content: `- ${londonDate(clock)} · ${summary}\n  Source: [${src} ${rec.item.title}](permalink)`,
       };
     }
-    const path = hint ?? `Inbox/Slack/${londonDate(clock)} ${slug(summary)}.md`;
+    const path = hint ?? `Inbox/${src}/${londonDate(clock)} ${slug(summary)}.md`;
     return {
       ...meta,
       kind: 'vault_new',
       path,
-      content: `---\ntype: note\nsource: slack\nchannel: "${rec.item.title}"\ncreated: ${londonDate(clock)}\ntags: [slack]\n---\n# ${summary.replace(/\.$/, '')}\n\n${bullets}\n\nSource: [Slack thread](permalink)`,
+      content: `---\ntype: note\nsource: ${rec.item.source}\n${rec.item.source === 'slack' ? 'channel' : 'from'}: "${rec.item.title}"\ncreated: ${londonDate(clock)}\ntags: [${rec.item.source}]\n---\n# ${summary.replace(/\.$/, '')}\n\n${bullets}\n\nSource: [${src} ${what}](permalink)`,
     };
   }
 
@@ -83,6 +87,6 @@ export function buildDraft(
     section: t?.section ?? 'Decisions',
     baseVersion: (t?.baseVersion ?? stableNumber(page.pageId, 6, 40)) + (opts.attempt > 1 ? 2 : 0),
     title: t?.title ?? `${longDate(clock)} · ${slug(summary)}`,
-    content: t?.content ?? `${summary}\n\nContext: ${rec.item.messages[0]?.text ?? ''}\n\nSource: Slack ${rec.item.title} thread`,
+    content: t?.content ?? `${summary}\n\nContext: ${rec.item.messages[0]?.text ?? ''}\n\nSource: ${src} ${rec.item.title} ${what}`,
   };
 }
