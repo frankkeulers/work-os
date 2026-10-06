@@ -4,17 +4,19 @@ import { join } from 'node:path';
 import type { HealthView } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { paths } from './config/dataDir';
+import { memoryKeychain } from './config/keychain';
 import type { Notification, Notifier } from './notify/macos';
 import { run, type RunResult } from './start';
 
 let dir: string;
 let notes: Notification[];
+let secrets: ReturnType<typeof memoryKeychain>;
 const notifier: Notifier = { notify: async (n) => void notes.push(n) };
 const started: RunResult[] = [];
 
 const env = (over: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({ WORKOS_INSTANCE: 'dev', WORKOS_DATA_DIR: dir, WORKOS_PORT: '0', ...over });
 const start = async (over?: NodeJS.ProcessEnv) => {
-  const res = await run({ env: env(over), notifier });
+  const res = await run({ env: env(over), notifier, secrets }); // never the real Keychain in tests
   started.push(res);
   return res;
 };
@@ -22,7 +24,13 @@ const start = async (over?: NodeJS.ProcessEnv) => {
 beforeEach(async () => {
   dir = join(await mkdtemp(join(tmpdir(), 'workos-start-')), 'data');
   notes = [];
+  secrets = memoryKeychain();
 });
+const health = async (res: RunResult) => {
+  if (!res.running) throw new Error('expected a running server');
+  const r = await fetch(`${res.url}/api/health`, { headers: { authorization: `Bearer ${res.token}` } });
+  return (await r.json()) as HealthView;
+};
 afterEach(async () => {
   for (const r of started.splice(0)) if (r.running) await r.lifecycle.stop('test');
   await rm(dir, { recursive: true, force: true });
@@ -34,8 +42,7 @@ describe('startup', () => {
     expect(res.running).toBe(true);
     if (!res.running) return;
     expect(res.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
-    const health = (await (await fetch(`${res.url}/api/health`)).json()) as HealthView;
-    expect(health).toMatchObject({ mode: 'normal', phase: 'running', instance: 'dev', checks: [{ id: 'settings', status: 'ok' }] });
+    expect(await health(res)).toMatchObject({ mode: 'normal', phase: 'running', instance: 'dev', checks: [{ id: 'settings', status: 'ok' }] });
     expect(JSON.parse(await readFile(paths(dir).lock, 'utf8')).pid).toBe(process.pid);
   });
 
@@ -81,9 +88,9 @@ describe('startup', () => {
     await writeFile(paths(dir).settings, '{}');
     const res = await start();
     if (!res.running) throw new Error('expected a degraded start');
-    const health = (await (await fetch(`${res.url}/api/health`)).json()) as HealthView;
-    expect(health.mode).toBe('degraded');
-    expect(health.checks[0]).toMatchObject({ id: 'settings', status: 'warn' });
+    const h = await health(res);
+    expect(h.mode).toBe('degraded');
+    expect(h.checks[0]).toMatchObject({ id: 'settings', status: 'warn' });
   });
 
   it('refuses development on the autostarted instance’s data directory', async () => {
@@ -107,6 +114,8 @@ describe('startup', () => {
     if (!res.running) throw new Error('expected a start');
     const { app } = res.server;
     void res.lifecycle.stop('test');
-    expect((await app.inject({ method: 'POST', url: '/api/poll' })).statusCode).toBe(503);
+    const res503 = await app.inject({ method: 'POST', url: '/api/poll', headers: { authorization: `Bearer ${res.token}` } });
+    expect(res503.statusCode).toBe(503);
+    expect(res503.json()).toMatchObject({ code: 'unavailable' });
   });
 });

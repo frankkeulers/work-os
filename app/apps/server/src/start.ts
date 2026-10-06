@@ -1,13 +1,18 @@
 import { ConfigError, EXIT, exitCode, resolveConfig, type RuntimeConfig } from './config/env';
 import { initDataDir, paths } from './config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from './config/defaults';
-import { applyOverrides, loadSettings } from './config/settings';
+import { join, resolve } from 'node:path';
+import { loadApiToken } from './api/auth';
+import { macKeychain, type SecretStore } from './config/keychain';
+import { loadSettings } from './config/settings';
+import { SettingsState } from './config/settingsState';
 import { createLogger, type Logger } from './log';
 import { silentNotifier, type Notifier } from './notify/macos';
 import { Lifecycle } from './runtime/lifecycle';
 import { acquireLock, systemProbe, type ProcessProbe } from './runtime/lock';
 import { apiKeySet, clearRefusal, refuseApiKey } from './runtime/refuse';
 import { createServer, type WorkOsServer } from './server';
+import { ItemFiles } from './store/items';
 import { Store, type RecoveryReport } from './store/store';
 
 // The startup order (PLAN.md robustness §6): refuse an API key, take the lock, load settings
@@ -18,6 +23,7 @@ export interface RunDeps {
   env: NodeJS.ProcessEnv;
   notifier?: Notifier;
   probe?: ProcessProbe;
+  secrets?: SecretStore;
   now?: () => Date;
   echoLogs?: boolean;
 }
@@ -30,7 +36,10 @@ export type RunResult =
       config: RuntimeConfig;
       server: WorkOsServer;
       store: Store;
+      items: ItemFiles;
+      settings: SettingsState;
       recovery: RecoveryReport;
+      token: string;
       logger: Logger;
       lifecycle: Lifecycle;
       flush(): void;
@@ -38,6 +47,9 @@ export type RunResult =
 
 /** How often to check whether a snapshot is due. The scheduler's tick takes this over (step 7). */
 const SNAPSHOT_CHECK_MS = 5000;
+
+/** Vite's dev server, which proxies /api to the development instance. */
+const DEV_ORIGINS = 'http://localhost:5173,http://127.0.0.1:5173';
 
 export async function run(deps: RunDeps): Promise<RunResult> {
   const notifier = deps.notifier ?? silentNotifier;
@@ -74,10 +86,12 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   lifecycle.onStop('log', () => flush());
   await clearRefusal(config.dataDir);
 
-  const settings = applyOverrides(await loadSettings(config.dataDir), { forceDryRun: config.forceDryRun });
-  if (settings.status !== 'ok') {
-    logger.warn({ issues: settings.issues }, settings.status === 'fallback' ? 'Settings invalid: using the last good copy' : 'Settings invalid and no good copy: sources paused');
+  const load = await loadSettings(config.dataDir);
+  if (load.status !== 'ok') {
+    logger.warn({ issues: load.issues }, load.status === 'fallback' ? 'Settings invalid: using the last good copy' : 'Settings invalid and no good copy: sources paused');
   }
+  const settings = await SettingsState.create(config.dataDir, load, config.forceDryRun);
+  const { token, persisted } = await loadApiToken(deps.secrets ?? macKeychain(), config.instance, logger);
 
   // Recover the store before binding, so the first request already sees the replayed inbox.
   const { store, recovery } = await Store.open({ dataDir: config.dataDir, logger, now });
@@ -88,7 +102,21 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   snapshots.unref();
   lifecycle.onStop('snapshot-timer', () => clearInterval(snapshots));
 
-  const server = createServer({ config, logger, settings, lifecycle, now });
+  const items = new ItemFiles(join(config.dataDir, 'items'));
+  const server = await createServer({
+    config,
+    logger,
+    lifecycle,
+    store,
+    items,
+    settings,
+    recovery,
+    token,
+    tokenPersisted: persisted,
+    now,
+    webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
+    devOrigins: config.instance === 'dev' ? (deps.env.WORKOS_DEV_ORIGINS ?? DEV_ORIGINS).split(',') : [],
+  });
   let url: string;
   try {
     url = await server.listen();
@@ -99,5 +127,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     return { running: false, code: EXIT.crash };
   }
   logger.info({ url, version: config.version, dataDir: config.dataDir }, 'Work OS started');
-  return { running: true, url, config, server, store, recovery, logger, lifecycle, flush };
+  // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
+  const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
+  items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
+  return { running: true, url, config, server, store, items, settings, recovery, token, logger, lifecycle, flush };
 }

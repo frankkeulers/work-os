@@ -54,9 +54,3 @@ export async function loadSettings(dataDir: string): Promise<SettingsLoad> {
   if (s.ok && r.ok) return { status: 'fallback', settings: s.value, rules: r.value, issues };
   return { status: 'paused', issues };
 }
-
-/** Development forces dry-run on, whatever the file says (FR-1.6). Applied in memory only. */
-export function applyOverrides(load: SettingsLoad, o: { forceDryRun: boolean }): SettingsLoad {
-  if (load.status === 'paused' || !o.forceDryRun) return load;
-  return { ...load, settings: { ...load.settings, dryRun: true } };
-}

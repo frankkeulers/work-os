@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initDataDir, paths } from './dataDir';
 import { DEFAULT_RULES, defaultSettings } from './defaults';
 import { ConfigError, EXIT, exitCode, resolveConfig } from './env';
-import { applyOverrides, loadSettings } from './settings';
+import { loadSettings } from './settings';
+import { SettingsState } from './settingsState';
 
 describe('resolveConfig', () => {
   const home = '/Users/test';
@@ -99,8 +100,9 @@ describe('data directory and settings', () => {
     await init();
     const s = JSON.parse(await readFile(paths(dir).settings, 'utf8'));
     await writeFile(paths(dir).settings, JSON.stringify({ ...s, dryRun: false }));
-    const load = applyOverrides(await loadSettings(dir), { forceDryRun: true });
-    expect(load.status === 'ok' && load.settings.dryRun).toBe(true);
+    const state = await SettingsState.create(dir, await loadSettings(dir), true);
+    expect(state.settings?.dryRun).toBe(true);
+    expect(state.editable.settings.dryRun).toBe(false); // the Settings page shows the file as it is
     expect(JSON.parse(await readFile(paths(dir).settings, 'utf8')).dryRun).toBe(false);
   });
 });
