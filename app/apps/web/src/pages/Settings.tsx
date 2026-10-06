@@ -123,9 +123,10 @@ export function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <header className="border-b border-line px-8 py-5">
-        <div className="flex max-w-[1008px] flex-wrap items-center gap-x-6 gap-y-2">
-          <h1 className="m-0 flex-1 text-[22px] font-semibold tracking-[-0.015em]">Settings &amp; rules</h1>
+      {/* 64px, like the Inbox top bar, lined up with the sidebar's header. */}
+      <header className="flex h-16 items-center border-b border-line px-8">
+        <div className="flex max-w-[1008px] flex-1 items-center gap-x-6">
+          <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Settings &amp; rules</h1>
           <SaveStatus st={st} savedAt={view.savedAt} onRetry={ctx.flush} />
         </div>
       </header>

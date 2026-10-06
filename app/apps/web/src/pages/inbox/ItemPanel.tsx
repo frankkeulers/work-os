@@ -329,13 +329,13 @@ export function ItemPanel({
   return (
     <aside aria-label="Item panel" className="flex h-full min-h-0 flex-col border-l border-line bg-surface shadow-[-12px_0_32px_rgba(20,23,28,0.06)]">
       <div className="flex items-center gap-1 border-b border-line-soft px-4 py-2.5">
-        <IconButton label="Previous item" icon="up" onClick={onPrev} disabled={pos <= 1} />
-        <IconButton label="Next item" icon="down" onClick={onNext} disabled={pos >= total} />
+        <IconButton label="Previous item" title="Previous item (k)" icon="up" onClick={onPrev} disabled={pos <= 1} />
+        <IconButton label="Next item" title="Next item (j)" icon="down" onClick={onNext} disabled={pos >= total} />
         <span className="pl-1 font-mono text-xs text-muted" data-testid="panel-pos">
           {pos > 0 ? `${pos} of ${total}` : `${total} in the list`}
         </span>
         <span className="flex-1" />
-        <Link to={itemPath(item.id)} aria-label="Open as a full page" title="Open as a full page" className="inline-flex h-9 w-9 items-center justify-center rounded-lg !text-ink-2 hover:bg-track">
+        <Link to={itemPath(item.id)} aria-label="Open as a full page" title="Open as a full page (o)" className="inline-flex h-9 w-9 items-center justify-center rounded-lg !text-ink-2 hover:bg-track">
           <Icon name="expand" size={17} />
         </Link>
         <div className="relative">
@@ -363,7 +363,7 @@ export function ItemPanel({
             </PopoverPanel>
           )}
         </div>
-        <IconButton label="Close panel" icon="x" onClick={onClose} />
+        <IconButton label="Close panel" title="Close panel (Esc)" icon="x" onClick={onClose} />
       </div>
 
       <div ref={body} className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-6 pb-6 pt-5">

@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 
 test('poll outcomes: nothing eligible, VIP DM, batch of 12, and the event log', async ({ page }) => {
   await ctl(page, 'Nothing eligible').click();
-  await expect(page.getByTestId('poll-line')).toContainText('nothing new, no Claude call', { timeout: 10_000 });
+  await expect(page.getByTestId('poll-line')).toContainText('Nothing new, no Claude call', { timeout: 10_000 });
 
   await ctl(page, 'VIP DM').click();
   await expect(page.getByRole('button', { name: /new item/ }).or(group(page, 'Now').getByText('exec sync'))).toBeVisible({ timeout: 10_000 });

@@ -54,8 +54,9 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
     !slack ? '' : slack.status === 'auth_failed' ? 'token rejected' : slack.status === 'never' ? 'not polled' : slack.status === 'backoff' ? 'backing off' : slack.lastPollAt ? `${fmtAgo(slack.lastPollAt, now)} ago`.replace('now ago', 'just now') : '';
   return (
     <div className="w-[220px] shrink-0 border-r border-line bg-surface">
-    <nav aria-label="Main" className="sticky top-0 flex h-screen flex-col gap-[22px] overflow-y-auto px-3.5 pb-16 pt-5">
-      <div className="flex flex-col gap-0.5 px-2">
+    <nav aria-label="Main" className="sticky top-0 flex h-screen flex-col gap-[22px] overflow-y-auto px-3.5 pb-16">
+      {/* 64px, the height of the Inbox top bar, so the two line up. */}
+      <div className="flex h-16 shrink-0 flex-col justify-center gap-0.5 px-2">
         <div className="text-[17px] font-semibold tracking-tight">Work OS</div>
         <div className="font-mono text-[11px] text-muted">local · 127.0.0.1</div>
       </div>

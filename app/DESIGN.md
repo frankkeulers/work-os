@@ -58,6 +58,13 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 - **Item panel motion:** the panel slides in over the list from the right (240 ms) and back out (180 ms), below the page header so Poll and Usage stay in view. A faint backdrop (`--scrim`) fades in over the list. It is visual only: the list still scrolls, and a row click switches the item. With reduced motion it just appears. A click outside closes the panel, except on rows, links, header and sidebar buttons, toasts, dialogs, menus and the scenario drawer. Esc and × close it too.
 - **Item panel:** has one primary action, in the Next step card. Everything else is secondary (outline) or ghost. Done, Snooze and Done and next sit in a fixed footer with their shortcuts shown.
 - **Lower groups:** Failed, Waiting, Everything else, Snoozed and Done are collapsible headings in the same list. They are not separate boxes.
+- **Top bar:** one line, 64px high, the same as the sidebar's header, so their bottom edges line up. Settings uses the same height. It holds only:
+  - the page title;
+  - the poll status, shown only while it's happening or just after;
+  - Dry-run on;
+  - two 32px icon buttons, Poll and Usage.
+
+  Details go in tooltips: last and next poll on Poll, and the shortcut keys on the panel's buttons.
 - **Status:** dry-run is a small amber "Dry-run on" link in the header. Banners are only for things you need to act on (budgets, Slack failing, FileVault).
 - **Brand marks:** sources show their real marks, never a recoloured glyph:
   - **Slack:** the Slack logo.

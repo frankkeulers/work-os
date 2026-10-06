@@ -7,11 +7,11 @@ import { SourceMark } from '../components/BrandIcon';
 import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo } from '../components/item';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
-import { Banner, Button, ConfirmDialog, IconButton, Kbd, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
+import { Banner, Button, ConfirmDialog, IconButton, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, plural } from '../lib/format';
-import { dueInfo, needLabel, nextDeadline } from '../lib/next';
+import { dueInfo, needLabel } from '../lib/next';
 import { usePrefs } from '../store/prefs';
 import { errorToast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
@@ -23,41 +23,51 @@ const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest
 
 // ---------- Header ----------
 
-function PollLine({ inbox }: { inbox: InboxView }) {
+/** What the last poll found, for a few minutes after it ran. */
+function pollResult(inbox: InboxView, now: Date) {
+  const r = inbox.poll.lastResult;
+  if (!r || now.getTime() - Date.parse(r.at) >= 3 * 60_000) return null;
+  return r.triaged === 0 ? (r.fetched === 0 ? 'Nothing new, no Claude call' : `${r.fetched} new · no Claude call needed`) : `${r.fetched} new · ${r.triaged} triaged in ${plural(r.calls, 'call')}`;
+}
+
+/**
+ * Poll status next to the Poll button, only when there's something to say: a poll in flight, or
+ * what the last one found. The rest (last and next poll) is in the button's tooltip, and the
+ * sidebar shows how long ago Slack was polled. Slack trouble has its own banner.
+ */
+function PollStatus({ inbox }: { inbox: InboxView }) {
   const now = useNow(5_000);
-  const { poll, source } = inbox;
+  const { poll } = inbox;
+  let body: ReactNode;
   if (poll.phase === 'polling')
-    return (
-      <span className="inline-flex items-center gap-1.5 text-accent">
+    body = (
+      <>
         <Spinner size={12} /> Polling Slack…
-      </span>
+      </>
     );
-  if (poll.phase === 'triaging') {
+  else if (poll.phase === 'triaging') {
     const n = poll.triagingCount ?? 0;
-    return (
-      <span className="inline-flex items-center gap-1.5 text-accent">
+    body = (
+      <>
         <Spinner size={12} /> Triaging {plural(n, 'thread')} · {plural(Math.max(1, Math.ceil(n / 25)), 'call')}
-      </span>
+      </>
     );
-  }
-  if (!poll.lastPollAt) return <span>Not polled yet</span>;
-  const r = poll.lastResult;
-  const recent = r && now.getTime() - Date.parse(r.at) < 3 * 60_000;
-  const result = !recent ? null : r.triaged === 0 ? (r.fetched === 0 ? 'nothing new, no Claude call' : `${r.fetched} new · no Claude call needed`) : `${r.fetched} new · ${r.triaged} triaged in ${plural(r.calls, 'call')}`;
+  } else body = pollResult(inbox, now);
   return (
-    <span>
-      Last poll {fmtTime(poll.lastPollAt)}
-      {result && <span className="text-ink-2"> · {result}</span>}
-      {source.status === 'backoff' && source.retryAt ? (
-        <span className="text-amber-fg"> · retry {fmtTime(source.retryAt)}</span>
-      ) : source.status === 'auth_failed' ? (
-        <span className="text-red-fg"> · polling stopped</span>
-      ) : (
-        poll.nextPollAt && <> · next {fmtTime(poll.nextPollAt)}</>
-      )}
-      {!inbox.workHours && <> · off-hours</>}
+    <span data-testid="poll-line" aria-live="polite" className={cx('inline-flex items-center gap-1.5 text-xs', poll.phase === 'idle' ? 'text-muted' : 'text-accent')}>
+      {body}
     </span>
   );
+}
+
+function pollTooltip(inbox: InboxView) {
+  const { poll, source } = inbox;
+  const parts = [poll.lastPollAt ? `Last poll ${fmtTime(poll.lastPollAt)}` : 'Not polled yet'];
+  if (source.status === 'backoff' && source.retryAt) parts.push(`retry ${fmtTime(source.retryAt)}`);
+  else if (source.status === 'auth_failed') parts.push('polling stopped');
+  else if (poll.nextPollAt) parts.push(`next ${fmtTime(poll.nextPollAt)}`);
+  if (!inbox.workHours) parts.push('off-hours');
+  return parts.join(' · ');
 }
 
 function UsagePopover({ inbox }: { inbox: InboxView }) {
@@ -79,10 +89,10 @@ function UsagePopover({ inbox }: { inbox: InboxView }) {
         aria-haspopup="dialog"
         aria-label={label}
         title="Claude usage today"
-        className={cx('relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-line-strong text-ink-2 cursor-pointer', pOpen ? 'bg-track' : 'bg-surface')}
+        className={cx('relative inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 cursor-pointer hover:bg-track', pOpen && 'bg-track')}
       >
-        <Icon name="dollar" size={18} />
-        <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-surface box-content" style={{ background: colour }} />
+        <Icon name="dollar" size={17} />
+        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full border-2 border-surface box-content" style={{ background: colour }} />
       </button>
       {pOpen && (
         <PopoverPanel panelRef={pPanel} label="Claude usage today" className="flex w-[300px] flex-col gap-3 !p-4">
@@ -117,14 +127,8 @@ const Kpi = ({ value, label }: { value: string; label: string }) => (
 function PollButton({ inbox }: { inbox: InboxView }) {
   const busy = inbox.poll.phase !== 'idle';
   return (
-    <IconButton
-      label={busy ? 'Poll in progress' : 'Poll now'}
-      bordered
-      size={40}
-      disabled={busy}
-      onClick={() => void api.pollNow().catch(errorToast)}
-    >
-      {busy ? <Spinner size={16} /> : <Icon name="poll" size={18} />}
+    <IconButton label={busy ? 'Poll in progress' : 'Poll now'} title={`Poll now · ${pollTooltip(inbox)}`} size={32} disabled={busy} onClick={() => void api.pollNow().catch(errorToast)}>
+      {busy ? <Spinner size={15} /> : <Icon name="poll" size={17} />}
     </IconButton>
   );
 }
@@ -396,7 +400,6 @@ const NOT_OUTSIDE = '[data-row], a[href], [data-inbox-header] button, nav button
 export function InboxPage() {
   const { inbox: q } = useShell();
   const inbox = q.data;
-  const now = useNow(30_000);
   const navigate = useNavigate();
   const full = usePrefs((s) => s.scope === 'full');
   const setPanelOpen = usePrefs((s) => s.setPanelOpen);
@@ -550,7 +553,6 @@ export function InboxPage() {
   if (!inbox) return <div className="p-8 text-muted">{q.error ? 'Could not load the inbox.' : 'Loading…'}</div>;
 
   const topCount = TOP_LANES.reduce((n, l) => n + by[l].length, 0);
-  const deadline = nextDeadline(all, now);
   const row = (i: ItemSummary) => <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} onPick={() => pick(i.id)} />;
   const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
   if (selItem && (shown?.item !== selItem || shown.view !== view || shown.pos !== idx + 1)) setShown({ item: selItem, view, pos: idx + 1 });
@@ -559,32 +561,23 @@ export function InboxPage() {
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-surface">
-      <header data-inbox-header className="flex flex-wrap items-center gap-3 border-b border-line px-6 py-[18px]">
-        <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-0.5">
-          <h1 className="m-0 text-[22px] font-semibold tracking-[-0.01em]">Inbox</h1>
-          <div className="font-mono text-xs text-muted">
-            {fmtDayDate(now)} · {fmtTime(now)}
-            {deadline && <> · next deadline {deadline}</>} ·{' '}
-            <span data-testid="poll-line">
-              <PollLine inbox={inbox} />
-            </span>
-          </div>
-        </div>
-        <span className="hidden text-xs text-muted 2xl:inline">
-          Click any row. <Kbd>j</Kbd> <Kbd>k</Kbd> move, <Kbd>Esc</Kbd> closes the panel.
-        </span>
+      {/* 64px, the height of the sidebar's header, so the two line up. */}
+      <header data-inbox-header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-6">
+        <h1 className="m-0 text-xl font-semibold tracking-[-0.01em]">Inbox</h1>
+        <span className="flex-1" />
+        <PollStatus inbox={inbox} />
         {inbox.dryRun && (
           <Link
             to="/settings/writing#dry-run"
             title="Approved writes go to a sandbox folder, not to your vault or Confluence."
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium !text-amber-fg no-underline hover:bg-amber-wash"
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium !text-amber-fg no-underline hover:bg-amber-wash"
           >
             <Icon name="flask" size={14} /> Dry-run on
           </Link>
         )}
         {full && (
-          <label className="flex min-h-10 flex-[0_1_240px] items-center gap-2 rounded-lg border-[1.5px] border-dashed border-violet-line bg-surface px-3 text-muted">
-            <Icon name="search" />
+          <label className="flex min-h-8 flex-[0_1_220px] items-center gap-2 rounded-lg border-[1.5px] border-dashed border-violet-line bg-surface px-2.5 text-muted">
+            <Icon name="search" size={14} />
             <span className="sr-only">Search items, decisions and vault</span>
             <input type="search" placeholder="Search" className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-ink outline-none" onFocus={(e) => (e.currentTarget.blur(), phaseToast('P4', 'Search'))} />
             <span className="font-mono text-[10px] text-violet-fg">P4</span>

@@ -33,7 +33,8 @@ test('J01 morning scan: groups, the item panel, Done with Undo', async ({ page }
   await expect(rows(page, 'Today')).toHaveCount(4);
   await expect(rows(page, 'To file')).toHaveCount(4);
   await expect(page.getByRole('link', { name: /Dry-run on/ })).toBeVisible();
-  await expect(page.getByTestId('poll-line')).toContainText('Last poll 09:42');
+  // Last and next poll live in the Poll button's tooltip; the top bar stays quiet when idle.
+  await expect(page.getByRole('button', { name: 'Poll now' })).toHaveAttribute('title', 'Poll now · Last poll 09:42 · next 09:52');
 
   // The panel opens on the first item, with its next step.
   const first = rows(page, 'Now').first();
