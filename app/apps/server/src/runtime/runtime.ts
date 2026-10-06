@@ -246,6 +246,14 @@ export class Runtime {
     this.nextCheckMono = 0;
     await this.runChecks();
     if (this.health.state('network') === 'offline') await this.reprobe();
+    // A source stuck on a token or login polls now, not at its next slot: that poll is what
+    // shows the fix worked (Poll now is refused while it is stuck).
+    const stuck = this.d.sources().filter((s) => s.deps.some((dep) => this.health.state(dep) === 'auth_failed'));
+    if (stuck.length)
+      this.scheduler.request(
+        'manual',
+        stuck.map((s) => s.id),
+      );
     this.scheduler.tick();
   }
 

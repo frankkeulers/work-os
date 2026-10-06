@@ -26,7 +26,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!rt) throw new HttpError('unavailable', 'The runtime is not running.');
     if (rt.safeMode) throw new HttpError('unavailable', 'Safe mode: polling is off after repeated crashes. Choose Check again first.');
     const slack = rt.health.get('slack');
-    if (slack.state === 'auth_failed') throw new HttpError('forbidden', 'Slack rejected the token. Fix it in the Keychain, then poll again.');
+    if (slack.state === 'auth_failed') throw new HttpError('forbidden', 'Slack has no working token. Fix it in the Keychain, then choose Check again.');
     if (slack.state === 'rate_limited' && slack.retryAt && slack.retryAt > d.now().toISOString()) {
       throw new HttpError('conflict', 'Slack is rate-limiting. The next poll runs after Retry-After.');
     }
@@ -84,7 +84,10 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const id = item(req.params.id);
     const body = DraftRequest.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" }.');
-    return reply.code(201).headers(noStore).send(await actions().request(id, body.data.type));
+    return reply
+      .code(201)
+      .headers(noStore)
+      .send(await actions().request(id, body.data.type));
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/cancel', async (req, reply) => {
     await actions().cancel(req.params.id);
@@ -96,7 +99,12 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     await actions().edit(req.params.id, body.data.content);
     return reply.code(204).send();
   });
-  app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) => reply.code(201).headers(noStore).send(await actions().redraft(req.params.id)));
+  app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) =>
+    reply
+      .code(201)
+      .headers(noStore)
+      .send(await actions().redraft(req.params.id)),
+  );
   app.post<{ Params: { id: string } }>('/api/actions/:id/discard', async (req, reply) => {
     await actions().discard(req.params.id);
     return reply.code(204).send();

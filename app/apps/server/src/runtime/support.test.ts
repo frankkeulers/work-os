@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { isWorkHours, setTimeZone, timeZone, type StartupCheck } from '@work-os/shared';
+import { isWorkHours, setTimeZone, timeZone, type DependencyHealth, type StartupCheck } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { tokenAccount } from '../api/auth';
 import { memoryKeychain, SLACK_TOKEN_ACCOUNT, type SecretStore } from '../config/keychain';
@@ -141,7 +141,18 @@ describe('startup checks (FR-12.2)', () => {
   it('passes with FileVault on and both secrets in the Keychain', async () => {
     const checks = byId(await run(memoryKeychain({ [tokenAccount('dev')]: 't', [SLACK_TOKEN_ACCOUNT]: 'xoxp-test' })));
     for (const id of ['filevault', 'api_key', 'slack_token', 'settings', 'keychain', 'power_nap'] as const) expect(checks[id].status).toBe('ok');
-    expect(checks.claude_login.status).toBe('warn'); // checked once triage exists (M2)
+    expect(checks.claude_login.status).toBe('warn'); // no Claude call yet
+  });
+
+  it('judges the Claude login by the last real call (FR-12.2)', async () => {
+    const secrets = memoryKeychain({ [tokenAccount('dev')]: 't', [SLACK_TOKEN_ACCOUNT]: 'xoxp-test' });
+    const claude = async (h: Partial<DependencyHealth>) =>
+      byId(await runChecks({ exec: fakeExec('FileVault is On.\n'), secrets, instance: 'dev', settingsCheck: () => settingsOk, claude: () => ({ id: 'claude', state: 'unknown', since: '', failures: 0, ...h }) }))
+        .claude_login;
+    expect(await claude({})).toMatchObject({ status: 'warn', note: expect.stringMatching(/not called yet/) });
+    expect(await claude({ state: 'ok', lastOkAt: '2026-10-06T20:09:16.000Z' })).toMatchObject({ status: 'ok', note: 'ok: last call 2026-10-06T20:09:16.000Z' });
+    expect(await claude({ state: 'auth_failed', fix: 'Run `claude login` in Terminal, then Check again.' })).toMatchObject({ status: 'fail', note: expect.stringMatching(/claude login/) });
+    expect(await claude({ state: 'rate_limited', fix: 'The Claude usage limit was reached.' })).toMatchObject({ status: 'warn' });
   });
 
   it('fails on a missing Slack token, naming the Keychain entry', async () => {

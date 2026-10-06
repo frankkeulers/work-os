@@ -133,6 +133,27 @@ describe('poll to inbox', () => {
   });
 });
 
+describe('a fixed Slack token (FR-12.2)', () => {
+  const slackHealth = async () => (await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'slack');
+
+  it('"Check again" polls a source stuck on its token, so the fix shows at once', async () => {
+    const good = slack.token;
+    slack.token = 'xoxp-revoked'; // Slack no longer accepts ours
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    expect(await slackHealth()).toMatchObject({ state: 'auth_failed' });
+    // Poll now is refused while it is stuck, and says what to do instead.
+    const refused = await call<ApiErrorBody>('POST', '/api/poll');
+    expect(refused).toMatchObject({ status: 403, body: { message: expect.stringMatching(/Check again/) } });
+    slack.token = good; // fixed in the Keychain
+    const polls = slack.calls.length;
+    expect((await call('POST', '/api/health/recheck')).status).toBe(204);
+    await res.runtime.settled();
+    expect(slack.calls.length).toBeGreaterThan(polls);
+    expect(await slackHealth()).toMatchObject({ state: 'ok' });
+  });
+});
+
 describe('done, reopen and snooze (FR-8.2, FR-8.3)', () => {
   const id = `slack:C01PROD:${P}`;
   const url = (cmd: string) => `/api/items/${encodeURIComponent(id)}/${cmd}`;

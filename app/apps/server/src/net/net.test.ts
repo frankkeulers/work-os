@@ -132,7 +132,11 @@ describe('health', () => {
   it('reports changes of state or reason once, with the fix to show', () => {
     let t = Date.parse('2026-10-06T09:00:00Z');
     const changes: HealthChange[] = [];
-    const h = new Health(() => new Date(t), (c) => changes.push(c), () => 0);
+    const h = new Health(
+      () => new Date(t),
+      (c) => changes.push(c),
+      () => 0,
+    );
     expect(h.state('slack')).toBe('unknown');
     h.fail('slack', degraded);
     h.fail('slack', degraded);
@@ -147,7 +151,11 @@ describe('health', () => {
   });
 
   it('keeps one breaker per dependency: Slack failing never blocks Wispr Flow', () => {
-    const h = new Health(() => new Date(0), undefined, () => 0);
+    const h = new Health(
+      () => new Date(0),
+      undefined,
+      () => 0,
+    );
     h.fail('slack', { state: 'auth_failed', reason: 'invalid_auth' });
     expect(h.allowed('slack')).toBe(false);
     expect(h.allowed('wisprDb')).toBe(true);
@@ -209,5 +217,15 @@ describe('probe', () => {
     expect(s.aborted).toBe(false);
     a.abort();
     expect(s.aborted).toBe(true);
+  });
+});
+
+describe('fix texts', () => {
+  it('says a missing Slack token is missing, not rejected', () => {
+    const h = new Health(() => new Date('2026-10-06T08:00:00Z'));
+    h.fail('slack', { state: 'auth_failed', reason: 'token_missing' });
+    expect(h.get('slack').fix).toMatch(/^No Slack token in the Keychain yet/);
+    h.fail('slack', { state: 'auth_failed', reason: 'invalid_auth' });
+    expect(h.get('slack').fix).toMatch(/^Slack rejected the token/);
   });
 });

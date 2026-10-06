@@ -68,8 +68,8 @@ Stop or redesign if any of these hold:
 
 | ID | Task | Owner | Why |
 |---|---|---|---|
-| P0-1 | Create an **internal** Slack app in the PSG workspace (Frank has done this before for PDW and Meridia). Request the user-token scopes in section 7.1 and install it to get a user token. | Frank | Internal apps are exempt from Slack's 2025 rate-limit cuts for non-Marketplace apps. Check at install time that the user scopes (`search:read`, `im:history`, `mpim:history`) don't trigger an admin-approval step that bot-only apps didn't. |
-| P0-2 | Confirm the Claude Agent SDK runs on Frank's PSG Claude plan with no `ANTHROPIC_API_KEY` set. One test call with Haiku. | Frank | Confirms subscription auth works on this plan, and records the usage it draws. |
+| P0-1 | Create an **internal** Slack app in the PSG workspace (Frank has done this before for PDW and Meridia). Request the user-token scopes in section 7.1 and install it to get a user token. **Done 6 Oct 2026: internal app installed, user token in the Keychain, the first poll fetched 222 threads.** | Frank | Internal apps are exempt from Slack's 2025 rate-limit cuts for non-Marketplace apps. Check at install time that the user scopes (`search:read`, `im:history`, `mpim:history`) don't trigger an admin-approval step that bot-only apps didn't. |
+| P0-2 | Confirm the Claude Agent SDK runs on Frank's PSG Claude plan with no `ANTHROPIC_API_KEY` set. One test call with Haiku. **Done 6 Oct 2026: the first real triage run (about 9 Haiku calls) succeeded on the subscription, with no `ANTHROPIC_API_KEY`.** | Frank | Confirms subscription auth works on this plan, and records the usage it draws. |
 | P0-3 | Measure the baseline: run the Slack digest prompt once with `claude -p --output-format json` and record `usage` and `total_cost_usd`. Repeat on a busy weekday. | Frank / Claude Code | Sets the S3 budget. |
 | P0-4 | Build the labelled set: export 2 weeks of Slack threads Frank took part in or was mentioned in. Label ~200 threads for attention (now/today/none), confluence (y/n), vault (y/n). | Frank (Claude can pre-label for review) | Needed for the eval harness and thresholds. |
 | P0-5 | Write down the vault conventions (frontmatter fields, note types, folders, linking rules) as a file the app can load. Source: Note Manager project. | Frank | Vault writes must match existing conventions. |
@@ -660,6 +660,12 @@ As built (M3 step 19):
 ### 7.12 E11 Hardening
 
 - **FR-12.1** Retention job runs daily (section 4.3).
+  As built (FR-12.2):
+
+  - **The Claude login check makes no call of its own.** It reports Claude's health as the last real call left it. Triage and draft calls all report to health, so a lost login shows at the first call that needs it, with its fix. Until the first call, the check is a warning. This deviates from "one minimal Haiku call": a call every 5 minutes would cost more than it tells.
+  - **"Check again" also polls** any source whose dependency is `auth_failed`. Without that, a token fixed in the Keychain kept showing as broken until the next scheduled poll, because Poll now is refused while the token is rejected.
+  - A missing Slack token says it is missing ("No Slack token in the Keychain yet"), not that Slack rejected it.
+
   As built (M4 step 20):
 
   - **What is removed.** `store/retention.ts` removes what holds message text and is older than `retentionDays`:

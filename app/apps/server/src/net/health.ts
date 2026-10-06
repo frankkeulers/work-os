@@ -6,9 +6,13 @@ import type { Failure } from './classify';
 // Each dependency has its own breaker, so Slack being offline never holds up a source that needs
 // no network. A change of state (not every failure) is reported once, for the event log.
 
-const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal', string>>>> = {
+const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal' | 'token_missing', string>>>> = {
   network: { offline: 'Waiting for the network. Work that needs it resumes on its own.', captive_portal: 'Sign in to the Wi-Fi portal in a browser.' },
-  slack: { auth_failed: 'Slack rejected the token. Re-install the Slack app and update the Keychain entry.', rate_limited: 'Slack asked us to wait. Polling resumes after Retry-After.' },
+  slack: {
+    token_missing: 'No Slack token in the Keychain yet. Store it (account slack-user-token), then choose Check again.',
+    auth_failed: 'Slack rejected the token. Re-install the Slack app and update the Keychain entry.',
+    rate_limited: 'Slack asked us to wait. Polling resumes after Retry-After.',
+  },
   claude: { auth_failed: 'Run `claude login` in Terminal, then Check again.', rate_limited: 'The Claude usage limit was reached. Triage resumes when it resets.' },
   confluence: { auth_failed: 'Confluence rejected the token. Update it in the Keychain.' },
   keychain: { degraded: 'Unlock the login Keychain, then Check again.', auth_failed: 'Unlock the login Keychain, then Check again.' },
@@ -97,7 +101,8 @@ export class Health {
     if (h.state !== state) h.since = at;
     h.state = state;
     h.reason = reason;
-    h.fix = FIXES[h.id]?.[reason === 'captive_portal' ? 'captive_portal' : state];
+    const fixes = FIXES[h.id];
+    h.fix = (reason === 'captive_portal' || reason === 'token_missing' ? fixes?.[reason] : undefined) ?? fixes?.[state];
     if (changed) this.onChange({ dep: h.id, state, reason });
   }
 }

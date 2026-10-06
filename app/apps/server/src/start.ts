@@ -315,7 +315,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }) }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
-    checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings) }),
+    checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings), claude: () => runtime.health.get('claude') }),
     wakeTime: deps.wakeTime ?? readWakeTime,
     followZone: deps.followZone ?? followSystemZone,
     safeMode: runs.safeMode,
