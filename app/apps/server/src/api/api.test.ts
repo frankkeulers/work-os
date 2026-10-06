@@ -1,4 +1,4 @@
-import { brotliCompressSync } from 'node:zlib';
+import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -352,5 +352,35 @@ describe('ItemFiles', () => {
   it('escapes ids into safe file names', () => {
     expect(fileNameFor('slack:C1:1791189720.000100')).toBe('slack%3aC1%3a1791189720.000100.json');
     expect(fileNameFor('../../etc/passwd')).toBe('..%2f..%2fetc%2fpasswd.json');
+  });
+});
+
+describe('inbox caching (NF-11)', () => {
+  beforeEach(() => build());
+
+  it('answers 304 to an unchanged inbox, 200 once it changes, and is never stored by the browser', async () => {
+    await store.append(upsert());
+    const first = await get('/api/inbox');
+    const etag = String(first.headers.etag);
+    expect(etag).toMatch(/^".+"$/);
+    expect(first.headers['cache-control']).toBe('no-store');
+    const same = await get('/api/inbox', { ...auth, 'if-none-match': etag });
+    expect(same.statusCode).toBe(304);
+    expect(same.body).toBe('');
+    await store.append({ type: 'item.done', itemId: ITEM, data: undefined });
+    const changed = await get('/api/inbox', { ...auth, 'if-none-match': etag });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.headers.etag).not.toBe(etag);
+  });
+
+  it('gzips a large inbox for clients that accept it', async () => {
+    for (let i = 0; i < 40; i++) await store.append({ ...upsert({ title: `#channel-${i}` }), itemId: `slack:C${i}:1791189720.000100` });
+    const plain = await get('/api/inbox');
+    expect(plain.headers['content-encoding']).toBeUndefined();
+    expect(plain.rawPayload.length).toBeGreaterThan(8 * 1024);
+    const zipped = await get('/api/inbox', { ...auth, 'accept-encoding': 'gzip, br' });
+    expect(zipped.headers['content-encoding']).toBe('gzip');
+    expect(zipped.rawPayload.length).toBeLessThan(plain.rawPayload.length / 4);
+    expect(JSON.parse(gunzipSync(zipped.rawPayload).toString())).toEqual(plain.json());
   });
 });

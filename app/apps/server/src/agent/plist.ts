@@ -6,6 +6,10 @@ import { isAbsolute, join } from 'node:path';
 
 export const LABEL = 'com.polestar.workos';
 export const PROD_PORT = 4317;
+/** Node's flags in the plist's ProgramArguments, which `npm run perf` also starts the server with.
+ * The young generation is capped at 2 MB semi-spaces: an idle server doesn't need V8's default
+ * 16 MB, and RSS stays inside its budget (NF-11). */
+export const NODE_FLAGS = ['--max-old-space-size=256', '--max-semi-space-size=2'];
 
 /** Where releases live. The prod instance never runs from the repo, so a checkout can't break it. */
 export const appSupportDir = (home: string) => join(home, 'Library', 'Application Support', 'WorkOS');

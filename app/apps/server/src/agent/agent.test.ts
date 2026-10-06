@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isDisabled, Launchctl, parsePrint } from './launchctl';
-import { LABEL, launchdPath, nodePathWarning, plistProblems, plistVars, renderPlist } from './plist';
+import { LABEL, launchdPath, NODE_FLAGS, nodePathWarning, plistProblems, plistVars, renderPlist } from './plist';
 import { currentRelease, pruneReleases, releaseName, swapCurrent, toPrune } from './release';
 
 const TEMPLATE = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../scripts/launchd/com.polestar.workos.plist.tmpl');
@@ -29,7 +29,7 @@ describe('LaunchAgent plist (FR-12.3)', () => {
     const p = JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', file], { encoding: 'utf8' }));
     expect(p).toMatchObject({
       Label: LABEL,
-      ProgramArguments: ['/usr/local/bin/node', '--max-old-space-size=256', `${input.root}/current/server.mjs`],
+      ProgramArguments: ['/usr/local/bin/node', ...NODE_FLAGS, `${input.root}/current/server.mjs`], // perf measures with these flags
       WorkingDirectory: `${input.root}/current`,
       RunAtLoad: true,
       KeepAlive: { SuccessfulExit: false },

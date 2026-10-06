@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
+import { sendJson } from './send';
 import { healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table). Triage, draft and eval commands arrive with
@@ -57,7 +58,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(204).send();
   });
 
-  app.get('/api/inbox', async (_req, reply) => reply.headers(noStore).send(inboxView(d)));
+  app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));
 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {
     const view = await itemView(d, req.params.id);

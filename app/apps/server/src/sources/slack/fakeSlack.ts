@@ -23,6 +23,8 @@ export class FakeSlack {
   token = 'xoxp-fake-token';
   inFlight = 0;
   maxInFlight = 0;
+  /** How long each call takes; raised by `npm run perf` to look like the real Slack. */
+  latencyMs = 1;
 
   channel(c: Omit<FakeChannel, 'messages' | 'member'> & { member?: boolean }): this {
     this.channels.set(c.id, { member: true, messages: [], ...c });
@@ -49,7 +51,7 @@ export class FakeSlack {
     this.inFlight++;
     this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
     try {
-      await new Promise((r) => setTimeout(r, 1));
+      await new Promise((r) => setTimeout(r, this.latencyMs));
       const f = this.failures.get(method);
       if (f) {
         if (--f.times! <= 0) this.failures.delete(method);

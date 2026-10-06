@@ -45,6 +45,7 @@ export class HttpApi implements WorkOsApi {
   private retryTimer?: ReturnType<typeof setTimeout>;
   private silenceTimer?: ReturnType<typeof setTimeout>;
   private lastHealth?: HealthView;
+  private inbox?: { etag: string; view: InboxView }; // memory only: never the browser's disk cache
 
   constructor(
     private readonly base = '',
@@ -63,8 +64,8 @@ export class HttpApi implements WorkOsApi {
 
   // ---------------------------------------------------------------- requests
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = {};
+  private async send(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Response> {
+    const headers: Record<string, string> = { ...extra };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (body !== undefined) headers['content-type'] = 'application/json';
     let res: Response;
@@ -79,10 +80,15 @@ export class HttpApi implements WorkOsApi {
       this.onUnauthorised();
       throw new ApiError('unauthorized', 'The page is out of date. Reloading.');
     }
-    if (!res.ok) {
+    if (!res.ok && res.status !== 304) {
       const err = (await res.json().catch(() => undefined)) as ApiErrorBody | undefined;
       throw new ApiError(err?.code ?? (res.status === 503 ? 'unavailable' : 'internal'), err?.message ?? `Work OS answered ${res.status}.`, err?.issues);
     }
+    return res;
+  }
+
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const res = await this.send(method, path, body);
     if (res.status === 204 || res.status === 202) return undefined as T;
     return (await res.json()) as T;
   }
@@ -117,7 +123,16 @@ export class HttpApi implements WorkOsApi {
   }
 
   recheck = () => this.post('/api/health/recheck');
-  getInbox = () => this.get<InboxView>('/api/inbox');
+  /** The inbox, revalidated with its ETag: unchanged, it costs a 304 and the copy held here. */
+  getInbox = async (): Promise<InboxView> => {
+    const held = this.inbox;
+    const res = await this.send('GET', '/api/inbox', undefined, held ? { 'if-none-match': held.etag } : {});
+    if (res.status === 304 && held) return held.view;
+    const view = (await res.json()) as InboxView;
+    const etag = res.headers.get('etag');
+    this.inbox = etag ? { etag, view } : undefined;
+    return view;
+  };
   getItem = (id: string) => this.get<ItemView>(this.item(id));
   getUsage = () => this.get<UsageView>('/api/usage');
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');

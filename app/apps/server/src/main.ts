@@ -11,6 +11,13 @@ if (process.argv.includes('--version')) {
   process.exit(0);
 }
 
+// Signals are caught from the start: one that arrives while run() is still starting (a logout, or
+// `kickstart -k`, just after login) is held and handled once there is something to stop, instead
+// of killing the process with the lock held and the run counted as a crash.
+let early: NodeJS.Signals | undefined;
+let onSignal = (sig: NodeJS.Signals) => void (early ??= sig);
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => onSignal(sig));
+
 const notifier = osascriptNotifier(process.env.WORKOS_INSTANCE === 'prod' ? '' : '[dev] ');
 const fakes = process.argv.includes('--fakes');
 const res = await run({ env: process.env, notifier: fakes ? undefined : notifier, echoLogs: process.env.WORKOS_LAUNCHD !== '1', fakes });
@@ -29,7 +36,8 @@ if (!res.running) {
     process.exit(code);
   };
 
-  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => void shutdown(sig, EXIT.ok));
+  onSignal = (sig) => void shutdown(sig, EXIT.ok);
+  if (early) onSignal(early);
 
   // A crash exits non-zero so launchd restarts the server; the next start recovers from the log.
   const crash = (err: unknown) => {

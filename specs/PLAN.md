@@ -225,8 +225,9 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
     app-2026-10-20.log
     usage-2026-10-20.jsonl    one line per Claude call
     launchd.out.log           output from before the logger starts (truncated by size)
-    perf-<timestamp>.json     performance budget reports (NF-11)
 ```
+
+Performance reports (`npm run perf`) run on synthetic data, never this directory, and go to `app/logs/perf-<timestamp>.json` in the repo (ignored by git).
 
 The deployed release lives outside the data directory, in `~/Library/Application Support/WorkOS/releases/<version>/` with a `current` symlink. Development uses a separate data directory, `~/WorkOS-data-dev`, a separate port and dry-run forced on, so it never contends with the autostarted instance for the lock.
 
@@ -679,7 +680,7 @@ NF-11 budgets:
 | Measure | Budget |
 |---|---|
 | Cold start to API ready | < 400 ms from the snapshot; < 1.5 s with a full replay |
-| `GET /api/inbox` | p95 < 15 ms server-side, payload < 300 KB |
+| `GET /api/inbox` | p95 < 15 ms server-side, payload < 300 KB as sent (gzip); an unchanged inbox answers 304 |
 | `GET /api/items/:id` | p95 < 5 ms warm, < 20 ms cold |
 | Commands (done, snooze, correct), including fsync | p95 < 30 ms |
 | SSE notice after a commit | p95 < 50 ms |
@@ -687,6 +688,13 @@ NF-11 budgets:
 | Poll + triage of 25 threads, excluding Claude time | < 10 s (NF-7 total < 60 s) |
 | Idle CPU | < 0.5 % average |
 | Steady memory (RSS) | < 150 MB |
+
+How the budgets are measured and met (M1 step 12):
+
+- `npm run gen-data` makes the synthetic directory: 90 days of 60 Slack items a day (5,400 items, about 48,600 events), made-up text only. It refuses `~/WorkOS-data*` and any folder that is not empty.
+- `npm run perf` bundles the server as `deploy` does, starts it with `--fakes` and the plist's Node flags, and measures over HTTP. Cold starts are the median of three. The poll budget runs the real adapter and pipeline in-process against the fake Slack at 150 ms a call. Claude time is not in it until M2.
+- The inbox has an ETag from its body and is gzipped above 8 KB. It stays `no-store`, because summaries paraphrase messages and must not outlive retention in the browser's disk cache. The web client keeps the last inbox in memory and revalidates with `If-None-Match`.
+- Node runs with `--max-semi-space-size=2` as well as `--max-old-space-size=256`. With V8's default young generation, RSS after the API run was about 169 MB; with the cap, it is 117–131 MB, and latencies are unchanged.
 
 ---
 

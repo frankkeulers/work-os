@@ -1,0 +1,15 @@
+{
+  "coldStartSnapshotMs": { "max": 400, "unit": "ms", "what": "start to /api/health 200, from the snapshot" },
+  "coldStartReplayMs": { "max": 1500, "unit": "ms", "what": "start to /api/health 200, replaying the whole log" },
+  "inboxP95Ms": { "max": 15, "unit": "ms", "what": "GET /api/inbox p95" },
+  "inboxWireKb": { "max": 300, "unit": "KB", "what": "GET /api/inbox as sent (gzip)" },
+  "gzip": { "expect": true, "what": "the inbox is gzipped" },
+  "notModified": { "expect": true, "what": "an unchanged inbox answers 304" },
+  "itemWarmP95Ms": { "max": 5, "unit": "ms", "what": "GET /api/items/:id p95, cached" },
+  "itemColdP95Ms": { "max": 20, "unit": "ms", "what": "GET /api/items/:id p95, first read" },
+  "commandP95Ms": { "max": 30, "unit": "ms", "what": "done, reopen, snooze p95, synced to disk" },
+  "sseP95Ms": { "max": 50, "unit": "ms", "what": "command sent to SSE notice p95" },
+  "poll25ThreadsMs": { "max": 10000, "unit": "ms", "what": "a poll finding 25 threads, Slack at 150 ms a call" },
+  "rssMb": { "max": 150, "unit": "MB", "what": "resident memory after the API run" },
+  "idleCpuPercent": { "max": 0.5, "unit": "%", "what": "average CPU while idle" }
+}

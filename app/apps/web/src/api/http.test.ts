@@ -81,6 +81,23 @@ describe('requests', () => {
     expect(reloads).toBe(1);
   });
 
+  it('revalidates the inbox with its ETag and reuses the copy it holds on 304', async () => {
+    const view = { items: [{ id: 'a' }] };
+    let etag = '"v1"';
+    srv.routes.set('GET /api/inbox', () => {
+      const sent = srv.calls.at(-1)!.init.headers as Record<string, string>;
+      if (sent['if-none-match'] === etag) return new Response(null, { status: 304, headers: { etag } });
+      return new Response(JSON.stringify(view), { status: 200, headers: { etag, 'content-type': 'application/json' } });
+    });
+    const first = await api.getInbox();
+    expect(srv.calls.at(-1)!.init.headers).not.toHaveProperty('if-none-match');
+    expect(await api.getInbox()).toBe(first);
+    expect(srv.calls.at(-1)!.init.headers).toMatchObject({ 'if-none-match': '"v1"' });
+    etag = '"v2"';
+    view.items = [{ id: 'b' }];
+    expect((await api.getInbox()).items).toEqual([{ id: 'b' }]);
+  });
+
   it('describes an unreachable server as a health view, so the UI can say so', async () => {
     srv.setDown(true);
     expect((await api.getHealth()).connection).toBe('reconnecting');
