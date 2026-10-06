@@ -20,10 +20,12 @@ export interface EditorState {
 }
 
 export type SaveKind = 'saved' | 'undone';
+/** Which file a save changed. */
+export type SaveInfo = { settings: boolean; rules: boolean };
 
 export interface EditorDeps {
   save: (d: Draft) => Promise<{ savedAt: string }>;
-  onSaved: (kind: SaveKind, undo: () => void) => void;
+  onSaved: (kind: SaveKind, undo: () => void, info: SaveInfo) => void;
   onError: (e: unknown) => void;
   /** Pause after typing before a save, in ms. */
   delay?: number;
@@ -144,7 +146,7 @@ export class SettingsEditor {
     try {
       await this.deps.save(payload);
       this.set({ base: payload });
-      this.deps.onSaved(kind, () => this.revert(base));
+      this.deps.onSaved(kind, () => this.revert(base), { settings: !same(payload.settings, base.settings), rules: !same(payload.rules, base.rules) });
     } catch (e) {
       if (isApiError(e) && e.code === 'validation' && e.issues) this.set({ errors: toErrors(e.issues.map((i) => ({ path: i.path, message: friendly(i.message) }))) });
       else this.set({ failed: true });

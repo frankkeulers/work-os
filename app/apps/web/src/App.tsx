@@ -74,6 +74,7 @@ const router = createBrowserRouter([
           { path: 'usage', element: <UsagePage /> },
           { path: 'usage/eval/:id', element: <EvalReportPage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: 'settings/:section', element: <SettingsPage /> },
         ],
       },
       { path: 'item/:id', element: <ItemDetailPage /> },

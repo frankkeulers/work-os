@@ -65,7 +65,7 @@ function RuleRow({
       ref={setNodeRef}
       data-rule={rule.id}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cx('relative flex items-center gap-3 border-b border-line-soft bg-surface py-3 pl-2 pr-4', isDragging && 'z-10 shadow-[0_8px_24px_rgba(20,23,28,0.18)]', error && 'bg-red-line/10')}
+      className={cx('relative flex items-center gap-3 border-b border-line-soft bg-surface py-3.5', isDragging && 'z-10 shadow-[0_8px_24px_rgba(20,23,28,0.18)]', error && 'bg-red-line/10')}
     >
       <button
         type="button"
@@ -83,7 +83,7 @@ function RuleRow({
         <div className={cx('flex flex-wrap items-center gap-1.5', !rule.enabled && 'opacity-55')}>
           <span className="text-[13px] font-semibold text-muted">If</span>
           {rule.conditions.map((c, i) => (
-            <span key={i} className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-line bg-bg px-2.5 text-[13px]">
+            <span key={i} className="inline-flex min-h-7 items-center gap-1.5 rounded-md bg-surface-2 px-2.5 text-[13px] ring-1 ring-line-soft ring-inset">
               {i > 0 && <span className="text-[11px] font-semibold uppercase text-muted">and</span>}
               {conditionText(c)}
             </span>
@@ -133,7 +133,7 @@ export function RulesList({
   };
   return (
     <>
-      <div className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface" aria-label="Rules, in order">
+      <div className="flex flex-col" aria-label="Rules, in order">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} accessibility={{ screenReaderInstructions: { draggable: 'Press space to pick up a rule, the arrow keys to move it, and space again to drop it.' } }}>
           <SortableContext items={rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
             {rules.map((r, i) => (
@@ -149,10 +149,10 @@ export function RulesList({
             ))}
           </SortableContext>
         </DndContext>
-        <div className="flex items-center gap-3 bg-surface-3 py-3 pl-2 pr-4">
+        <div className="flex items-center gap-3 py-3.5">
           <span className="w-7 shrink-0" />
           <span className="w-5 shrink-0 text-center font-mono text-xs text-muted">∞</span>
-          <span className="flex-1 text-[13px] text-ink-2">No rule matched → batched Haiku triage after the quiet window</span>
+          <span className="flex-1 text-[13px] text-muted">No rule matched → batched Haiku triage after the quiet window</span>
           <span className="text-xs text-muted">Always last</span>
         </div>
       </div>

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SEED_RULES, SEED_SETTINGS } from '../mock/seed/config';
-import { SettingsEditor, savable, type Draft, type SaveKind } from './settingsEditor';
+import { SettingsEditor, savable, type Draft, type SaveInfo, type SaveKind } from './settingsEditor';
 
 const seed = (): Draft => structuredClone({ settings: SEED_SETTINGS, rules: SEED_RULES });
 
 let saved: Draft[];
-let toasts: { kind: SaveKind; undo: () => void }[];
+let toasts: { kind: SaveKind; undo: () => void; info: SaveInfo }[];
 let editor: SettingsEditor;
 
 beforeEach(() => {
@@ -17,7 +17,7 @@ beforeEach(() => {
       saved.push(structuredClone(d));
       return { savedAt: '2026-10-05T09:00:00.000Z' };
     },
-    onSaved: (kind, undo) => toasts.push({ kind, undo }),
+    onSaved: (kind, undo, info) => toasts.push({ kind, undo, info }),
     onError: (e) => {
       throw e;
     },
@@ -34,6 +34,7 @@ describe('settings autosave (FR-1.3, FR-1.5)', () => {
     expect(saved).toHaveLength(1);
     expect(saved[0].settings.notifications.enabled).toBe(false);
     expect(toasts.map((t) => t.kind)).toEqual(['saved']);
+    expect(toasts[0].info).toEqual({ settings: true, rules: false });
   });
 
   it('waits for a pause in typing, then saves once', async () => {

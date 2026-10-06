@@ -10,35 +10,43 @@ function ToastRow({ t }: { t: Toast }) {
     const id = setTimeout(() => dismiss(t.id), t.ttl ?? (t.action ? 7000 : 4500));
     return () => clearTimeout(id);
   }, [t, dismiss]);
+  const tone = t.tone ?? 'default';
   return (
     <div
-      role={t.tone === 'error' ? 'alert' : 'status'}
-      className={cx(
-        'pointer-events-auto flex max-w-[560px] items-center gap-3 rounded-[10px] px-4 py-2.5 text-[13px] shadow-[0_12px_32px_rgba(20,23,28,0.24)]',
-        t.tone === 'error' ? 'bg-red text-on-solid' : 'bg-solid text-on-solid',
-      )}
+      role={tone === 'error' ? 'alert' : 'status'}
+      className="pointer-events-auto flex w-[380px] max-w-full items-start gap-3 rounded-xl border border-line bg-surface p-3.5 text-ink shadow-[0_12px_32px_rgba(20,23,28,0.16)]"
     >
-      {t.tone === 'success' && <Icon name="check" strokeWidth={2.5} />}
-      {t.tone === 'error' && <Icon name="alert" />}
-      <span className="flex-1">{t.message}</span>
-      {t.action && (
-        <button
-          type="button"
-          className="rounded-md px-2 py-1 font-semibold text-accent-light underline-offset-2 hover:underline cursor-pointer"
-          onClick={() => {
-            t.action!.run();
-            dismiss(t.id);
-          }}
-        >
-          {t.action.label}
-        </button>
-      )}
-      <button type="button" aria-label="Dismiss" className="opacity-70 hover:opacity-100 cursor-pointer" onClick={() => dismiss(t.id)}>
+      <span className={cx('mt-px inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full', TONE[tone])}>
+        <Icon name={tone === 'success' ? 'check' : tone === 'error' ? 'alert' : 'info'} size={15} strokeWidth={2.25} />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1">
+        <span className="text-sm font-medium leading-snug">{t.message}</span>
+        {t.description && <span className="text-[13px] leading-snug text-muted">{t.description}</span>}
+        {t.action && (
+          <button
+            type="button"
+            className="mt-1.5 self-start text-[13px] font-semibold text-accent hover:underline cursor-pointer"
+            onClick={() => {
+              t.action!.run();
+              dismiss(t.id);
+            }}
+          >
+            {t.action.label}
+          </button>
+        )}
+      </div>
+      <button type="button" aria-label="Dismiss" className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink cursor-pointer" onClick={() => dismiss(t.id)}>
         <Icon name="x" size={14} />
       </button>
     </div>
   );
 }
+
+const TONE = {
+  default: 'bg-accent-wash text-accent',
+  success: 'bg-teal-wash text-green-fg',
+  error: 'bg-red-line/15 text-red-fg',
+} as const;
 
 function NotificationCard({ n }: { n: OsNotification }) {
   const dismiss = useToasts((s) => s.dismissNotification);
@@ -75,7 +83,7 @@ export function Toasts() {
   const notifications = useToasts((s) => s.notifications);
   return (
     <>
-      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[60] flex flex-col items-center gap-2 px-4" aria-live="polite">
+      <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-2 pl-5" aria-live="polite">
         {toasts.map((t) => (
           <ToastRow key={t.id} t={t} />
         ))}

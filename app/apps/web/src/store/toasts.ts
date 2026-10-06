@@ -3,6 +3,8 @@ import { create } from 'zustand';
 export interface Toast {
   id: number;
   message: string;
+  /** One line of detail under the message. */
+  description?: string;
   tone?: 'default' | 'success' | 'error';
   action?: { label: string; run: () => void };
   ttl?: number;

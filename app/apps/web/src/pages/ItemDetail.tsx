@@ -509,7 +509,7 @@ function ActionPanel({ view, type, setType, onDirty }: { view: ItemView; type: A
         </div>
       ) : action.failureReason === 'allow_list' ? (
         <div className="flex flex-col gap-3">
-          <Banner tone="bad" icon="lock" action={<Link to="/settings#targets" className="text-[13px] font-medium">Settings › Write targets</Link>}>
+          <Banner tone="bad" icon="lock" action={<Link to="/settings/writing" className="text-[13px] font-medium">Settings › Write targets</Link>}>
             <strong>Not written.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
@@ -561,7 +561,7 @@ function ActionPanel({ view, type, setType, onDirty }: { view: ItemView; type: A
           </Banner>
         )}
         {!allowListed && action.status === 'ready' && (
-          <Banner tone="bad" icon="lock" action={<Link to="/settings#targets" className="text-[13px] font-medium">Write targets</Link>}>
+          <Banner tone="bad" icon="lock" action={<Link to="/settings/writing" className="text-[13px] font-medium">Write targets</Link>}>
             Page {draft.kind === 'confluence' && draft.pageId} isn’t on the Confluence allow-list. The executor will refuse this write.
           </Banner>
         )}

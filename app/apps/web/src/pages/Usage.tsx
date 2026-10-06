@@ -109,7 +109,7 @@ function Budgets({ u }: { u: UsageView }) {
           <Bar pct={pctOf(line)} colour={barColour(line)} />
         </div>
       ))}
-      <Link to="/settings#budgets" className="text-[13px]">
+      <Link to="/settings/budgets" className="text-[13px]">
         Edit in settings
       </Link>
     </SectionCard>
@@ -337,7 +337,7 @@ export function UsagePage() {
         <MvpTag>MVP · E7, E12</MvpTag>
       </header>
       {noBaseline && (
-        <Banner tone="info" icon="info" action={<Link to="/settings#budgets" className="text-[13px] font-medium">Budgets</Link>}>
+        <Banner tone="info" icon="info" action={<Link to="/settings/budgets" className="text-[13px] font-medium">Budgets</Link>}>
           <strong>Baseline not measured yet.</strong> Percentages appear once Phase 0 records the average daily usage of your current scheduled tasks (P0-3). Until then, usage shows as cost-equivalent only.
         </Banner>
       )}

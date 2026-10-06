@@ -6,14 +6,18 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
+/* The root stays at the browser's 16px so Tailwind's rem-based sizes mean what they say
+   (text-xs 12px, spacing in 4px steps). Body copy is 14px. */
 html,
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 14px;
   line-height: 1.4;
+}
+body {
+  font-size: 14px;
 }
 
 a {

@@ -79,8 +79,8 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
 | J30 | Edit rules | Add a rule (keyword `/invoice/i` → Today). Drag it to the top. Disable `customer-channels`. Enter a bad regex. Save. | Is the rule editor readable as a sentence? Is the regex error clear? | FR-4.1–4.3, FR-1.5 | |
-| J31 | Edit settings | Change the poll intervals and add a VIP: each saves on its own, with a toast. Remove a VIP, then click Undo in the toast. Set the work-hours interval to 0, try to leave the page, then fix it. | Is it obvious that changes save on their own? Is Undo enough of a safety net? Is the inline error clear? | FR-1.3, FR-1.5 | |
-| J32 | Dry-run | Writing → turn dry-run off (it asks first), then approve a draft. Turn it back on. | Is the difference between dry-run and real writes always visible? | FR-1.6 | |
+| J31 | Edit settings | In Slack, change the poll intervals and add a VIP: each saves on its own, with a toast. Remove a VIP, then click Undo in the toast. Set the work-hours interval to 0, switch to Notifications and back (the Slack nav item shows a red dot), try to leave Settings, then fix it. | Is it obvious that changes save on their own? Is Undo enough of a safety net? Is the inline error clear? | FR-1.3, FR-1.5 | |
+| J32 | Dry-run | Write targets → turn dry-run off (it asks first; the nav badge goes away), then approve a draft. Turn it back on. | Is the difference between dry-run and real writes always visible? | FR-1.6 | |
 | J33 | Rebuild state | Storage & data → Rebuild. | Is it clear that nothing is lost? | §4.3 | |
 | J34 | Theme and scope | Switch System/Light/Dark. Switch Scope to Full and click a P3 placeholder. | Do placeholders read as "later", not "broken"? | — | |
 
@@ -139,7 +139,9 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 - Dry-run defaults to on (FR-1.6). The Settings artboard shows it off.
 - The Usage page has the left nav. The artboard only has "Back to inbox".
 - **Settings autosave.** Each change saves on its own with a "Changes saved · Undo" toast; typing saves after a short pause or on blur. The artboard's sticky Save/Discard bar is gone. An invalid field shows its error inline and is held back while the other changes save. Leaving the page asks first only if an invalid field would be lost.
-- **Settings layout.** One label-and-control row pattern throughout, a sticky section nav, and sections ordered by how often they change: Triage rules, Slack, Notifications, Budgets, Writing, Claude & models, Storage & data, Appearance. Dry-run moved to the top of Writing, because it decides where writes go. Batching limits sit behind a disclosure. Theme moved from the page header to Appearance. MVP tags show only in Full scope, where they mean something.
+- **Settings layout.** Each section is its own view at `/settings/<section>`, with grouped navigation: Inbox (Triage rules, Slack, Notifications), Actions (Write targets), Claude (Models, Budgets) and System (Storage & data, Appearance). Rows sit directly on the page surface with hairline dividers. Dry-run leads Write targets, and its nav item shows a Dry-run badge. Batching limits sit behind a disclosure, the theme lives under Appearance, and MVP tags show only in Full scope. Old `/settings#…` links redirect to the right view. See DESIGN.md.
+- **Toasts.** A light card at the bottom right with an icon, a title, an optional description and an action, instead of the dark pill at the bottom centre.
+- **Type and spacing.** The root font size is back to 16px (body text stays 14px), so Tailwind's rem-based sizes are what they say. Before, every `text-xs` was 10.5px and all spacing was 12.5% tight.
 - The default channel exclude list is `#random`, `#alerts-prod`, `#social`. The artboard also excludes `#general`, but the seed data has `#general` threads you need to see.
 
 **Not designed, built from the design tokens:**

@@ -146,7 +146,7 @@ function Banners({ inbox }: { inbox: InboxView }) {
     );
   if (b.triage.hit)
     out.push(
-      <Banner key="tb" tone="warn" icon="alert" action={<Link to="/settings#budgets" className="text-[13px] font-medium">Budgets</Link>}>
+      <Banner key="tb" tone="warn" icon="alert" action={<Link to="/settings/budgets" className="text-[13px] font-medium">Budgets</Link>}>
         <strong>
           Triage budget reached ({b.triage.used}/{b.triage.limit}).
         </strong>{' '}
@@ -155,7 +155,7 @@ function Banners({ inbox }: { inbox: InboxView }) {
     );
   if (b.drafts.hit)
     out.push(
-      <Banner key="db" tone="warn" icon="alert" action={<Link to="/settings#budgets" className="text-[13px] font-medium">Budgets</Link>}>
+      <Banner key="db" tone="warn" icon="alert" action={<Link to="/settings/budgets" className="text-[13px] font-medium">Budgets</Link>}>
         <strong>
           Drafts budget reached ({b.drafts.used}/{b.drafts.limit}).
         </strong>{' '}
@@ -164,7 +164,7 @@ function Banners({ inbox }: { inbox: InboxView }) {
     );
   if (b.cost.hit && !b.triage.hit && !b.drafts.hit)
     out.push(
-      <Banner key="cb" tone="warn" icon="alert" action={<Link to="/settings#budgets" className="text-[13px] font-medium">Budgets</Link>}>
+      <Banner key="cb" tone="warn" icon="alert" action={<Link to="/settings/budgets" className="text-[13px] font-medium">Budgets</Link>}>
         <strong>Daily cost-equivalent cap reached ({fmtMoney(b.cost.limit)}).</strong> Model calls pause until tomorrow.
       </Banner>,
     );
@@ -182,7 +182,7 @@ function Banners({ inbox }: { inbox: InboxView }) {
     );
   if (inbox.dryRun)
     out.push(
-      <Banner key="dry" tone="dry" icon="flask" action={<Link to="/settings#dry-run" className="text-[13px] font-medium">Dry-run setting</Link>}>
+      <Banner key="dry" tone="dry" icon="flask" action={<Link to="/settings/writing#dry-run" className="text-[13px] font-medium">Dry-run setting</Link>}>
         <strong>Dry-run is on.</strong> Approved writes go to a sandbox folder, not to your vault or Confluence.
       </Banner>,
     );
@@ -360,7 +360,7 @@ function FirstRun({ inbox }: { inbox: InboxView }) {
         )}
       </Button>
       <div className="text-xs text-muted">
-        Rules, VIPs and the quiet window are in <Link to="/settings#rules">Settings &amp; rules</Link>.
+        Rules, VIPs and the quiet window are in <Link to="/settings/rules">Settings &amp; rules</Link>.
       </div>
     </div>
   );
