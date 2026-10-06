@@ -24,13 +24,13 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
-| J01 | Morning scan | Open the Inbox. The item panel opens on the first item. Scan Now, Today and To file, then click a few rows. Open Everything else. | Do the need tag and deadline on each row tell you what to do before you open it? Is the panel's Next step the obvious next step? | FR-3.1, FR-8.1 | |
+| J01 | Morning scan | Open the Inbox. The item panel opens on the first item. Scan Needs you and To file, then click a few rows. Open Low priority from the footer. | Do the need tag and deadline on each row tell you what to do before you open it? Is the panel's Next step the obvious next step? | FR-3.1, FR-8.1 | |
 | J02 | Done and Undo | In the panel, click Done. Click Undo in the toast. Then try Done and next. | Does the row leave cleanly? Is it clear the panel still shows the done item until you move on? | FR-8.2, FR-8.3 | |
 | J03 | Snooze and return | Use the Next step's suggested snooze (for #mvi-launch it's "Snooze until 11:30"). Then Snooze → 1 hour on a Today item. Open the Snoozed group. In the drawer, add 1 h. | Is the suggested snooze time right? Does the item come back, marked "Back from snooze"? | FR-8.3 | |
-| J04 | Correct triage in the panel | Select an Everything else row, click Correct triage, set Today and save. Then on a To file item clear Confluence. | Does the item move straight away? Is the labelled-set toast clear? Check `triage.corrected` in the log. | FR-6.2 | |
+| J04 | Correct triage in the panel | Open Low priority from the footer, select a row, click Correct triage, set Today and save. Then on a To file item clear Confluence. | Does the item move straight away? Is the labelled-set toast clear? Check `triage.corrected` in the log. | FR-6.2 | |
 | J05 | Correct triage in detail | Open the Labs graduation item. Click Correct triage and change the attention. | Does the triage band recolour and its headline change? | FR-6.2 | |
 | J06 | Keyboard triage | On the Inbox, use `j`/`k` to move the panel, `e` for Done, `⇧E` for Done and next, `s` for Snooze, `c` for Correct triage, `o` to open the full page, `Esc` to close the panel. | Are the shortcuts worth having? After Done, does `j` carry on from where you were? | (new) | |
-| J40 | Outlook and Teams (P2) | Switch Scope to Full. The [Customer] email (Outlook) joins Now, the readiness review (Teams) joins Today and the roadmap review (Teams) joins To file. Open each. | Are the source marks recognisable at a glance? Do "Reply in Outlook" and "Open transcript in Teams" read right? Are the meeting's action items useful as checkboxes? | P2 | |
+| J40 | Outlook and Teams (P2) | Switch Scope to Full. The [Customer] email (Outlook) joins the top of Needs you, the readiness review (Teams) joins further down and the roadmap review (Teams) joins To file. Open each. | Are the source marks recognisable at a glance? Do "Reply in Outlook" and "Open transcript in Teams" read right? Are the meeting's action items useful as checkboxes? | P2 | |
 
 ### Filing to the vault
 
@@ -62,7 +62,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J20 | Nothing eligible | Poll outcome → Nothing eligible. | The header says no Claude call was made. Usage does not move. | Story 5.1 | |
 | J21 | Revision collisions | Poll outcome → New reply on: a done item, a snoozed item, a corrected item, a drafted item. Then Clock → +10 min: replies wait out the 10-minute quiet window like any thread, and the next scheduled poll re-triages all four in one call. | Each case follows the defaults under Open questions. Are they right? | FR-5.4 | |
 | J22 | Wake from sleep | Clock → Wake from 3 h sleep. | Is the catch-up poll visible straight away? | FR-2.7, Story 2.1 | |
-| J23 | Failed triage | Find the Failed row (#data-products-ops). Click Retry. | Does the item land in a lane? Is the failure wording clear? | CL-7 | |
+| J23 | Failed triage | Find the Triage failed row in Needs you (#data-products-ops). Click Retry. | Does the item land in a lane? Is the failure wording clear? | CL-7 | |
 
 ### Budgets, health and usage
 
@@ -142,6 +142,7 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 - a rich-text draft editor with a Markdown view, in place of the plain text box.
 
 **Changed:**
+- **Inbox grouping** (FR-8.1). Now and Today merge into one Needs you group, sorted by deadline, with To file at equal weight. Failed triage shows inline in Needs you. Low priority (was Everything else), Snoozed and Done are a footer line of links that open one list at a time. Waiting is a "still active" link in the header. The designs show five headings.
 - **Inbox redesign** (`specs/Inbox Redesign Options.html`). One list grouped into Now, Today and To file, with an item panel on the right. It replaces the Board/List lanes and the cards.
   - **Rows:** source mark, where and kind, the summary, a need tag (Approve, Decide, Reply, 2 actions…), a deadline chip coloured by urgency and, in To file, the target.
   - **Panel:** previous/next with position, open as a full page, more actions, close; the summary with its lane and reason; Correct triage inline; a Next step card with the primary action and a snooze timed to the deadline; action items; the latest messages with Show all; File it; the triage meta line; and a Done / Snooze / Done and next footer.

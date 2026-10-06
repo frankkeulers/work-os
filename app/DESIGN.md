@@ -22,7 +22,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 4. **Label left, control right.** Small controls (switches, selects, short numbers, segmented controls) sit at the right edge of the row. Wide controls (chip lists, allow-lists, rule lists) go under the label at full width.
 5. **Colour carries meaning, nothing else.**
    - **Accent:** the one primary action, the selected state, links.
-   - **Lane colours:** Now, Today and File.
+   - **Lane colours:** Now (orange) and To file (teal).
    - **Amber and red:** only for something that needs attention.
    - **Everything else:** greys.
 6. **One primary action per view.** Secondary actions are outline or ghost buttons; rare ones go in overflow menus.
@@ -56,14 +56,16 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
 ## Inbox (applied, from `specs/Inbox Redesign Options.html`)
 
-- **Layout:** one list and an item panel. The list is grouped into Now, Today and To file. Each group has a coloured dot, a title and a count, and its rows are separated by hairlines. There are no trays and no cards. Now rows have a faint orange wash; the selected row has an accent wash and a 3px accent bar.
+- **Layout:** one list and an item panel. The list has two groups of equal weight, Needs you and To file. Each group has a coloured dot, a title and a count, and its rows are separated by hairlines. There are no trays and no cards. Needs you lists Now rows first, with a faint orange wash and a darker hairline under the last one, then failed triage, then Today rows by deadline. The selected row has an accent wash and a 3px accent bar.
 - **Rows:** read left to right. Source mark → where and kind · age → summary → chips. There are three chips:
   - a grey need tag;
   - a deadline chip coloured by urgency: orange if within about 4 h or overdue, blue if later today, grey otherwise;
   - in To file, a teal target chip.
 - **Item panel motion:** the panel slides in over the list from the right (240 ms) and back out (180 ms), below the page header so Poll and Usage stay in view. A faint backdrop (`--scrim`) fades in over the list. It is visual only: the list still scrolls, and a row click switches the item. With reduced motion it just appears. A click outside closes the panel, except on rows, links, header and sidebar buttons, toasts, dialogs, menus and the scenario drawer. Esc and × close it too.
 - **Item panel:** has one primary action, in the Next step card. Everything else is secondary (outline) or ghost. Done, Snooze and Done and next sit in a fixed footer with their shortcuts shown.
-- **Lower groups:** Failed, Waiting, Everything else, Snoozed and Done are collapsible headings in the same list. They are not separate boxes.
+- **Everything else is one click away.** A muted footer line under the groups reads "16 low priority · 2 snoozed · next back 10:25 · 3 done". Each part toggles its list open below, one at a time, and j/k walk it after To file. Snoozed and Done only show when they have items.
+  - **Failed triage** sits in Needs you with a red Triage failed chip, so it isn't missed. Retry is in the panel.
+  - **Waiting for the quiet window** is a quiet "N still active" link in the header, which opens its list in the same place.
 - **Top bar:** one line, 64px high, the same as the sidebar's header, so their bottom edges line up. Settings uses the same height. It holds only:
   - the page title;
   - the poll status, shown only while it's happening or just after;

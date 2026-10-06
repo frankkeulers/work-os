@@ -414,11 +414,11 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 
 ### 7.8 Inbox lanes (M2 UI)
 
-**FR-8.1** Lanes: **Now**, **Today**, **File** (confluence or vault suggested, attention none), **Everything else** (collapsed), **Failed** (triage failed).
+**FR-8.1** The inbox shows two groups: **Needs you** (attention now or today, plus items whose triage failed, shown untriaged) and **To file** (confluence or vault suggested, attention none). Needs you lists Now items first, then failed ones, then Today items by deadline. **Low priority** (no attention, nothing to file) is a footer link that opens its list. Lanes stay as before underneath (now, today, file, else, failed, waiting).
 
 **FR-8.2** Item actions: Open in Slack, Done, Snooze (1h / tomorrow 09:00 / custom), Correct triage, Draft vault note, Draft Confluence entry.
 
-**FR-8.3** Done and snoozed items leave the lanes. Snoozed items return at the snooze time.
+**FR-8.3** Done and snoozed items leave the two groups. Each has a footer link that opens its list (Snoozed shows when the next one comes back). Snoozed items return at the snooze time, marked "Back from snooze". Threads waiting for the quiet window show as a quiet "N still active" link in the header.
 
 ### 7.9 E8 Vault note action
 
