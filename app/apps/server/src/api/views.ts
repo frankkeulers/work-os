@@ -26,6 +26,7 @@ import {
 } from '@work-os/shared';
 import type { RuntimeConfig } from '../config/env';
 import type { SettingsState } from '../config/settingsState';
+import type { ActionService } from '../actions/service';
 import type { Evals } from '../pipeline/eval';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
@@ -34,8 +35,7 @@ import type { RecoveryReport, Store } from '../store/store';
 import { HttpError } from './errors';
 
 // The read side of the API: each view is built from the projection, the item files and the
-// settings in force, the usage log, the labelled set and the eval reports. Drafts arrive with M3;
-// until then those parts of the views are empty rather than made up.
+// settings in force, the usage log, the labelled set, the eval reports and the drafts.
 
 export const DONE_VISIBLE_DAYS = 7; // the inbox returns done items from the last week only (NF-11)
 
@@ -58,6 +58,8 @@ export interface ViewDeps {
   correct?: (id: string, input: CorrectionInput) => Promise<{ labelCount: number }>;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */
   evals?: Evals;
+  /** Drafts, approvals and the outbox (FR-9.x, FR-14.5). */
+  actions?: ActionService;
 }
 
 function budgets(d: ViewDeps): BudgetState {
@@ -66,7 +68,7 @@ function budgets(d: ViewDeps): BudgetState {
 
 function actionsByItem(d: ViewDeps): Map<string, ActionState[]> {
   const by = new Map<string, ActionState[]>();
-  for (const a of Object.values(d.store.projection.actions)) {
+  for (const a of Object.values(d.store.projection.actions).reverse()) {
     const list = by.get(a.itemId);
     if (list) list.push(a);
     else by.set(a.itemId, [a]);
@@ -198,7 +200,8 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
   const s = d.settings.editable.settings;
   const b = budgets(d);
   const stored = await d.items.read(it.source, id);
-  const actions = actionsByItem(d).get(id) ?? [];
+  const acts = d.actions ? await d.actions.view(id) : { actions: actionsByItem(d).get(id) ?? [], drafts: {}, progress: {}, results: {} };
+  const actions = acts.actions;
   const text = stored?.text;
   const summary = summaryOf(it, it, {
     actions,
@@ -234,9 +237,9 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
     decision,
     correction: it.correction,
     actions,
-    drafts: {},
-    progress: {},
-    results: {},
+    drafts: acts.drafts,
+    progress: acts.progress,
+    results: acts.results,
     allowListedPageIds: s.confluence.pages.map((p) => p.id),
     dryRun: d.settings.settings?.dryRun ?? true,
     dataDir: d.config.dataDir,

@@ -30,13 +30,17 @@ import { createServer, type WorkOsServer } from './server';
 import { budgetsOf, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
-import { DEFAULT_TRIAGE_PROMPT, loadPrompt } from './claude/prompts';
+import { DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, loadPrompt } from './claude/prompts';
 import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
 import { runTriage, type TriageDeps } from './pipeline/triage';
 import { correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
 import { LabelStore } from './store/labels';
+import { DraftStore } from './store/drafts';
+import { ActionService } from './actions/service';
+import { readFile } from 'node:fs/promises';
+import type { Notice } from '@work-os/shared';
 import { ClaudeError } from './claude/errors';
 import { ItemFiles } from './store/items';
 import { Store, type RecoveryReport } from './store/store';
@@ -79,6 +83,7 @@ export type RunResult =
       runtime: Runtime;
       labels: LabelStore;
       evals: Evals;
+      actions: ActionService;
       recovery: RecoveryReport;
       token: string;
       logger: Logger;
@@ -120,7 +125,12 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     extraRoutes = world.routes;
   }
 
-  const init = await initDataDir(config.dataDir, { settings: defaultSettings(config.dataDir), rules: DEFAULT_RULES, prompts: { 'triage.md': DEFAULT_TRIAGE_PROMPT } });
+  const defaults = defaultSettings(config.dataDir);
+  if (deps.fakes) {
+    defaults.vaultPath = join(config.dataDir, 'fake-vault');
+    await (await import('./fakes')).seedFakeVault(defaults.vaultPath);
+  }
+  const init = await initDataDir(config.dataDir, { settings: defaults, rules: DEFAULT_RULES, prompts: { 'triage.md': DEFAULT_TRIAGE_PROMPT, 'draft-vault.md': DEFAULT_VAULT_PROMPT } });
   const { logger, flush } = createLogger({ dir: paths(config.dataDir).logs, echo: deps.echoLogs, now, base: { instance: config.instance } });
   if (init.created.length) logger.info({ created: init.created }, 'Created default config');
 
@@ -212,6 +222,33 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     },
   });
   lifecycle.onStop('evals', () => evals.stop());
+  // Actions (M3): drafted when Claude may be called, written by the outbox after approval.
+  let publish: (n: Notice) => void = () => undefined; // the SSE hub, once the server exists
+  const actions = new ActionService({
+    store,
+    items,
+    drafts: new DraftStore(join(config.dataDir, 'drafts')),
+    claude,
+    dataDir: config.dataDir,
+    now,
+    logger,
+    settings: () => settings.editable.settings,
+    dryRun: () => settings.settings?.dryRun ?? true,
+    me: () => triageDeps.me(),
+    draftsBudgetHit: () => {
+      const b = budgetsOf(usage.records(), settings.editable.settings, now());
+      return b.drafts.hit || b.cost.hit;
+    },
+    claudeReady: () => runtime.claudeReady(),
+    canWrite: () => runtime.canUseClaude(),
+    signal: () => runtime.sleepSignal,
+    reportClaude: (f) => runtime.reportFailure('claude', f),
+    prompt: () => loadPrompt(config.dataDir, 'draft-vault.md', DEFAULT_VAULT_PROMPT),
+    conventions: () => readFile(join(config.dataDir, 'config/vault-conventions.md'), 'utf8').catch(() => ''),
+    notify: (n) => publish(n),
+  });
+  await actions.recover();
+  lifecycle.onStop('actions', () => actions.stop());
   const runtime: Runtime = new Runtime({
     clock,
     store,
@@ -219,6 +256,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
     sources: () => buildSources(settings.settings, factories),
     triage: (signal, only) => runTriage(triageDeps, signal, { only }),
+    onTick: () => actions.pump(),
     poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }) }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
@@ -247,10 +285,12 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     labels,
     correct,
     evals,
+    actions,
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
     extraRoutes,
     devOrigins: config.instance === 'dev' ? (deps.env.WORKOS_DEV_ORIGINS ?? DEV_ORIGINS).split(',') : [],
   });
+  publish = (n) => server.hub.publish(n);
   let url: string;
   try {
     url = await server.listen();
@@ -272,5 +312,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, actions, recovery, token, logger, lifecycle, flush };
 }

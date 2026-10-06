@@ -578,6 +578,22 @@ As built (M2 step 16):
 > - Given I approve, when the executor runs, then the file is written and `action.executed` is logged with the path.
 > - Given the target note changed after drafting, when I approve, then the app re-drafts instead of overwriting.
 
+As built (M3 step 17):
+
+- The vault draft call (Sonnet, `config/prompts/draft-vault.md`) gets the Read, Grep and Glob tools only, with the vault as its working directory. Every tool call is checked twice, by a `PreToolUse` hook and by `canUseTool`: paths and patterns must stay inside the vault after symlinks are resolved. There are no MCP servers; the Obsidian MCP server is not used.
+- The model answers `{kind: new, path, content}` or `{kind: append, path, heading, content}`. Code then checks the answer against the vault as it is: the path is Markdown, not in a hidden folder and inside the vault; a new note doesn't already exist; an append's heading is there. Code also records the note's hash (`baseHash`) in `drafts/<id>.json`. An answer that fails these checks fails the action (`model_error`) and says why.
+- The event log is the queue. Drafting actions are drafted one at a time when Claude may be called; a sleep or a lost login leaves them drafting, and they run again later (FR-14.4). Approved and executing actions are the outbox. They are written one at a time once the Mac has been awake for 45 s; no network is needed for the vault.
+- Each write attempt runs in this order:
+  1. Save the expected hash to the draft file.
+  2. Sync `action.executing`.
+  3. Write: an append replaces the file atomically, and a new note is linked into place, which fails rather than overwrite.
+  4. Log `action.executed`.
+- On the next attempt or after a restart, the note's hash decides what happens: the expected hash means already written, the base hash means write, and anything else means a conflict. A conflict fails the action and starts a re-draft, budget permitting. A disk error is retried with a growing delay; after 5 attempts the action fails as `unreachable`.
+- In dry-run the note goes to `<data>/sandbox/vault/<path>`, and the vault itself is only read. A sandbox copy stands in for the vault note, so a second approval sees the first.
+- A ready, approved or executing action whose draft file is gone fails as `draft_missing` at startup.
+- `--fakes` runs use a made-up vault in their temp data directory.
+- Confluence entries answer 503 until step 18.
+
 ### 7.10 E9 Confluence entry action
 
 **FR-10.1** Allowed only for items where `containsPeopleObservations` is false. Otherwise the button is disabled with an explanation.

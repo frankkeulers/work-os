@@ -1,4 +1,4 @@
-import { CorrectionBody, SettingsSave, SnoozeInput, seenChanges } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, SettingsSave, SnoozeInput, seenChanges } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
@@ -6,7 +6,7 @@ import { HttpError } from './errors';
 import { sendJson } from './send';
 import { healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
 
-// One route per WorkOsApi method (PLAN.md API table). Draft commands arrive with M3.
+// One route per WorkOsApi method (PLAN.md API table).
 
 export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: Lifecycle }) {
   const noStore = { 'cache-control': 'no-store' };
@@ -73,6 +73,37 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const body = CorrectionBody.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { attention, confluence, vault }.');
     return reply.headers(noStore).send(await d.correct(id, body.data));
+  });
+
+  // Actions (FR-9.x): drafted in the background, written by the outbox after approval.
+  const actions = () => {
+    if (!d.actions) throw new HttpError('unavailable', 'Actions are not available.');
+    return d.actions;
+  };
+  app.post<{ Params: { id: string } }>('/api/items/:id/actions', async (req, reply) => {
+    const id = item(req.params.id);
+    const body = DraftRequest.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" }.');
+    return reply.code(201).headers(noStore).send(await actions().request(id, body.data.type));
+  });
+  app.post<{ Params: { id: string } }>('/api/actions/:id/cancel', async (req, reply) => {
+    await actions().cancel(req.params.id);
+    return reply.code(204).send();
+  });
+  app.put<{ Params: { id: string } }>('/api/actions/:id/draft', async (req, reply) => {
+    const body = DraftEdit.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { content }.');
+    await actions().edit(req.params.id, body.data.content);
+    return reply.code(204).send();
+  });
+  app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) => reply.code(201).headers(noStore).send(await actions().redraft(req.params.id)));
+  app.post<{ Params: { id: string } }>('/api/actions/:id/discard', async (req, reply) => {
+    await actions().discard(req.params.id);
+    return reply.code(204).send();
+  });
+  app.post<{ Params: { id: string } }>('/api/actions/:id/approve', async (req, reply) => {
+    await actions().approve(req.params.id);
+    return reply.code(202).send();
   });
 
   app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));

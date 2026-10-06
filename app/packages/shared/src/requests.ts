@@ -12,3 +12,9 @@ export type SnoozeInput = z.infer<typeof SnoozeInput>;
 
 /** POST /api/items/:id/correction (FR-6.2): the triage Frank says it should have been. */
 export const CorrectionBody = z.object({ attention: z.enum(['now', 'today', 'none']), confluence: z.boolean(), vault: z.boolean() }).strict();
+
+/** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
+export const DraftRequest = z.object({ type: z.enum(['vault_note', 'confluence_entry']) }).strict();
+
+/** PUT /api/actions/:id/draft (FR-9.3): Frank's edited text. */
+export const DraftEdit = z.object({ content: z.string().max(200_000) }).strict();

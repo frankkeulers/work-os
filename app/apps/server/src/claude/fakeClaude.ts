@@ -6,6 +6,7 @@ import type { QueryFn } from './adapter';
 //   today  a question, or check / review / decision
 //   none   anything else
 // Confluence for launch, licensing and pricing talk; the vault for release notes and ideas.
+// A vault draft request gets a new note under Inbox/, named after the thread.
 
 export interface FakeClaude {
   query: QueryFn;
@@ -45,6 +46,15 @@ export function answerFor(threads: Thread[]) {
   };
 }
 
+/** A new note for the thread in a vault draft request. */
+export function vaultNoteFor(prompt: string) {
+  const m = /<thread>\n([\s\S]*?)\n<\/thread>/.exec(prompt);
+  const t = m ? (JSON.parse(m[1]) as Thread & { title: string; permalink?: string }) : { id: 'x', title: 'Thread', messages: [] };
+  const name = t.title.replace(/[^A-Za-z0-9 -]/g, '').trim() || 'Thread';
+  const first = t.messages[0]?.text ?? '';
+  return { kind: 'new', path: `Inbox/${name}.md`, content: `---\ntags: [slack]\n---\n# ${name}\n\n${first}\n\n[Slack thread](${t.permalink ?? ''})\n` };
+}
+
 export function fakeClaude(): FakeClaude {
   const fake: FakeClaude = {
     calls: [],
@@ -59,7 +69,7 @@ export function fakeClaude(): FakeClaude {
         if (fail) throw fail;
         yield { type: 'system', subtype: 'init', mcp_servers: [] };
         const m = /<threads>\n([\s\S]*)\n<\/threads>/.exec(prompt);
-        const text = scripted ?? JSON.stringify(answerFor(m ? (JSON.parse(m[1]) as Thread[]) : []));
+        const text = scripted ?? JSON.stringify(prompt.includes('<vault-conventions>') ? vaultNoteFor(prompt) : answerFor(m ? (JSON.parse(m[1]) as Thread[]) : []));
         yield {
           type: 'result',
           subtype: 'success',

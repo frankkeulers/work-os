@@ -44,6 +44,8 @@ export interface RuntimeDeps {
   poll: (s: SourceAdapter, reason: PollReason, signal: AbortSignal) => Promise<unknown>;
   /** Work due by the wall clock, run on every tick (snooze returns). */
   due?: (now: Date) => Promise<unknown>;
+  /** Work that runs on every tick once running: drafts and the outbox (FR-9.x, FR-14.5). */
+  onTick?: () => Promise<unknown>;
   /** Model triage of what is due, or of `only` those items. Throws ClaudeError for health. */
   triage?: (signal: AbortSignal, only?: string[]) => Promise<TriageRun>;
   probe: (signal: AbortSignal) => Promise<ProbeResult>;
@@ -140,7 +142,10 @@ export class Runtime {
     }
     if (mono >= this.nextCheckMono) this.track(this.runChecks());
     if (this.phase === 'running') this.scheduler.tick();
-    if (this.phase === 'running' || this.phase === 'catching_up') this.maybeTriage();
+    if (this.phase === 'running' || this.phase === 'catching_up') {
+      this.maybeTriage();
+      if (this.d.onTick) this.track(this.d.onTick().catch((err) => this.d.logger?.error({ err }, 'Tick work failed')));
+    }
     if (this.d.due && this.phase !== 'stopping') this.track(this.d.due(this.d.clock.now()).catch((err) => this.d.logger?.error({ err }, 'Due work failed')));
     if (this.d.store.snapshotDue()) this.track(this.d.store.snapshot().catch((err) => this.d.logger?.error({ err }, 'Snapshot failed')));
   }

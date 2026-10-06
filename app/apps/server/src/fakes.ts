@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, sep } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { tokenAccount } from './api/auth';
@@ -74,4 +75,10 @@ export function fakeWorld(now: Date) {
   };
 
   return { slack, secrets, exec, fetch: slack.fetch, sources: { slack: slackFactory(directory) }, claude: fakeClaude().query, routes };
+}
+
+/** A made-up vault inside the temp data directory, so `--fakes` never reads or writes the real one. */
+export async function seedFakeVault(dir: string) {
+  await mkdir(join(dir, 'Projects'), { recursive: true });
+  await writeFile(join(dir, 'Projects/MVI V2.md'), '---\ntags: [mvi]\n---\n# MVI V2\n\n## Decisions\n\n- Bulk export ships first.\n', { flag: 'wx' }).catch(() => undefined);
 }

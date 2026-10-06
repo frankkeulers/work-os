@@ -25,7 +25,7 @@ export class ConfigError extends Error {
   }
 }
 
-const expandHome = (p: string, home: string) => (p === '~' || p.startsWith('~/') ? home + p.slice(1) : p);
+export const expandHome = (p: string, home: string) => (p === '~' || p.startsWith('~/') ? home + p.slice(1) : p);
 
 export function resolveConfig(env: NodeJS.ProcessEnv, home = homedir()): RuntimeConfig {
   const instance: Instance = env.WORKOS_INSTANCE === 'prod' ? 'prod' : 'dev';

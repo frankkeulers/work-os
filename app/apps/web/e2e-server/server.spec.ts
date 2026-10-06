@@ -6,8 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 // The built web app against the real server, Slack and Claude faked (M1 step 11, M2 step 15): the
 // seeded threads are triaged into their lanes, a poll adds a thread that waits for its quiet
-// window, a correction moves an item, Done sticks, and after a server restart the page goes
-// reconnecting, then up.
+// window, a correction moves an item, Done sticks, after a server restart the page goes
+// reconnecting, then up, and a vault note is drafted and written to the sandbox.
 
 const APP = resolve(import.meta.dirname, '../../..');
 const PORT = 4399;
@@ -62,7 +62,7 @@ test.afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test('inbox, poll, correction, done, a server restart and an eval against the real server', async ({ page, request }) => {
+test('inbox, poll, correction, done, a restart, a vault note and an eval against the real server', async ({ page, request }) => {
   await page.goto('/');
   // The fake model triages the three quiet threads: Matt's go/no-go is Now, the #product review is
   // Today, and the #mvi-launch licensing note is To file (Confluence).
@@ -110,8 +110,20 @@ test('inbox, poll, correction, done, a server restart and an eval against the re
   await expect(lane(page, 'today')).toHaveCount(1);
   await expect(lane(page, 'today').getByText('Corrected by you')).toBeVisible();
 
+  // A vault note (Story 9.1): drafted against the fake vault, approved, written to the sandbox.
+  const items = ((await (await request.get(`${BASE}/api/inbox`, { headers: auth })).json()) as { items: { id: string; title: string }[] }).items;
+  await page.goto(`/item/${encodeURIComponent(items.find((i) => i.title === 'Matt M.')!.id)}`);
+  const action = page.getByRole('region', { name: 'Action' });
+  await action.getByRole('tab', { name: /Vault note/ }).click();
+  await action.getByRole('button', { name: 'Draft vault note' }).click();
+  await expect(action.getByText('Inbox/Matt M.md', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await action.getByRole('button', { name: 'Approve and write to sandbox' }).click();
+  await expect(action.getByRole('status')).toContainText('Dry-run: Created', { timeout: 20_000 });
+  await expect(action.getByRole('status')).toContainText('/sandbox/vault/Inbox/Matt M.md');
+  await page.screenshot({ path: join(APP, 'screenshots/server-vault-light.png') });
+
   // Usage from the real usage log, and an eval over the one label (FR-6.1, FR-7.2).
-  await page.getByRole('link', { name: 'Usage & health' }).click();
+  await page.goto('/usage');
   await expect(page.getByRole('heading', { name: 'Usage & health', level: 1 })).toBeVisible();
   await expect(page.getByText('No eval run yet')).toBeVisible();
   await page.getByRole('button', { name: 'Run eval' }).click();

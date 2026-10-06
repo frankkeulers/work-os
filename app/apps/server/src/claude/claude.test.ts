@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ESLint } from 'eslint';
@@ -260,4 +260,38 @@ describe('CL-1', () => {
     const [inAdapter] = await eslint.lintText(code, { filePath: join(APP, 'apps/server/src/claude/adapter.ts') });
     expect(inAdapter.messages.filter((m) => m.ruleId?.startsWith('no-restricted'))).toEqual([]);
   }, 30_000);
+});
+
+describe('read-only draft calls (FR-9.1)', () => {
+  it('offers Read, Grep and Glob in the vault only, and denies the rest in the hook and in canUseTool', async () => {
+    const vault = join(dir, 'vault');
+    await mkdir(join(vault, 'Notes'), { recursive: true });
+    const turns: boolean[] = [];
+    const a = adapter(
+      fakeQuery(async () => [
+        { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Glob' }] } },
+        { type: 'assistant', message: { content: [{ type: 'text' }] } },
+        result('{"ok":true}'),
+      ]),
+    );
+    await a.run({ ...spec, purpose: 'draft_vault', model: 'sonnet-5.5', readOnly: { root: vault }, maxTurns: 12, onTurn: (t) => turns.push(t) });
+    expect(turns).toEqual([true, false]);
+    const o = seen[0].options;
+    expect(o).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], allowedTools: [], cwd: vault, maxTurns: 12, mcpServers: {}, settingSources: [] });
+    const hook = o.hooks!.PreToolUse![0].hooks[0];
+    const pre = (tool_name: string, tool_input: object) => hook({ hook_event_name: 'PreToolUse', tool_name, tool_input } as never, undefined, { signal: new AbortController().signal });
+    expect(await pre('Read', { file_path: join(vault, 'Notes/a.md') })).toEqual({});
+    expect(await pre('Read', { file_path: '/etc/hosts' })).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } });
+    expect(await pre('Glob', { pattern: '/Users/**/*.md' })).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } });
+    expect(await pre('Write', { file_path: join(vault, 'Notes/a.md'), content: 'x' })).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } });
+    const can = (name: string, input: Record<string, unknown>) => o.canUseTool!(name, input, { signal: new AbortController().signal } as never);
+    expect(await can('Grep', { pattern: 'launch', path: join(vault, 'Notes') })).toMatchObject({ behavior: 'allow' });
+    expect(await can('Grep', { pattern: 'launch', path: dir })).toMatchObject({ behavior: 'deny' });
+    expect(await can('Bash', { command: 'ls' })).toMatchObject({ behavior: 'deny' });
+  });
+
+  it('keeps triage calls tool-free (CL-4)', async () => {
+    await adapter(fakeQuery(async () => [result('{}')])).run(spec);
+    expect(seen[0].options).toMatchObject({ tools: [], cwd: dir, hooks: {} });
+  });
 });

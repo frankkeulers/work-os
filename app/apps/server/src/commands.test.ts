@@ -1,7 +1,7 @@
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
+import type { Action, ApiErrorBody, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
@@ -25,6 +25,7 @@ let res: Extract<RunResult, { running: true }>;
 let slack: FakeSlack;
 let claude: FakeClaude;
 let wall: number;
+let wakeTime = 'boot';
 let mono: number;
 const clock: Clock = { now: () => new Date(wall), mono: () => mono };
 const exec: Exec = async (cmd) => ({ code: 0, stdout: cmd.endsWith('fdesetup') ? 'FileVault is On.\n' : '' });
@@ -46,6 +47,7 @@ beforeEach(async () => {
   dir = join(await mkdtemp(join(tmpdir(), 'workos-cmd-')), 'data');
   wall = START;
   mono = 0;
+  wakeTime = 'boot';
   slack = new FakeSlack();
   slack.users.set('U02DANA', 'Dana Lee');
   slack.channel({ id: 'C01PROD', name: 'product' }).channel({ id: 'D01DANA', is_im: true, user: 'U02DANA' });
@@ -61,7 +63,7 @@ beforeEach(async () => {
     secrets,
     clock,
     exec,
-    wakeTime: () => 'boot',
+    wakeTime: () => wakeTime,
     followZone: () => undefined,
     fetch: slack.fetch,
     sources: { slack: slackFactory(directory) },
@@ -307,5 +309,114 @@ describe('usage view (FR-7.2)', () => {
     await call('POST', '/api/poll');
     await res.runtime.settled();
     expect((await call<UsageView>('GET', '/api/usage')).body.today.pollsSkipped).toBe(1);
+  });
+});
+
+describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const NOTE = '# Product\n\n## Decisions\n\n- Bulk export first.\n';
+  let vault: string;
+
+  // Never the real vault: every test here points at a temp folder, created only by useVault().
+  beforeEach(async () => {
+    vault = join(dir, '..', 'vault');
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, vaultPath: vault }, rules: view.rules })).status).toBe(200);
+  });
+  const useVault = () => mkdir(join(vault, 'Projects'), { recursive: true });
+  const item = async (id = PROD) => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(id)}`)).body;
+  const request = async (type = 'vault_note') => {
+    const r = await call<Action & ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, { type });
+    await res.actions.settled();
+    return r;
+  };
+
+  it('drafts a new note, and on approval code writes it to the sandbox in dry-run', async () => {
+    await useVault();
+    const r = await request();
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ itemId: PROD, type: 'vault_note' });
+    let v = await item();
+    expect(v.actions[0]).toMatchObject({ id: r.body.id, status: 'ready', target: { path: 'Inbox/product.md' } });
+    expect(v.drafts[r.body.id]).toMatchObject({ kind: 'vault_new', path: 'Inbox/product.md', model: 'sonnet-5.5' });
+    // The call could read the vault, and nothing else (FR-9.1).
+    const draftCall = claude.calls.at(-1)!;
+    expect(draftCall.options).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], cwd: vault });
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v1 -->/);
+
+    // Frank edits, then approves; the outbox writes once it may.
+    expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: '# Product\n\nEdited.\n' })).status).toBe(204);
+    expect((await call('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(202);
+    await res.actions.settled();
+    v = await item();
+    expect(v.actions[0].status).toBe('done');
+    const written = join(dir, 'sandbox/vault/Inbox/product.md');
+    expect(await readFile(written, 'utf8')).toBe('# Product\n\nEdited.\n');
+    expect(v.results[r.body.id]).toBe(`Dry-run: Created ${written}. Logged action.executed.`);
+    await expect(readFile(join(vault, 'Inbox/product.md'))).rejects.toThrow(); // the vault is untouched
+    expect((await call<ApiErrorBody>('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(409);
+  });
+
+  it('re-drafts instead of writing when the note changed after drafting', async () => {
+    await useVault();
+    await writeFile(join(vault, 'Projects/Product.md'), NOTE);
+    claude.nextTexts.push(JSON.stringify({ kind: 'append', path: 'Projects/Product.md', heading: '## Decisions', content: '- ETA wording agreed.' }));
+    const r = await request();
+    expect((await item()).drafts[r.body.id]).toMatchObject({ kind: 'vault_append', heading: '## Decisions', context: ['# Product', '## Decisions', '- Bulk export first.'] });
+    await writeFile(join(vault, 'Projects/Product.md'), `${NOTE}- Added in Obsidian.\n`);
+    await call('POST', `/api/actions/${r.body.id}/approve`);
+    await res.actions.settled();
+    const v = await item();
+    const old = v.actions.find((a) => a.id === r.body.id)!;
+    expect(old).toMatchObject({ status: 'failed', failureReason: 'conflict', error: expect.stringMatching(/changed after drafting/) });
+    expect(v.actions[0]).toMatchObject({ supersedes: r.body.id, status: 'ready' });
+    await expect(readFile(join(dir, 'sandbox/vault/Projects/Product.md'))).rejects.toThrow(); // nothing written
+  });
+
+  it('fails a draft that targets a heading the note does not have, and one whose file is lost', async () => {
+    await useVault();
+    await writeFile(join(vault, 'Projects/Product.md'), NOTE);
+    claude.nextTexts.push(JSON.stringify({ kind: 'append', path: 'Projects/Product.md', heading: '## Actions', content: 'x' }));
+    const bad = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: bad.body.id, status: 'failed', failureReason: 'model_error', error: expect.stringMatching(/no such heading/) });
+    const ok = await request();
+    await rm(join(dir, 'drafts', `${ok.body.id}.json`));
+    await res.actions.recover();
+    expect((await item()).actions[0]).toMatchObject({ id: ok.body.id, status: 'failed', failureReason: 'draft_missing' });
+  });
+
+  it('refuses Confluence for now, and a vault that is not there', async () => {
+    expect((await request('confluence_entry')).status).toBe(503);
+    const r = await request();
+    expect(r.status).toBe(503);
+    expect(r.body.message).toMatch(/vault folder/);
+  });
+
+  it('holds an approved write through a Power Nap wake until 45 s awake (FR-14.2)', async () => {
+    await useVault();
+    const r = await request();
+    wall += 3 * 60 * MIN; // asleep: the wall clock moves, the monotonic clock doesn't
+    wakeTime = 'wake-1';
+    await tick();
+    expect(res.runtime.canUseClaude()).toBe(false);
+    await call('POST', `/api/actions/${r.body.id}/approve`);
+    await res.actions.settled();
+    expect((await item()).actions[0].status).toBe('approved');
+    for (let i = 0; i < 8; i++) await tick(); // 40 s awake
+    await res.actions.settled();
+    expect((await item()).actions[0].status).toBe('approved');
+    await tick(); // 45 s
+    await res.actions.settled();
+    expect((await item()).actions[0].status).toBe('done');
+  });
+
+  it('cancels a draft waiting for Claude, and drafts once Claude is back (FR-14.4)', async () => {
+    await useVault();
+    claude.failNext = Object.assign(new Error('Not logged in · Please run /login'), {});
+    const r = await request();
+    expect((await item()).actions[0].status).toBe('drafting');
+    expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('auth_failed');
+    expect((await call('POST', `/api/actions/${r.body.id}/cancel`)).status).toBe(204);
+    expect((await item()).actions[0].status).toBe('discarded');
   });
 });

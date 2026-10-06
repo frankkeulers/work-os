@@ -8,13 +8,14 @@ import { deadline } from '../net/http';
 import { backendEnv, SDK_MODEL } from './backends';
 import { ClaudeError, ClaudeOutputError, failureFromAssistantError, failureFromThrown } from './errors';
 import { parseJsonOutput } from './outputs';
+import { READ_TOOLS, readVerdict } from './readGuard';
 import type { UsageLog } from './usage';
 
 // The only module that talks to the Agent SDK (CL-1; ESLint enforces it). Every call states its
 // model, system prompt, tools, MCP servers, setting sources and turns (CL-3), checked against the
-// SDK 0.3.291 types and the P0-9 spike. Triage and drafts get no tools, no MCP servers, no
-// filesystem settings and no Claude Code prompt (CL-4); a relay call (relay.ts) gets exactly one
-// connector tool, gated by canUseTool (CL-9). Sessions are not saved to ~/.claude, so message text
+// SDK 0.3.291 types and the P0-9 spike. Triage gets no tools, no MCP servers, no filesystem
+// settings and no Claude Code prompt (CL-4); a vault draft may read inside the vault only (FR-9.1,
+// readGuard.ts); a relay call (relay.ts) gets exactly one connector tool, gated by canUseTool (CL-9). Sessions are not saved to ~/.claude, so message text
 // never lands there. The SDK is loaded on the first call, not at startup (NF-11).
 
 /** The SDK's query(), or a fake in tests. Messages are read defensively, by the fields used here. */
@@ -37,6 +38,10 @@ export interface RunSpec {
     disallow: string[]; // the connector's other tools, hidden from the model
     onResult: (response: unknown) => void; // the raw result, for code; the model sees "ok"
   };
+  /** Draft calls: Read, Grep and Glob inside this folder only, which is also the cwd (FR-9.1). */
+  readOnly?: { root: string };
+  /** Each assistant turn: whether it used a tool. Drives the draft progress stages. */
+  onTurn?: (usedTool: boolean) => void;
 }
 
 export interface RunResult {
@@ -121,10 +126,29 @@ export class ClaudeAdapter {
             },
           ]
         : [];
+      const ro = spec.readOnly;
+      const preToolUse: HookCallbackMatcher[] = ro
+        ? [
+            {
+              hooks: [
+                async (input) => {
+                  const i = input as { tool_name?: string; tool_input?: unknown };
+                  const v = await readVerdict(ro.root, i.tool_name ?? '', i.tool_input);
+                  if (v.ok) return {};
+                  denied.push(i.tool_name ?? '');
+                  return { hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'deny' as const, permissionDecisionReason: v.reason } };
+                },
+              ],
+            },
+          ]
+        : [];
+      const hooks: Options['hooks'] = {};
+      if (postToolUse.length) hooks.PostToolUse = postToolUse;
+      if (preToolUse.length) hooks.PreToolUse = preToolUse;
       const options: Options = {
         model: SDK_MODEL[spec.model],
         systemPrompt: spec.system,
-        tools: [],
+        tools: ro ? [...READ_TOOLS] : [],
         allowedTools: [],
         disallowedTools: t?.disallow ?? [],
         mcpServers: (t?.servers ?? {}) as Record<string, McpServerConfig>,
@@ -134,13 +158,14 @@ export class ClaudeAdapter {
         permissionMode: 'default',
         canUseTool: async (name, input) => {
           if (t && name === t.allow) return { behavior: 'allow', updatedInput: input };
+          if (ro && (await readVerdict(ro.root, name, input)).ok) return { behavior: 'allow', updatedInput: input };
           denied.push(name);
           return { behavior: 'deny', message: 'Not allowed' };
         },
-        hooks: postToolUse.length ? { PostToolUse: postToolUse } : {},
+        hooks,
         thinking: { type: 'disabled' },
         persistSession: false,
-        cwd: this.o.cwd,
+        cwd: ro?.root ?? this.o.cwd,
         env,
         abortController: ctrl,
       };
@@ -149,7 +174,9 @@ export class ClaudeAdapter {
         if (m.type === 'system' && m.subtype === 'init') mcpServers = m.mcp_servers ?? [];
         else if (m.type === 'assistant') {
           if (m.error) apiError = m.error;
-          for (const b of m.message?.content ?? []) if (b.type === 'tool_use' && b.name) toolCalls.push(b.name);
+          const content = m.message?.content ?? [];
+          for (const b of content) if (b.type === 'tool_use' && b.name) toolCalls.push(b.name);
+          spec.onTurn?.(content.some((b) => b.type === 'tool_use'));
         } else if (m.type === 'result') result = m;
       }
     } catch (err) {
