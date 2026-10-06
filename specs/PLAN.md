@@ -30,7 +30,7 @@ The MVP covers Slack only. Later phases add Outlook, Teams, Plaud and more actio
 
 ### Timing
 
-Phase 0 tasks (Slack app, baseline, labelling) can start now because they're quick and unblock the build. Code starts after the MVI V2 launch (15 Oct 2026) and the Apidog cutover have landed.
+Phase 0 tasks (Slack app, baseline, labelling, spikes) come first because they're quick and unblock the build.
 
 ---
 
@@ -698,7 +698,7 @@ Requirements:
 | Usage above baseline | Medium | Competes with Cowork work | Batching rules, budgets, usage panel, retire old tasks. |
 | Writing wrong content into Confluence | Low | Pollutes the shared context | Allow-list, preview, people check, version check, approval. |
 | Company data on the laptop | Low | Data-protection exposure | FileVault, localhost only, retention, Keychain secrets. |
-| Scope creep before committed work lands | High | Delays MVI V2, Apidog and other commitments | Phase 0 now; code after 15 Oct; phases gated on success criteria. |
+| Scope creep before committed work lands | High | Delays MVI V2, Apidog and other commitments | Phase 0 first; phases gated on success criteria. |
 | The server silently stops running (sleep, network loss, crash, bad settings) | Medium | Items missed while Frank thinks the app is watching | E13: launchd autostart, wake catch-up, degraded mode with a visible banner and rate-limited alerts, safe mode instead of a crash loop. |
 | A Wispr Flow update changes its database schema | Medium | The Wispr Flow source stops | Schema fingerprint check, `degraded` status and a notification (R2.6). Other sources are unaffected. |
 | claude.ai connectors don't load headless, or relay calls cost too much | Medium | No email source | Spike P0-9 before building. Fallback: Apple Mail local store. |
