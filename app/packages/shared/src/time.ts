@@ -53,22 +53,20 @@ export function isWorkHours(d: Date | string, spec: string): boolean {
   return inDays && inTimeRange(d, range);
 }
 
-/** Next London 09:00 after d, as ISO. */
+/** London 09:00 on the London day after d, as ISO. */
 export function tomorrowAt9(d: Date): string {
-  const p = londonParts(d);
-  // Start from London midnight of today, then step forward a day and to 09:00, correcting for the offset.
-  const guess = new Date(`${p.dateKey}T09:00:00Z`);
-  const offsetMins = londonParts(guess).hours * 60 + londonParts(guess).minutes - 9 * 60;
-  const nine = new Date(guess.getTime() - offsetMins * 60_000 + 24 * 3600_000);
-  return nine.toISOString();
+  return londonAt(d, '09:00', 1);
 }
 
-/** London HH:MM on d's London day, or `days` later, as ISO. */
+/** London HH:MM on d's London day, or `days` later, as ISO. Correct across clock changes. */
 export function londonAt(d: Date, hhmm: string, days = 0): string {
   const [h, m] = hhmm.split(':').map(Number);
-  const guess = new Date(`${londonParts(d).dateKey}T${hhmm}:00Z`);
+  const [year, month, day] = londonParts(d).dateKey.split('-').map(Number);
+  // Read HH:MM as UTC on the target day, then correct by London's offset on that day,
+  // not today's: adding whole days to today's answer is an hour out across a clock change.
+  const guess = new Date(Date.UTC(year, month - 1, day + days, h, m));
   const g = londonParts(guess);
   let offsetMins = (g.hours * 60 + g.minutes - (h * 60 + m) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
   if (offsetMins > MINUTES_IN_DAY / 2) offsetMins -= MINUTES_IN_DAY;
-  return new Date(guess.getTime() - offsetMins * 60_000 + days * MINUTES_IN_DAY * 60_000).toISOString();
+  return new Date(guess.getTime() - offsetMins * 60_000).toISOString();
 }

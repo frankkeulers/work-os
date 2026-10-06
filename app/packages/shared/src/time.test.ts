@@ -43,6 +43,16 @@ describe('tomorrowAt9 and londonAt', () => {
     expect(tomorrowAt9(new Date('2026-10-05T15:00:00.000Z'))).toBe('2026-10-06T08:00:00.000Z');
   });
 
+  it('returns the next London 09:00 across a clock change', () => {
+    expect(tomorrowAt9(new Date('2026-10-24T15:00:00.000Z'))).toBe('2026-10-25T09:00:00.000Z'); // to GMT
+    expect(tomorrowAt9(new Date('2027-03-27T15:00:00.000Z'))).toBe('2027-03-28T08:00:00.000Z'); // to BST
+  });
+
+  it('keeps the London wall time when the days span a clock change', () => {
+    expect(londonAt(new Date('2026-10-24T10:00:00.000Z'), '17:00', 2)).toBe('2026-10-26T17:00:00.000Z');
+    expect(londonAt(new Date('2027-03-26T10:00:00.000Z'), '09:00', 3)).toBe('2027-03-29T08:00:00.000Z');
+  });
+
   it('places a London time on the same or a later day', () => {
     expect(londonAt(new Date('2026-10-05T10:00:00.000Z'), '17:00')).toBe('2026-10-05T16:00:00.000Z');
     expect(londonAt(new Date('2026-10-05T10:00:00.000Z'), '09:00', 2)).toBe('2026-10-07T08:00:00.000Z');
