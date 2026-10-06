@@ -88,6 +88,11 @@ export interface ItemInput {
   names: (userId: string) => string;
 }
 
+const MENTION = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
+
+/** The user IDs @-mentioned in these texts. */
+export const mentionedIds = (texts: string[]): string[] => [...new Set(texts.flatMap((t) => [...t.matchAll(MENTION)].map((m) => m[1])))];
+
 export function itemId(channel: string, key: string): string {
   return `slack:${channel}:${key}`;
 }
@@ -104,6 +109,9 @@ export function buildItem(i: ItemInput): Item {
     seen.add(m.user!);
     participants.push({ id: m.user!, name: i.names(m.user!) });
   }
+  const mentioned = mentionedIds(messages.map((m) => m.text))
+    .map((id) => ({ id, name: i.names(id) }))
+    .filter((p) => p.name !== p.id);
   const last = human.at(-1);
   return {
     id: itemId(i.channel.id, i.key),
@@ -112,6 +120,7 @@ export function buildItem(i: ItemInput): Item {
     title: i.title,
     permalink: i.permalink,
     participants,
+    ...(mentioned.length && { mentioned }),
     messages,
     messageCount: Math.max(i.total ?? 0, human.length),
     lastActivityAt: last ? tsToIso(last.ts) : tsToIso(i.key),

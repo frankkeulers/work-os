@@ -5,7 +5,7 @@ import { mapLimit } from '../limit';
 import type { FetchContext, FetchResult, SourceAdapter } from '../types';
 import type { SlackApi } from './api';
 import { SlackDirectory } from './directory';
-import { buildItem, channelListed, cmpTs, dmWindows, isDirect, isHuman, isoToTs, maxTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
+import { buildItem, channelListed, mentionedIds, cmpTs, dmWindows, isDirect, isHuman, isoToTs, maxTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
 import type { Conversation, HistoryResponse, SearchMatch, SearchResponse, SlackMessage } from './types';
 
 // The Slack source (FR-2.3–2.10). One poll:
@@ -120,7 +120,7 @@ export class SlackAdapter implements SourceAdapter {
     const drafts = [...threadItems, ...dmItems.flat()].filter((d): d is ItemDraft => !!d);
 
     await this.directory.resolveUsers(
-      drafts.flatMap((d) => [...d.messages.map((m) => m.user!), ...(d.channel.user ? [d.channel.user] : [])]),
+      drafts.flatMap((d) => [...d.messages.map((m) => m.user!), ...(d.channel.user ? [d.channel.user] : []), ...mentionedIds(d.messages.map((m) => m.text ?? ''))]),
       signal,
     );
     const items: Item[] = drafts.map((d) =>

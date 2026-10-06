@@ -51,6 +51,8 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
   const messages = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id.localeCompare(b.id)).slice(-MAX_STORED_MESSAGES);
   const participants = [...(stored?.participants ?? [])];
   for (const p of fetched.participants) if (!participants.some((q) => q.id === p.id)) participants.push(p);
+  const mentioned = [...(fetched.mentioned ?? [])];
+  for (const p of stored?.mentioned ?? []) if (!mentioned.some((q) => q.id === p.id)) mentioned.push(p);
   const lastActivityAt = [stored?.lastActivityAt, fetched.lastActivityAt]
     .filter((x): x is string => !!x)
     .sort()
@@ -60,6 +62,7 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
     item: {
       ...fetched,
       participants: participants.map((p) => fetched.participants.find((q) => q.id === p.id) ?? p), // fresher names
+      ...(mentioned.length && { mentioned }),
       messages,
       messageCount: Math.max(stored?.messageCount ?? 0, fetched.messageCount, messages.length),
       lastActivityAt,

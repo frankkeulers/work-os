@@ -7,7 +7,7 @@ import { mapLimit } from '../limit';
 import { SlackAdapter } from './adapter';
 import { SlackApi } from './api';
 import { FakeSlack } from './fakeSlack';
-import { channelListed, cmpTs, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
+import { buildItem, channelListed, cmpTs, mentionedIds, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
 
 const NOW = Date.parse('2026-10-06T09:00:00Z');
 const MIN = 60_000;
@@ -57,6 +57,21 @@ beforeEach(() => {
 });
 
 describe('normalise', () => {
+  it('names the users @-mentioned in the text, keeping the raw <@id> markup', () => {
+    expect(mentionedIds(['cc <@U01A> and <@W02B|bea>', 'again <@U01A>'])).toEqual(['U01A', 'W02B']);
+    const names: Record<string, string> = { U1: 'Dana Lee', U2: 'Sam' };
+    const item = buildItem({
+      channel: { id: 'D1', is_im: true, user: 'U1' },
+      key: '1791277200.000100',
+      messages: [{ ts: '1791277200.000100', user: 'U1', text: 'Hi <@U2> and <@U9>' }],
+      title: 'Dana Lee',
+      permalink: 'https://polestar.slack.com/archives/D1/p1791277200000100',
+      names: (id) => names[id] ?? id,
+    });
+    expect(item.mentioned).toEqual([{ id: 'U2', name: 'Sam' }]); // an unresolved ID is left out
+    expect(item.messages[0].text).toBe('Hi <@U2> and <@U9>');
+  });
+
   it('converts between ts and ISO, and compares ts numerically', () => {
     expect(tsToIso('1791277200.000100')).toBe('2026-10-06T09:00:00.000Z');
     expect(tsToIso('1791277200.123456')).toBe('2026-10-06T09:00:00.123Z');

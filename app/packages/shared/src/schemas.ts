@@ -32,6 +32,7 @@ export const Item = z.object({
   title: z.string().min(1), // channel name or DM partner
   permalink: z.url(),
   participants: z.array(Participant).min(1),
+  mentioned: z.array(Participant).optional(), // amendment: names for users @-mentioned in the text, to render <@id>
   messages: z.array(Message),
   messageCount: z.number().int().nonnegative(), // full thread length; messages may be truncated
   lastActivityAt: isoDate,
