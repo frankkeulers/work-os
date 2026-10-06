@@ -36,6 +36,12 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 9. **Progressive disclosure.** Rare or expert settings go behind a disclosure row that shows the current values, such as Batching limits.
 10. **Status small and inline.** A dot and a few words, such as "● Connected", or a badge on a nav item. A full-width banner is for something you need to act on.
 
+## Sidebar (applied)
+
+- **Collapsing:** the sidebar folds to a 60px icon rail and back (200 ms width transition; with reduced motion it just snaps). Use the button in its header or the `[` key. The choice is a per-browser preference, like theme and scope, so it survives a reload.
+- **Rail contents:** the same items in the same order, as icons only. Each label moves to a tooltip and stays available to screen readers. The Inbox count becomes a small badge on the icon. Slack's health shows as a dot on its mark. Scope becomes a small "MVP" / "Full" button that switches scope. Placeholders keep their dashed style.
+- **Header:** 64px tall in both states, so it stays level with the page top bars. Collapsing hides the brand and leaves only the toggle.
+
 ## Settings (applied)
 
 - Each section is its own view at `/settings/<section>`, with grouped navigation:

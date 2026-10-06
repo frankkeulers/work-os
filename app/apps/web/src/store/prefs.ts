@@ -9,9 +9,11 @@ interface Prefs {
   theme: Theme;
   panelOpen: boolean; // the Inbox item panel opens on the first item until it's closed
   scope: Scope;
+  navCollapsed: boolean; // the sidebar shows icons only
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
+  setNavCollapsed: (collapsed: boolean) => void;
 }
 
 export const usePrefs = create<Prefs>()(
@@ -20,9 +22,11 @@ export const usePrefs = create<Prefs>()(
       theme: 'light',
       panelOpen: true,
       scope: 'mvp',
+      navCollapsed: false,
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       setScope: (scope) => set({ scope }),
+      setNavCollapsed: (navCollapsed) => set({ navCollapsed }),
     }),
     { name: 'workos.prefs' },
   ),
