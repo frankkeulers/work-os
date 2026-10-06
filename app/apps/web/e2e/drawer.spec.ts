@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const group = (page: Page, name: 'Now' | 'Today' | 'To file') => page.getByRole('region', { name, exact: true });
-const rows = (page: Page, name: Parameters<typeof group>[1]) => group(page, name).locator('[data-row]');
+// FR-8.1: Now and Today rows share the Needs you group; data-lane tells them apart.
+const group = (page: Page, name: 'Needs you' | 'To file') => page.getByRole('region', { name, exact: true });
+const rows = (page: Page, name: 'Now' | 'Today' | 'To file') =>
+  name === 'To file' ? group(page, name).locator('[data-row]') : group(page, 'Needs you').locator(`[data-row][data-lane="${name.toLowerCase()}"]`);
 const drawer = (page: Page) => page.getByRole('complementary', { name: 'Scenarios' });
 
 async function tab(page: Page, name: 'Journeys' | 'Controls' | 'Event log') {
@@ -23,7 +25,7 @@ test('poll outcomes: nothing eligible, VIP DM, batch of 12, and the event log', 
   await expect(page.getByTestId('poll-line')).toContainText('Nothing new, no Claude call', { timeout: 10_000 });
 
   await ctl(page, 'VIP DM').click();
-  await expect(page.getByRole('button', { name: /new item/ }).or(group(page, 'Now').getByText('exec sync'))).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: /new item/ }).or(group(page, 'Needs you').getByText('exec sync'))).toBeVisible({ timeout: 10_000 });
   await expect(page.getByLabel('Notifications').getByText(/Matt M\./)).toBeVisible();
 
   await ctl(page, '12 quiet threads').click();
@@ -67,7 +69,7 @@ test('server and startup states replace the app, and the drawer brings it back',
   await expect(page.getByRole('heading', { name: 'Can’t reach the Work OS server' })).toBeVisible();
   await ctl(page, 'Reconnecting').click();
   await expect(page.getByRole('heading', { name: 'Reconnecting to Work OS…' })).toBeVisible();
-  await expect(group(page, 'Now')).toBeVisible({ timeout: 10_000 });
+  await expect(group(page, 'Needs you')).toBeVisible({ timeout: 10_000 });
 
   for (const [control, heading] of [
     ['API key set', 'Work OS refused to start'],
@@ -78,7 +80,7 @@ test('server and startup states replace the app, and the drawer brings it back',
     await expect(page.getByRole('heading', { name: heading })).toBeVisible();
   }
   await ctl(page, 'All pass').click();
-  await expect(group(page, 'Now')).toBeVisible();
+  await expect(group(page, 'Needs you')).toBeVisible();
 });
 
 test('clock, draft outcome and data resets', async ({ page }) => {

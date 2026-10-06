@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const group = (page: Page, name: 'Now' | 'Today' | 'To file' | 'Snoozed' | 'Done') => page.getByRole('region', { name, exact: true });
-const rows = (page: Page, name: Parameters<typeof group>[1]) => group(page, name).locator('[data-row]');
+// FR-8.1: Now and Today rows share the Needs you group; data-lane tells them apart.
+const group = (page: Page, name: 'Needs you' | 'To file') => page.getByRole('region', { name, exact: true });
+const rows = (page: Page, name: 'Now' | 'Today' | 'To file') =>
+  name === 'To file' ? group(page, name).locator('[data-row]') : group(page, 'Needs you').locator(`[data-row][data-lane="${name.toLowerCase()}"]`);
 const itemPanel = (page: Page) => page.getByRole('complementary', { name: 'Item panel' });
 const selected = (page: Page) => page.locator('[data-row][aria-current="true"]');
 
@@ -99,7 +101,7 @@ test('J03 snooze for an hour, then it comes back marked', async ({ page }) => {
   await itemPanel(page).getByRole('button', { name: /^Snooze s$/ }).click();
   await page.getByRole('menuitem', { name: /1 hour/ }).click();
   await expect(rows(page, 'Now')).toHaveCount(2);
-  await expect(group(page, 'Snoozed')).toContainText('3');
+  await expect(page.getByTestId('inbox-footer').getByRole('button', { name: /^3 snoozed/ })).toBeVisible();
 
   await openControls(page);
   await page.getByRole('button', { name: '+1 h' }).click();
@@ -244,4 +246,47 @@ test('a click outside the panel with unsaved draft edits asks first', async ({ p
   await expect(leave).toBeVisible();
   await leave.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByLabel('Draft text')).toHaveText('Unsaved change');
+});
+
+test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {
+  const needs = group(page, 'Needs you').locator('[data-row]');
+  const failed = needs.nth(3);
+  await expect(failed).toHaveAttribute('data-lane', 'failed');
+  await expect(failed.getByText('Triage failed')).toBeVisible();
+  await failed.click();
+  await itemPanel(page).getByRole('button', { name: /Retry triage/ }).click();
+  await expect(page.locator('[data-row][data-lane="failed"]')).toHaveCount(0, { timeout: 10_000 });
+});
+
+test('the footer opens Low priority, Snoozed and Done one at a time, and j/k walk the open list', async ({ page }) => {
+  const footer = page.getByTestId('inbox-footer');
+  const low = footer.getByRole('button', { name: /low priority/ });
+  const done = footer.getByRole('button', { name: /done/ });
+  await expect(footer.getByRole('button', { name: /^2 snoozed · next back / })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Low priority' })).toHaveCount(0);
+
+  await low.click();
+  await expect(low).toHaveAttribute('aria-expanded', 'true');
+  const lowRows = page.getByRole('region', { name: 'Low priority' }).locator('[data-row]');
+  const n = await lowRows.count();
+  expect(n).toBeGreaterThan(0);
+  // The open list joins the panel's order after To file.
+  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText(`1 of ${12 + n}`);
+
+  await done.click();
+  await expect(page.getByRole('region', { name: 'Low priority' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Done' }).locator('[data-row]').first()).toBeVisible();
+  await done.click();
+  await expect(page.getByRole('region', { name: 'Done' })).toHaveCount(0);
+});
+
+test('threads still active show as a quiet header link that opens their list', async ({ page }) => {
+  await openControls(page);
+  await page.getByRole('button', { name: 'Triage budget hit', exact: true }).click();
+  await page.getByRole('button', { name: '12 quiet threads', exact: true }).click();
+  await closeDrawer(page);
+  const link = page.getByRole('button', { name: /^\d+ still active$/ });
+  await expect(link).toBeVisible({ timeout: 10_000 });
+  await link.click();
+  await expect(page.getByRole('region', { name: 'Waiting for quiet window' }).locator('[data-row]').first()).toBeVisible();
 });
