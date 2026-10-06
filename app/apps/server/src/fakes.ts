@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { tokenAccount } from './api/auth';
 import { fakeClaude } from './claude/fakeClaude';
 import type { RuntimeConfig } from './config/env';
-import { memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
+import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
+import { FAKE_CONFLUENCE_CREDS, FakeConfluence } from './actions/fakeConfluence';
 import type { Exec } from './runtime/checks';
 import { slackFactory } from './sources/slack/adapter';
 import { SlackApi } from './sources/slack/api';
@@ -48,10 +49,7 @@ export function fakeWorld(now: Date) {
   const slack = new FakeSlack();
   const at = (minsAgo: number) => isoToTs(now.getTime() - minsAgo * 60_000);
   slack.users.set('U02DANA', 'Dana Lee').set('U03SAM', 'Sam Okafor').set('U04MATT', 'Matt M.');
-  slack
-    .channel({ id: 'C01PROD', name: 'product' })
-    .channel({ id: 'C02LAUNCH', name: 'mvi-launch' })
-    .channel({ id: 'D01MATT', is_im: true, user: 'U04MATT' });
+  slack.channel({ id: 'C01PROD', name: 'product' }).channel({ id: 'C02LAUNCH', name: 'mvi-launch' }).channel({ id: 'D01MATT', is_im: true, user: 'U04MATT' });
   const p = at(95);
   slack
     .post('C01PROD', { ts: p, user: 'U02DANA', text: 'Release notes draft for 3.4 is up. Can someone check the ETA wording?' })
@@ -59,7 +57,12 @@ export function fakeWorld(now: Date) {
     .post('C02LAUNCH', { ts: at(40), user: 'U03SAM', text: 'Launch checklist is green apart from the data-licensing wording.' })
     .post('D01MATT', { ts: at(25), user: 'U04MATT', text: 'Morning Frank. Go/no-go on MVI V2 before Thursday?' });
 
-  const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token, [tokenAccount('dev')]: FAKE_API_TOKEN });
+  const confluence = new FakeConfluence().page(
+    FAKE_CONFLUENCE_PAGE.id,
+    FAKE_CONFLUENCE_PAGE.title,
+    '<h1>MVI V2</h1><p>Product requirements.</p><h2>Decisions</h2><ul><li>Bulk export ships first.</li></ul><h2>Open questions</h2><p>Pricing tiers.</p>',
+  );
+  const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token, [tokenAccount('dev')]: FAKE_API_TOKEN, [CONFLUENCE_TOKEN_ACCOUNT]: FAKE_CONFLUENCE_CREDS });
   const directory = new SlackDirectory(new SlackApi(secrets, slack.fetch));
   // FileVault on, Power Nap off: the checks pass, so the UI starts in normal mode.
   const exec: Exec = async (cmd) => ({ code: 0, stdout: cmd.endsWith('fdesetup') ? 'FileVault is On.\n' : ' powernap 0\n' });
@@ -74,8 +77,11 @@ export function fakeWorld(now: Date) {
     });
   };
 
-  return { slack, secrets, exec, fetch: slack.fetch, sources: { slack: slackFactory(directory) }, claude: fakeClaude().query, routes };
+  return { slack, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory) }, claude: fakeClaude().query, routes };
 }
+
+/** The one allow-listed page in a `--fakes` run, on a made-up site. */
+export const FAKE_CONFLUENCE_PAGE = { id: '1234567', title: 'MVI V2 PRD', siteUrl: 'https://fake-workos.atlassian.net', spaceKey: 'MVI' };
 
 /** A made-up vault inside the temp data directory, so `--fakes` never reads or writes the real one. */
 export async function seedFakeVault(dir: string) {

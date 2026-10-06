@@ -30,7 +30,10 @@ import { createServer, type WorkOsServer } from './server';
 import { budgetsOf, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
-import { DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, loadPrompt } from './claude/prompts';
+import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, loadPrompt } from './claude/prompts';
+import { ConfluenceApi } from './actions/confluenceApi';
+import { noConfluence } from './actions/fakeConfluence';
+import { homedir } from 'node:os';
 import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
 import { runTriage, type TriageDeps } from './pipeline/triage';
@@ -66,6 +69,8 @@ export interface RunDeps {
   sources?: Partial<Record<SourceId, AdapterFactory>>;
   /** Run against a made-up Slack (`--fakes`, e2e:server). Refused outside a temp data dir. */
   fakes?: boolean;
+  /** Confluence REST calls; real fetch by default. Tests and `--fakes` pass a fake Confluence. */
+  confluenceFetch?: FetchFn;
   /** The Agent SDK's query(), or a fake. Tests must pass one: they never call Claude. */
   claude?: QueryFn;
 }
@@ -90,6 +95,9 @@ export type RunResult =
       lifecycle: Lifecycle;
       flush(): void;
     };
+
+/** The draft prompts, written to config/prompts/ on first run and read from there on every call. */
+const PROMPTS = { 'draft-vault.md': DEFAULT_VAULT_PROMPT, 'draft-confluence.md': DEFAULT_CONFLUENCE_PROMPT, 'people-check.md': DEFAULT_PEOPLE_CHECK_PROMPT };
 
 /** Vite's dev server, which proxies /api to the development instance. */
 const DEV_ORIGINS = 'http://localhost:5173,http://127.0.0.1:5173';
@@ -121,16 +129,19 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       return { running: false, code: exitCode(EXIT.config, underLaunchd) };
     }
     const world = fakeWorld(now());
-    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, exec: world.exec, sources: world.sources, claude: world.claude };
+    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude };
     extraRoutes = world.routes;
   }
 
   const defaults = defaultSettings(config.dataDir);
   if (deps.fakes) {
+    const fakes = await import('./fakes');
     defaults.vaultPath = join(config.dataDir, 'fake-vault');
-    await (await import('./fakes')).seedFakeVault(defaults.vaultPath);
+    await fakes.seedFakeVault(defaults.vaultPath);
+    const page = fakes.FAKE_CONFLUENCE_PAGE;
+    defaults.confluence = { siteUrl: page.siteUrl, spaceKey: page.spaceKey, pages: [{ id: page.id, title: page.title }] };
   }
-  const init = await initDataDir(config.dataDir, { settings: defaults, rules: DEFAULT_RULES, prompts: { 'triage.md': DEFAULT_TRIAGE_PROMPT, 'draft-vault.md': DEFAULT_VAULT_PROMPT } });
+  const init = await initDataDir(config.dataDir, { settings: defaults, rules: DEFAULT_RULES, prompts: { 'triage.md': DEFAULT_TRIAGE_PROMPT, ...PROMPTS } });
   const { logger, flush } = createLogger({ dir: paths(config.dataDir).logs, echo: deps.echoLogs, now, base: { instance: config.instance } });
   if (init.created.length) logger.info({ created: init.created }, 'Created default config');
 
@@ -242,8 +253,20 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     claudeReady: () => runtime.claudeReady(),
     canWrite: () => runtime.canUseClaude(),
     signal: () => runtime.sleepSignal,
-    reportClaude: (f) => runtime.reportFailure('claude', f),
-    prompt: () => loadPrompt(config.dataDir, 'draft-vault.md', DEFAULT_VAULT_PROMPT),
+    reportFailure: (dep, f) => runtime.reportFailure(dep, f),
+    depReady: (dep) => runtime.health.ready(dep),
+    reportOk: (dep) => {
+      if (runtime.health.state(dep) !== 'ok') runtime.health.ok(dep);
+    },
+    online: () => runtime.health.state('network') !== 'offline',
+    // Belt and braces, as for Claude: a test without a fake Confluence fails instead of calling one.
+    confluence: new ConfluenceApi(secrets, () => settings.editable.settings.confluence.siteUrl, deps.confluenceFetch ?? (process.env.VITEST ? noConfluence : fetch)),
+    prompt: (name) => loadPrompt(config.dataDir, name, PROMPTS[name]),
+    // The routing guidance: a copy in config/, else the installed skill (never in tests or fakes).
+    routing: () =>
+      readFile(join(config.dataDir, 'config/psg-context-builder.md'), 'utf8').catch(() =>
+        deps.fakes || process.env.VITEST ? '' : readFile(join(homedir(), '.claude/skills/psg-context-builder/SKILL.md'), 'utf8').catch(() => ''),
+      ),
     conventions: () => readFile(join(config.dataDir, 'config/vault-conventions.md'), 'utf8').catch(() => ''),
     notify: (n) => publish(n),
   });

@@ -592,7 +592,6 @@ As built (M3 step 17):
 - In dry-run the note goes to `<data>/sandbox/vault/<path>`, and the vault itself is only read. A sandbox copy stands in for the vault note, so a second approval sees the first.
 - A ready, approved or executing action whose draft file is gone fails as `draft_missing` at startup.
 - `--fakes` runs use a made-up vault in their temp data directory.
-- Confluence entries answer 503 until step 18.
 
 ### 7.10 E9 Confluence entry action
 
@@ -613,6 +612,26 @@ As built (M3 step 17):
 > - Given a thread suggested for Confluence with no people observations, when I click Draft Confluence entry, then I see the target page, section and content.
 > - Given the page was edited after the draft, when I approve, then the app re-drafts instead of writing.
 > - Given a draft targets a page outside the allow-list, when I approve, then the executor refuses and logs `action.failed`.
+
+As built (M3 step 18):
+
+- **Code reads the pages, not the model (FR-10.2).** Before drafting, code reads every allow-listed page over REST v2 (`GET /wiki/api/v2/pages/{id}?body-format=storage`) and gives the model their section outlines. The draft call (Sonnet, `config/prompts/draft-confluence.md`) has no tools and no MCP servers, so it can only see allow-listed pages. A page that answers 404 is skipped; if none can be read, the action fails as `allow_list`.
+- **Routing guidance.** It comes from `config/psg-context-builder.md` if that file exists, else from `~/.claude/skills/psg-context-builder/SKILL.md`. Neither exists on this Mac yet, so drafts run without it. Frank: copy the skill's text to `~/WorkOS-data/config/psg-context-builder.md`.
+- **Deviation from FR-10.3: the draft is Markdown, not storage format.** The model answers `{pageId, section, title, content}` with Markdown content. That is what the preview shows and what Frank edits. Code checks that the page and section exist, records the page version at draft time (`baseVersion`), and converts the Markdown to storage format only when it writes. The conversion handles a safe subset: headings, paragraphs, lists, bold, italics, code, and https or mailto links. Everything else is escaped. The entry goes at the end of the chosen section, under a heading one level below it.
+- **People check (FR-10.4).** A second Haiku call (`config/prompts/people-check.md`, usage purpose `people_check`) reads the entry as it would be written. If it finds observations about named people, the action fails as `people_check` and nothing is shown. Items flagged `containsPeopleObservations` are refused with a 403 before any call.
+- **Executor (FR-10.5, FR-10.6, NF-5).** Before every attempt, code:
+  1. checks the allow-list as it is now; a page that is no longer on it fails the action as `allow_list`;
+  2. re-reads the page;
+  3. decides from the version it finds:
+     - the drafted version: save version + 1 with the version message `Work OS <actionId>`;
+     - version + 1 with that message: an earlier attempt already wrote it, so the action is done (this covers a save whose answer was lost);
+     - anything else: a conflict, which fails the action and re-drafts, budget permitting.
+
+  A 409 on save means another save won the race: the next attempt, 30 s later, re-reads and reconciles. Offline, needs-probe, auth and rate-limit failures don't use up any of the 5 attempts.
+- **Dry-run.** The page is only read. The would-be page is saved to `<data>/sandbox/confluence/<pageId>-<actionId>.html`, and the result says "Dry-run: write logged only. <page> stays at v<n>".
+- **Credentials (P0-8).** They are `email:token` in the Keychain account `confluence-api-token`, sent as Basic auth. The site URL and the allow-list come from settings.
+- **Retries.** A draft that fails on a transient Claude or Confluence error stays drafting and waits at least 30 s before the next try, so a failure the breaker lets through is not retried at once. Writes after a 409 or a dropped connection wait the same way.
+- **Test runs.** Tests and `--fakes` runs use a made-up Confluence (`actions/fakeConfluence.ts`) that checks Basic auth and version numbers. Under vitest, with no fake given, any Confluence call fails.
 
 ### 7.11 E10 Notifications
 

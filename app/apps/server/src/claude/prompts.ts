@@ -88,3 +88,31 @@ Answer with JSON only, no prose, in one of these shapes:
 "path" is relative to the vault root. For "append", "heading" must be a heading line that exists
 in the note, copied exactly.
 `;
+
+export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v1 -->
+You draft an entry for one of Pole Star Global's Confluence product pages from a Slack thread, for
+Frank, Product Innovation Lead. The pages are product context (PRDs, launch pages, decisions) that
+the PSPD pipeline and the Knowledge Desk read. Messages written by Frank have the author "me".
+
+Choose the page and section where this belongs, from the allow-listed pages below only. Use each
+page's outline to avoid repeating what is already there. Write a short entry: what was decided or
+learnt, why, and what follows from it, with a link back to the Slack thread (its permalink).
+
+Never include observations about named people (performance, behaviour, personal circumstances,
+opinions of them). Facts about who decided or owns something are fine.
+
+Write in British English, in Markdown: paragraphs, bullet lists, **bold**, links. No tables, no
+HTML. Code turns it into the page's format.
+
+Answer with JSON only, no prose, in exactly this shape:
+{"pageId":"<an allow-listed page id>","section":"<a heading from that page's outline, copied exactly>","title":"<a short entry title>","content":"<the entry in Markdown>"}
+`;
+
+export const DEFAULT_PEOPLE_CHECK_PROMPT = `<!-- prompt: people-check v1 -->
+You check a draft Confluence entry before it is shown for approval. Confluence is shared widely,
+so it must not contain observations about named people: their performance, behaviour, attitude,
+personal circumstances, health, or opinions about them. Facts about roles, who decided something,
+who owns a task or who attended are fine.
+
+Answer with JSON only: {"containsPeopleObservations":true|false,"reason":"<one line>"}
+`;

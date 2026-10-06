@@ -6,7 +6,8 @@ import type { QueryFn } from './adapter';
 //   today  a question, or check / review / decision
 //   none   anything else
 // Confluence for launch, licensing and pricing talk; the vault for release notes and ideas.
-// A vault draft request gets a new note under Inbox/, named after the thread.
+// A vault draft request gets a new note under Inbox/, named after the thread. A Confluence draft
+// goes to the first page's first section; the people check flags words about how someone works.
 
 export interface FakeClaude {
   query: QueryFn;
@@ -55,6 +56,17 @@ export function vaultNoteFor(prompt: string) {
   return { kind: 'new', path: `Inbox/${name}.md`, content: `---\ntags: [slack]\n---\n# ${name}\n\n${first}\n\n[Slack thread](${t.permalink ?? ''})\n` };
 }
 
+/** An entry for the first allow-listed page in a Confluence draft request. */
+export function confluenceEntryFor(prompt: string) {
+  const pages = JSON.parse(/<confluence-pages>\n([\s\S]*?)\n<\/confluence-pages>/.exec(prompt)?.[1] ?? '[]') as { pageId: string; sections: { level: number; heading: string }[] }[];
+  const t = JSON.parse(/<thread>\n([\s\S]*?)\n<\/thread>/.exec(prompt)?.[1] ?? '{}') as { title?: string; permalink?: string; messages?: { text: string }[] };
+  const page = pages[0];
+  const section = page?.sections.find((x) => x.level >= 2) ?? page?.sections[0];
+  return { pageId: page?.pageId ?? 'none', section: section?.heading ?? 'none', title: `${t.title ?? 'Thread'} update`, content: `${t.messages?.[0]?.text ?? ''}\n\n[Slack thread](${t.permalink ?? ''})` };
+}
+
+const PEOPLE_RE = /\b(lazy|unreliable|performance issue|attitude|behaviour)\b/i;
+
 export function fakeClaude(): FakeClaude {
   const fake: FakeClaude = {
     calls: [],
@@ -69,7 +81,14 @@ export function fakeClaude(): FakeClaude {
         if (fail) throw fail;
         yield { type: 'system', subtype: 'init', mcp_servers: [] };
         const m = /<threads>\n([\s\S]*)\n<\/threads>/.exec(prompt);
-        const text = scripted ?? JSON.stringify(prompt.includes('<vault-conventions>') ? vaultNoteFor(prompt) : answerFor(m ? (JSON.parse(m[1]) as Thread[]) : []));
+        const answer = prompt.includes('<vault-conventions>')
+          ? vaultNoteFor(prompt)
+          : prompt.includes('<confluence-pages>')
+            ? confluenceEntryFor(prompt)
+            : prompt.startsWith('<entry>')
+              ? { containsPeopleObservations: PEOPLE_RE.test(prompt), reason: PEOPLE_RE.test(prompt) ? 'Describes how a named person works.' : 'Facts only.' }
+              : answerFor(m ? (JSON.parse(m[1]) as Thread[]) : []);
+        const text = scripted ?? JSON.stringify(answer);
         yield {
           type: 'result',
           subtype: 'success',

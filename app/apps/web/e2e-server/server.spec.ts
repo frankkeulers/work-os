@@ -7,7 +7,8 @@ import { expect, test, type Page } from '@playwright/test';
 // The built web app against the real server, Slack and Claude faked (M1 step 11, M2 step 15): the
 // seeded threads are triaged into their lanes, a poll adds a thread that waits for its quiet
 // window, a correction moves an item, Done sticks, after a server restart the page goes
-// reconnecting, then up, and a vault note is drafted and written to the sandbox.
+// reconnecting, then up, a vault note is drafted and written to the sandbox, and a Confluence entry
+// is drafted and its write logged in dry-run.
 
 const APP = resolve(import.meta.dirname, '../../..');
 const PORT = 4399;
@@ -62,7 +63,7 @@ test.afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test('inbox, poll, correction, done, a restart, a vault note and an eval against the real server', async ({ page, request }) => {
+test('inbox, poll, correction, done, a restart, a vault note, a Confluence entry and an eval against the real server', async ({ page, request }) => {
   await page.goto('/');
   // The fake model triages the three quiet threads: Matt's go/no-go is Now, the #product review is
   // Today, and the #mvi-launch licensing note is To file (Confluence).
@@ -121,6 +122,16 @@ test('inbox, poll, correction, done, a restart, a vault note and an eval against
   await expect(action.getByRole('status')).toContainText('Dry-run: Created', { timeout: 20_000 });
   await expect(action.getByRole('status')).toContainText('/sandbox/vault/Inbox/Matt M.md');
   await page.screenshot({ path: join(APP, 'screenshots/server-vault-light.png') });
+
+  // A Confluence entry (Story 10.1): drafted from the fake allow-listed page, people-checked,
+  // approved; dry-run only logs the write and saves the would-be page in the sandbox.
+  await action.getByRole('tab', { name: /Confluence entry/ }).click();
+  await action.getByRole('button', { name: 'Draft Confluence entry' }).click();
+  await expect(action.getByRole('link', { name: 'MVI V2 PRD' })).toBeVisible({ timeout: 20_000 });
+  await expect(action.getByText('Decisions', { exact: true })).toBeVisible();
+  await action.getByRole('button', { name: 'Approve and write to sandbox' }).click();
+  await expect(action.getByRole('status')).toContainText('Dry-run: write logged only. MVI V2 PRD stays at v', { timeout: 20_000 });
+  await page.screenshot({ path: join(APP, 'screenshots/server-confluence-light.png') });
 
   // Usage from the real usage log, and an eval over the one label (FR-6.1, FR-7.2).
   await page.goto('/usage');

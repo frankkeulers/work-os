@@ -2,9 +2,10 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Action, ApiErrorBody, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
-import { memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
+import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
+import { FAKE_CONFLUENCE_CREDS, FakeConfluence } from './actions/fakeConfluence';
 import type { Exec } from './runtime/checks';
 import type { Clock } from './runtime/power';
 import { slackFactory } from './sources/slack/adapter';
@@ -24,6 +25,8 @@ let dir: string;
 let res: Extract<RunResult, { running: true }>;
 let slack: FakeSlack;
 let claude: FakeClaude;
+let confluence: FakeConfluence;
+let instance = 'dev';
 let wall: number;
 let wakeTime = 'boot';
 let mono: number;
@@ -55,11 +58,12 @@ beforeEach(async () => {
     .post('C01PROD', { ts: P, user: 'U02DANA', text: 'Release notes draft is up' })
     .post('C01PROD', { ts: isoToTs(START - 40 * MIN), thread_ts: P, user: 'U02DANA', text: '@Frank can you check the ETA wording?' })
     .post('D01DANA', { ts: isoToTs(START - 20 * MIN), user: 'U02DANA', text: 'Quick one before standup' });
-  const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token });
+  confluence = new FakeConfluence().page('1234567', 'MVI V2 PRD', '<h1>MVI V2</h1><h2>Decisions</h2><ul><li>Bulk export first.</li></ul><h2>Open questions</h2><p>Pricing.</p>', 7);
+  const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token, [CONFLUENCE_TOKEN_ACCOUNT]: FAKE_CONFLUENCE_CREDS });
   claude = fakeClaude();
   const directory = new SlackDirectory(new SlackApi(secrets, slack.fetch));
   const r = await run({
-    env: { WORKOS_INSTANCE: 'dev', WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' },
+    env: { WORKOS_INSTANCE: instance, WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' },
     secrets,
     clock,
     exec,
@@ -68,6 +72,7 @@ beforeEach(async () => {
     fetch: slack.fetch,
     sources: { slack: slackFactory(directory) },
     claude: claude.query,
+    confluenceFetch: (url, init) => confluence.fetch(url, init),
   });
   if (!r.running) throw new Error('expected a start');
   res = r;
@@ -385,8 +390,8 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect((await item()).actions[0]).toMatchObject({ id: ok.body.id, status: 'failed', failureReason: 'draft_missing' });
   });
 
-  it('refuses Confluence for now, and a vault that is not there', async () => {
-    expect((await request('confluence_entry')).status).toBe(503);
+  it('refuses Confluence with no allow-listed pages, and a vault that is not there', async () => {
+    expect((await request('confluence_entry')).status).toBe(409);
     const r = await request();
     expect(r.status).toBe(503);
     expect(r.body.message).toMatch(/vault folder/);
@@ -418,5 +423,177 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('auth_failed');
     expect((await call('POST', `/api/actions/${r.body.id}/cancel`)).status).toBe(204);
     expect((await item()).actions[0].status).toBe('discarded');
+  });
+});
+
+describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;
+  const request = async () => {
+    const r = await call<Action & ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, { type: 'confluence_entry' });
+    await res.actions.settled();
+    return r;
+  };
+  const approve = async (id: string) => {
+    const r = await call('POST', `/api/actions/${id}/approve`);
+    await res.actions.settled();
+    return r;
+  };
+
+  beforeEach(async () => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    const settings = { ...view.settings, confluence: { siteUrl: 'https://fake.atlassian.net', spaceKey: 'MVI', pages: [{ id: '1234567', title: 'MVI V2 PRD' }] } };
+    expect((await call('PUT', '/api/settings', { settings, rules: view.rules })).status).toBe(200);
+  });
+
+  it('drafts from the allow-listed pages, checks for people, and in dry-run only logs the write', async () => {
+    const r = await request();
+    expect(r.status).toBe(201);
+    let v = await item();
+    expect(v.actions[0]).toMatchObject({ status: 'ready', target: { pageId: '1234567', baseVersion: 7 } });
+    expect(v.drafts[r.body.id]).toMatchObject({ kind: 'confluence', pageTitle: 'MVI V2 PRD', section: 'Decisions', baseVersion: 7, title: '#product update' });
+    // The draft call had no tools and saw only the allow-listed page; then a Haiku people check.
+    const [draftCall, check] = claude.calls.slice(-2);
+    expect(draftCall.options).toMatchObject({ tools: [], mcpServers: {} });
+    expect(draftCall.prompt).toContain('"pageId":"1234567"');
+    expect(check.system).toMatch(/^<!-- prompt: people-check v1 -->/);
+    expect(check.options.model).toBe('claude-haiku-4-5');
+
+    expect((await approve(r.body.id)).status).toBe(202);
+    v = await item();
+    expect(v.actions[0].status).toBe('done');
+    expect(v.results[r.body.id]).toBe('Dry-run: write logged only. MVI V2 PRD stays at v7. Logged action.executed.');
+    expect(confluence.pages.get('1234567')!.version).toBe(7); // only read
+    expect(confluence.calls.filter((c) => c.method === 'PUT')).toHaveLength(0);
+    const preview = await readFile(join(dir, 'sandbox/confluence', `1234567-${r.body.id}.html`), 'utf8');
+    expect(preview).toContain('<h3>#product update</h3><p>Release notes draft is up</p>');
+  });
+
+  it('blocks a draft the people check flags, and refuses items with people observations (FR-10.1, FR-10.4)', async () => {
+    claude.nextTexts.push(JSON.stringify({ pageId: '1234567', section: 'Decisions', title: 'Release', content: 'Dana has been unreliable on reviews.' }));
+    const r = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'people_check', error: expect.stringMatching(/people check found/) });
+  });
+
+  it('re-drafts instead of writing when the page was edited after drafting', async () => {
+    const r = await request();
+    confluence.edit('1234567', '<h1>MVI V2</h1><h2>Decisions</h2><p>Edited.</p>');
+    await approve(r.body.id);
+    const v = await item();
+    expect(v.actions.find((a) => a.id === r.body.id)).toMatchObject({ status: 'failed', failureReason: 'conflict', error: expect.stringMatching(/v7 → v8/) });
+    expect(v.actions[0]).toMatchObject({ supersedes: r.body.id, status: 'ready', target: { baseVersion: 8 } });
+  });
+
+  it('refuses at write time a page taken off the allow-list after drafting (FR-10.6)', async () => {
+    const r = await request();
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    await call('PUT', '/api/settings', { settings: { ...view.settings, confluence: { ...view.settings.confluence, pages: [{ id: '7654321', title: 'Other' }] } }, rules: view.rules });
+    await approve(r.body.id);
+    expect((await item()).actions[0]).toMatchObject({ status: 'failed', failureReason: 'allow_list' });
+    expect(confluence.calls.filter((c) => c.method === 'PUT')).toHaveLength(0);
+  });
+
+  it('waits for Confluence when it fails to draft, and drafts once it is back', async () => {
+    confluence.failNext.push(503);
+    const r = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'drafting' });
+    expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'confluence')?.state).toBe('degraded');
+    for (let i = 0; i < 5; i++) await tick(); // 25 s: not yet
+    await res.actions.settled();
+    expect((await item()).actions[0].status).toBe('drafting');
+    await tick();
+    await res.actions.settled();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'ready' });
+    expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'confluence')?.state).toBe('ok');
+  });
+});
+
+describe('Confluence writes outside dry-run (FR-10.5, FR-14.5, NF-5)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;
+  const puts = () => confluence.calls.filter((c) => c.method === 'PUT');
+  const drafted = async () => {
+    const r = await call<Action>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, { type: 'confluence_entry' });
+    await res.actions.settled();
+    return r.body.id;
+  };
+  const approve = async (id: string) => {
+    await call('POST', `/api/actions/${id}/approve`);
+    await res.actions.settled();
+  };
+
+  beforeAll(() => {
+    instance = 'prod'; // dev forces dry-run; the data dir is still a temp dir
+  });
+  afterAll(() => {
+    instance = 'dev';
+  });
+  beforeEach(async () => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    const settings = { ...view.settings, dryRun: false, confluence: { siteUrl: 'https://fake.atlassian.net', spaceKey: 'MVI', pages: [{ id: '1234567', title: 'MVI V2 PRD' }] } };
+    expect((await call('PUT', '/api/settings', { settings, rules: view.rules })).status).toBe(200);
+  });
+
+  it('writes the next version under the section, marked with the action id', async () => {
+    const id = await drafted();
+    await approve(id);
+    const v = await item();
+    expect(v.actions[0].status).toBe('done');
+    expect(v.results[id]).toBe('Written to MVI V2 PRD, now v8. Logged action.executed.');
+    const page = confluence.pages.get('1234567')!;
+    expect(page).toMatchObject({ version: 8, message: `Work OS ${id}` });
+    expect(page.storage).toMatch(/<h2>Decisions<\/h2><ul><li>Bulk export first.<\/li><\/ul><h3>#product update<\/h3>.*<h2>Open questions<\/h2>/);
+  });
+
+  it('treats a write whose answer was lost as done when the page carries its marker', async () => {
+    const id = await drafted();
+    const real = confluence.fetch;
+    confluence.fetch = async (url, init) => {
+      const r = await real(url, init);
+      if (init?.method === 'PUT') throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+      return r;
+    };
+    await approve(id);
+    confluence.fetch = real;
+    expect((await item()).actions[0].status).toBe('executing');
+    for (let i = 0; i < 12; i++) await tick();
+    await res.actions.settled();
+    expect((await item()).actions[0].status).toBe('done');
+    expect(puts()).toHaveLength(1); // reconciled, not written twice
+    expect(confluence.pages.get('1234567')!.version).toBe(8);
+  });
+
+  it('re-reads after losing a save race (409) and writes on the next attempt', async () => {
+    const id = await drafted();
+    confluence.failNext.push(0, 409); // the GET passes, the PUT loses
+    await approve(id);
+    expect((await item()).actions[0].status).toBe('executing');
+    for (let i = 0; i < 12; i++) await tick();
+    await res.actions.settled();
+    const v = await item();
+    expect(v.actions[0].status).toBe('done');
+    expect(v.results[id]).toBe('Written to MVI V2 PRD, now v8. Logged action.executed.');
+    expect(puts()).toHaveLength(1); // the forced 409 is not recorded as a call
+  });
+
+  it('keeps an approved write through dropped connections without using up its attempts (FR-14.5)', async () => {
+    const id = await drafted();
+    const real = confluence.fetch;
+    let dropped = 0;
+    confluence.fetch = async (url, init) => {
+      if (init?.method !== 'PUT') return real(url, init);
+      dropped++; // before it reaches the page
+      throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+    };
+    await approve(id);
+    for (let i = 0; i < 12 * 20; i++) await tick(); // 20 minutes of failures
+    await res.actions.settled();
+    expect(dropped).toBeGreaterThan(5); // more than MAX_ATTEMPTS writes tried
+    expect((await item()).actions[0].status).toBe('executing');
+    confluence.fetch = real;
+    for (let i = 0; i < 12 * 15; i++) await tick();
+    await res.actions.settled();
+    expect((await item()).actions[0]).toMatchObject({ id, status: 'done' });
+    expect(confluence.pages.get('1234567')!.version).toBe(8);
   });
 });

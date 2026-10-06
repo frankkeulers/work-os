@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import type { Prompt } from '../claude/prompts';
 import { DEADLINES } from '../net/http';
+import { DraftError } from './errors';
 import { threadForTriage } from '../pipeline/truncate';
 import { checkNotePath, insertUnderHeading, readOrNull, sha256, VaultPathError } from './vaultFiles';
 
@@ -16,14 +17,6 @@ export const VaultAnswer = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('new'), path: z.string().min(1), content: z.string().min(1) }),
   z.object({ kind: z.literal('append'), path: z.string().min(1), heading: z.string().min(1), content: z.string().min(1) }),
 ]);
-
-/** The model's proposal doesn't fit the vault (a path outside it, a heading that isn't there). */
-export class VaultDraftError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'VaultDraftError';
-  }
-}
 
 export const DRAFT_KEEP_LAST = 20; // more of the thread than triage sees: the note needs the detail
 
@@ -89,16 +82,16 @@ export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Pro
   try {
     path = await checkNotePath(d.vaultRoot, a.path);
   } catch (e) {
-    if (e instanceof VaultPathError) throw new VaultDraftError(e.message);
+    if (e instanceof VaultPathError) throw new DraftError(e.message);
     throw e;
   }
   const current = await readOrNull(join(d.vaultRoot, path));
   if (a.kind === 'new') {
-    if (current !== null) throw new VaultDraftError(`The draft would create ${path}, but that note already exists.`);
+    if (current !== null) throw new DraftError(`The draft would create ${path}, but that note already exists.`);
     return { draft: { kind: 'vault_new', path, content: a.content, ...meta }, baseHash: null };
   }
-  if (current === null) throw new VaultDraftError(`The draft would append to ${path}, but there is no such note.`);
+  if (current === null) throw new DraftError(`The draft would append to ${path}, but there is no such note.`);
   const ins = insertUnderHeading(current, a.heading, a.content);
-  if (!ins) throw new VaultDraftError(`The draft would append under “${a.heading}”, but ${path} has no such heading.`);
+  if (!ins) throw new DraftError(`The draft would append under “${a.heading}”, but ${path} has no such heading.`);
   return { draft: { kind: 'vault_append', path, heading: a.heading.trim(), context: ins.context, content: a.content, ...meta }, baseHash: sha256(current) };
 }
