@@ -12,11 +12,13 @@ interface Prefs {
   scope: Scope;
   navCollapsed: boolean; // the sidebar shows icons only
   inboxSort: InboxSort;
+  groupByChannel: boolean; // the Inbox lists Slack items under their channel
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
   setNavCollapsed: (collapsed: boolean) => void;
   setInboxSort: (s: InboxSort) => void;
+  setGroupByChannel: (on: boolean) => void;
 }
 
 export const usePrefs = create<Prefs>()(
@@ -27,11 +29,13 @@ export const usePrefs = create<Prefs>()(
       scope: 'mvp',
       navCollapsed: false,
       inboxSort: 'newest',
+      groupByChannel: true,
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       setScope: (scope) => set({ scope }),
       setNavCollapsed: (navCollapsed) => set({ navCollapsed }),
       setInboxSort: (inboxSort) => set({ inboxSort }),
+      setGroupByChannel: (groupByChannel) => set({ groupByChannel }),
     }),
     { name: 'workos.prefs' },
   ),

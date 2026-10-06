@@ -12,7 +12,7 @@ import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverP
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
-import { INBOX_SORT_LABEL, dueInfo, needLabel, sortItems, type InboxSort } from '../lib/next';
+import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, needLabel, sortItems, type InboxSort } from '../lib/next';
 import { usePrefs } from '../store/prefs';
 import { errorToast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
@@ -90,6 +90,8 @@ function pollTooltip(inbox: InboxView) {
 function SortMenu() {
   const sort = usePrefs((s) => s.inboxSort);
   const setSort = usePrefs((s) => s.setInboxSort);
+  const grouped = usePrefs((s) => s.groupByChannel);
+  const setGrouped = usePrefs((s) => s.setGroupByChannel);
   const { open, setOpen, close, trigger, panel } = usePopover();
   return (
     <div className="relative">
@@ -112,6 +114,17 @@ function SortMenu() {
               {INBOX_SORT_LABEL[k]}
             </MenuItem>
           ))}
+          <div className="mx-1 my-1.5 border-t border-line-soft" />
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={grouped}
+            onClick={() => setGrouped(!grouped)}
+            className="flex min-h-9 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] text-ink cursor-pointer hover:bg-surface-2"
+          >
+            <span className="flex-1">Group by channel</span>
+            {grouped && <Icon name="check" size={14} className="text-accent" />}
+          </button>
         </PopoverPanel>
       )}
     </div>
@@ -451,6 +464,16 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
   );
 }
 
+/** The name over a Slack channel's rows when the Inbox groups by channel. */
+function ChannelHead({ item, count }: { item: ItemSummary; count: number }) {
+  return (
+    <div data-channel={channelKey(item)} className="flex items-baseline gap-2 border-t border-line-soft bg-surface-2 px-6 pb-1 pt-1.5">
+      <h3 className="m-0 truncate text-xs font-semibold text-ink-2">{item.kind === 'dm' ? `DM · ${item.title}` : item.title}</h3>
+      <span className="font-mono text-[11px] text-muted">{count}</span>
+    </div>
+  );
+}
+
 function GroupHead({ dot, title, count }: { dot: string; title: string; count: number }) {
   return (
     <>
@@ -519,16 +542,18 @@ export function InboxPage() {
   const toggle = (g: Lower) => setOpen(open === g ? null : g);
   const now = useNow(60_000);
   const sort = usePrefs((s) => s.inboxSort);
+  const grouped = usePrefs((s) => s.groupByChannel);
 
   const by = useMemo(() => {
     const shown = all.filter((i) => !heldIds.has(i.id));
     const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(shown, sort, true, now), file: [], else: [], waiting: [], snoozed: [], done: [] };
     for (const i of shown) if (i.lane in m) m[i.lane as Group | Lower].push(i);
     for (const g of ['file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
+    if (grouped) for (const g of ['needs', 'file', 'else', 'waiting'] as const) m[g] = groupByChannel(m[g]);
     m.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
     return m;
-  }, [all, heldIds, now, sort]);
+  }, [all, heldIds, now, sort, grouped]);
   // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open.
   const order = useMemo(() => [...by.needs, ...by.file, ...(open ? by[open] : [])].map((i) => i.id), [by, open]);
   const selItem = sel ? all.find((i) => i.id === sel) : undefined;
@@ -660,10 +685,16 @@ export function InboxPage() {
   if (!inbox) return <div className="p-8 text-muted">{q.error ? 'Could not load the inbox.' : 'Loading…'}</div>;
 
   const topCount = by.needs.length + by.file.length;
-  // Under Priority, a darker hairline closes the Now block at the top of Needs you.
-  const row = (i: ItemSummary, n: number, list: ItemSummary[]) => (
-    <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} divide={sort === 'priority' && n > 0 && list[n - 1].lane === 'now' && i.lane !== 'now'} onPick={() => pick(i.id)} />
-  );
+  // Under Priority, a darker hairline closes the Now block at the top of Needs you. Grouped by
+  // channel, each Slack channel's run of rows opens with its name.
+  const row = (i: ItemSummary, n: number, list: ItemSummary[]) => {
+    const key = grouped ? channelKey(i) : undefined;
+    const head = key && (n === 0 || channelKey(list[n - 1]) !== key);
+    return [
+      head && <ChannelHead key={`head:${i.id}`} item={i} count={list.filter((x) => channelKey(x) === key).length} />,
+      <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} divide={!grouped && sort === 'priority' && n > 0 && list[n - 1].lane === 'now' && i.lane !== 'now'} onPick={() => pick(i.id)} />,
+    ];
+  };
   const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
   if (selItem && (shown?.item !== selItem || shown.view !== view || shown.pos !== idx + 1)) setShown({ item: selItem, view, pos: idx + 1 });
   const closing = !selItem && !!shown;
@@ -739,7 +770,7 @@ export function InboxPage() {
                     <div className="flex items-baseline gap-2 px-6 pb-2 pt-3">
                       <GroupHead dot={g.dot} title={g.title} count={by[g.id].length} />
                     </div>
-                    <div className="border-b border-line-soft">{by[g.id].length ? by[g.id].map(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
+                    <div className="border-b border-line-soft">{by[g.id].length ? by[g.id].flatMap(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
                   </section>
                 ))
               )}
@@ -752,7 +783,7 @@ export function InboxPage() {
                     <span className="font-mono text-xs text-muted">{by[open].length}</span>
                     <span className="min-w-0 flex-[1_1_200px] pl-1 text-xs text-muted">{LOWER[open].note}</span>
                   </div>
-                  <div className="border-b border-line-soft">{by[open].length ? by[open].map(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
+                  <div className="border-b border-line-soft">{by[open].length ? by[open].flatMap(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
                 </section>
               )}
             </>

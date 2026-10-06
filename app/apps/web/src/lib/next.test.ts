@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
-import { dueInfo, needLabel, needsYouOrder, nextDeadline, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
+import { dueInfo, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
 
 // Mon 5 Oct 2026, 09:45 London (BST).
 const now = new Date('2026-10-05T08:45:00.000Z');
@@ -95,6 +95,18 @@ describe('sortItems', () => {
     const copy = [...items];
     sortItems(items, 'newest', false, now);
     expect(items).toEqual(copy);
+  });
+});
+
+describe('groupByChannel', () => {
+  const at = (id: string, over: Partial<ItemSummary> = {}) => item({ id, ...over });
+  it('brings each channel together where its first item was, keeping the order inside it', () => {
+    const items = [at('slack:C1:3'), at('slack:C2:1'), at('slack:C1:2'), at('slack:D9:1'), at('slack:C2:5'), at('slack:C1:1')];
+    expect(groupByChannel(items).map((i) => i.id)).toEqual(['slack:C1:3', 'slack:C1:2', 'slack:C1:1', 'slack:C2:1', 'slack:C2:5', 'slack:D9:1']);
+  });
+  it('leaves other sources where they were, ungrouped', () => {
+    const items = [at('outlook:a', { source: 'outlook' }), at('slack:C1:1'), at('teams:b', { source: 'teams' }), at('slack:C1:2')];
+    expect(groupByChannel(items).map((i) => i.id)).toEqual(['outlook:a', 'slack:C1:1', 'slack:C1:2', 'teams:b']);
   });
 });
 

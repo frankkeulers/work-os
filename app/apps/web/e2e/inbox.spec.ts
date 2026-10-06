@@ -256,23 +256,39 @@ async function sortBy(page: Page, name: 'Newest first' | 'Oldest first' | 'Prior
   await expect(page.getByRole('button', { name: `Sort: ${name}` })).toBeVisible();
 }
 
-/** Each Needs you and To file row's last activity, in the order on screen. */
-async function activity(page: Page) {
-  const at = (g: string) => page.locator(`[data-group="${g}"] [data-row]`).evaluateAll((els) => els.map((e) => e.getAttribute('data-activity')!));
-  return { needs: await at('needs'), file: await at('file') };
+/** Each Needs you and To file row's channel (Slack) and last activity, in the order on screen. */
+async function rowsInOrder(page: Page) {
+  const at = (g: string) =>
+    page.locator(`[data-group="${g}"] [data-row]`).evaluateAll((els) => els.map((e) => ({ channel: e.getAttribute('data-row')!.match(/^slack:([^:]+):/)?.[1], at: e.getAttribute('data-activity')! })));
+  return [await at('needs'), await at('file')];
 }
+const newestFirst = (list: string[]) => expect(list).toEqual([...list].sort().reverse());
 
-test('Needs you and To file sort newest first by default, and the Sort menu changes it', async ({ page }) => {
+test('the Inbox groups Slack items by channel, newest first, and the Sort menu changes both', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Sort: Newest first' })).toBeVisible();
-  let by = await activity(page);
-  for (const list of Object.values(by)) expect(list).toEqual([...list].sort().reverse());
+  // Grouped: each channel's rows sit together, newest first, under one heading.
+  for (const list of await rowsInOrder(page)) {
+    const channels = list.map((r) => r.channel).filter((c) => c);
+    expect(channels.filter((c, n) => channels.indexOf(c) === n)).toEqual(channels.filter((c, n) => c !== channels[n - 1]));
+    for (const c of new Set(channels)) newestFirst(list.filter((r) => r.channel === c).map((r) => r.at));
+  }
+  await expect(page.locator('[data-group="needs"] [data-channel]').first()).toBeVisible();
+
+  await page.getByRole('button', { name: /^Sort: / }).click();
+  const grouping = page.getByRole('menuitemcheckbox', { name: 'Group by channel' });
+  await expect(grouping).toHaveAttribute('aria-checked', 'true');
+  await grouping.click();
+  await expect(grouping).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-channel]')).toHaveCount(0);
+  for (const list of await rowsInOrder(page)) newestFirst(list.map((r) => r.at));
 
   await sortBy(page, 'Oldest first');
-  by = await activity(page);
-  for (const list of Object.values(by)) expect(list).toEqual([...list].sort());
+  for (const list of await rowsInOrder(page)) expect(list.map((r) => r.at)).toEqual(list.map((r) => r.at).sort());
 
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sort: Oldest first' })).toBeVisible();
+  await expect(page.locator('[data-channel]')).toHaveCount(0);
 });
 
 test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {

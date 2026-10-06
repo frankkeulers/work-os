@@ -80,6 +80,26 @@ export function sortItems(items: ItemSummary[], sort: InboxSort, needs: boolean,
   return [...shown].sort((a, b) => dir * a.lastActivityAt.localeCompare(b.lastActivityAt));
 }
 
+/** A Slack item's channel or DM, from its id (`slack:<channel>:<key>`). Other sources have none. */
+export function channelKey(i: Pick<ItemSummary, 'id' | 'source'>): string | undefined {
+  return i.source === 'slack' ? i.id.split(':')[1] : undefined;
+}
+
+/**
+ * Brings each Slack channel's items together, keeping the sorted order inside each channel. A channel
+ * sits where its first item was, so the channels follow the sort too. Other sources stay in place.
+ */
+export function groupByChannel(items: ItemSummary[]): ItemSummary[] {
+  const runs = new Map<string, ItemSummary[]>();
+  for (const i of items) {
+    const key = channelKey(i) ?? `item:${i.id}`;
+    const run = runs.get(key);
+    if (run) run.push(i);
+    else runs.set(key, [i]);
+  }
+  return [...runs.values()].flat();
+}
+
 export function openLabel(i: Pick<ItemSummary, 'source' | 'kind'>): string {
   const app = SOURCE_NAME[i.source];
   if (i.source === 'outlook') return 'Reply in Outlook';
