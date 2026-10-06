@@ -16,6 +16,7 @@ import {
   type SourceHealth,
   type StartupCheck,
   type TriageDecision,
+  type UsageRecord,
   type UsageView,
 } from '@work-os/shared';
 import type { RuntimeConfig } from '../config/env';
@@ -43,10 +44,12 @@ export interface ViewDeps {
   meId?: () => string | undefined; // the Slack user, once the first poll has asked Slack
   /** Health, wake state and the scheduler. Absent in tests of the HTTP layer alone. */
   runtime?: Runtime;
+  /** The last eight days of Claude calls (CL-5), for budgets and the usage view. */
+  usage?: () => readonly UsageRecord[];
 }
 
 function budgets(d: ViewDeps): BudgetState {
-  return budgetsOf([], d.settings.editable.settings, d.now());
+  return budgetsOf(d.usage?.() ?? [], d.settings.editable.settings, d.now());
 }
 
 function actionsByItem(d: ViewDeps): Map<string, ActionState[]> {

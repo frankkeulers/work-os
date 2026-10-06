@@ -8,6 +8,7 @@ export const DEADLINES = {
   probe: 5000,
   triage: 120_000,
   draft: 240_000,
+  relay: 60_000, // one connector call; about 6 s in P0-9
 } as const;
 
 /** A signal that aborts on the deadline or with any of the given signals, whichever comes first. */

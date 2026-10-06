@@ -6,8 +6,8 @@ import { build } from 'esbuild';
 
 export const SERVER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-/** Packages kept out of the bundle and installed in the release instead. The Agent SDK joins in M2. */
-export const EXTERNALS: string[] = [];
+/** Packages kept out of the bundle and installed in the release instead: the Agent SDK runs a native binary from its own folder. */
+export const EXTERNALS: string[] = ['@anthropic-ai/claude-agent-sdk'];
 
 export async function bundleServer(outfile: string, version: string): Promise<{ bytes: number; ms: number }> {
   const t0 = performance.now();

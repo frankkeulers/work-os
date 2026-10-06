@@ -28,6 +28,7 @@ import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
 import type { SourceId } from '@work-os/shared';
 import { createServer, type WorkOsServer } from './server';
+import { UsageLog } from './claude/usage';
 import { ItemFiles } from './store/items';
 import { Store, type RecoveryReport } from './store/store';
 
@@ -148,6 +149,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   lifecycle.onStop('store', () => store.close());
   const items = new ItemFiles(join(config.dataDir, 'items'));
   const cursors = await CursorFile.open(paths(config.dataDir).cursors);
+  const usage = await UsageLog.open(paths(config.dataDir).logs, now);
+  lifecycle.onStop('usage', () => usage.close());
   // One Slack client and directory for the life of the process: the adapter is rebuilt when
   // settings change, but the token, Frank's identity and names stay cached.
   const slackDirectory = new SlackDirectory(new SlackApi(secrets, deps.fetch ?? fetch));
@@ -182,6 +185,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     tokenPersisted: persisted,
     now,
     meId: () => runtime.identity('slack'),
+    usage: () => usage.records(),
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
     extraRoutes,
     devOrigins: config.instance === 'dev' ? (deps.env.WORKOS_DEV_ORIGINS ?? DEV_ORIGINS).split(',') : [],

@@ -349,6 +349,24 @@ Every change to inbox or action state is an event, so replaying the log rebuilds
   See the P0-9 findings.
 - **CL-10** Every call has a timeout (triage 120 s, drafts 240 s) and is aborted on sleep or shutdown. Claude calls do not start during a brief Power Nap wake: the machine must have been awake for at least 45 s (FR-14.2).
 
+As built (M2 step 14), checked against the Agent SDK 0.3.291 types and the P0-9 spike:
+
+- Every call sets these explicitly:
+  - `model`, `systemPrompt` (a plain string, so no Claude Code preset);
+  - `tools: []` and `allowedTools: []`;
+  - `mcpServers` (empty except for a relay) with `strictMcpConfig: true`;
+  - `settingSources: []`, `maxTurns`, `permissionMode: 'default'`, and a deny-all `canUseTool`.
+- It also sets `thinking: disabled` and `persistSession: false`. The second keeps message text out of `~/.claude/projects`.
+- The SDK gets its own environment: the account variables are stripped, then set for the chosen backend (CL-8). An API key comes only from the Keychain account `anthropic-api-key`.
+- The SDK is imported lazily on the first call, and deploy installs it into the release as an external package.
+- Failures are classified from the SDK's typed assistant `error`:
+  - login problems → `auth_failed`;
+  - `rate_limit` or `billing_error` → `rate_limited` for 15 minutes;
+  - everything else → `degraded`.
+- A call that throws on the network counts as offline, and the probe confirms it. The deadline is a `timeout`; a sleep or shutdown abort passes through unchanged.
+- Usage is logged for every call that returns a result, failed ones included, from the SDK's per-model totals.
+- Model names: `haiku-4.5` → `claude-haiku-4-5`, `opus-5.5` → `claude-opus-5-5`. The settings ID `sonnet-5.5` is mapped to `claude-sonnet-5`, because there is no Sonnet 5.5; **the settings label needs a decision**.
+
 ### 5.3 Batching rules (to stay under the baseline)
 
 - Triage only threads that have been quiet for `quietMinutes` (default 10). VIP rules bypass the wait.
