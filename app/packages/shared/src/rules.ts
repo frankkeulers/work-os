@@ -18,13 +18,16 @@ export const toRegExp = (pattern: string): RegExp => {
   return m ? new RegExp(m[1], m[2]) : new RegExp(pattern, 'i');
 };
 
+/** Whether a message mentions the user: a Slack `<@id>` mention, or the plain-text pattern. */
+export const mentionsMe = (text: string, me: Me) => (!!me.id && text.includes(`<@${me.id}>`)) || (me.mentionRe?.test(text) ?? false);
+
 function matches(c: RuleCondition, item: Item, s: Settings, me: Me): boolean {
   const others = item.messages.filter((m) => m.authorId !== me.id);
   switch (c.type) {
     case 'is_dm':
       return item.kind === 'dm';
     case 'mentions_me':
-      return item.messages.some((m) => m.text.includes(`<@${me.id}>`) || (me.mentionRe?.test(m.text) ?? false));
+      return item.messages.some((m) => mentionsMe(m.text, me));
     case 'sender_in': {
       const names = listValues(c, s).map((v) => v.toLowerCase());
       return others.some((m) => names.includes((item.participants.find((p) => p.id === m.authorId)?.name ?? '').toLowerCase()));

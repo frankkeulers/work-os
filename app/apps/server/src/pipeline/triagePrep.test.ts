@@ -1,0 +1,103 @@
+import { newItemFlags, type Item, type ItemState, type Message } from '@work-os/shared';
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
+import { triageQueue } from './eligibility';
+import { meFrom, ruleVerdict } from './rules';
+import { MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
+
+const NOW = new Date('2026-10-06T09:00:00.000Z');
+const ago = (mins: number) => new Date(NOW.getTime() - mins * 60_000).toISOString();
+
+const state = (id: string, minsAgo: number, over: Partial<ItemState> = {}): ItemState => ({
+  id,
+  source: 'slack',
+  kind: 'thread',
+  title: '#product',
+  permalink: 'https://polestar.slack.com/archives/C1/p1',
+  participants: [],
+  lastActivityAt: ago(minsAgo),
+  revision: 1,
+  messageCount: 1,
+  ...newItemFlags(),
+  ...over,
+});
+
+const msg = (i: number, text = `message ${i}`, authorId = 'U2'): Message => ({ id: String(i), authorId, ts: ago(100 - i), text });
+const thread = (messages: Message[], over: Partial<Item> = {}): Item => ({
+  id: 'slack:C1:1.000100',
+  source: 'slack',
+  kind: 'thread',
+  title: '#product',
+  permalink: 'https://polestar.slack.com/archives/C1/p1',
+  participants: [
+    { id: 'U2', name: 'Dana Lee' },
+    { id: 'UFRANK', name: 'Frank' },
+  ],
+  messages,
+  messageCount: messages.length,
+  lastActivityAt: messages.at(-1)!.ts,
+  revision: 1,
+  schemaVersion: 1,
+  ...over,
+});
+
+describe('quiet window and eligibility (§5.3)', () => {
+  it('takes pending items quiet for quietMinutes, oldest first, and says when the next is due', () => {
+    const q = triageQueue([state('a', 5), state('b', 30), state('c', 10), state('d', 60, { triageState: 'triaged' }), state('e', 8)], NOW, 10);
+    expect(q.ready.map((i) => i.id)).toEqual(['b', 'c']);
+    expect(q.nextReadyAt?.toISOString()).toBe(new Date(NOW.getTime() + 2 * 60_000).toISOString()); // e, quiet 2 min from now
+  });
+
+  it('has nothing to do when nothing waits', () => {
+    expect(triageQueue([state('a', 30, { triageState: 'triaged' }), state('b', 30, { triageState: 'failed' })], NOW, 10)).toEqual({ ready: [] });
+  });
+});
+
+describe('rule verdicts (FR-4.2, FR-4.3)', () => {
+  const settings = defaultSettings('/tmp/x');
+  settings.slack = { ...settings.slack, vips: ['Dana Lee'], excludeChannels: ['#random'] };
+  const me = meFrom({ id: 'UFRANK', name: 'frank' });
+
+  it('maps the first matching rule to drop, a fixed level, or the model with a floor', () => {
+    expect(ruleVerdict(thread([msg(1)], { kind: 'dm', title: 'Dana Lee' }), DEFAULT_RULES, settings, me)).toMatchObject({ kind: 'fixed', attention: 'now', rule: { id: 'vip-dm' } });
+    expect(ruleVerdict(thread([msg(1)], { title: '#random' }), DEFAULT_RULES, settings, me)).toMatchObject({ kind: 'drop', rule: { id: 'exclude-channels' } });
+    expect(ruleVerdict(thread([msg(1, 'Can @Frank look?')]), DEFAULT_RULES, settings, me)).toMatchObject({ kind: 'model', min: 'today', rule: { id: 'mention-me' } });
+    expect(ruleVerdict(thread([msg(1)]), DEFAULT_RULES, settings, me)).toEqual({ kind: 'model' });
+  });
+
+  it('builds "me" from the source identity, escaping the name', () => {
+    expect(meFrom(undefined)).toEqual({ id: '' });
+    const odd = meFrom({ id: 'U1', name: 'f.k (x)' });
+    expect(odd.mentionRe?.test('hi @f.k (x)')).toBe(true);
+    expect(odd.mentionRe?.test('hi @fXk (x)')).toBe(false);
+  });
+});
+
+describe('truncation and batching (§5.3, CL-4)', () => {
+  const me = meFrom({ id: 'UFRANK' });
+
+  it('keeps the first message, the last N and any that mention Frank, and counts the rest', () => {
+    const msgs = Array.from({ length: 20 }, (_, i) => msg(i + 1));
+    msgs[6] = msg(7, 'Over to <@UFRANK> for the sign-off');
+    msgs[18] = msg(19, 'Thanks', 'UFRANK');
+    const t = threadForTriage(thread(msgs, { messageCount: 25 }), me, 3);
+    expect(t.messages.map((m) => m.text)).toEqual(['message 1', 'Over to <@UFRANK> for the sign-off', 'message 18', 'Thanks', 'message 20']);
+    expect(t.messages.map((m) => m.author)).toEqual(['Dana Lee', 'Dana Lee', 'Dana Lee', 'me', 'Dana Lee']);
+    expect(t.omitted).toBe(20); // 25 in the thread, 5 sent
+  });
+
+  it('sends a short thread whole and cuts a very long message', () => {
+    const t = threadForTriage(thread([msg(1), msg(2, 'x'.repeat(MESSAGE_MAX_CHARS + 500))]), me, 8);
+    expect(t.omitted).toBe(0);
+    expect(t.messages[1].text).toHaveLength(MESSAGE_MAX_CHARS);
+    expect(t.messages[1].text.endsWith('…')).toBe(true);
+  });
+
+  it('packs threads in order within the thread and token limits; an oversized one goes alone', () => {
+    const sizes = [300, 300, 300, 2000, 100, 100, 100];
+    const batches = packBatches(sizes, (n) => n, { maxThreads: 3, maxInputTokens: 1200, overheadTokens: 200 });
+    expect(batches).toEqual([[300, 300, 300], [2000], [100, 100, 100]]);
+    expect(packBatches([], (n: number) => n, { maxThreads: 25, maxInputTokens: 1000, overheadTokens: 0 })).toEqual([]);
+    expect(threadTokens(threadForTriage(thread([msg(1)]), me, 8))).toBeGreaterThan(10);
+  });
+});

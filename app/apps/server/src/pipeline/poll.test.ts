@@ -173,6 +173,58 @@ describe('pollSource (FR-2.8)', () => {
   });
 });
 
+describe('rules at ingest (FR-4, §5.3)', () => {
+  const withRules = () => {
+    const settings = defaultSettings(dir);
+    settings.slack = { ...settings.slack, vips: ['U2'], excludeChannels: ['#random'] };
+    d.rules = () => ({ rules: DEFAULT_RULES, settings });
+  };
+
+  it('keeps a new thread in an excluded channel out altogether', async () => {
+    withRules();
+    next = { items: [item([msg('1', 30)], { title: '#random' })], nextCursor: '5' };
+    const stats = await pollSource(d, source, 'first', signal());
+    expect(stats).toMatchObject({ fetched: 1, changed: 0, dropped: 1 });
+    expect((await events()).map((e) => e.type)).toEqual(['source.polled']);
+    expect(store.projection.items[ID]).toBeUndefined();
+    expect(await d.items.read('slack', ID)).toBeUndefined();
+  });
+
+  it('never drops an item it already has', async () => {
+    next = { items: [item([msg('1', 30)], { title: '#random' })], nextCursor: '5' };
+    await pollSource(d, source, 'first', signal());
+    withRules();
+    next = { items: [item([msg('1', 30), msg('2', 10)], { title: '#random' })], nextCursor: '6' };
+    expect(await pollSource(d, source, 'scheduled', signal())).toMatchObject({ changed: 1, dropped: 0 });
+    expect(store.projection.items[ID].revision).toBe(2);
+  });
+
+  it('decides a VIP DM at once, without the quiet window, and logs it with the upsert', async () => {
+    withRules();
+    next = { items: [item([msg('1', 1)], { kind: 'dm', title: 'U2' })], nextCursor: '5' };
+    expect(await pollSource(d, source, 'first', signal())).toMatchObject({ changed: 1, ruleDecided: 1 });
+    const log = await events();
+    expect(log.map((e) => e.type)).toEqual(['item.upserted', 'triage.decided', 'source.polled']);
+    expect(log[1]).toMatchObject({ itemId: ID, data: { decision: { itemRevision: 1, attention: 'now', decidedBy: 'rule', ruleId: 'vip-dm', confluence: { suggested: false }, vault: { suggested: false } } } });
+    expect(store.projection.items[ID]).toMatchObject({ triageState: 'triaged', decision: { attention: 'now' } });
+    expect((await d.items.read('slack', ID))?.text).toEqual({ summary: 'text 1', reason: 'Rule “vip-dm” sets Now without asking the model.' });
+
+    // Frank's own reply needs no decision; a new one from the VIP gets one for the new revision.
+    next = { items: [item([msg('1', 1), msg('2', 0.5, 'UFRANK')], { kind: 'dm', title: 'U2' })], nextCursor: '6' };
+    expect(await pollSource(d, source, 'scheduled', signal())).toMatchObject({ ruleDecided: 0 });
+    next = { items: [item([msg('1', 1), msg('2', 0.5, 'UFRANK'), msg('3', 0.2)], { kind: 'dm', title: 'U2' })], nextCursor: '7' };
+    expect(await pollSource(d, source, 'scheduled', signal())).toMatchObject({ ruleDecided: 1 });
+    expect(store.projection.items[ID]).toMatchObject({ revision: 3, triageState: 'triaged', decision: { itemRevision: 3 } });
+  });
+
+  it('leaves "send to the model" items waiting for triage', async () => {
+    withRules();
+    next = { items: [item([{ ...msg('1', 30), text: 'Can <@UFRANK> confirm the ETA?' }])], nextCursor: '5' };
+    expect(await pollSource(d, source, 'first', signal())).toMatchObject({ changed: 1, ruleDecided: 0 });
+    expect(store.projection.items[ID]).toMatchObject({ triageState: 'pending' });
+  });
+});
+
 describe('snooze return (FR-8.3)', () => {
   it('brings snoozed items back once their time has passed, once', async () => {
     next = { items: [item([msg('1', 30)])], nextCursor: '5' };

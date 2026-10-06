@@ -357,6 +357,12 @@ Every change to inbox or action state is an event, so replaying the log rebuilds
 - Re-triage a thread only when its `revision` changes and the new messages are not from Frank alone.
 - Skip the call entirely when nothing is eligible.
 
+As built (M2 step 13):
+
+- Rules run in the poll, on every item with new messages from someone other than Frank. A `drop` rule keeps a new thread out altogether, but never removes an item that is already stored. A `now` or `today` rule logs its `triage.decided` (`decidedBy: rule`) in the same append as the upsert, so the item never waits for the quiet window. A `model` rule's `min` is applied to the model's answer in step 15.
+- The queue (`pipeline/eligibility.ts`) holds pending items that have been quiet for `quietMinutes`, oldest first, and reports when the next one goes quiet.
+- Truncation keeps the first message, the last `keepLastMessages`, and every message that mentions Frank (`<@id>` or "@handle"). It sends a count of the rest, and cuts any single message at 2,000 characters. Threads are packed in order within `maxThreadsPerCall` and `maxInputTokens` (estimated at four characters per token, prompt included); a thread too big for any batch goes alone.
+
 ---
 
 ## 6. MVP scope (Slack only)

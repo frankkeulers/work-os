@@ -158,7 +158,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     settings,
     logger,
     sources: () => buildSources(settings.settings, factories),
-    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger }, s, reason, signal),
+    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }) }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
     checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings) }),

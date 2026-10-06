@@ -1,9 +1,10 @@
-import type { EventDraft, Item, PollReason } from '@work-os/shared';
+import type { EventDraft, Item, PollReason, Rule, Settings } from '@work-os/shared';
 import type { Logger } from '../log';
 import type { SourceAdapter } from '../sources/types';
 import type { ItemFiles } from '../store/items';
 import type { Store } from '../store/store';
 import type { CursorFile } from './cursors';
+import { meFrom, ruleDecision, ruleReason, ruleVerdict } from './rules';
 
 // One poll of one source (FR-2.8). Idempotent: message IDs (Slack ts) are the dedupe key, so a
 // replayed or overlapping fetch changes nothing, and an item's revision only moves when it has a
@@ -12,12 +13,17 @@ import type { CursorFile } from './cursors';
 //   2. one append: the item.upserted events and source.polled with the cursor (one fsync);
 //   3. cursors.json.
 // A crash before 2 re-fetches the same messages next time and finds them already in the files.
+//
+// Rules run on every item with new messages from someone else (FR-4, §5.3): a drop rule keeps a
+// new thread out altogether; a now/today rule logs its decision with the upsert, in the same append.
 
 export const MAX_STORED_MESSAGES = 500;
 
 export interface PollStats {
   fetched: number;
   changed: number;
+  dropped: number; // new threads a drop rule kept out
+  ruleDecided: number; // items a now/today rule decided
   cursor?: string;
   durationMs: number;
 }
@@ -28,7 +34,12 @@ export interface PollDeps {
   cursors: CursorFile;
   now: () => Date;
   logger?: Logger;
+  /** The rules and settings in force; without them every item waits for the model. */
+  rules?: () => { rules: Rule[]; settings: Settings };
 }
+
+const EXCERPT_MAX = 110;
+const excerpt = (text = '') => (text.length > EXCERPT_MAX ? `${text.slice(0, EXCERPT_MAX - 1)}…` : text);
 
 /** Merges a fetched item into what is stored: the union of messages, by ID. */
 export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision: number | undefined): { item: Item; newIds: string[] } {
@@ -59,8 +70,14 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   const result = await source.fetchSince(cursor, { signal, now: d.now(), reason });
   signal.throwIfAborted(); // asleep mid-poll: don't write half a picture
 
-  const me = source.identity?.()?.id;
+  const identity = source.identity?.();
+  const me = identity?.id;
+  const rules = d.rules?.();
+  const now = d.now();
   const drafts: EventDraft[] = [];
+  let changed = 0;
+  let dropped = 0;
+  let ruleDecided = 0;
   for (const fetched of result.items) {
     const prev = d.store.projection.items[fetched.id];
     const stored = await d.items.read(fetched.source, fetched.id);
@@ -69,7 +86,16 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
     if (prev && !newIds.length) continue;
     const byId = new Map(item.messages.map((m) => [m.id, m]));
     const fromMeOnly = !!prev && !!me && newIds.every((id) => byId.get(id)?.authorId === me);
-    await d.items.write({ item, text: stored?.text, schemaVersion: 1 });
+    const verdict = rules && !fromMeOnly ? ruleVerdict(item, rules.rules, rules.settings, meFrom(identity)) : undefined;
+    if (verdict?.kind === 'drop' && !prev) {
+      dropped++;
+      continue;
+    }
+    const fixed = verdict?.kind === 'fixed' ? verdict : undefined;
+    // A rule's decision replaces the text of any earlier one, which described older messages.
+    const text = fixed ? { summary: excerpt(item.messages[0]?.text) || item.title, reason: ruleReason(fixed) } : stored?.text;
+    await d.items.write({ item, text, schemaVersion: 1 });
+    changed++;
     drafts.push({
       type: 'item.upserted',
       itemId: item.id,
@@ -85,12 +111,15 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
         fromMeOnly,
       },
     });
+    if (fixed) {
+      drafts.push({ type: 'triage.decided', itemId: item.id, data: { decision: ruleDecision(item, fixed, now) } });
+      ruleDecided++;
+    }
   }
   const durationMs = Math.round(performance.now() - t0);
   drafts.push({ type: 'source.polled', data: { source: source.id, reason, fetched: result.items.length, cursor: result.nextCursor, durationMs } });
   await d.store.append(...drafts);
   if (result.nextCursor) await d.cursors.set(source.id, result.nextCursor);
-  const changed = drafts.length - 1;
-  d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, durationMs }, 'Polled');
-  return { fetched: result.items.length, changed, cursor: result.nextCursor, durationMs };
+  d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, dropped, ruleDecided, durationMs }, 'Polled');
+  return { fetched: result.items.length, changed, dropped, ruleDecided, cursor: result.nextCursor, durationMs };
 }
