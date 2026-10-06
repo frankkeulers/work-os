@@ -292,8 +292,11 @@ interface Action {
 
 type EventType =
   | 'item.upserted' | 'triage.decided' | 'triage.corrected'
-  | 'item.done' | 'item.snoozed' | 'item.notified'
-  | 'action.requested' | 'action.drafted' | 'action.approved'
+  | 'item.done' | 'item.reopened' | 'item.snoozed'
+  | 'item.unsnoozed'             // the snooze time passed (FR-8.3)
+  | 'item.seen'                  // opening the item cleared "new replies" or "back from snooze"
+  | 'item.notified'              // logged even when quiet hours held it back, so it never repeats (FR-11.2)
+  | 'action.requested' | 'action.drafted' | 'action.edited' | 'action.approved'
   | 'action.executing'           // fsynced before every write attempt (FR-14.5)
   | 'action.executed' | 'action.failed' | 'action.discarded'
   | 'source.polled' | 'source.failed'
@@ -310,6 +313,8 @@ interface WorkEvent {
   schemaVersion: 1;
 }
 ```
+
+Every change to inbox or action state is an event, so replaying the log rebuilds the state exactly. `packages/shared/src/projection` holds the one reducer the server and the mock both use. `action.drafted` carries the write target, `action.requested` the action it supersedes. Bump `PROJECTION_VERSION` whenever the reducer changes, so the server replays the whole log instead of trusting `snapshot.json`.
 
 ---
 

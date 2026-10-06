@@ -6,6 +6,9 @@ export type Lane = 'now' | 'today' | 'file' | 'else' | 'failed' | 'waiting' | 's
 export type ItemStatus = 'open' | 'done' | 'snoozed';
 export type TriageState = 'pending' | 'triaged' | 'failed';
 
+/** The parts of a decision lanes need. A full TriageDecision and a LoggedDecision both fit. */
+export type DecisionLike = Pick<TriageDecision, 'itemRevision' | 'attention' | 'confluence' | 'vault' | 'decidedBy'>;
+
 export interface EffectiveTriage {
   attention: Attention;
   confluence: boolean;
@@ -18,7 +21,7 @@ export interface EffectiveTriage {
  * older revision; a model or rule decision on a newer revision wins over the correction.
  */
 export function effectiveTriage(
-  decision: TriageDecision | undefined,
+  decision: DecisionLike | undefined,
   correction: TriageCorrection | undefined,
 ): EffectiveTriage | undefined {
   if (correction && (!decision || correction.itemRevision >= decision.itemRevision)) {
@@ -36,7 +39,7 @@ export function effectiveTriage(
 export function laneFor(input: {
   status: ItemStatus;
   triageState: TriageState;
-  decision?: TriageDecision;
+  decision?: DecisionLike;
   correction?: TriageCorrection;
 }): Lane {
   if (input.status === 'done') return 'done';

@@ -106,17 +106,20 @@ export type ActionStatus = z.infer<typeof ActionStatus>;
 export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', 'model_error', 'unreachable', 'draft_missing']);
 export type FailureReason = z.infer<typeof FailureReason>;
 
+export const ActionTarget = z.object({
+  path: z.string().optional(),
+  pageId: z.string().optional(),
+  baseVersion: z.number().int().optional(),
+});
+export type ActionTarget = z.infer<typeof ActionTarget>;
+
 export const Action = z.object({
   id: z.string().min(1),
   itemId: z.string().min(1),
   itemRevision: z.number().int().positive(), // revision the draft was made from
   type: ActionType,
   status: ActionStatus,
-  target: z.object({
-    path: z.string().optional(),
-    pageId: z.string().optional(),
-    baseVersion: z.number().int().optional(),
-  }),
+  target: ActionTarget,
   draftRef: z.string().min(1),
   error: z.string().optional(),
   failureReason: FailureReason.optional(),

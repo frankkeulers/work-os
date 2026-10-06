@@ -1,4 +1,18 @@
-import { firstMatchingRule, isWorkHours, toLoggedDecision, type EventData, type EventType, type WorkEvent } from '@work-os/shared';
+import {
+  applyActionEvent,
+  applyDecision,
+  failTriage,
+  firstMatchingRule,
+  isWorkHours,
+  markDone,
+  markNotified,
+  needsNotification,
+  snooze as snoozeItem,
+  toLoggedDecision,
+  type EventData,
+  type EventType,
+  type WorkEvent,
+} from '@work-os/shared';
 import { addMins, buildDecision, makeEvent, newRec, upserted, type EventIds } from '../build';
 import { buildDraft } from '../drafts';
 import { ME } from '../me';
@@ -8,7 +22,7 @@ import { BATCH_TWELVE, SEED_THREADS, TIMELINE } from './threads';
 import { SEED_EVALS, seedUsage } from './usage';
 
 export const SEED_CLOCK = '2026-10-05T08:45:00.000Z'; // Mon 5 Oct 2026, 09:45 London
-export const STATE_VERSION = 6; // 6: events carry seq and typed payloads
+export const STATE_VERSION = 7; // 6: events carry seq and typed payloads; 7: the log replays to the mock's state
 
 export type Preset = 'default' | 'firstRun' | 'inboxZero' | 'heavy' | 'noBaseline';
 
@@ -30,8 +44,12 @@ export function buildState(preset: Preset = 'default'): MockState {
 
   let seq = 0;
   const events: WorkEvent[] = [];
-  const ev = <T extends EventType>(type: T, at: string, data: EventData<T>, ids: EventIds = {}) =>
-    events.push(makeEvent(++seq, type, at, data, ids));
+  // Action state follows from its events, as on the server.
+  const ev = <T extends EventType>(type: T, at: string, data: EventData<T>, ids: EventIds = {}) => {
+    const e = makeEvent(++seq, type, at, data, ids);
+    events.push(e);
+    applyActionEvent(state.actions, e);
+  };
 
   const state: MockState = {
     schemaVersion: STATE_VERSION,
@@ -88,12 +106,11 @@ export function buildState(preset: Preset = 'default'): MockState {
   for (const seed of seeds) {
     const rec = newRec(seed, clock);
     rec.arrivedAt = rec.item.messages[0]?.ts ?? clock;
+    if (seed.key === 'f1') rec.item.revision = 2;
     byKey[seed.key] = rec;
     state.items[rec.item.id] = rec;
     ev('item.upserted', rec.item.lastActivityAt, upserted(rec.item, false), { itemId: rec.item.id });
   }
-
-  byKey.f1.item.revision = 2;
 
   // Triage everything except the threads still inside the quiet window and the failed one.
   const batches: Record<string, ItemRec[]> = {};
@@ -101,8 +118,7 @@ export function buildState(preset: Preset = 'default'): MockState {
     if (rec.key === 'q1' || rec.key === 'q2') continue;
     const at = pollAfter(rec.item.lastActivityAt, settings.schedule.workHours);
     if (rec.key === 'x1') {
-      rec.triageState = 'failed';
-      rec.failCount = 2;
+      failTriage(rec, 2);
       ev('triage.failed', at, { revision: rec.item.revision, attempts: 2, reason: 'schema validation failed' }, { itemId: rec.item.id });
       continue;
     }
@@ -121,10 +137,12 @@ export function buildState(preset: Preset = 'default'): MockState {
         model: 'haiku-4.5',
       });
     }
-    rec.decision = decision;
-    rec.triageState = 'triaged';
-    rec.notified = decision.attention === 'now';
+    applyDecision(rec, decision);
     ev('triage.decided', decision.decidedAt, { decision: toLoggedDecision(decision) }, { itemId: rec.item.id });
+    if (needsNotification(rec)) {
+      markNotified(rec);
+      ev('item.notified', decision.decidedAt, { kind: 'now' }, { itemId: rec.item.id });
+    }
   }
   for (const [batchId, recs] of Object.entries(batches)) {
     for (const rec of recs) rec.batch = { at: batchId.slice(6), threads: recs.length, calls: 1 };
@@ -132,16 +150,14 @@ export function buildState(preset: Preset = 'default'): MockState {
 
   // Item states.
   const snooze = (rec: ItemRec, until: string, at: string) => {
-    rec.status = 'snoozed';
-    rec.snoozedUntil = until;
+    snoozeItem(rec, until);
     ev('item.snoozed', at, { until }, { itemId: rec.item.id });
   };
   snooze(byKey.s1, addMins(clock, 40), addMins(clock, -20));
   snooze(byKey.s2, '2026-10-06T08:00:00.000Z', addMins(clock, -60));
 
   const done = (rec: ItemRec, at: string) => {
-    rec.status = 'done';
-    rec.doneAt = at;
+    markDone(rec, at);
     ev('item.done', at, undefined, { itemId: rec.item.id });
   };
   done(byKey.d1, addMins(byKey.d1.item.lastActivityAt, 2));
@@ -156,21 +172,12 @@ export function buildState(preset: Preset = 'default'): MockState {
     const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : 'c'}1`;
     const draft = buildDraft(rec, type, settings, at, { attempt: 1 });
     state.drafts[id] = draft;
-    state.actions[id] = {
-      id,
-      itemId: rec.item.id,
-      itemRevision: rec.item.revision,
-      type,
-      status,
-      target: draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path },
-      draftRef: `drafts/${id}.json`,
-      createdAt: at,
-      updatedAt: at,
-    };
+    const target = draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path };
     ev('action.requested', at, { type, revision: rec.item.revision }, { itemId: rec.item.id, actionId: id });
-    ev('action.drafted', addMins(at, 1), { type, revision: rec.item.revision, draftRef: `drafts/${id}.json`, tokens: draft.tokens }, { itemId: rec.item.id, actionId: id });
+    ev('action.drafted', addMins(at, 1), { type, revision: rec.item.revision, draftRef: `drafts/${id}.json`, tokens: draft.tokens, target }, { itemId: rec.item.id, actionId: id });
     if (status === 'done') {
       ev('action.approved', addMins(at, 6), undefined, { itemId: rec.item.id, actionId: id });
+      ev('action.executing', addMins(at, 6), { attempt: 1 }, { itemId: rec.item.id, actionId: id });
       ev('action.executed', addMins(at, 6), draft.kind === 'confluence' ? { dryRun: false, pageId: draft.pageId, pageVersion: draft.baseVersion + 1 } : { dryRun: false, path: draft.path }, { itemId: rec.item.id, actionId: id });
       state.results[id] = draft.kind === 'confluence' ? `Written to page v${draft.baseVersion + 1}. Logged action.executed.` : `Written to ${draft.path}.`;
     }
@@ -189,7 +196,9 @@ export function buildState(preset: Preset = 'default'): MockState {
     state.timeline = [];
   }
 
+  // The log is in time order with a gap-free seq, as the server writes it.
   events.sort((a, b) => a.at.localeCompare(b.at));
+  events.forEach((e, i) => Object.assign(e, { seq: i + 1, id: `ev-${i + 1}` }));
   state.seq = seq;
   return state;
 }

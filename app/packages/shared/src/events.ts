@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ActionType, FailureReason, ItemKind, NextStep, Participant, SourceId, TriageCorrection, TriageDecision } from './schemas';
+import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participant, SourceId, TriageCorrection, TriageDecision } from './schemas';
 
 // The event log (PLAN.md §4.3, §4.4). It is the source of truth: every event carries a gap-free
 // `seq` and a typed payload, so the inbox can be rebuilt from the log alone. Events never carry
@@ -48,12 +48,22 @@ export const EventPayloads = {
   'item.done': none,
   'item.reopened': none,
   'item.snoozed': z.object({ until: isoDate }),
-  'item.notified': z.object({ kind: z.enum(['now', 'summary']) }), // at most one per item (FR-11.2)
+  'item.unsnoozed': none, // the snooze time passed (FR-8.3)
+  'item.seen': none, // opened while flagged as new replies or back from snooze; clears the flags
+  // At most one per item (FR-11.2). Logged even when quiet hours or the setting held it back,
+  // so the item is never notified later.
+  'item.notified': z.object({ kind: z.enum(['now', 'summary']), suppressed: z.enum(['quiet_hours', 'disabled']).optional() }),
   'triage.decided': z.object({ decision: LoggedDecision }),
   'triage.corrected': z.object({ correction: TriageCorrection }),
   'triage.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
-  'action.requested': z.object({ type: ActionType, revision }),
-  'action.drafted': z.object({ type: ActionType, revision, draftRef: z.string().min(1), tokens: z.number().int().nonnegative() }),
+  'action.requested': z.object({ type: ActionType, revision, supersedes: z.string().optional() }),
+  'action.drafted': z.object({
+    type: ActionType,
+    revision,
+    draftRef: z.string().min(1),
+    tokens: z.number().int().nonnegative(),
+    target: ActionTarget, // where the approved write goes, checked again before it runs
+  }),
   'action.edited': none,
   'action.approved': none,
   // Synced before every write attempt, so a write interrupted by sleep or a crash is reconciled, not repeated (FR-14.5).

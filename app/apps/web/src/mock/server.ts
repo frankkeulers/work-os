@@ -1,16 +1,29 @@
 import {
   Rules,
   Settings as SettingsSchema,
+  applyActionEvent,
+  applyDecision,
+  budgetsOf,
+  correct,
   costOf,
-  effectiveTriage,
+  failTriage,
   firstMatchingRule,
   inTimeRange,
+  isSnoozeDue,
   isWorkHours,
-  laneFor,
   londonParts,
+  markDone,
+  markNotified,
+  markSeen,
+  needsNotification,
+  receiveMessages,
+  reopen,
+  seenChanges,
+  snooze,
+  summaryOf,
   toLoggedDecision,
+  unsnooze,
   type Action,
-  type ActionSummary,
   type ActionType,
   type BudgetState,
   type CorrectionInput,
@@ -150,10 +163,13 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'health' }, { topic: 'inbox' }, { topic: 'usage' }, { topic: 'settings' }, { topic: 'evals' }, { topic: 'clock' });
     for (const id of Object.keys(this.s.items)) this.emit({ topic: 'item', id });
   }
+  /** Logs an event. Action state follows from its events, through the server's own reducer. */
   private event<T extends EventType>(type: T, data: EventData<T>, ids: EventIds = {}) {
     this.s.seq += 1;
-    this.s.events.push(makeEvent(this.s.seq, type, this.iso(), data, ids));
+    const e = makeEvent(this.s.seq, type, this.iso(), data, ids);
+    this.s.events.push(e);
     if (this.s.events.length > 2000) this.s.events.splice(0, this.s.events.length - 2000);
+    applyActionEvent(this.s.actions, e);
   }
 
   private async gate(ms: number) {
@@ -179,10 +195,9 @@ export class MockServer implements WorkOsApi, MockControls {
     const now = this.iso();
     let changed = false;
     for (const rec of Object.values(this.s.items)) {
-      if (rec.status === 'snoozed' && rec.snoozedUntil && rec.snoozedUntil <= now) {
-        rec.status = 'open';
-        rec.snoozedUntil = undefined;
-        rec.backFromSnooze = true;
+      if (isSnoozeDue(rec, now)) {
+        unsnooze(rec);
+        this.event('item.unsnoozed', undefined, { itemId: rec.item.id });
         changed = true;
         this.emit({ topic: 'item', id: rec.item.id });
       }
@@ -279,7 +294,7 @@ export class MockServer implements WorkOsApi, MockControls {
     this.event('item.upserted', upserted(rec.item, false), { itemId: rec.item.id });
     if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
       this.s.ruleHits[rule.id] = (this.s.ruleHits[rule.id] ?? 0) + 1;
-      this.applyDecision(rec, buildDecision(rec, this.iso(), { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
+      this.decide(rec, buildDecision(rec, this.iso(), { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
     }
     this.emit({ topic: 'item', id: rec.item.id });
     return seed.messages.length;
@@ -300,12 +315,11 @@ export class MockServer implements WorkOsApi, MockControls {
     if (reply.decision) rec.script = { ...rec.script, ...reply.decision };
     this.event('item.upserted', upserted(item, reply.by === FRANK), { itemId: item.id });
     // Re-triage only when the new messages are not from Frank alone (§5.3).
+    receiveMessages(rec, reply.by === FRANK);
     if (reply.by !== FRANK) {
-      rec.triageState = 'pending';
-      rec.newReplies = true;
       const rule = firstMatchingRule(item, this.s.rules, this.s.settings, ME);
       if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
-        this.applyDecision(rec, buildDecision(rec, now, { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
+        this.decide(rec, buildDecision(rec, now, { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
       }
     }
     this.emit({ topic: 'item', id: item.id });
@@ -336,14 +350,13 @@ export class MockServer implements WorkOsApi, MockControls {
         // CL-7: retry once, then mark the item triage_failed.
         if (rec.failTriage > 0) {
           rec.failTriage -= Math.min(rec.failTriage, 2);
-          rec.failCount += 2;
-          rec.triageState = 'failed';
+          failTriage(rec, 2);
           this.event('triage.failed', { revision: rec.item.revision, attempts: 2, reason: 'schema validation failed' }, { itemId: rec.item.id });
           this.emit({ topic: 'item', id: rec.item.id });
           continue;
         }
         const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings, ME);
-        this.applyDecision(
+        this.decide(
           rec,
           buildDecision(rec, at, {
             kind: 'model',
@@ -360,28 +373,15 @@ export class MockServer implements WorkOsApi, MockControls {
     return { triaged, calls };
   }
 
-  private applyDecision(rec: ItemRec, d: NonNullable<ItemRec['decision']>) {
-    if (rec.correction && d.itemRevision > rec.correction.itemRevision) rec.correctedFrom = rec.correction.attention;
-    rec.decision = d;
-    rec.triageState = 'triaged';
-    // Defaults for revision collisions; see JOURNEYS.md open questions 1–2.
-    if (rec.status === 'done' && rec.newReplies) {
-      rec.status = 'open';
-      rec.doneAt = undefined;
-    }
-    if (rec.status === 'snoozed' && d.attention === 'now') {
-      rec.status = 'open';
-      rec.snoozedUntil = undefined;
-      rec.backFromSnooze = true;
-    }
+  private decide(rec: ItemRec, d: NonNullable<ItemRec['decision']>) {
+    applyDecision(rec, d);
     this.event('triage.decided', { decision: toLoggedDecision(d) }, { itemId: rec.item.id });
-    const eff = effectiveTriage(rec.decision, rec.correction);
-    if (eff?.attention === 'now' && !rec.notified) {
-      rec.notified = true; // at most one notification per item (FR-11.2)
+    if (needsNotification(rec)) {
       const n = this.s.settings.notifications;
-      if (n.enabled && !inTimeRange(this.now(), n.quietHours)) {
-        this.emit({ topic: 'notification', itemId: rec.item.id, title: rec.item.title, summary: d.summary });
-      }
+      const suppressed = !n.enabled ? 'disabled' : inTimeRange(this.now(), n.quietHours) ? 'quiet_hours' : undefined;
+      markNotified(rec);
+      this.event('item.notified', { kind: 'now', ...(suppressed && { suppressed }) }, { itemId: rec.item.id });
+      if (!suppressed) this.emit({ topic: 'notification', itemId: rec.item.id, title: rec.item.title, summary: d.summary });
     }
     this.emit({ topic: 'item', id: rec.item.id });
   }
@@ -406,20 +406,8 @@ export class MockServer implements WorkOsApi, MockControls {
   // ---------------------------------------------------------------- views
 
   private budgets(): BudgetState {
-    const today = londonParts(this.now()).dateKey;
-    const rows = this.s.usage.filter((u) => londonParts(u.at).dateKey === today);
-    const b = this.s.settings.budgets;
-    const triage = rows.filter((u) => u.purpose === 'triage').length;
-    const drafts = rows.filter((u) => u.purpose === 'draft_vault' || u.purpose === 'draft_confluence').length;
-    const cost = rows.reduce((sum, u) => sum + u.costEquivalent, 0);
-    const baseline = this.s.settings.baselineCostPerDay;
-    return {
-      triage: { used: triage, limit: b.triageCallsPerDay, hit: this.s.flags.forceTriageBudget || triage >= b.triageCallsPerDay },
-      drafts: { used: drafts, limit: b.draftsPerDay, hit: this.s.flags.forceDraftBudget || drafts >= b.draftsPerDay },
-      cost: { used: cost, limit: b.costEquivalentPerDay, hit: cost >= b.costEquivalentPerDay },
-      baseline,
-      pctOfBaseline: baseline ? Math.round((cost / baseline) * 100) : null,
-    };
+    const f = this.s.flags;
+    return budgetsOf(this.s.usage, this.s.settings, this.now(), { triage: f.forceTriageBudget, drafts: f.forceDraftBudget });
   }
 
   private actionsFor(itemId: string) {
@@ -430,40 +418,13 @@ export class MockServer implements WorkOsApi, MockControls {
 
   private summaryOf(rec: ItemRec, budgets: BudgetState): ItemSummary {
     const d = rec.decision;
-    const actions: ItemSummary['actions'] = {};
-    for (const a of this.actionsFor(rec.item.id)) {
-      if (actions[a.type] || a.status === 'discarded') continue;
-      const s: ActionSummary = { id: a.id, type: a.type, status: a.status, failureReason: a.failureReason, stale: a.status === 'ready' && a.itemRevision < rec.item.revision };
-      actions[a.type] = s;
-    }
-    const quietUntil = rec.triageState === 'pending' ? addMins(rec.item.lastActivityAt, this.s.settings.triage.quietMinutes) : undefined;
-    const first = rec.item.messages[0]?.text ?? '';
-    return {
-      id: rec.item.id,
-      source: rec.item.source,
-      kind: rec.item.kind,
-      title: rec.item.title,
-      permalink: rec.item.permalink,
-      lastActivityAt: rec.item.lastActivityAt,
-      revision: rec.item.revision,
-      lane: laneFor(rec),
-      status: rec.status,
-      triageState: rec.triageState,
-      summary: d?.summary ?? (first.length > 110 ? `${first.slice(0, 107)}…` : first),
-      reason: d?.reason,
-      next: d?.next,
-      triage: effectiveTriage(d, rec.correction),
-      correctedFrom: rec.correctedFrom,
-      containsPeopleObservations: d?.containsPeopleObservations ?? false,
-      targetHints: { confluence: d?.confluence.targetHint, vault: d?.vault.targetHint },
-      actions,
-      newReplies: rec.newReplies,
-      backFromSnooze: rec.backFromSnooze,
-      modelPaused: rec.triageState === 'pending' && budgets.triage.hit && !!quietUntil && quietUntil <= this.iso(),
-      snoozedUntil: rec.snoozedUntil,
-      quietUntil,
-      doneAt: rec.doneAt,
-    };
+    return summaryOf(rec.item, rec, {
+      actions: this.actionsFor(rec.item.id),
+      quietMinutes: this.s.settings.triage.quietMinutes,
+      now: this.iso(),
+      triageBudgetHit: budgets.triage.hit,
+      text: { summary: d?.summary, reason: d?.reason, next: d?.next, firstMessage: rec.item.messages[0]?.text },
+    });
   }
 
   async getHealth(): Promise<HealthView> {
@@ -547,8 +508,10 @@ export class MockServer implements WorkOsApi, MockControls {
     const budgets = this.budgets();
     const summary = this.summaryOf(rec, budgets);
     // Opening an item counts as seeing it.
-    if (rec.newReplies && rec.triageState === 'triaged') rec.newReplies = false;
-    rec.backFromSnooze = false;
+    if (seenChanges(rec)) {
+      markSeen(rec);
+      this.event('item.seen', undefined, { itemId: id });
+    }
     const actions = this.actionsFor(id);
     const drafts = Object.fromEntries(actions.filter((a) => this.s.drafts[a.id]).map((a) => [a.id, this.s.drafts[a.id]]));
     const progress = Object.fromEntries(actions.filter((a) => this.progress[a.id]).map((a) => [a.id, this.progress[a.id]]));
@@ -716,22 +679,14 @@ export class MockServer implements WorkOsApi, MockControls {
 
   async markDone(itemId: string) {
     await this.gate(COMMAND_MS);
-    const rec = this.rec(itemId);
-    rec.status = 'done';
-    rec.doneAt = this.iso();
-    rec.snoozedUntil = undefined;
-    rec.newReplies = false;
-    rec.backFromSnooze = false;
+    markDone(this.rec(itemId), this.iso());
     this.event('item.done', undefined, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
 
   async reopen(itemId: string) {
     await this.gate(COMMAND_MS);
-    const rec = this.rec(itemId);
-    rec.status = 'open';
-    rec.doneAt = undefined;
-    rec.snoozedUntil = undefined;
+    reopen(this.rec(itemId));
     this.event('item.reopened', undefined, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
@@ -739,10 +694,7 @@ export class MockServer implements WorkOsApi, MockControls {
   async snooze(itemId: string, untilIso: string) {
     await this.gate(COMMAND_MS);
     if (untilIso <= this.iso()) throw new ApiError('validation', 'Pick a time in the future.', [{ path: 'until', message: 'Pick a time in the future' }]);
-    const rec = this.rec(itemId);
-    rec.status = 'snoozed';
-    rec.snoozedUntil = untilIso;
-    rec.backFromSnooze = false;
+    snooze(this.rec(itemId), untilIso);
     this.event('item.snoozed', { until: untilIso }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
@@ -750,12 +702,11 @@ export class MockServer implements WorkOsApi, MockControls {
   async correctTriage(itemId: string, input: CorrectionInput) {
     await this.gate(COMMAND_MS);
     const rec = this.rec(itemId);
-    rec.correction = { itemId, itemRevision: rec.item.revision, ...input, correctedAt: this.iso() };
-    rec.correctedFrom = undefined;
-    if (rec.triageState === 'failed') rec.triageState = 'triaged';
+    const correction = { itemId, itemRevision: rec.item.revision, ...input, correctedAt: this.iso() };
+    correct(rec, correction);
     this.s.labelCount += 1;
     this.s.correctionCount += 1;
-    this.event('triage.corrected', { correction: rec.correction }, { itemId });
+    this.event('triage.corrected', { correction }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId }, { topic: 'settings' });
     return { labelCount: this.s.labelCount };
   }
@@ -798,21 +749,8 @@ export class MockServer implements WorkOsApi, MockControls {
 
   private createAction(rec: ItemRec, type: ActionType, outcome: DraftOutcome, supersedes?: string): Action {
     const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : 'c'}${this.s.seq + 1}`;
-    const now = this.iso();
-    const action: Action = {
-      id,
-      itemId: rec.item.id,
-      itemRevision: rec.item.revision,
-      type,
-      status: 'drafting',
-      target: {},
-      draftRef: `drafts/${id}.json`,
-      supersedes,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.s.actions[id] = action;
-    this.event('action.requested', { type, revision: rec.item.revision }, { itemId: rec.item.id, actionId: id });
+    this.event('action.requested', { type, revision: rec.item.revision, ...(supersedes && { supersedes }) }, { itemId: rec.item.id, actionId: id });
+    const action = this.s.actions[id];
     this.startDrafting(action, outcome);
     this.emit({ topic: 'inbox' }, { topic: 'item', id: rec.item.id });
     return action;
@@ -853,12 +791,10 @@ export class MockServer implements WorkOsApi, MockControls {
     const now = this.iso();
     const model = action.type === 'vault_note' ? this.s.settings.models.draftVault : this.s.settings.models.draftConfluence;
     const purpose: UsagePurpose = action.type === 'vault_note' ? 'draft_vault' : 'draft_confluence';
-    action.updatedAt = now;
+    let ready = false;
 
     if (outcome === 'model_error') {
       this.recordUsage(purpose, model, 21000, 900, [rec.item.id], 'draft v2', 44000);
-      action.status = 'failed';
-      action.failureReason = 'model_error';
       action.error = 'The draft did not match the expected format twice, so it was dropped.';
       this.s.results[actionId] = action.error;
       this.event('action.failed', { reason: 'model_error' }, { itemId: rec.item.id, actionId });
@@ -868,20 +804,18 @@ export class MockServer implements WorkOsApi, MockControls {
       this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
       if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-4.5', 2100, 60, [rec.item.id], 'people-check v1', 1900);
       if (outcome === 'people_check') {
-        action.status = 'failed';
-        action.failureReason = 'people_check';
         action.error = 'The people check found observations about named people in the draft. Nothing will be written to Confluence.';
         this.s.results[actionId] = action.error;
         this.event('action.failed', { reason: 'people_check' }, { itemId: rec.item.id, actionId });
       } else {
         this.s.drafts[actionId] = draft;
-        action.target = draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path };
-        action.status = 'ready';
-        this.event('action.drafted', { type: action.type, revision: rec.item.revision, draftRef: action.draftRef, tokens: draft.tokens }, { itemId: rec.item.id, actionId });
+        const target = draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path };
+        this.event('action.drafted', { type: action.type, revision: rec.item.revision, draftRef: action.draftRef, tokens: draft.tokens, target }, { itemId: rec.item.id, actionId });
+        ready = true;
       }
     }
     this.emit({ topic: 'item', id: rec.item.id }, { topic: 'inbox' }, { topic: 'usage' });
-    if (action.status === 'ready') {
+    if (ready) {
       this.emit({ topic: 'draft_ready', itemId: rec.item.id, actionId, type: action.type, title: rec.item.title });
     }
   }
@@ -897,8 +831,6 @@ export class MockServer implements WorkOsApi, MockControls {
     const a = this.action(actionId);
     if (a.status !== 'drafting') return;
     this.clearDraftTimers(actionId);
-    a.status = 'discarded';
-    a.updatedAt = this.iso();
     this.event('action.discarded', { reason: 'cancelled' }, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
   }
@@ -909,7 +841,6 @@ export class MockServer implements WorkOsApi, MockControls {
     const d = this.s.drafts[actionId];
     if (a.status !== 'ready' || !d) throw new ApiError('conflict', 'This draft can no longer be edited.');
     this.s.drafts[actionId] = { ...d, content, edited: true };
-    a.updatedAt = this.iso();
     this.event('action.edited', undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId });
   }
@@ -921,7 +852,6 @@ export class MockServer implements WorkOsApi, MockControls {
     if (ACTIVE.includes(a.status) || a.status === 'failed') {
       this.clearDraftTimers(actionId);
       if (a.status !== 'failed') {
-        a.status = 'discarded';
         this.event('action.discarded', { reason: 'redraft' }, { itemId: a.itemId, actionId });
       }
     }
@@ -934,8 +864,6 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(COMMAND_MS);
     const a = this.action(actionId);
     this.clearDraftTimers(actionId);
-    a.status = 'discarded';
-    a.updatedAt = this.iso();
     this.event('action.discarded', { reason: 'discarded' }, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
   }
@@ -944,8 +872,6 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(COMMAND_MS);
     const a = this.action(actionId);
     if (a.status !== 'ready') throw new ApiError('conflict', 'This draft is no longer ready to approve.');
-    a.status = 'approved';
-    a.updatedAt = this.iso();
     this.event('action.approved', undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
     void this.execute(actionId, 500);
@@ -956,19 +882,16 @@ export class MockServer implements WorkOsApi, MockControls {
     await sleep(delay);
     const a = this.s.actions[actionId];
     if (!a) return;
-    a.status = 'executing';
+    this.event('action.executing', { attempt: 1 }, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId });
     await sleep(delay ? 1300 : 0);
     const d = this.s.drafts[actionId];
     const rec = this.s.items[a.itemId];
     if (!d || !rec) return;
-    a.updatedAt = this.iso();
     const conflict = this.takeOutcome((o) => (a.type === 'vault_note' ? o === 'vault_conflict' : o === 'confluence_conflict'));
     const dry = this.s.settings.dryRun;
 
     if (conflict !== 'normal') {
-      a.status = 'failed';
-      a.failureReason = 'conflict';
       a.error =
         d.kind === 'confluence'
           ? `The page changed after drafting (v${d.baseVersion} → v${d.baseVersion + 2}). Re-drafting instead of writing.`
@@ -984,8 +907,6 @@ export class MockServer implements WorkOsApi, MockControls {
     }
 
     if (d.kind === 'confluence' && !this.s.settings.confluence.pages.some((p) => p.id === d.pageId)) {
-      a.status = 'failed';
-      a.failureReason = 'allow_list';
       a.error = `Page ${d.pageId} (${d.pageTitle}) is not on the Confluence allow-list. The executor refused the write.`;
       this.s.results[actionId] = a.error;
       this.event('action.failed', { reason: 'allow_list', pageId: d.pageId }, { itemId: a.itemId, actionId });
@@ -993,7 +914,6 @@ export class MockServer implements WorkOsApi, MockControls {
       return;
     }
 
-    a.status = 'done';
     let msg: string;
     if (d.kind === 'confluence') {
       msg = dry
@@ -1144,8 +1064,8 @@ export class MockServer implements WorkOsApi, MockControls {
       if (!target) {
         // Nothing corrected yet: correct the Head of Sales DM to "none" first, as Frank would.
         target = Object.values(this.s.items).find((r) => r.key === 't3')!;
-        target.correction = { itemId: target.item.id, itemRevision: target.item.revision, attention: 'none', confluence: false, vault: false, correctedAt: this.iso() };
-        this.event('triage.corrected', { correction: target.correction }, { itemId: target.item.id });
+        correct(target, { itemId: target.item.id, itemRevision: target.item.revision, attention: 'none', confluence: false, vault: false, correctedAt: this.iso() });
+        this.event('triage.corrected', { correction: target.correction! }, { itemId: target.item.id });
       }
       const by = target.item.participants.find((p) => p.id !== FRANK)?.id ?? 'U09SALES';
       return void this.runPoll('manual', {

@@ -4,16 +4,14 @@ import type {
   Draft,
   EvalReport,
   Item,
-  ItemStatus,
+  ItemFlags,
   NextStep,
   PollStatus,
   Rule,
   Settings,
   SlackStatus,
   StartupFailure,
-  TriageCorrection,
   TriageDecision,
-  TriageState,
   UsageRecord,
   WorkEvent,
 } from '@work-os/shared';
@@ -76,20 +74,10 @@ export interface ReplySeed {
 
 export type DraftOutcome = 'normal' | 'vault_conflict' | 'confluence_conflict' | 'people_check' | 'allow_list' | 'model_error';
 
-export interface ItemRec {
+/** An item with the server's inbox flags (shared projection), plus the mock's own script. */
+export interface ItemRec extends ItemFlags<TriageDecision> {
   key: string;
   item: Item;
-  status: ItemStatus;
-  triageState: TriageState;
-  decision?: TriageDecision;
-  correction?: TriageCorrection;
-  correctedFrom?: Attention;
-  snoozedUntil?: string;
-  doneAt?: string;
-  newReplies: boolean;
-  backFromSnooze: boolean;
-  failCount: number;
-  notified: boolean;
   arrivedAt: string;
   script: ScriptedDecision;
   failTriage: number;

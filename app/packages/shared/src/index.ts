@@ -5,4 +5,5 @@ export * from './time';
 export * from './rules';
 export * from './pricing';
 export * from './errors';
+export * from './projection';
 export type * from './api';
