@@ -1,12 +1,11 @@
-import type { WorkEvent } from '@work-os/shared';
+import { firstMatchingRule, isWorkHours, type WorkEvent } from '@work-os/shared';
 import { addMins, buildDecision, makeEvent, newRec } from '../build';
 import { buildDraft } from '../drafts';
-import { firstMatchingRule } from '../rules';
+import { ME } from '../me';
 import type { ItemRec, MockState, ThreadSeed } from '../types';
 import { SEED_RULE_HITS, SEED_RULES, SEED_SETTINGS } from './config';
 import { BATCH_TWELVE, SEED_THREADS, TIMELINE } from './threads';
 import { SEED_EVALS, seedUsage } from './usage';
-import { isWorkHours } from '../../lib/time';
 
 export const SEED_CLOCK = '2026-10-05T08:45:00.000Z'; // Mon 5 Oct 2026, 09:45 London
 export const STATE_VERSION = 5;
@@ -107,7 +106,7 @@ export function buildState(preset: Preset = 'default'): MockState {
       ev('triage.failed', at, { itemId: rec.item.id, data: { attempts: 2, reason: 'schema validation failed' } });
       continue;
     }
-    const rule = firstMatchingRule(rec.item, rules, settings);
+    const rule = firstMatchingRule(rec.item, rules, settings, ME);
     let decision;
     if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
       decision = buildDecision(rec, rec.item.lastActivityAt, { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type });

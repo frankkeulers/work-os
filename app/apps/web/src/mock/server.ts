@@ -1,41 +1,42 @@
 import {
   Rules,
   Settings as SettingsSchema,
+  costOf,
   effectiveTriage,
+  firstMatchingRule,
+  inTimeRange,
+  isWorkHours,
   laneFor,
+  londonParts,
   type Action,
+  type ActionSummary,
   type ActionType,
+  type BudgetState,
+  type CorrectionInput,
+  type Criterion,
+  type DraftProgress,
   type EvalReport,
+  type HealthView,
+  type InboxView,
+  type ItemSummary,
+  type ItemView,
+  type Notice,
   type Rule,
   type Settings,
+  type SettingsView,
+  type StartupCheck,
   type UsagePurpose,
   type UsageRecord,
+  type UsageRow,
+  type UsageView,
   type WorkEvent,
+  type WorkOsApi,
 } from '@work-os/shared';
 import { ApiError, type FieldIssue } from '../api/errors';
-import type {
-  ActionSummary,
-  BudgetState,
-  CorrectionInput,
-  Criterion,
-  DraftProgress,
-  HealthView,
-  InboxView,
-  ItemSummary,
-  ItemView,
-  Notice,
-  SettingsView,
-  StartupCheck,
-  UsageRow,
-  UsageView,
-  WorkOsApi,
-} from '../api/types';
-import { inTimeRange, isWorkHours, londonParts } from '../lib/time';
 import { MIN, addMins, buildDecision, makeEvent, newRec, slackTs } from './build';
 import type { MockControls, PollOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
-import { costOf } from './pricing';
-import { firstMatchingRule } from './rules';
+import { ME } from './me';
 import { FRANK } from './seed/people';
 import { SEED_CLOCK, STATE_VERSION, buildState, type Preset } from './seed';
 import { BATCH_TWELVE, REPLIES, VIP_DM } from './seed/threads';
@@ -264,7 +265,7 @@ export class MockServer implements WorkOsApi, MockControls {
   private ingestThread(seed: ThreadSeed, uniq: string, keepOriginalTimes = false): number {
     const rec = newRec(seed, this.iso(), uniq);
     if (!keepOriginalTimes) rec.arrivedAt = this.iso();
-    const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings);
+    const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings, ME);
     if (rule?.outcome.type === 'drop') {
       this.s.ruleHits[rule.id] = (this.s.ruleHits[rule.id] ?? 0) + 1;
       return seed.messages.length; // dropped at ingest, never stored (FR-2.10)
@@ -297,7 +298,7 @@ export class MockServer implements WorkOsApi, MockControls {
     if (reply.by !== FRANK) {
       rec.triageState = 'pending';
       rec.newReplies = true;
-      const rule = firstMatchingRule(item, this.s.rules, this.s.settings);
+      const rule = firstMatchingRule(item, this.s.rules, this.s.settings, ME);
       if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
         this.applyDecision(rec, buildDecision(rec, now, { kind: 'rule', ruleId: rule.id, attention: rule.outcome.type }));
       }
@@ -336,7 +337,7 @@ export class MockServer implements WorkOsApi, MockControls {
           this.emit({ topic: 'item', id: rec.item.id });
           continue;
         }
-        const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings);
+        const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings, ME);
         this.applyDecision(
           rec,
           buildDecision(rec, at, {

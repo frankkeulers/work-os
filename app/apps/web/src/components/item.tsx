@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import type { Attention, SourceId } from '@work-os/shared';
+import { tomorrowAt9, type Attention, type SourceId } from '@work-os/shared';
 import { api, type ItemSummary } from '../api';
 import { fmtDayDate, fmtTime } from '../lib/format';
 import { SOURCE_NAME } from '../lib/next';
-import { tomorrowAt9 } from '../lib/time';
 import { errorToast, toast } from '../store/toasts';
 import { Icon } from './icons';
 import { Button, MenuItem, Segmented, cx, inputClass } from './ui';

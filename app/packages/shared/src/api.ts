@@ -1,15 +1,13 @@
+import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type {
   Action,
   ActionType,
   Attention,
   Draft,
-  EffectiveTriage,
   EvalReport,
   FailureReason,
   Item,
   ItemKind,
-  ItemStatus,
-  Lane,
   ModelId,
   NextStep,
   Rule,
@@ -17,12 +15,11 @@ import type {
   Settings,
   TriageCorrection,
   TriageDecision,
-  TriageState,
   UsagePurpose,
-} from '@work-os/shared';
+} from './schemas';
 
-// The contract between the web app and the backend. Queries and commands map 1:1 to REST
-// routes on the future Fastify server; subscribe() stands in for the SSE stream (FR-3.2).
+// The contract between the web app and the backend, shared by both. Queries and commands map
+// 1:1 to REST routes on the Fastify server; subscribe() stands in for the SSE stream (FR-3.2).
 
 export interface ActionSummary {
   id: string;

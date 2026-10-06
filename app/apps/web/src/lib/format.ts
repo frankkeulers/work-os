@@ -1,4 +1,4 @@
-import { TZ, londonParts } from './time';
+import { TZ, londonParts } from '@work-os/shared';
 
 const time = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const dayDate = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short' });

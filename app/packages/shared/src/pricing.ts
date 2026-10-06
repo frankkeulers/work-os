@@ -1,4 +1,4 @@
-import type { ModelId } from '@work-os/shared';
+import type { ModelId } from './schemas';
 
 // Cost-equivalent in USD per million tokens. Placeholder rates for the prototype.
 const RATES: Record<ModelId, { input: number; output: number; cache: number }> = {

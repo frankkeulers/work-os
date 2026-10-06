@@ -1,25 +1,7 @@
-// Typed API errors. Status codes mirror what the Fastify server will return.
-export type ApiErrorCode =
-  | 'network' // 0: server unreachable
-  | 'not_found' // 404
-  | 'conflict' // 409: state changed under you
-  | 'validation' // 422: settings or rules failed zod validation
-  | 'forbidden' // 403: blocked by policy (people observations, allow-list)
-  | 'budget'; // 429: daily budget reached (CL-6)
+import { API_ERROR_STATUS, type ApiErrorCode, type FieldIssue } from '@work-os/shared';
 
-const STATUS: Record<ApiErrorCode, number> = {
-  network: 0,
-  not_found: 404,
-  conflict: 409,
-  validation: 422,
-  forbidden: 403,
-  budget: 429,
-};
-
-export interface FieldIssue {
-  path: string; // dotted path, e.g. "settings.schedule.intervalWorkMinutes" or "rules.3.conditions.0.pattern"
-  message: string;
-}
+// Typed API errors. Codes and status codes are shared with the Fastify server.
+export type { ApiErrorCode, FieldIssue };
 
 export class ApiError extends Error {
   readonly status: number;
@@ -30,7 +12,7 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
     this.code = code;
-    this.status = STATUS[code];
+    this.status = API_ERROR_STATUS[code];
     this.issues = issues;
   }
 }

@@ -1,8 +1,7 @@
-import type { Need, NextStep, SourceId } from '@work-os/shared';
+import { londonAt, londonParts, tomorrowAt9, type Need, type NextStep, type SourceId } from '@work-os/shared';
 import type { ItemSummary } from '../api';
 import { fmtIn, fmtTime, fmtWhen } from './format';
 import { cardActions, type DraftButton, type DraftState } from './lanes';
-import { londonAt, londonParts, tomorrowAt9 } from './time';
 
 // What the Inbox shows as each item's next step: the triage's suggestion when it made one,
 // otherwise a default from the lane. Rules and older decisions have no next step (no model call).

@@ -6,15 +6,17 @@ import type {
   Item,
   ItemStatus,
   NextStep,
+  PollStatus,
   Rule,
   Settings,
+  SlackStatus,
+  StartupFailure,
   TriageCorrection,
   TriageDecision,
   TriageState,
   UsageRecord,
   WorkEvent,
 } from '@work-os/shared';
-import type { PollStatus, SlackStatus, StartupFailure } from '../api/types';
 
 // Mock-only types. Nothing outside src/mock and src/scenarios imports these.
 
