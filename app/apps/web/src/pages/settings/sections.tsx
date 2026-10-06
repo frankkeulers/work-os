@@ -237,7 +237,7 @@ function WritingSection({ s, view, full, set, type, flush, err, confirm }: Ctx) 
         title="Confluence allow-list"
         aside={
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-            <Icon name="lock" size={12} /> Space <span className="font-mono">{s.confluence.spaceKey}</span> · API token in Keychain
+            <Icon name="lock" size={12} /> <span className="font-mono">{s.confluence.siteUrl.replace(/^https:\/\//, '')}</span> · Space <span className="font-mono">{s.confluence.spaceKey}</span> · API token in Keychain
           </span>
         }
       >

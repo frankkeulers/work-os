@@ -19,7 +19,7 @@ import { ItemPanel } from './inbox/ItemPanel';
 
 const TOP_LANES = ['now', 'today', 'file'] as const satisfies Lane[];
 const isTop = (i: ItemSummary) => (TOP_LANES as readonly Lane[]).includes(i.lane);
-const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]');
+const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
 // ---------- Header ----------
 

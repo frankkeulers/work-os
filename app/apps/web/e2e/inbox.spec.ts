@@ -150,5 +150,28 @@ test('J08 unsaved draft edits in the panel ask before moving to another item', a
   const leave = page.getByRole('dialog', { name: 'Leave with unsaved edits?' });
   await expect(leave).toBeVisible();
   await leave.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByLabel('Draft text')).toHaveValue('Unsaved change');
+  // The draft field is a rich-text editor (contenteditable), so it has text rather than a value.
+  await expect(page.getByLabel('Draft text')).toHaveText('Unsaved change');
+});
+
+test('the Confluence target links to the page, and rich-text edits are saved as markdown', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  await expect(action.getByRole('link', { name: 'Insights APIs › Decisions' })).toHaveAttribute('href', 'https://pole-star.atlassian.net/wiki/spaces/PRD/pages/39004512');
+  await expect(action.getByRole('link', { name: 'Insights APIs › Decisions' })).toHaveAttribute('target', '_blank');
+
+  await action.getByRole('button', { name: 'Edit text' }).click();
+  const editor = page.getByLabel('Draft text');
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Ship it');
+  await page.keyboard.press('ControlOrMeta+a');
+  await action.getByRole('toolbar', { name: 'Formatting' }).getByRole('button', { name: 'Bold' }).click();
+  await expect(editor.locator('strong')).toHaveText('Ship it');
+  await action.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'Markdown' }).click();
+  await expect(page.getByLabel('Draft text')).toHaveValue('**Ship it**');
+  await action.getByRole('button', { name: 'Save edits' }).click();
+  await expect(action.getByLabel('Draft text preview').locator('strong')).toHaveText('Ship it');
+  await expect(action.getByText('Edited', { exact: true })).toBeVisible();
 });

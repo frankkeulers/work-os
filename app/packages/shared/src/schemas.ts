@@ -298,6 +298,7 @@ export const Settings = z.object({
   retentionDays: z.number().int().min(1, 'At least 1 day').max(365, 'At most 365 days'),
   vaultPath: z.string().min(1, 'Enter the vault path'),
   confluence: z.object({
+    siteUrl: z.url({ protocol: /^https$/, error: 'Enter the https:// address of your Confluence site' }), // amendment: links to pages
     spaceKey: z.string().min(1),
     pages: z.array(ConfluencePage),
   }),

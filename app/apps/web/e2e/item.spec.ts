@@ -59,6 +59,8 @@ test('J08 edit a vault append, then the leave guard and re-draft confirmation', 
   await panel(page).getByRole('tab', { name: /Vault note/ }).click();
   await panel(page).getByRole('button', { name: 'Draft vault note' }).click();
   await panel(page).getByRole('button', { name: 'Edit text' }).click(DRAFT_TIMEOUT);
+  // The note it appends to opens in Obsidian.
+  await expect(panel(page).getByRole('link', { name: /\.md$/ })).toHaveAttribute('href', /^obsidian:\/\/open\?vault=PSG%20Vault&file=/);
   await page.getByLabel('Draft text').fill('- 2026-10-05 · Edited by hand.');
   await panel(page).getByRole('button', { name: 'Save edits' }).click();
   await expect(panel(page).getByText('Edited', { exact: true })).toBeVisible();

@@ -15,7 +15,7 @@ import { usePrefs } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { DueChip, LaneChip, NeedTag, StatusChip } from './chips';
 
-const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]');
+const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
 function snoozeToast(item: ItemSummary, iso: string) {
   toast(`Snoozed until ${fmtDayDate(iso)} ${fmtTime(iso)} · ${item.title}`, {
@@ -417,8 +417,9 @@ export function ItemPanel({
           <div ref={filingRef} className="flex scroll-mt-4 flex-col gap-2.5 border-t border-line-soft pt-[18px]">
             <div className="flex items-baseline gap-2">
               <h3 className="m-0 flex-1 text-[13px] font-semibold">File it</h3>
-              <button type="button" className="min-h-7 rounded-lg px-2 text-[13px] font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={() => setFiling(undefined)}>
-                Back to both targets
+              <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={() => setFiling(undefined)}>
+                <Icon name="back" size={14} />
+                Back to filing options
               </button>
             </div>
             <ActionPanel key={item.id} embedded view={view} type={filing} setType={setFiling} onDirty={onDirty} onDoneNext={onDoneNext} />
@@ -433,11 +434,11 @@ export function ItemPanel({
       <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface px-6 py-3">
         {open ? (
           <>
-            <Button className="min-h-10 px-3.5" onClick={() => void markDoneWithUndo(item)}>
+            <Button className="min-h-10 px-3.5" icon="check" onClick={() => void markDoneWithUndo(item)}>
               Done <Kbd>e</Kbd>
             </Button>
             <div className="relative">
-              <Button className="min-h-10 px-3.5" ref={snoozeTrigger} aria-haspopup="menu" aria-expanded={snoozeOpen} onClick={() => setSnoozeOpen(!snoozeOpen)}>
+              <Button className="min-h-10 px-3.5" icon="clock" ref={snoozeTrigger} aria-haspopup="menu" aria-expanded={snoozeOpen} onClick={() => setSnoozeOpen(!snoozeOpen)}>
                 Snooze <Kbd>s</Kbd>
               </Button>
               {snoozeOpen && (
@@ -453,7 +454,7 @@ export function ItemPanel({
               )}
             </div>
             <span className="flex-1" />
-            <Button className="min-h-10 px-3.5" onClick={onDoneNext}>
+            <Button className="min-h-10 px-3.5" icon="arrow" onClick={onDoneNext}>
               Done and next <Kbd>⇧e</Kbd>
             </Button>
           </>
@@ -463,7 +464,7 @@ export function ItemPanel({
               {item.status === 'snoozed' ? 'Unsnooze' : 'Reopen'}
             </Button>
             <span className="flex-1" />
-            <Button className="min-h-10 px-3.5" onClick={onNext} disabled={pos >= total}>
+            <Button className="min-h-10 px-3.5" icon="arrow" onClick={onNext} disabled={pos >= total}>
               Next item <Kbd>j</Kbd>
             </Button>
           </>

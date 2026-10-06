@@ -44,6 +44,7 @@
   --red:#B91C1C;
   --red-fg:#B91C1C;
   --red-line:#F3C9C9;
+  --red-wash:#FDF4F4;
   --seg-on:#FFFFFF;
   --solid:#14171C;
   --surface:#FFFFFF;
@@ -112,6 +113,7 @@
   --red:#DC2626;
   --red-fg:#F87171;
   --red-line:#5A2626;
+  --red-wash:#2A1818;
   --seg-on:#343A46;
   --solid:#3A4150;
   --surface:#1A1D24;
@@ -178,10 +180,10 @@
     --orange-line:#5A3320;
     --orange-wash:#3A2014;
     --orange-wash-2:#24170F;
-  --orange-wash-2:#24170F;
     --red:#DC2626;
     --red-fg:#F87171;
     --red-line:#5A2626;
+    --red-wash:#2A1818;
     --seg-on:#343A46;
     --solid:#3A4150;
     --surface:#1A1D24;
@@ -252,6 +254,7 @@
   --color-red: var(--red);
   --color-red-fg: var(--red-fg);
   --color-red-line: var(--red-line);
+  --color-red-wash: var(--red-wash);
   --color-seg-on: var(--seg-on);
   --color-solid: var(--solid);
   --color-surface: var(--surface);

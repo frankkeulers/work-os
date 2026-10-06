@@ -38,6 +38,15 @@ const PATHS = {
   wifiOff: <><path d="M2 2l20 20" /><path d="M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5-2.6M19 13a10 10 0 0 0-2.3-1.6M2 9.5a15 15 0 0 1 4.5-2.8M22 9.5A15 15 0 0 0 11 6" /><path d="M12 20h.01" /></>,
   copy: <><rect x="8" y="8" width="13" height="13" rx="2" /><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" /></>,
   sparkle: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6" />,
+  // Action buttons and the draft editor toolbar (Lucide-style, to match the set above).
+  trash: <><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 13h10l1-13M9 7V4h6v3" /></>,
+  redraft: <><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5" /><path d="M20 4v4.5h-4.5" /><path d="M20 12a8 8 0 0 1-13.7 5.7L4 15.5" /><path d="M4 20v-4.5h4.5" /></>,
+  bold: <path d="M7 4h6a4 4 0 0 1 0 8H7zM7 12h7a4 4 0 0 1 0 8H7z" />,
+  italic: <path d="M19 4h-9M14 20H5M15 4 9 20" />,
+  code: <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />,
+  heading: <path d="M6 4v16M18 4v16M6 12h12" />,
+  listBullet: <><path d="M9 6h12M9 12h12M9 18h12" /><path d="M4 6h.01M4 12h.01M4 18h.01" strokeWidth="3" /></>,
+  listOrdered: <><path d="M10 6h11M10 12h11M10 18h11" /><path d="M4 4h1v4M4 8h2M6 18H4l2-2.5a1 1 0 0 0-2-.5" /></>,
 } as const;
 
 export type IconName = keyof typeof PATHS;

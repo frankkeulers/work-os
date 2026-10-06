@@ -6,15 +6,22 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 
 // ---------- Buttons (design guide: card action hierarchy) ----------
 
-type Variant = 'tonal' | 'secondary' | 'solid' | 'ghost' | 'danger' | 'future' | 'inverse';
+// Colour follows what the action does, not how important it is:
+//   solid       the one commit action (Approve, Save)
+//   secondary   neutral, reversible actions (Edit, Re-draft, Cancel)
+//   danger      throws work away (Discard, Delete). Red text and a soft red edge, so it reads as
+//               "careful" without competing with the primary. The confirm dialog is where red goes solid.
+//   dangerSolid the confirming button in a destructive dialog only
+type Variant = 'tonal' | 'secondary' | 'solid' | 'ghost' | 'danger' | 'dangerSolid' | 'future' | 'inverse';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
   tonal: 'bg-accent-tonal text-accent font-semibold hover:brightness-95',
-  secondary: 'border border-line-strong bg-surface text-ink hover:bg-surface-2',
+  secondary: 'border border-line-strong bg-surface text-ink font-medium hover:bg-surface-2 [&>svg]:text-ink-2',
   solid: 'bg-accent-bg text-on-solid font-semibold hover:brightness-110',
   ghost: 'text-ink-2 hover:bg-track',
-  danger: 'text-red-fg hover:bg-red-line/30',
+  danger: 'border border-red-line bg-surface text-red-fg font-medium hover:bg-red-wash',
+  dangerSolid: 'bg-red text-white font-semibold hover:brightness-110',
   future: 'border-[1.5px] border-dashed border-violet-line bg-surface text-violet-fg',
   inverse: 'bg-surface text-ink font-semibold',
 };
@@ -403,7 +410,7 @@ export function ConfirmDialog({
       footer={
         <>
           <Button onClick={onCancel}>Cancel</Button>
-          <Button variant="solid" className={danger ? 'bg-red' : undefined} onClick={onConfirm}>
+          <Button variant={danger ? 'dangerSolid' : 'solid'} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </>

@@ -31,3 +31,67 @@ a:hover {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Draft text rendered from markdown (MarkdownDoc): previews and the in-place editor. */
+.wos-prose {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-strong);
+  outline: none;
+  overflow-wrap: anywhere;
+}
+.wos-prose > * {
+  margin: 0;
+}
+.wos-prose h1 {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.wos-prose h2,
+.wos-prose h3 {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.wos-prose ul,
+.wos-prose ol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 22px;
+}
+.wos-prose ul {
+  list-style: disc;
+}
+.wos-prose ol {
+  list-style: decimal;
+}
+.wos-prose li > p {
+  margin: 0;
+}
+.wos-prose code {
+  border-radius: 4px;
+  background: var(--surface-2);
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.wos-prose blockquote {
+  border-left: 3px solid var(--line-strong);
+  padding-left: 12px;
+  color: var(--ink-2);
+}
+.wos-prose a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.wos-prose[contenteditable='true'] {
+  min-height: 160px;
+}

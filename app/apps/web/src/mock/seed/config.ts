@@ -19,6 +19,7 @@ export const SEED_SETTINGS: Settings = {
   retentionDays: 30,
   vaultPath: '~/Obsidian/PSG Vault',
   confluence: {
+    siteUrl: 'https://pole-star.atlassian.net',
     spaceKey: 'PRD',
     pages: [
       { title: 'Insights APIs › Decisions', id: '39004512' },

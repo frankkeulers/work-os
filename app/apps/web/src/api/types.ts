@@ -129,6 +129,8 @@ export interface ItemView {
   allowListedPageIds: string[];
   dryRun: boolean;
   dataDir: string;
+  /** Where approved actions write, for links to the Confluence page and the Obsidian note. */
+  targets: { confluenceSite: string; spaceKey: string; vaultPath: string };
   budgets: BudgetState;
   meId: string; // the signed-in Slack user, shown as "You"
 }

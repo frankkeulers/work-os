@@ -1,11 +1,13 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import type { Action, ActionType, ConfluenceDraft, Draft, VaultAppendDraft, VaultNewDraft } from '@work-os/shared';
+import type { Action, ActionType, ConfluenceDraft, Draft, VaultAppendDraft } from '@work-os/shared';
 import { api, type ItemView } from '../api';
 import { fmtTokens } from '../lib/format';
+import { confluencePageUrl, obsidianNoteUrl } from '../lib/links';
 import { TYPE_LABEL, draftState, type DraftState } from '../lib/lanes';
 import { SOURCE_NAME } from '../lib/next';
 import { errorToast, toast } from '../store/toasts';
+import { BrandIcon } from './BrandIcon';
 import { Icon } from './icons';
 import { itemPath } from './item';
 import { Banner, Button, Chip, ConfirmDialog, Spinner, cx } from './ui';
@@ -34,35 +36,53 @@ const STATUS_BADGE: Record<DraftState, { label: string; cls: string } | null> = 
 
 const ACTIVE = new Set<Action['status']>(['drafting', 'ready', 'approved', 'executing']);
 
+/** A link styled as a secondary button. */
+const linkButton =
+  'inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-lg border border-line-strong bg-surface px-3 text-[13px] font-medium !text-ink no-underline hover:bg-surface-2';
+
 // ---------- Draft previews ----------
 
-const Inline = ({ text }: { text: string }) => (
-  <>
-    {text.split(/(`[^`]+`)/g).map((part, i) =>
-      part.startsWith('`') && part.endsWith('`') ? (
-        <code key={i} className="font-mono text-[13px]">
-          {part.slice(1, -1)}
-        </code>
-      ) : (
-        part
-      ),
-    )}
-  </>
-);
+const MarkdownDoc = lazy(() => import('./MarkdownDoc'));
 
-function ConfluencePreview({ d, item }: { d: ConfluenceDraft; item: ItemView['item'] }) {
-  const paras = d.content.split(/\n{2,}/);
+/** Plain paragraphs while the editor's code loads. */
+function PlainText({ text }: { text: string }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {text.split(/\n{2,}/).map((p, i) => (
+        <p key={i} className="m-0 whitespace-pre-line text-sm leading-relaxed text-ink-strong">
+          {p.split(/(`[^`]+`)/g).map((part, j) =>
+            part.startsWith('`') && part.endsWith('`') ? (
+              <code key={j} className="font-mono text-[13px]">
+                {part.slice(1, -1)}
+              </code>
+            ) : (
+              part
+            ),
+          )}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+type DocProps = { value: string; editing: boolean; onChange: (md: string) => void };
+
+function Doc(props: DocProps) {
+  return (
+    <Suspense fallback={<PlainText text={props.value} />}>
+      <MarkdownDoc label="Draft text" {...props} />
+    </Suspense>
+  );
+}
+
+function ConfluencePreview({ d, item, doc }: { d: ConfluenceDraft; item: ItemView['item']; doc: DocProps }) {
   return (
     <div className="rounded-[10px] bg-tray p-5">
       <article className="flex flex-col gap-2.5 rounded-md border border-line bg-surface px-6 py-[22px]">
         <div className="font-mono text-[11px] text-teal">+ new entry</div>
         <div className="text-base font-semibold">{d.title}</div>
-        {paras.map((p, i) => (
-          <p key={i} className="m-0 whitespace-pre-line text-sm leading-relaxed text-ink-strong">
-            <Inline text={p} />
-          </p>
-        ))}
-        {!paras.some((p) => p.startsWith('Source:')) && <div className="text-xs text-muted">Source: {SOURCE_NAME[item.source]} {item.title}</div>}
+        <Doc {...doc} />
+        {!/^\W*Source:/m.test(doc.value) && <div className="text-xs text-muted">Source: {SOURCE_NAME[item.source]} {item.title}</div>}
       </article>
     </div>
   );
@@ -86,20 +106,41 @@ function VaultAppendPreview({ d }: { d: VaultAppendDraft }) {
   );
 }
 
-function VaultNewPreview({ d }: { d: VaultNewDraft }) {
+/** A vault note, or the lines an append adds while they're being edited. */
+function VaultDoc({ doc }: { doc: DocProps }) {
   return (
-    <pre className="m-0 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-[10px] border border-line bg-surface-3 px-4 py-3 font-mono text-[13px] leading-relaxed text-ink-strong">
-      {d.content}
-    </pre>
+    <div className="rounded-[10px] border border-line bg-surface px-5 py-4">
+      <Doc {...doc} />
+    </div>
   );
 }
 
-function TargetLine({ d, allowListed }: { d: Draft; allowListed: boolean }) {
+/** A link out to the page or note. Confluence opens in a new tab; obsidian:// hands over to the app. */
+function TargetLink({ href, title, children }: { href: string; title: string; children: ReactNode }) {
+  const web = href.startsWith('http');
+  return (
+    <a
+      href={href}
+      title={title}
+      target={web ? '_blank' : undefined}
+      rel={web ? 'noreferrer' : undefined}
+      className="inline-flex min-w-0 items-center gap-1 font-semibold underline decoration-accent/35 decoration-1 underline-offset-[3px] hover:decoration-accent"
+    >
+      <span className="min-w-0 break-all">{children}</span>
+      <Icon name="external" size={12} className="shrink-0" />
+    </a>
+  );
+}
+
+function TargetLine({ d, allowListed, links }: { d: Draft; allowListed: boolean; links: TargetLinks }) {
   if (d.kind === 'confluence')
     return (
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
         <span className="text-muted">Append to</span>
-        <span className="font-semibold">{d.pageTitle}</span>
+        <BrandIcon brand="confluence" size={14} decorative />
+        <TargetLink href={links.page(d.pageId)} title={`Open page ${d.pageId} in Confluence`}>
+          {d.pageTitle}
+        </TargetLink>
         <span className="text-muted">under</span>
         <span className="font-semibold">{d.section}</span>
         <span className="font-mono text-[11px] text-muted">
@@ -109,18 +150,31 @@ function TargetLine({ d, allowListed }: { d: Draft; allowListed: boolean }) {
       </div>
     );
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px]">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
       <span className="text-muted">{d.kind === 'vault_new' ? 'New note' : 'Append to'}</span>
-      <span className="break-all font-mono text-[12px] font-semibold">{d.path}</span>
-      {d.kind === 'vault_append' && (
+      <BrandIcon brand="obsidian" size={14} decorative />
+      {d.kind === 'vault_append' || links.noteExists ? (
+        <TargetLink href={links.note(d.path)} title="Open the note in Obsidian">
+          <span className="font-mono text-[12px]">{d.path}</span>
+        </TargetLink>
+      ) : (
+        <span className="break-all font-mono text-[12px] font-semibold" title="The note is created when you approve">
+          {d.path}
+        </span>
+      )}
+      {d.kind === 'vault_append' ? (
         <>
           <span className="text-muted">under</span>
           <span className="font-semibold">{d.heading}</span>
         </>
+      ) : (
+        !links.noteExists && <span className="text-xs text-muted">· created when you approve</span>
       )}
     </div>
   );
 }
+
+type TargetLinks = { page: (id: string) => string; note: (path: string) => string; noteExists: boolean };
 
 function SafetyChips({ d, allowListed, dryRun }: { d: Draft; allowListed: boolean; dryRun: boolean }) {
   return (
@@ -189,7 +243,9 @@ function DraftingProgress({ action, view }: { action: Action; view: ItemView }) 
         ))}
       </ol>
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => void api.cancelDraft(action.id).catch(errorToast)}>Cancel</Button>
+        <Button icon="x" onClick={() => void api.cancelDraft(action.id).catch(errorToast)}>
+          Cancel
+        </Button>
         <span className="font-mono text-xs text-muted">{elapsed}s elapsed · usually 30–60 s with the real model</span>
       </div>
     </div>
@@ -291,7 +347,7 @@ export function ActionPanel({
           <strong>Vault only.</strong> This thread contains observations about named people, so it can’t go to Confluence (FR-10.1). Your private vault is fine.
         </Banner>
         <div>
-          <Button variant="solid" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
+          <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
             Draft vault note instead
           </Button>
         </div>
@@ -326,10 +382,12 @@ export function ActionPanel({
             <strong>People check blocked this entry.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
-            <Button variant="solid" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
+            <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
               Draft vault note instead
             </Button>
-            <Button onClick={discard}>Dismiss</Button>
+            <Button icon="x" onClick={discard}>
+              Dismiss
+            </Button>
           </div>
         </div>
       ) : action.failureReason === 'allow_list' ? (
@@ -338,10 +396,12 @@ export function ActionPanel({
             <strong>Not written.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={budgetHit || busy} onClick={redraft}>
+            <Button icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
               Re-draft
             </Button>
-            <Button onClick={discard}>Discard</Button>
+            <Button variant="danger" icon="trash" onClick={discard}>
+              Discard
+            </Button>
           </div>
         </div>
       ) : action.failureReason === 'conflict' ? (
@@ -354,18 +414,31 @@ export function ActionPanel({
             <strong>The model didn’t return a usable draft.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
-            <Button variant="solid" disabled={budgetHit || busy} onClick={redraft}>
+            <Button variant="solid" icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
               Retry
             </Button>
-            <Button onClick={discard}>Discard</Button>
+            <Button variant="danger" icon="trash" onClick={discard}>
+              Discard
+            </Button>
           </div>
         </div>
       );
   } else if (draft) {
     const isEditing = editing?.actionId === action.id;
+    const doc: DocProps = {
+      value: isEditing ? editing.text : draft.content,
+      editing: isEditing,
+      onChange: (text) => setEditing((e) => (e ? { ...e, text } : e)),
+    };
+    const written = action.status === 'done' && !view.dryRun;
+    const links: TargetLinks = {
+      page: (id) => confluencePageUrl(view.targets.confluenceSite, view.targets.spaceKey, id),
+      note: (path) => obsidianNoteUrl(view.targets.vaultPath, path),
+      noteExists: written,
+    };
     body = (
       <div className="flex flex-col gap-3.5">
-        <TargetLine d={draft} allowListed={allowListed} />
+        <TargetLine d={draft} allowListed={allowListed} links={links} />
         <SafetyChips d={draft} allowListed={allowListed} dryRun={view.dryRun} />
         {prev?.failureReason === 'conflict' && action.status === 'ready' && (
           <Banner tone="info" icon="info">
@@ -377,7 +450,7 @@ export function ActionPanel({
             tone="warn"
             icon="info"
             action={
-              <Button size="sm" disabled={budgetHit || busy} onClick={redraft}>
+              <Button size="sm" icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
                 Re-draft
               </Button>
             }
@@ -390,31 +463,33 @@ export function ActionPanel({
             Page {draft.kind === 'confluence' && draft.pageId} isn’t on the Confluence allow-list. The executor will refuse this write.
           </Banner>
         )}
-        {isEditing ? (
-          <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-ink-2" htmlFor="draft-editor">
-              Draft text
-            </label>
-            <textarea
-              id="draft-editor"
-              className="min-h-[260px] w-full resize-y rounded-[10px] border border-line-strong bg-surface p-3.5 font-mono text-[13px] leading-relaxed text-ink outline-none focus:border-accent"
-              value={editing.text}
-              onChange={(e) => setEditing({ ...editing, text: e.target.value })}
-            />
-          </div>
-        ) : draft.kind === 'confluence' ? (
-          <ConfluencePreview d={draft} item={item} />
-        ) : draft.kind === 'vault_append' ? (
+        {draft.kind === 'confluence' ? (
+          <ConfluencePreview d={draft} item={item} doc={doc} />
+        ) : draft.kind === 'vault_append' && !isEditing ? (
           <VaultAppendPreview d={draft} />
         ) : (
-          <VaultNewPreview d={draft} />
+          <VaultDoc doc={doc} />
         )}
+        <div className="-mt-1.5 text-right font-mono text-[11px] text-muted">
+          Drafted by {draft.model} · {Math.round(draft.durationMs / 1000)}s · {fmtTokens(draft.tokens)} tokens
+        </div>
         {action.status === 'done' && (
           <div role="status" className="flex flex-wrap items-center gap-3 rounded-[10px] border border-teal-line bg-teal-wash px-4 py-3 text-[13px] text-teal-ink">
             <Icon name="check" strokeWidth={2.5} />
             <span className="min-w-0 flex-[1_1_300px] text-ink">{view.results[action.id]}</span>
+            {draft.kind === 'confluence' ? (
+              <a href={links.page(draft.pageId)} target="_blank" rel="noreferrer" className={linkButton}>
+                <BrandIcon brand="confluence" size={14} decorative /> Open page
+              </a>
+            ) : (
+              written && (
+                <a href={links.note(draft.path)} className={linkButton}>
+                  <BrandIcon brand="obsidian" size={14} decorative /> Open note
+                </a>
+              )
+            )}
             {s.status === 'open' && (
-              <Button variant="solid" onClick={() => (onDoneNext ? onDoneNext() : void markDoneAndNext())}>
+              <Button variant="solid" icon="check" onClick={() => (onDoneNext ? onDoneNext() : void markDoneAndNext())}>
                 Mark done and next item
               </Button>
             )}
@@ -431,6 +506,7 @@ export function ActionPanel({
           <>
             <Button
               variant="solid"
+              icon="check"
               disabled={busy || !dirty}
               onClick={() =>
                 void run(async () => {
@@ -442,11 +518,14 @@ export function ActionPanel({
             >
               Save edits
             </Button>
-            <Button onClick={() => (dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', run: () => setEditing(null) }) : setEditing(null))}>Cancel</Button>
+            <Button icon="x" onClick={() => (dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', danger: true, run: () => setEditing(null) }) : setEditing(null))}>
+              Cancel
+            </Button>
           </>
         ) : (
           <>
-            <Button variant="solid" size="lg" icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(() => api.approveAction(action.id))}>
+            {/* In the narrow panel the commit action gets its own row, which keeps Discard well away from it. */}
+            <Button variant="solid" size="lg" className={cx(embedded && 'w-full')} icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(() => api.approveAction(action.id))}>
               {action.status === 'ready' ? (
                 view.dryRun ? (
                   'Approve and write to sandbox'
@@ -459,21 +538,18 @@ export function ActionPanel({
                 </>
               )}
             </Button>
-            <Button disabled={action.status !== 'ready'} onClick={() => setEditing({ actionId: action.id, text: draft.content, original: draft.content })}>
+            <Button icon="edit" disabled={action.status !== 'ready'} onClick={() => setEditing({ actionId: action.id, text: draft.content, original: draft.content })}>
               Edit text
             </Button>
-            <Button disabled={action.status !== 'ready' || budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : undefined}>
+            <Button icon="redraft" disabled={action.status !== 'ready' || budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : undefined}>
               Re-draft
             </Button>
-            <Button disabled={action.status !== 'ready'} onClick={discard}>
+            <span className="flex-1" />
+            <Button variant="danger" icon="trash" disabled={action.status !== 'ready'} onClick={discard}>
               Discard
             </Button>
           </>
         )}
-        <span className="flex-1" />
-        <span className="font-mono text-[11px] text-muted">
-          {draft.model} · {Math.round(draft.durationMs / 1000)}s · {fmtTokens(draft.tokens)} tokens
-        </span>
       </div>
     ) : null;
 

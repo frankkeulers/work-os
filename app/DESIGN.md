@@ -26,6 +26,11 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
    - **Amber and red:** only for something that needs attention.
    - **Everything else:** greys.
 6. **One primary action per view.** Secondary actions are outline or ghost buttons; rare ones go in overflow menus.
+   - **Buttons carry an icon** that says what they do: ✓ approve or save, ✎ edit, ↻ re-draft or retry, × cancel, a bin for discard.
+   - **Colour follows the kind of action** (`Button` variants in `components/ui.tsx`):
+     - `solid` (accent) is the one commit action;
+     - `secondary` (outline) is anything neutral or reversible;
+     - `danger` is red text with a soft red edge, for actions that throw work away. It sits apart from the primary, at the far end of the row, and turns solid red (`dangerSolid`) only on the confirm button in its dialog.
 7. **Navigation is quiet.** Group labels are small and muted. The selected item has a subtle neutral fill; the app's main nav keeps the accent.
 8. **Calm, reversible feedback.** Changes save on their own and confirm with a toast that has a title, an optional line of detail, and Undo. Confirmation dialogs are kept for things that can't be undone or that write outside Work OS.
 9. **Progressive disclosure.** Rare or expert settings go behind a disclosure row that shows the current values, such as Batching limits.
@@ -58,6 +63,12 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
   - **Outlook and Teams:** Microsoft's Fluent product icons.
   - **Write targets:** the Confluence and Obsidian marks.
   - All of them live in `components/BrandIcon.tsx`.
+
+## Action panel (applied)
+
+- **Targets are links.** The Confluence page title opens the page (`<site>/wiki/spaces/<key>/pages/<id>`) in a new tab. The vault path opens the note in Obsidian (`obsidian://open?vault=…&file=…`). A new note has no link until it's written, because it doesn't exist yet. After a write, the done banner has Open page or Open note.
+- **Drafts are rich text.** Drafts are stored as markdown. They're rendered as formatted text, and Edit text edits them in place, with a small toolbar (heading, bold, italic, code, bulleted list, numbered list). A Markdown view shows the raw text. Front matter shows as a properties block and is edited in the Markdown view. Obsidian `[[wiki links]]` survive edits.
+- **Footer.** Approve, Edit text and Re-draft come first; Discard sits at the far end. In the narrow Inbox panel, Approve takes its own full-width row. The model, duration and token count sit in a caption under the draft, not in the footer.
 
 ## Impact on the other pages (proposed, not yet applied)
 

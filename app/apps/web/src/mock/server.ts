@@ -529,6 +529,7 @@ export class MockServer implements WorkOsApi, MockControls {
       allowListedPageIds: this.s.settings.confluence.pages.map((p) => p.id),
       dryRun: this.s.settings.dryRun,
       dataDir: this.s.settings.dataDir,
+      targets: { confluenceSite: this.s.settings.confluence.siteUrl, spaceKey: this.s.settings.confluence.spaceKey, vaultPath: this.s.settings.vaultPath },
       budgets,
       meId: FRANK,
     };

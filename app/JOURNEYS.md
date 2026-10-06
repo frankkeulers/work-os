@@ -37,14 +37,14 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
 | J07 | New vault note | Open the Claude Code how-to item (File). Click Draft vault note. Wait for the draft and read it. Approve. | Is the drafting progress reassuring? Can you judge the path and frontmatter at a glance? | FR-9.1–9.3 | |
-| J08 | Append with edit | Open the Meridia IQ beta feedback item (Today). Draft a vault note. Click Edit text, change a line, save, then approve. | Is the diff readable? Is "Edited" visible? Does the done banner say where the text went? | FR-9.2, FR-9.3 | |
+| J08 | Append with edit | Open the Meridia IQ beta feedback item (Today). Draft a vault note. Click the note path (it opens Obsidian). Click Edit text, change a line in the rich-text editor, try bold or a list, look at the Markdown view, save, then approve. | Is the diff readable? Does editing in place feel natural? Is "Edited" visible? Does the done banner say where the text went? | FR-9.2, FR-9.3 | |
 | J09 | Vault conflict | Start J09 from the drawer. On the imo_str item, open the Vault note tab and approve. | The note changed after drafting. Is "re-drafting instead of writing" understood? Does a new draft follow? | FR-9.4 | |
 
 ### Filing to Confluence
 
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
-| J10 | Happy path | Open the imo_str decision item. Review the ready Confluence draft and approve. Then try the same from the Inbox panel: select the item and click Review Confluence entry. | Are the target page, section and base version obvious? Is the dry-run wording clear? | FR-10.2, FR-10.3, FR-10.5 | |
+| J10 | Happy path | Open the imo_str decision item. Click the page title (it opens Confluence in a new tab). Review the ready Confluence draft and approve. Then try the same from the Inbox panel: select the item and click Review Confluence entry. | Are the target page, section and base version obvious? Is the dry-run wording clear? Is Discard noticeable without shouting? | FR-10.2, FR-10.3, FR-10.5 | The seed page IDs are made up, so pole-star.atlassian.net will say the page doesn't exist. |
 | J11 | Blocked: people observations | Open the overloaded-engineers item (Today). | The Confluence button is disabled. Is the reason clear? Is the vault the obvious alternative? | FR-10.1, NF-2 | |
 | J12 | Blocked: people check | Start J12. Draft a Confluence entry on the Labs graduation item. | The draft is blocked at the people-check step. Is "Draft vault note instead" helpful? | FR-10.4 | |
 | J13 | Version conflict | Start J13. Draft and approve a Confluence entry on the Labs graduation item. | Page v42 changed to v44. Does the re-draft explain what happened? | FR-10.5 | |
@@ -122,6 +122,7 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 - **Item view:** the item endpoint returns `meId`, your Slack user ID, so the thread can label your own messages "You".
 - **Next step (Inbox redesign):** `TriageDecision.next` (optional): `need` (reply, approve, decide, prepare, review, actions, file), `step`, `why`, `dueAt`, `dueLabel`, `blocks` and `actionItems`. Model triage returns it; rule decisions don't (no model call), so the Inbox falls back to a default from the lane. The item summary carries `source` and `next`.
 - **Item kinds:** `chat` joins `ItemKind`, for Teams chats.
+- **Confluence site URL:** `Settings.confluence.siteUrl` (https only, e.g. `https://pole-star.atlassian.net`), so drafts can link to the target page. The executor needs it anyway. The item view returns `targets` (site, space key, vault path) for the links.
 - **Client preferences:** theme, scope and whether the Inbox item panel is open are client-side preferences, not part of `settings.json`.
 
 ## Deviations from the designs
@@ -137,6 +138,8 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 - S6 in the success criteria;
 - a cost baseline field in Settings › Budgets, so P0-3's measurement has somewhere to go;
 - the item page keeps its draft tab in the URL (`?tab=`), so it doesn't jump when a draft finishes.
+- links from the action panel to the Confluence page and the Obsidian note;
+- a rich-text draft editor with a Markdown view, in place of the plain text box.
 
 **Changed:**
 - **Inbox redesign** (`specs/Inbox Redesign Options.html`). One list grouped into Now, Today and To file, with an item panel on the right. It replaces the Board/List lanes and the cards.
