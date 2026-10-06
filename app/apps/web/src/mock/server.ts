@@ -70,7 +70,12 @@ export class MockServer implements WorkOsApi, MockControls {
     this.anchorClock(this.s.clock);
     this.resumeAfterLoad();
     this.tickTimer = setInterval(() => this.tick(), 2000);
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', this.flushOnHide);
   }
+
+  private flushOnHide = () => {
+    if (this.saveTimer) this.writeNow();
+  };
 
   // ---------------------------------------------------------------- clock & persistence
 
@@ -98,15 +103,20 @@ export class MockServer implements WorkOsApi, MockControls {
 
   private save() {
     clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      this.s.clock = this.iso();
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.s));
-      } catch {
-        /* storage full or blocked: the session still works in memory */
-      }
-    }, 150);
+    this.saveTimer = setTimeout(() => this.writeNow(), 150);
   }
+
+  /** Writes at once. Also runs as the page unloads, so a reload never loses the last change. */
+  private writeNow = () => {
+    clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
+    this.s.clock = this.iso();
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.s));
+    } catch {
+      /* storage full or blocked: the session still works in memory */
+    }
+  };
 
   private resumeAfterLoad() {
     this.s.poll.phase = 'idle';
@@ -1188,5 +1198,6 @@ export class MockServer implements WorkOsApi, MockControls {
 
   dispose() {
     clearInterval(this.tickTimer);
+    if (typeof window !== 'undefined') window.removeEventListener('pagehide', this.flushOnHide);
   }
 }

@@ -79,9 +79,9 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
 | J30 | Edit rules | Add a rule (keyword `/invoice/i` → Today). Drag it to the top. Disable `customer-channels`. Enter a bad regex. Save. | Is the rule editor readable as a sentence? Is the regex error clear? | FR-4.1–4.3, FR-1.5 | |
-| J31 | Edit settings | Change poll intervals, add a VIP, set the interval to 0, then save. Fix it. Make a change and leave the page without saving. | Unsaved bar, inline errors, and the leave-page prompt. | FR-1.3, FR-1.5 | |
-| J32 | Dry-run | Turn dry-run off, save, and approve a draft. Turn it back on. | Is the difference between dry-run and real writes always visible? | FR-1.6 | |
-| J33 | Rebuild state | Storage & safety → Rebuild. | Is it clear that nothing is lost? | §4.3 | |
+| J31 | Edit settings | Change the poll intervals and add a VIP: each saves on its own, with a toast. Remove a VIP, then click Undo in the toast. Set the work-hours interval to 0, try to leave the page, then fix it. | Is it obvious that changes save on their own? Is Undo enough of a safety net? Is the inline error clear? | FR-1.3, FR-1.5 | |
+| J32 | Dry-run | Writing → turn dry-run off (it asks first), then approve a draft. Turn it back on. | Is the difference between dry-run and real writes always visible? | FR-1.6 | |
+| J33 | Rebuild state | Storage & data → Rebuild. | Is it clear that nothing is lost? | §4.3 | |
 | J34 | Theme and scope | Switch System/Light/Dark. Switch Scope to Full and click a P3 placeholder. | Do placeholders read as "later", not "broken"? | — | |
 
 ### Failure and empty states
@@ -138,6 +138,8 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 **Changed:**
 - Dry-run defaults to on (FR-1.6). The Settings artboard shows it off.
 - The Usage page has the left nav. The artboard only has "Back to inbox".
+- **Settings autosave.** Each change saves on its own with a "Changes saved · Undo" toast; typing saves after a short pause or on blur. The artboard's sticky Save/Discard bar is gone. An invalid field shows its error inline and is held back while the other changes save. Leaving the page asks first only if an invalid field would be lost.
+- **Settings layout.** One label-and-control row pattern throughout, a sticky section nav, and sections ordered by how often they change: Triage rules, Slack, Notifications, Budgets, Writing, Claude & models, Storage & data, Appearance. Dry-run moved to the top of Writing, because it decides where writes go. Batching limits sit behind a disclosure. Theme moved from the page header to Appearance. MVP tags show only in Full scope, where they mean something.
 - The default channel exclude list is `#random`, `#alerts-prod`, `#social`. The artboard also excludes `#general`, but the seed data has `#general` threads you need to see.
 
 **Not designed, built from the design tokens:**

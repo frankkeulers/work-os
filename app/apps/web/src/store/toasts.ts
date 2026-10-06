@@ -6,6 +6,8 @@ export interface Toast {
   tone?: 'default' | 'success' | 'error';
   action?: { label: string; run: () => void };
   ttl?: number;
+  /** A toast with the same key replaces the visible one instead of stacking. */
+  key?: string;
 }
 
 export interface OsNotification {
@@ -31,7 +33,11 @@ export const useToasts = create<ToastStore>()((set) => ({
   notifications: [],
   push: (t) => {
     const id = next++;
-    set((s) => ({ toasts: [...s.toasts.slice(-3), { ...t, id }] }));
+    set((s) => {
+      const i = t.key ? s.toasts.findIndex((x) => x.key === t.key) : -1;
+      if (i >= 0) return { toasts: s.toasts.map((x, j) => (j === i ? { ...t, id } : x)) };
+      return { toasts: [...s.toasts.slice(-3), { ...t, id }] };
+    });
     return id;
   },
   dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

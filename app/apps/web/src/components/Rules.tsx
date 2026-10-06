@@ -65,54 +65,65 @@ function RuleRow({
       ref={setNodeRef}
       data-rule={rule.id}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cx('relative flex flex-wrap items-center gap-x-4 gap-y-2.5 border-b border-line-soft bg-surface px-3.5 py-3', isDragging && 'z-10 shadow-[0_8px_24px_rgba(20,23,28,0.18)]', error && 'bg-red-line/10')}
+      className={cx('relative flex items-center gap-3 border-b border-line-soft bg-surface py-3 pl-2 pr-4', isDragging && 'z-10 shadow-[0_8px_24px_rgba(20,23,28,0.18)]', error && 'bg-red-line/10')}
     >
-      <div className="flex shrink-0 items-center gap-2.5">
-        <button
-          type="button"
-          ref={setActivatorNodeRef}
-          aria-label={`Reorder ${rule.id}`}
-          title="Drag to reorder, or focus and use the arrow keys"
-          className="inline-flex h-9 w-7 items-center justify-center rounded text-faint cursor-grab hover:bg-track active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-        >
-          <DragIcon />
-        </button>
-        <span className="w-[18px] font-mono text-xs text-muted">{n}</span>
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        aria-label={`Reorder ${rule.id}`}
+        title="Drag to reorder, or focus and use the arrow keys"
+        className="inline-flex h-9 w-7 shrink-0 items-center justify-center rounded text-faint cursor-grab hover:bg-track active:cursor-grabbing"
+        {...attributes}
+        {...listeners}
+      >
+        <DragIcon />
+      </button>
+      <span className="w-5 shrink-0 text-center font-mono text-xs text-muted">{n}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className={cx('flex flex-wrap items-center gap-1.5', !rule.enabled && 'opacity-55')}>
+          <span className="text-[13px] font-semibold text-muted">If</span>
+          {rule.conditions.map((c, i) => (
+            <span key={i} className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-line bg-bg px-2.5 text-[13px]">
+              {i > 0 && <span className="text-[11px] font-semibold uppercase text-muted">and</span>}
+              {conditionText(c)}
+            </span>
+          ))}
+          <Icon name="arrow" size={14} className="text-muted" />
+          <span className={cx('inline-flex min-h-7 items-center rounded-md px-2.5 text-[13px] font-semibold', OUTCOME_CLS[rule.outcome.type])}>{outcomeText(rule.outcome)}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+          <span className="font-mono">{rule.id}</span>
+          <span aria-hidden>·</span>
+          <span>{!rule.enabled ? 'Off' : hits === undefined ? 'Not run yet' : `${hits} ${hits === 1 ? 'match' : 'matches'} today`}</span>
+        </div>
+        {error && <span className="text-xs text-red-fg">{error}. Open the rule to fix it.</span>}
       </div>
-      <div className={cx('flex min-w-0 flex-[1_1_380px] flex-wrap items-center gap-1.5', !rule.enabled && 'opacity-55')}>
-        <span className="text-[13px] font-semibold text-muted">If</span>
-        {rule.conditions.map((c, i) => (
-          <span key={i} className="inline-flex min-h-7 items-center gap-1.5 rounded-md border border-line bg-bg px-2.5 text-[13px]">
-            {i > 0 && <span className="text-[11px] font-semibold uppercase text-muted">and</span>}
-            {conditionText(c)}
-          </span>
-        ))}
-        <Icon name="arrow" size={14} className="text-muted" />
-        <span className={cx('inline-flex min-h-7 items-center rounded-md px-2.5 text-[13px] font-semibold', OUTCOME_CLS[rule.outcome.type])}>{outcomeText(rule.outcome)}</span>
-        {error && <span className="w-full text-xs text-red-fg">{error}. Open the rule to fix it.</span>}
-      </div>
-      <span className="font-mono text-[11px] text-muted">{rule.id}</span>
-      <span className="min-w-[92px] text-right text-xs text-muted">{hits === undefined ? 'new' : `${hits} today`}</span>
       <Switch checked={rule.enabled} onChange={onToggle} label={`Enable ${rule.id}`} />
       <IconButton label={`Edit ${rule.id}`} icon="edit" onClick={onEdit} />
     </div>
   );
 }
 
+export type RuleEdit = { index: number | null; rule: Rule } | null;
+
+export const newRuleEdit = (): RuleEdit => ({ index: null, rule: { id: '', enabled: true, conditions: [{ type: 'mentions_me' }], outcome: { type: 'model', min: 'today' } } });
+
 export function RulesList({
   rules,
   hits,
   errorFor,
   onChange,
+  editing,
+  setEditing,
 }: {
   rules: Rule[];
   hits: Record<string, number>;
   errorFor: (index: number) => string | undefined;
   onChange: (rules: Rule[]) => void;
+  /** The rule dialog, controlled so the section header can hold the Add rule button. */
+  editing: RuleEdit;
+  setEditing: (e: RuleEdit) => void;
 }) {
-  const [editing, setEditing] = useState<{ index: number | null; rule: Rule } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
@@ -122,11 +133,6 @@ export function RulesList({
   };
   return (
     <>
-      <div className="flex justify-end">
-        <Button variant="solid" size="lg" className="min-h-10 text-[13px]" icon="plus" onClick={() => setEditing({ index: null, rule: { id: '', enabled: true, conditions: [{ type: 'mentions_me' }], outcome: { type: 'model', min: 'today' } } })}>
-          Add rule
-        </Button>
-      </div>
       <div className="flex flex-col overflow-hidden rounded-xl border border-line bg-surface" aria-label="Rules, in order">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd} accessibility={{ screenReaderInstructions: { draggable: 'Press space to pick up a rule, the arrow keys to move it, and space again to drop it.' } }}>
           <SortableContext items={rules.map((r) => r.id)} strategy={verticalListSortingStrategy}>
@@ -143,10 +149,11 @@ export function RulesList({
             ))}
           </SortableContext>
         </DndContext>
-        <div className="flex flex-wrap items-center gap-3 bg-surface-3 px-3.5 py-3">
-          <span className="w-[46px] pl-[38px] font-mono text-xs text-muted">∞</span>
-          <span className="flex-[1_1_300px] text-[13px] text-ink-2">No rule matched → batched Haiku triage after the quiet window</span>
-          <span className="text-xs text-muted">Fixed, not editable</span>
+        <div className="flex items-center gap-3 bg-surface-3 py-3 pl-2 pr-4">
+          <span className="w-7 shrink-0" />
+          <span className="w-5 shrink-0 text-center font-mono text-xs text-muted">∞</span>
+          <span className="flex-1 text-[13px] text-ink-2">No rule matched → batched Haiku triage after the quiet window</span>
+          <span className="text-xs text-muted">Always last</span>
         </div>
       </div>
       {editing && (
@@ -370,7 +377,7 @@ function RuleDialog({
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete rule ${initial.id}?`}
-          body="The rule is removed from the draft. Nothing changes until you save."
+          body="The rule stops running straight away. You can still undo it from the “Changes saved” message."
           confirmLabel="Delete rule"
           danger
           onCancel={() => setConfirmDelete(false)}

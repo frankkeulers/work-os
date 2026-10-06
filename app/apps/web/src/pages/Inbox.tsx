@@ -182,7 +182,7 @@ function Banners({ inbox }: { inbox: InboxView }) {
     );
   if (inbox.dryRun)
     out.push(
-      <Banner key="dry" tone="dry" icon="flask" action={<Link to="/settings#storage" className="text-[13px] font-medium">Storage &amp; safety</Link>}>
+      <Banner key="dry" tone="dry" icon="flask" action={<Link to="/settings#dry-run" className="text-[13px] font-medium">Dry-run setting</Link>}>
         <strong>Dry-run is on.</strong> Approved writes go to a sandbox folder, not to your vault or Confluence.
       </Banner>,
     );

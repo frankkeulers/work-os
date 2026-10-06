@@ -161,11 +161,15 @@ export function Switch({ checked, onChange, label, disabled }: { checked: boolea
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={cx('relative h-[26px] w-11 shrink-0 rounded-[13px] cursor-pointer disabled:opacity-50', checked ? 'bg-accent-bg' : 'bg-off')}
+      className={cx(
+        'relative h-[24px] w-[42px] shrink-0 rounded-full transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+        checked ? 'bg-accent-bg' : 'bg-off',
+      )}
     >
+      {/* Sized in px: the root font size is 14px, so rem-based sizes would not line up with the knob offset. */}
       <span
-        className="absolute top-[3px] h-5 w-5 rounded-full bg-knob shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-[left]"
-        style={{ left: checked ? 21 : 3 }}
+        className="absolute left-[3px] top-[3px] h-[18px] w-[18px] rounded-full bg-knob shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform"
+        style={{ transform: `translateX(${checked ? 18 : 0}px)` }}
       />
     </button>
   );
