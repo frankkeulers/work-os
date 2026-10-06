@@ -44,6 +44,28 @@ export function nextDeadline(items: ItemSummary[], now: Date): string | undefine
   return due && fmtWhen(due, now);
 }
 
+const LANE_RANK: Partial<Record<ItemSummary['lane'], number>> = { now: 0, failed: 1, today: 2 };
+
+/** When an item is due, for sorting: an exact time, end of today for "today", then other labels, then none. */
+function dueKey(i: ItemSummary, now: Date): [number, number] {
+  const n = i.next;
+  if (n?.dueAt) return [0, Date.parse(n.dueAt)];
+  if (n?.dueLabel === 'today') return [0, Date.parse(londonAt(now, '23:59'))];
+  return [n?.dueLabel ? 1 : 2, 0];
+}
+
+/**
+ * The Needs you group (FR-8.1): Now first, then failed triage (shown untriaged so it isn't missed),
+ * then Today by deadline. Ties go to the newest activity.
+ */
+export function needsYouOrder(items: ItemSummary[], now: Date): ItemSummary[] {
+  return items
+    .filter((i) => i.lane in LANE_RANK)
+    .map((i) => ({ i, lane: LANE_RANK[i.lane]!, due: dueKey(i, now) }))
+    .sort((a, b) => a.lane - b.lane || a.due[0] - b.due[0] || a.due[1] - b.due[1] || b.i.lastActivityAt.localeCompare(a.i.lastActivityAt))
+    .map((x) => x.i);
+}
+
 export function openLabel(i: Pick<ItemSummary, 'source' | 'kind'>): string {
   const app = SOURCE_NAME[i.source];
   if (i.source === 'outlook') return 'Reply in Outlook';

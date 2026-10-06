@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
-import { dueInfo, needLabel, nextDeadline, openLabel, shownStep, suggestedSnooze } from './next';
+import { dueInfo, needLabel, needsYouOrder, nextDeadline, openLabel, shownStep, suggestedSnooze } from './next';
 
 // Mon 5 Oct 2026, 09:45 London (BST).
 const now = new Date('2026-10-05T08:45:00.000Z');
@@ -45,6 +45,30 @@ describe('dueInfo', () => {
   });
   it('uses the label alone when there is no exact time', () => {
     expect(dueInfo({ need: 'reply', step: 's', why: 'w', dueLabel: 'this week' }, now)).toEqual({ text: 'this week', tone: 'later' });
+  });
+});
+
+describe('needsYouOrder (FR-8.1)', () => {
+  const step = (over: object) => ({ need: 'reply' as const, step: 's', why: 'w', ...over });
+  it('puts Now first, then failed triage, then Today by deadline', () => {
+    const items = [
+      item({ id: 'undated', lane: 'today' }),
+      item({ id: 'week', lane: 'today', next: step({ dueLabel: 'this week' }) }),
+      item({ id: 'thu', lane: 'today', next: step({ dueAt: london(8, '09:00') }) }),
+      item({ id: 'today', lane: 'today', next: step({ dueLabel: 'today' }) }),
+      item({ id: 'at16', lane: 'today', next: step({ dueAt: london(5, '16:00') }) }),
+      item({ id: 'failed', lane: 'failed', triageState: 'failed', triage: undefined }),
+      item({ id: 'now', lane: 'now' }),
+    ];
+    expect(needsYouOrder(items, now).map((i) => i.id)).toEqual(['now', 'failed', 'at16', 'today', 'thu', 'week', 'undated']);
+  });
+  it('leaves out filing, low priority, waiting, snoozed and done', () => {
+    const lanes = ['file', 'else', 'waiting', 'snoozed', 'done'] as const;
+    expect(needsYouOrder(lanes.map((lane) => item({ id: lane, lane })), now)).toEqual([]);
+  });
+  it('breaks ties with the newest activity', () => {
+    const items = [item({ id: 'old', lastActivityAt: '2026-10-05T06:00:00.000Z' }), item({ id: 'new', lastActivityAt: '2026-10-05T08:00:00.000Z' })];
+    expect(needsYouOrder(items, now).map((i) => i.id)).toEqual(['new', 'old']);
   });
 });
 
