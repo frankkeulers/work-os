@@ -54,7 +54,8 @@ function Root() {
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []);
   const h = health.data;
   let body = <Outlet />;
-  if (!h) body = <div className="min-h-screen bg-bg" />;
+  // A first load that failed some other way still says so, rather than leaving the page blank.
+  if (!h) body = health.error ? <UnreachableScreen reconnecting={false} onRetry={health.reload} /> : <div className="min-h-screen bg-bg" />;
   else if (h.connection !== 'up') body = <UnreachableScreen reconnecting={h.connection === 'reconnecting'} onRetry={health.reload} />;
   else if (h.startupFailure) body = <StartupFailedScreen failure={h.startupFailure} onRetry={health.reload} />;
   return (

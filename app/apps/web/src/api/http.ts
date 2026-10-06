@@ -1,19 +1,4 @@
-import type {
-  Action,
-  ActionType,
-  ApiErrorBody,
-  CorrectionInput,
-  EvalReport,
-  HealthView,
-  InboxView,
-  ItemView,
-  Notice,
-  Rule,
-  Settings,
-  SettingsView,
-  UsageView,
-  WorkOsApi,
-} from '@work-os/shared';
+import type { Action, ActionType, ApiErrorBody, CorrectionInput, EvalReport, HealthView, InboxView, ItemView, Notice, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -72,6 +57,13 @@ export class HttpApi implements WorkOsApi {
     try {
       res = await this.fetchFn(this.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     } catch {
+      this.lost();
+      throw new ApiError('network', 'Work OS server is not reachable on 127.0.0.1.');
+    }
+    // The server never answers 502 or 504; a proxy in front of it does (Vite in development) when
+    // the server is down. That is the same as not reaching it.
+    if (res.status === 502 || res.status === 504) {
+      await res.body?.cancel().catch(() => undefined);
       this.lost();
       throw new ApiError('network', 'Work OS server is not reachable on 127.0.0.1.');
     }
