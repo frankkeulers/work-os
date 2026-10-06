@@ -1,7 +1,7 @@
 # Work OS: Plan and Requirements
 
 Owner: Frank Keulers
-Status: Draft v0.1, 5 Oct 2026
+Status: Draft v0.2, 6 Oct 2026 (v0.2 adds runtime robustness, autostart, offline handling, performance budgets and the multi-source groundwork)
 Working name: Work OS (rename freely)
 
 ---
@@ -22,7 +22,7 @@ The MVP covers Slack only. Later phases add Outlook, Teams, Plaud and more actio
 
 ### Design principles
 
-1. **Code fetches, Claude decides, Frank approves, code writes.** No model reads sources through connectors in a loop, and no model writes to a shared system without approval.
+1. **Code fetches, Claude decides, Frank approves, code writes.** No model reads sources through connectors in a loop, and no model writes to a shared system without approval. One narrow exception: a source that is only reachable through a claude.ai connector may be fetched with a relay call, where the model makes one fixed tool call and never sees the result (R2.5).
 2. **Anthropic models only, on Frank's Claude subscription.** No API key. No third-party model providers.
 3. **No database.** All state lives in local files: an append-only event log, JSON state files and settings.
 4. **Every new source retires a scheduled task.** Running the new and old pipelines side by side is a failure mode, not a transition plan.
@@ -76,6 +76,8 @@ Stop or redesign if any of these hold:
 | P0-6 | List the Confluence pages the app may write to (allow-list of page IDs) and the space. | Frank | Limits the blast radius of Confluence writes. |
 | P0-7 | Confirm FileVault is on. | Frank | Local files will hold company messages. |
 | P0-8 | Create a personal Atlassian API token for Confluence REST writes, and store it in the macOS Keychain. | Frank | Deterministic writes without an LLM in the loop. |
+| P0-9 | Spike: confirm the claude.ai Microsoft 365 connector loads in a headless Agent SDK run started by launchd, and that a relay call (R2.5) returns the raw `outlook_email_search` result through a `PostToolUse` hook. Record whether the SDK init message reports connector status, and the tokens and latency per relay call. Gates Phase 2 email only. | Claude Code | Our own Graph app registration is unlikely to get admin consent. The connector is already approved for the tenant. |
+| P0-10 | Spike: map Wispr Flow's local database (`~/Library/Application Support/Wispr Flow/flow.sqlite`). Identify the note and meeting tables and columns, choose cursor columns, confirm a read-only reader is safe in WAL mode while the app writes, and capture a schema fingerprint. Gates Phase 2 Wispr Flow only. | Claude Code | Local reads need no network, no tokens and no MCP, but the schema is undocumented. |
 
 ---
 
@@ -113,6 +115,8 @@ Stop or redesign if any of these hold:
 | Secrets | macOS Keychain (`security` CLI or `keytar`) | Never in settings files or logs. |
 | Real-time UI | Server-Sent Events | No websockets needed. |
 | Logging | pino (JSON lines) | Daily files. |
+| Process supervision | launchd LaunchAgent (`com.polestar.workos`) | Starts at login, restarts only after a crash (FR-12.3, FR-14.1). Runs a deployed release, never the repo. |
+| Notifications | `terminal-notifier` | `osascript` notifications can't open the item when clicked (FR-11.1). |
 
 ### 4.2 Repo layout
 
@@ -123,13 +127,17 @@ work-os/
   apps/
     server/
       src/
+        sources/              adapter interface (R2.1) and registry
         sources/slack/        adapter: fetchSince, normalise
-        pipeline/             quietWindow, rules, triage, scheduler
+        pipeline/             poll (per source), quietWindow, rules, triage, outbox
         actions/              drafters (vault, confluence), executors
-        claude/               single adapter around the Agent SDK + usage logging
-        store/                event log, item files, snapshots, cursors, atomic writes
+        claude/               single adapter around the Agent SDK + usage logging, connector relay (R2.5)
+        store/                event log, item files, snapshots, cursors, atomic writes, startup recovery
+        runtime/              lock, clock, sleep/wake detection, supervisor, scheduler, shutdown, startup checks
+        net/                  timeouts, error classification, backoff, circuit breakers, probes, dependency health
+        notify/               macOS notifications and rate-limited health alerts
         api/                  REST routes + SSE
-        config/               settings loader + validation
+        config/               settings loader + validation, Keychain access
     web/
       src/                    inbox, item detail, action preview, settings, usage
   packages/
@@ -138,6 +146,8 @@ work-os/
   scripts/
     eval.ts                   runs triage over labels, reports precision/recall/usage
     rebuild-state.ts          rebuilds snapshot from the event log
+    gen-data.ts, perf.ts      synthetic data and the performance budget check (NF-11)
+    launchd/                  LaunchAgent plist template, install/uninstall/status, deploy
 ```
 
 ### 4.3 Data directory (no database)
@@ -148,6 +158,7 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
 ~/WorkOS-data/
   config/
     settings.json             sources, schedules, model map, budgets, allow-lists, VIPs
+    settings.last-good.json   last settings that passed validation (FR-1.2)
     rules.json                deterministic triage rules
     vault-conventions.md      from P0-5
     prompts/
@@ -156,10 +167,12 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
       draft-confluence.md
   state/
     cursors.json              last cursor per source
-    snapshot.json             materialised inbox state (rebuildable from events)
-    lock                      single-instance lock
+    snapshot.json             materialised inbox state (rebuildable from events), with lastSeq
+    lock                      single-instance lock: pid, process start time, boot time, instance, port
+    refused.json              written when startup is refused (CL-2)
   events/
-    2026-10-20.jsonl          append-only event log (the audit trail)
+    2026-10-20.jsonl          append-only event log (the audit trail), one file per UTC day
+    quarantine/               torn or unreadable lines moved aside at startup
   items/
     slack/<itemId>.json       raw thread content (subject to retention)
   drafts/
@@ -169,13 +182,19 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
   logs/
     app-2026-10-20.log
     usage-2026-10-20.jsonl    one line per Claude call
+    launchd.out.log           output from before the logger starts (truncated by size)
+    perf-<timestamp>.json     performance budget reports (NF-11)
 ```
+
+The deployed release lives outside the data directory, in `~/Library/Application Support/WorkOS/releases/<version>/` with a `current` symlink. Development uses a separate data directory, `~/WorkOS-data-dev`, a separate port and dry-run forced on, so it never contends with the autostarted instance for the lock.
 
 Rules for file storage:
 
-- **The event log is the source of truth.** `snapshot.json` is a cache, rebuilt from events by `scripts/rebuild-state.ts` and on corruption.
-- **Atomic writes**: write to `*.tmp`, `fsync`, then `rename`. Appends to JSONL use a single writer.
-- **Single instance**: take a lock on `state/lock` at startup and refuse to start if it's held.
+- **The event log is the source of truth.** `snapshot.json` is a cache, rebuilt from events by `scripts/rebuild-state.ts` and on corruption. Every event carries a gap-free `seq` and a typed payload, so the log alone can rebuild the inbox. The snapshot records the `lastSeq` it covers, and startup replays only the events after it.
+- **Atomic writes**: write to `*.tmp`, `fsync`, then `rename`, then `fsync` the directory. Appends to JSONL use a single writer with group commit: one write and one sync per batch, and a command returns only after its event is synced.
+- **Write order in a poll**: item files, then events, then `source.polled` with the cursor, then `cursors.json`. A crash at any point re-fetches and dedupes.
+- **Startup recovery**: a torn last line in a JSONL file is truncated and quarantined, leftover `*.tmp` files are deleted, and a missing item file is re-fetched.
+- **Single instance**: take a lock on `state/lock` at startup and refuse to start if it's held by a live process. A lock left by a dead process, a reused pid or a previous boot is stale and taken over.
 - **Retention**: delete raw content in `items/` older than `retention.rawContentDays` (default 30). Events keep IDs, decisions and permalinks, never message bodies.
 - **Schema versioning**: every file and event carries `schemaVersion`.
 - **No secrets** in any file under the data directory.
@@ -183,7 +202,7 @@ Rules for file storage:
 ### 4.4 Core types (sketch)
 
 ```ts
-type SourceId = 'slack' | 'outlook' | 'teams' | 'plaud';
+type SourceId = 'slack' | 'outlook' | 'teams' | 'plaud' | 'wispr';
 
 interface Item {                 // one conversation unit: a Slack thread or DM window
   id: string;                    // e.g. "slack:C123:1728031234.000100"
@@ -231,10 +250,23 @@ interface Action {
 
 type EventType =
   | 'item.upserted' | 'triage.decided' | 'triage.corrected'
-  | 'item.done' | 'item.snoozed'
+  | 'item.done' | 'item.snoozed' | 'item.notified'
   | 'action.requested' | 'action.drafted' | 'action.approved'
+  | 'action.executing'           // fsynced before every write attempt (FR-14.5)
   | 'action.executed' | 'action.failed' | 'action.discarded'
-  | 'source.polled' | 'source.failed';
+  | 'source.polled' | 'source.failed'
+  | 'system.started' | 'system.stopped' | 'system.woke' | 'health.changed';
+
+interface WorkEvent {
+  seq: number;                   // gap-free, global across day files
+  id: string;
+  type: EventType;
+  at: string;                    // ISO, UTC
+  itemId?: string;
+  actionId?: string;
+  data?: EventPayloads[EventType]; // typed per event type; never message bodies
+  schemaVersion: 1;
+}
 ```
 
 ---
@@ -253,13 +285,15 @@ type EventType =
 ### 5.2 Hard requirements for every Claude call
 
 - **CL-1** All calls go through one module, `apps/server/src/claude/`. Nothing else imports the SDK.
-- **CL-2** On startup the server refuses to run if `ANTHROPIC_API_KEY` is set. The goal is subscription usage, and the SDK would silently prefer the key.
+- **CL-2** On startup the server refuses to run if `ANTHROPIC_API_KEY` is set. The goal is subscription usage, and the SDK would silently prefer the key. Under launchd it sends a macOS notification, writes `state/refused.json` and exits with code 0, so launchd does not restart it in a loop. Run interactively, it exits with code 78.
 - **CL-3** Each call sets its model, system prompt, allowed tools, MCP servers, setting sources and max turns explicitly. Defaults are not trusted. Check option names against the current Agent SDK docs before implementing.
 - **CL-4** Triage calls load **no** Claude Code system prompt preset, **no** tools, **no** MCP servers and **no** filesystem settings. This keeps the per-call overhead to the triage prompt itself.
 - **CL-5** Every call appends to `logs/usage-*.jsonl`: timestamp, purpose, model, input/output/cache tokens, cost-equivalent, duration, item IDs, prompt version.
 - **CL-6** Daily budgets in settings (`budgets.triageCallsPerDay`, `budgets.draftsPerDay`, `budgets.costEquivalentPerDay`). When a budget is hit, the triage queue pauses, rules-only triage continues, and the UI shows a banner.
 - **CL-7** Model outputs are validated with zod. On a schema failure, retry once, then mark the item `triage_failed` and show it in the inbox untriaged.
 - **CL-8** The adapter is swappable. One setting switches the backend to an API key or Bedrock without changes elsewhere, in case subscription terms change.
+- **CL-9** Relay calls (R2.5) allow exactly one connector tool and deny every other tool. A `PostToolUse` hook hands the raw result to code and replaces it with "ok" before the model sees it, so source content never enters the model's context. Relay calls are logged with purpose `fetch`.
+- **CL-10** Every call has a timeout (triage 120 s, drafts 240 s) and is aborted on sleep or shutdown. Claude calls do not start during a brief Power Nap wake: the machine must have been awake for at least 45 s (FR-14.2).
 
 ### 5.3 Batching rules (to stay under the baseline)
 
@@ -300,10 +334,12 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 
 | Milestone | Epics | Rough effort with Claude Code (guess) |
 |---|---|---|
-| M1 Ingest and store | E1 Settings and storage · E2 Slack polling · E3 Read-only inbox | 3–4 days |
+| M1 Ingest and store | E1 Settings and storage · E2 Slack polling · E3 Read-only inbox · E13 Runtime robustness (autostart, sleep, offline, degraded mode) | 6–8 days |
 | M2 Triage | E4 Rules · E5 Haiku triage · E6 Eval and feedback · E7 Usage tracking | 3–4 days |
 | M3 Actions | E8 Vault note action · E9 Confluence entry action · E10 Notifications | 4–5 days |
 | M4 Cut-over | E11 Hardening · E12 Retire the digest and measure | 2–3 days + 2 weeks of measurement |
+
+Robustness lands in M1, not M4: the server runs unattended from the first milestone, so autostart, sleep and offline handling, crash recovery and degraded mode (E13, section 7.14) are built before triage.
 
 ---
 
@@ -313,9 +349,9 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 
 **FR-1.1** The server creates the data directory structure on first run and copies default prompts into `config/prompts/`.
 
-**FR-1.2** `settings.json` is validated with zod at startup. Invalid settings stop the server with a clear message.
+**FR-1.2** `settings.json` is validated with zod at startup. If it is invalid, the server does not stop: it logs a clear message, falls back to `settings.last-good.json`, and runs in degraded mode with the error shown in the UI (FR-14.6). With no good copy, the server stays up with every source paused until the settings are fixed. A stopped server would be invisible when it starts unattended at login.
 
-**FR-1.3** Settings include at least: data dir, poll schedule (work hours, interval in work hours, interval off hours), Slack channel include/exclude lists, VIP user IDs, quiet minutes, model map, budgets, retention days, Confluence allow-list (space key + page IDs), vault path, dry-run flag.
+**FR-1.3** Settings include at least: data dir, poll schedule (work hours, interval in work hours, interval off hours), Slack channel include/exclude lists, VIP user IDs, quiet minutes, model map, budgets, retention days, Confluence allow-list (space key + page IDs), vault path, dry-run flag. Per-source schedules live in an optional `sources.<id>` block (`enabled`, `intervalWorkMinutes`, `intervalOffMinutes`, where `null` means work hours only), with defaults, so existing settings stay valid. Defaults: Slack 10 / 60 min, email 30 / 120 min, Wispr Flow 180 min in work hours only.
 
 **FR-1.4** The event log, item files, cursors and snapshot follow the storage rules in section 4.3.
 
@@ -327,7 +363,8 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 >
 > - Given a fresh install, when the server starts, then the data directory and default config files exist.
 > - Given a corrupted `snapshot.json`, when the server starts, then it rebuilds state from the event log and logs a warning.
-> - Given a second server instance, when it starts, then it exits because the lock is held.
+> - Given a second server instance, when it starts, then it logs the running instance's URL and exits because the lock is held (code 0 under launchd, 75 interactively).
+> - Given the laptop lost power while the server was running, when it starts after the reboot, then it takes over the stale lock and recovers any torn event line.
 
 ### 7.2 E2 Slack polling
 
@@ -343,17 +380,18 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 
 **FR-2.6** Messages are grouped into items by thread (`thread_ts`) or, for DMs without threads, into windows separated by a gap of 30+ minutes.
 
-**FR-2.7** Polling interval comes from settings (default 10 min in work hours, 60 min outside). The scheduler detects sleep or wake (a clock jump larger than 2× the interval) and polls immediately.
+**FR-2.7** Polling interval comes from settings (default 10 min in work hours, 60 min outside). The scheduler detects a wake by comparing wall-clock time with monotonic time on a 5-second tick: a gap of more than 30 s, with a changed kernel wake time, is a wake. It then polls within 1 minute, or as soon as the network returns if it is still offline (FR-14.2). The earlier rule, a clock jump larger than 2× the interval, missed a 1-hour sleep when the off-hours interval is 60 minutes. A manual clock change is not treated as a wake.
 
 **FR-2.8** Polling is idempotent. Message `ts` is the dedupe key. The cursor only advances after the items are persisted.
 
-**FR-2.9** On HTTP 429, honour `Retry-After`. Other failures back off exponentially and emit `source.failed`. The UI shows source health.
+**FR-2.9** On HTTP 429, honour `Retry-After`. Other failures back off exponentially with jitter and emit `source.failed`. Failures are classified as offline, captive portal, rate limited, auth failed or server error (FR-14.3). Being offline is not a source failure: the cursor stays put and polling resumes when the network returns. The UI shows source health.
 
 **FR-2.10** Bot messages and excluded channels are dropped at ingest. They are not stored.
 
 > **Story 2.1** As Frank, I want the app to catch up on Slack after my laptop has been asleep so that nothing is missed.
 >
 > - Given the laptop slept for 3 hours, when it wakes, then the next poll runs within 1 minute and fetches all messages since the last cursor.
+> - Given the laptop wakes with no network, when the network returns, then a catch-up poll runs within 1 minute of reconnecting.
 > - Given a poll fails halfway, when the next poll runs, then no messages are duplicated or skipped.
 
 ### 7.3 E3 Read-only inbox (M1)
@@ -362,7 +400,7 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 
 **FR-3.2** The UI updates over SSE when items change.
 
-**FR-3.3** The API is only reachable on `127.0.0.1`, and requires a per-install bearer token (generated on first run, injected into the served UI). CORS allows only the app's own origin.
+**FR-3.3** The API is only reachable on `127.0.0.1`, and requires a per-install bearer token (generated on first run, injected into the served UI). CORS allows only the app's own origin. The token is stored in the Keychain so open tabs survive a restart. Requests with a `Host` other than `127.0.0.1` or `localhost` (DNS rebinding) or a foreign `Origin` are refused. The UI reads SSE through `fetch`, so the token travels in a header, never in a URL.
 
 ### 7.4 E4 Rules
 
@@ -463,21 +501,107 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 
 ### 7.11 E10 Notifications
 
-**FR-11.1** New `now` items trigger a macOS notification with the one-line summary. Clicking it opens the item in the UI.
+**FR-11.1** New `now` items trigger a macOS notification with the one-line summary. Clicking it opens the item in the UI. Uses `terminal-notifier`, because `osascript` notifications can't open a URL.
 
-**FR-11.2** No more than one notification per item. Quiet hours come from settings.
+**FR-11.2** No more than one notification per item, recorded as an `item.notified` event so a restart never repeats one. Quiet hours come from settings. Three or more `now` items found in one catch-up poll after a wake become a single summary notification.
 
 ### 7.12 E11 Hardening
 
 - **FR-12.1** Retention job runs daily (section 4.3).
-- **FR-12.2** Startup checks: FileVault on (warn if not), no `ANTHROPIC_API_KEY`, Slack token present, Claude login works (one minimal Haiku call, logged).
-- **FR-12.3** launchd plist so the server starts at login (optional in MVP, required in Phase 2).
+- **FR-12.2** Startup checks: FileVault on (warn if not), no `ANTHROPIC_API_KEY`, Slack token present, Claude login works (one minimal Haiku call, logged), settings valid, Keychain readable, and a note if Power Nap is on. Checks run after the API is up, so they never delay first paint. Except for the API key, a failed check puts the server in degraded mode and is re-checked: Keychain and token every 5 minutes, the Claude login on a 15–60 minute backoff, and on wake, on settings save and on demand from the UI (FR-14.6).
+- **FR-12.3** launchd LaunchAgent so the server starts at login. **Required in the MVP and built in M1** (FR-14.1).
 - **FR-12.4** Tests: unit tests for rules, quiet window, grouping, cursor handling, atomic writes and executors. Contract tests for model output schemas, using recorded fixtures. There is no live-model call in CI.
 
 ### 7.13 E12 Cut-over and measurement
 
 - **FR-13.1** After 3 working days of parallel running, compare the Work OS output with the Slack digest. Then disable the digest scheduled task.
 - **FR-13.2** Measure S1–S7 for 2 working weeks and record the results in this file.
+
+### 7.14 E13 Runtime robustness (M1)
+
+The server runs unattended on a laptop that sleeps, travels and loses its network. These requirements make that safe.
+
+**FR-14.1 Autostart.** A launchd LaunchAgent (`com.polestar.workos`) starts the server at login with no window or browser:
+- **Restarts:** `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (restart only after a crash), `ThrottleInterval` 30.
+- **Session:** `ProcessType` Standard, `ExitTimeOut` 10, and `LimitLoadToSessionType` Aqua, so the login Keychain, the Claude login and notifications are available.
+- **Plist contents:** absolute paths, an explicit `PATH` and no secrets.
+- **What it runs:** a deployed release (`npm run deploy`), never the repo.
+- **Commands:** `npm run agent:install`, `agent:uninstall` and `agent:status`.
+- **Development:** uses its own data directory and port, so it can run alongside.
+
+**FR-14.2 Sleep and wake.** A 5-second tick compares wall-clock time with monotonic time.
+- **On wake:**
+  1. Abort in-flight requests.
+  2. Wait 10 s for the network.
+  3. Probe.
+  4. Poll within 1 minute.
+- **Wake with no network:** the catch-up poll runs on reconnect instead.
+- **Power Nap:** during a brief wake, source fetches may run, but Claude calls and approved writes wait until the machine has been awake for 45 s.
+- **Keeping the machine awake:** a `caffeinate` assertion is held only during a triage call or an approved write. Correctness never depends on it.
+
+**FR-14.3 Network handling.**
+- **Timeouts:** every network call has one. Slack 20 s, Confluence 15 s for reads and 30 s for writes, probes 5 s.
+- **Classification:** failures are classified as:
+  - offline (the probe also fails)
+  - degraded (the probe succeeds)
+  - captive portal (TLS errors, or HTML on a JSON endpoint)
+  - rate limited (wait for `Retry-After`)
+  - auth failed
+- **Backoff:** jittered and capped. Offline: probe only, up to 5 minutes. Degraded: up to 10 minutes. Claude: up to 15 minutes.
+- **Circuit breakers:** one per dependency. Work waits for the breaker instead of retrying on its own, so there are no retry storms.
+- **When the network returns:** catch-up poll first, then the outbox, then triage.
+
+**FR-14.4 Working offline.** The inbox, done, snooze and corrections work with no network.
+- Triage keeps items pending, and rules still apply.
+- A draft request waits for Claude.
+- Sources that need no network, such as Wispr Flow (R2.6), keep ingesting.
+
+**FR-14.5 Durable outbox.** An approval made offline, or interrupted by sleep or a crash, is never lost and never applied twice.
+- **Before every write attempt:** an `action.executing` event is fsynced, and the executor reconciles against the target.
+- **Confluence:** re-read the page version. A version of `base + 1` with the Work OS marker means an earlier attempt already succeeded.
+- **Vault:** compare the file hash with the base and expected hashes.
+- **Target changed by someone else:** re-draft, never overwrite.
+- **Attempts:** offline time does not use up attempts. After 5 transient failures the action fails with reason `unreachable`.
+
+**FR-14.6 Degraded and safe mode.** Problems are shown, not hidden.
+- **Health:** each dependency (network, Slack, Claude, Confluence, Keychain, storage) reports `ok | unknown | offline | degraded | rate_limited | auth_failed | paused`. The health API and SSE expose this.
+- **UI:** a banner shows the problem, how to fix it and a "Check again" button. The blocking startup screen is kept only for the API key (CL-2).
+- **Alerts:**
+  - macOS alerts are rate limited to one per dependency every 4 hours and respect quiet hours.
+  - Offline is alerted only after 30 minutes awake in work hours.
+  - "Recovered" is sent only if a problem alert was sent.
+- **Safe mode:** more than 5 crashes in 10 minutes puts the server in safe mode (UI only, no scheduler) with a notification.
+- **Full disk:** the server switches to read-only and commands return 503.
+
+**FR-14.7 Shutdown and crash recovery.**
+- **On SIGTERM (logout, restart):**
+  1. Stop the tick.
+  2. Abort fetches.
+  3. Give an in-flight write 5 s.
+  4. Sync the log and write the snapshot.
+  5. Release the lock.
+  6. Exit within 8 s.
+- **After a crash or power loss:** recover at startup as described in section 4.3.
+
+**FR-14.8 Clocks and time zones.**
+- **Storage:** all instants are stored in UTC.
+- **Snooze:** presets become an absolute instant when set.
+- **Local time:** work hours, quiet hours and budget days use the current system time zone, re-read every minute so travel is picked up.
+- **DST:** handled through Intl, never fixed offsets.
+- **Clock changes:** a manual change in either direction recomputes due times without a poll storm.
+- **Retention:** runs on the first tick after 03:00, or after the next wake if that time was missed.
+
+> **Story 14.1** As Frank, I want Work OS running whenever I'm logged in, without thinking about it.
+>
+> - Given a reboot, when I log in, then the server is up within 30 s and `npm run agent:status` reports it healthy.
+> - Given the server crashes, when launchd restarts it, then no event is lost and no message is fetched twice.
+> - Given `ANTHROPIC_API_KEY` is set in the launchd environment, when the server starts, then I get a notification and it does not restart in a loop.
+
+> **Story 14.2** As Frank, I want to approve a vault note on a train with no signal and have it land once I'm back online.
+>
+> - Given I approve an action offline, when the network returns, then the outbox writes it once.
+> - Given the target note changed while I was offline, when the outbox runs, then the app re-drafts instead of writing.
+> - Given the laptop sleeps during a Confluence write, when it wakes, then the executor re-reads the page and does not write the entry twice.
 
 ---
 
@@ -489,12 +613,27 @@ Frank sees what needs him in Slack within 10 minutes, and files knowledge with o
 | NF-2 | Privacy | Observations about people never leave the vault. Enforced by FR-10.1 and FR-10.4. |
 | NF-3 | Security | Secrets live only in the Keychain. Never logged, never in files or prompts. |
 | NF-4 | Security | Slack scopes are read-only. The app never sends messages in the MVP. |
-| NF-5 | Safety | Every write needs explicit approval. Executors re-validate the target (allow-list, version or hash) at write time. |
-| NF-6 | Reliability | Polling is idempotent. State can be rebuilt from the event log. Single instance. |
-| NF-7 | Performance | A poll with triage completes in under 60 s for 25 threads. The UI first paint is under 1 s. |
+| NF-5 | Safety | Every write needs explicit approval. Executors re-validate the target (allow-list, version or hash) at write time, and reconcile against the target before every retry, so a write is applied at most once (FR-14.5). |
+| NF-6 | Reliability | Polling is idempotent. State can be rebuilt from the event log. Single instance. The server starts at login, survives sleep, network loss, crashes and power loss, and shows degraded states instead of stopping (E13). |
+| NF-7 | Performance | A poll with triage completes in under 60 s for 25 threads. The UI first paint is under 1 s. Detailed budgets in NF-11. |
 | NF-8 | Cost | Daily usage stays at or under the Phase 0 baseline (S3). The usage panel makes drift visible. |
 | NF-9 | Portability | The Claude adapter can switch to an API key or Bedrock through settings only (CL-8). |
 | NF-10 | Compliance | Internal tool, not customer-facing, so the EU AI Act customer-facing obligations do not apply. Re-assess if any part is exposed to customers. |
+| NF-11 | Performance | Budgets in the table below, checked by `npm run perf` against 90 days of synthetic data (about 50k events) with fake Slack and fake Claude. The script fails on any breach. |
+
+NF-11 budgets:
+
+| Measure | Budget |
+|---|---|
+| Cold start to API ready | < 400 ms from the snapshot; < 1.5 s with a full replay |
+| `GET /api/inbox` | p95 < 15 ms server-side, payload < 300 KB |
+| `GET /api/items/:id` | p95 < 5 ms warm, < 20 ms cold |
+| Commands (done, snooze, correct), including fsync | p95 < 30 ms |
+| SSE notice after a commit | p95 < 50 ms |
+| UI first paint | < 1 s |
+| Poll + triage of 25 threads, excluding Claude time | < 10 s (NF-7 total < 60 s) |
+| Idle CPU | < 0.5 % average |
+| Steady memory (RSS) | < 150 MB |
 
 ---
 
@@ -506,17 +645,24 @@ Each phase starts only when the previous phase meets its success criteria. Each 
 
 | Source | Approach | Approval needed | Retires |
 |---|---|---|---|
-| Outlook mail | Microsoft Graph delta query on the Inbox, polled. No webhooks, so no public endpoint. | Entra app registration + admin consent (delegated `Mail.Read`) | Daily Outlook digest |
+| Outlook mail | Relay call (R2.5) to `outlook_email_search` on the claude.ai Microsoft 365 connector, every 30 min in work hours and 120 min outside. Our own Graph app registration is unlikely to get consent, and the connector is already approved for the tenant. Local reads are not viable: new Outlook for Mac caches mail in an undocumented binary store (`HxStore.hxd`) that only refreshes while Outlook runs. Fallback if P0-9 fails: add the account to Apple Mail and read its local store, which needs Full Disk Access. | P0-9 passes. Tell IT the approved connector will be polled automatically. | Daily Outlook digest |
+| Wispr Flow notes and meetings | Local read-only reads of `flow.sqlite` (R2.6), every 3 h in work hours. No network, tokens or MCP needed. | P0-10 passes | Whichever scheduled task covers Wispr Flow notes, if any |
 | Teams chats | Graph delta on chats Frank is in | `Chat.Read` delegated, admin consent | Part of the daily Teams transcript sweep |
 | Teams meeting transcripts | Graph online meeting transcripts for meetings Frank organised or attended | `OnlineMeetingTranscript.Read.All` (admin-level; may be refused) | Daily Teams transcript sweep |
 | Plaud | Plaud API if one is available to Frank; otherwise call the Plaud MCP server directly from code through an MCP client, with no model in the loop | Plaud account | Daily Plaud transcript sweep |
 
 Requirements:
 
-- **R2.1** Each source implements the same adapter interface: `fetchSince(cursor) → { items, nextCursor }`, plus `normalise` and `health`.
+- **R2.1** Each source implements the same adapter interface: `fetchSince(cursor) → { items, nextCursor }`, plus `normalise`, `probe`, its dependencies (`deps`) and `needsNetwork`. The interface, the source registry, per-source schedules, cursors, health and circuit breakers are built in the MVP with Slack as the only adapter, so a Phase 2 source needs no changes to the core. After a wake, only overdue sources run, one after another (Slack, then email, then Wispr Flow).
 - **R2.2** Triage prompts gain per-source sections. The eval set gains labelled examples per source before the source goes live.
 - **R2.3** Meeting items are triaged on the transcript summary, not the full transcript. Summarise with Haiku, or use Plaud's own summary.
-- **R2.4** If a Graph permission is refused, the source stays on the existing scheduled task. No workarounds that bypass IT.
+- **R2.4** If a Graph permission is refused, the source stays on the existing scheduled task. No workarounds that bypass IT. Using a connector IT has already approved is not a workaround, but tell IT before polling through it.
+- **R2.5** Relay fetch: for a source only reachable through a claude.ai connector, `claude/relay.ts` runs one Haiku call that may use exactly one connector tool (CL-9). Code captures the raw tool result through a `PostToolUse` hook, and the model sees only "ok". The adapter still normalises, dedupes and advances its cursor only after persisting. A connector that is missing or needs re-authentication shows as `auth_failed`, with the fix "reconnect it on claude.ai". The relay is built and tested on fixtures in the MVP and first used in Phase 2.
+- **R2.6** Local reads: a source that keeps its data in a local database is read directly, read-only.
+  - **Access:** `node:sqlite` with `readOnly`, `query_only`, a 2 s busy timeout and one short transaction per run.
+  - **Tables:** allow-listed tables only. For Wispr Flow that means notes and meetings, never the dictation `History`.
+  - **Schema check:** a fingerprint compared on every run. A mismatch after an app update marks the source `degraded` (`schema_changed`) and sends a notification.
+  - **Never** writes to the source database.
 
 ### Phase 3: More actions
 
@@ -553,6 +699,9 @@ Requirements:
 | Writing wrong content into Confluence | Low | Pollutes the shared context | Allow-list, preview, people check, version check, approval. |
 | Company data on the laptop | Low | Data-protection exposure | FileVault, localhost only, retention, Keychain secrets. |
 | Scope creep before committed work lands | High | Delays MVI V2, Apidog and other commitments | Phase 0 now; code after 15 Oct; phases gated on success criteria. |
+| The server silently stops running (sleep, network loss, crash, bad settings) | Medium | Items missed while Frank thinks the app is watching | E13: launchd autostart, wake catch-up, degraded mode with a visible banner and rate-limited alerts, safe mode instead of a crash loop. |
+| A Wispr Flow update changes its database schema | Medium | The Wispr Flow source stops | Schema fingerprint check, `degraded` status and a notification (R2.6). Other sources are unaffected. |
+| claude.ai connectors don't load headless, or relay calls cost too much | Medium | No email source | Spike P0-9 before building. Fallback: Apple Mail local store. |
 
 ---
 
@@ -563,3 +712,5 @@ Requirements:
 3. Is the Obsidian MCP server usable from the Agent SDK, or should vault reads use scoped file tools?
 4. How does Haiku usage weigh against plan limits compared with Sonnet and Opus? Measure from the usage log.
 5. Which Confluence pages go on the initial allow-list (P0-6)?
+6. Do claude.ai connectors load in a headless Agent SDK run under launchd, and what does one relay call cost? (Spike P0-9.)
+7. Does Node's `fsync` on macOS issue `F_FULLFSYNC`? If not, record the remaining power-loss window as an accepted limit (it affects only the last moments before a power cut, which the startup recovery already handles).
