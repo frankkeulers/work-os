@@ -68,7 +68,11 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
 - **Targets are links.** The Confluence page title opens the page (`<site>/wiki/spaces/<key>/pages/<id>`) in a new tab. The vault path opens the note in Obsidian (`obsidian://open?vault=…&file=…`). A new note has no link until it's written, because it doesn't exist yet. After a write, the done banner has Open page or Open note.
 - **Drafts are rich text.** Drafts are stored as markdown. They're rendered as formatted text, and Edit text edits them in place, with a small toolbar (heading, bold, italic, code, bulleted list, numbered list). A Markdown view shows the raw text. Front matter shows as a properties block and is edited in the Markdown view. Obsidian `[[wiki links]]` survive edits.
-- **Footer.** Approve, Edit text and Re-draft come first; Discard sits at the far end. In the narrow Inbox panel, Approve takes its own full-width row. The model, duration and token count sit in a caption under the draft, not in the footer.
+- **Every action sits where it acts.**
+  - **Edit** is part of the draft: an Edit button in the draft's corner, or click the text. Save and Cancel sit under the editor, and the footer steps aside while you edit.
+  - **Re-draft** is a quiet button by the draft tabs, because it replaces the whole draft.
+  - **The footer** holds only Approve and, at the far end, Discard.
+- **Only what you need to decide.** The target line gives the page or note, then one "✓ Checks passed" toggle, which turns red when a check fails. The individual checks, page ID, base version, dry-run note and model, duration and tokens are behind that toggle. A failed check still raises its own banner. "Edited" is a small tag on the draft.
 
 ## Impact on the other pages (proposed, not yet applied)
 

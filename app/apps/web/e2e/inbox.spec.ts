@@ -175,3 +175,22 @@ test('the Confluence target links to the page, and rich-text edits are saved as 
   await expect(action.getByLabel('Draft text preview').locator('strong')).toHaveText('Ship it');
   await expect(action.getByText('Edited', { exact: true })).toBeVisible();
 });
+
+test('click the draft text to edit it in place; Save and Cancel sit under the editor', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  await expect(action.getByRole('button', { name: 'Re-draft' })).toBeVisible();
+  await action.getByLabel('Draft text preview').getByText(/^Why:/).click();
+  const editor = page.getByLabel('Draft text');
+  await expect(editor).toBeFocused();
+  // While editing, the footer's Approve and the Re-draft button step aside.
+  await expect(action.getByRole('button', { name: 'Approve and write to sandbox' })).toHaveCount(0);
+  await expect(action.getByRole('button', { name: 'Re-draft' })).toHaveCount(0);
+  await page.keyboard.type('Note: ');
+  await expect(editor).toContainText('Note: ');
+  await action.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('dialog', { name: 'Discard your edits?' }).getByRole('button', { name: 'Discard edits' }).click();
+  await expect(action.getByLabel('Draft text preview')).not.toContainText('Note: ');
+  await expect(action.getByRole('button', { name: 'Approve and write to sandbox' })).toBeVisible();
+});

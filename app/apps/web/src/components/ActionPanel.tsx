@@ -10,7 +10,7 @@ import { errorToast, toast } from '../store/toasts';
 import { BrandIcon } from './BrandIcon';
 import { Icon } from './icons';
 import { itemPath } from './item';
-import { Banner, Button, Chip, ConfirmDialog, Spinner, cx } from './ui';
+import { Banner, Button, ConfirmDialog, Spinner, cx } from './ui';
 
 // The draft → review → approve panel (FR-9.x, FR-10.x). Used full width on Item detail and,
 // embedded, in the Inbox item panel.
@@ -75,43 +75,48 @@ function Doc(props: DocProps) {
   );
 }
 
-function ConfluencePreview({ d, item, doc }: { d: ConfluenceDraft; item: ItemView['item']; doc: DocProps }) {
+type FrameProps = Omit<Parameters<typeof DraftFrame>[0], 'label' | 'className' | 'children'>;
+
+function ConfluencePreview({ d, item, doc, frame }: { d: ConfluenceDraft; item: ItemView['item']; doc: DocProps; frame: FrameProps }) {
   return (
-    <div className="rounded-[10px] bg-tray p-5">
-      <article className="flex flex-col gap-2.5 rounded-md border border-line bg-surface px-6 py-[22px]">
-        <div className="font-mono text-[11px] text-teal">+ new entry</div>
-        <div className="text-base font-semibold">{d.title}</div>
-        <Doc {...doc} />
-        {!/^\W*Source:/m.test(doc.value) && <div className="text-xs text-muted">Source: {SOURCE_NAME[item.source]} {item.title}</div>}
-      </article>
+    <div className="rounded-[10px] bg-tray p-4">
+      <DraftFrame {...frame} label="+ new entry" className="rounded-md border border-line bg-surface px-5 pb-5 pt-3">
+        <div className="flex flex-col gap-2.5">
+          <div className="text-base font-semibold">{d.title}</div>
+          <Doc {...doc} />
+          {!/^\W*Source:/m.test(doc.value) && <div className="text-xs text-muted">Source: {SOURCE_NAME[item.source]} {item.title}</div>}
+        </div>
+      </DraftFrame>
     </div>
   );
 }
 
-function VaultAppendPreview({ d }: { d: VaultAppendDraft }) {
+function VaultAppendPreview({ d, frame }: { d: VaultAppendDraft; frame: FrameProps }) {
   return (
-    <div className="overflow-x-auto rounded-[10px] border border-line bg-surface-3 py-3 font-mono text-[13px] leading-relaxed">
-      {d.context.map((l, i) => (
-        <div key={`c${i}`} className="whitespace-pre px-4 text-muted">
-          {'  '}
-          {l}
-        </div>
-      ))}
-      {d.content.split('\n').map((l, i) => (
-        <div key={`a${i}`} className="whitespace-pre bg-teal-wash px-4 text-teal-deep">
-          + {l}
-        </div>
-      ))}
-    </div>
+    <DraftFrame {...frame} label="+ new lines" className="rounded-[10px] border border-line bg-surface-3 pb-3 pt-2 [&>div:first-child]:px-4">
+      <div className="overflow-x-auto font-mono text-[13px] leading-relaxed">
+        {d.context.map((l, i) => (
+          <div key={`c${i}`} className="whitespace-pre px-4 text-muted">
+            {'  '}
+            {l}
+          </div>
+        ))}
+        {d.content.split('\n').map((l, i) => (
+          <div key={`a${i}`} className="whitespace-pre bg-teal-wash px-4 text-teal-deep">
+            + {l}
+          </div>
+        ))}
+      </div>
+    </DraftFrame>
   );
 }
 
 /** A vault note, or the lines an append adds while they're being edited. */
-function VaultDoc({ doc }: { doc: DocProps }) {
+function VaultDoc({ d, doc, frame }: { d: Draft; doc: DocProps; frame: FrameProps }) {
   return (
-    <div className="rounded-[10px] border border-line bg-surface px-5 py-4">
+    <DraftFrame {...frame} label={d.kind === 'vault_append' ? '+ new lines' : '+ new note'} className="rounded-[10px] border border-line bg-surface px-5 pb-4 pt-2.5">
       <Doc {...doc} />
-    </div>
+    </DraftFrame>
   );
 }
 
@@ -135,7 +140,7 @@ function TargetLink({ href, title, children }: { href: string; title: string; ch
 function TargetLine({ d, allowListed, links }: { d: Draft; allowListed: boolean; links: TargetLinks }) {
   if (d.kind === 'confluence')
     return (
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
         <span className="text-muted">Append to</span>
         <BrandIcon brand="confluence" size={14} decorative />
         <TargetLink href={links.page(d.pageId)} title={`Open page ${d.pageId} in Confluence`}>
@@ -143,14 +148,11 @@ function TargetLine({ d, allowListed, links }: { d: Draft; allowListed: boolean;
         </TargetLink>
         <span className="text-muted">under</span>
         <span className="font-semibold">{d.section}</span>
-        <span className="font-mono text-[11px] text-muted">
-          page {d.pageId} · base v{d.baseVersion}
-        </span>
         {!allowListed && <span className="sr-only">Not on the allow-list</span>}
       </div>
     );
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
       <span className="text-muted">{d.kind === 'vault_new' ? 'New note' : 'Append to'}</span>
       <BrandIcon brand="obsidian" size={14} decorative />
       {d.kind === 'vault_append' || links.noteExists ? (
@@ -167,48 +169,114 @@ function TargetLine({ d, allowListed, links }: { d: Draft; allowListed: boolean;
           <span className="text-muted">under</span>
           <span className="font-semibold">{d.heading}</span>
         </>
-      ) : (
-        !links.noteExists && <span className="text-xs text-muted">· created when you approve</span>
-      )}
+      ) : null}
     </div>
   );
 }
 
 type TargetLinks = { page: (id: string) => string; note: (path: string) => string; noteExists: boolean };
 
-function SafetyChips({ d, allowListed, dryRun }: { d: Draft; allowListed: boolean; dryRun: boolean }) {
+type Check = { ok: boolean | 'info' | 'warn'; label: string; detail?: string };
+
+function checksFor(d: Draft, allowListed: boolean, dryRun: boolean): Check[] {
+  const c: Check[] =
+    d.kind === 'confluence'
+      ? [
+          allowListed ? { ok: true, label: 'Page on allow-list', detail: `page ${d.pageId}` } : { ok: false, label: 'Page not on allow-list', detail: `page ${d.pageId}` },
+          { ok: 'info', label: 'Version check at write', detail: `base v${d.baseVersion}` },
+          { ok: true, label: 'People check passed' },
+        ]
+      : [{ ok: true, label: 'Follows vault conventions' }, d.kind === 'vault_append' ? { ok: 'info', label: 'File hash check at write' } : { ok: 'info', label: 'Refuses to overwrite an existing note' }];
+  if (dryRun) c.push({ ok: 'warn', label: 'Dry-run: writes go to the sandbox only' });
+  return c;
+}
+
+const CHECK_ICON = {
+  true: { icon: 'check', cls: 'text-teal-ink' },
+  false: { icon: 'alert', cls: 'text-red-fg' },
+  info: { icon: 'lock', cls: 'text-muted' },
+  warn: { icon: 'flask', cls: 'text-amber-fg' },
+} as const;
+
+/** The safety checks folded into one line: they matter when one fails, not when all pass. */
+function ChecksToggle({ checks, open, onToggle }: { checks: Check[]; open: boolean; onToggle: () => void }) {
+  const failed = checks.filter((c) => c.ok === false).length;
   return (
-    <div className="flex flex-wrap gap-2">
-      {d.kind === 'confluence' ? (
-        <>
-          {allowListed ? (
-            <Chip tone="ok" icon="check">
-              Page on allow-list
-            </Chip>
-          ) : (
-            <Chip tone="bad" icon="alert">
-              Page not on allow-list
-            </Chip>
-          )}
-          <Chip icon="lock">Version check at write</Chip>
-          <Chip tone="ok" icon="check">
-            People check passed
-          </Chip>
-        </>
-      ) : (
-        <>
-          <Chip tone="ok" icon="check">
-            Follows vault conventions
-          </Chip>
-          <Chip icon="lock">{d.kind === 'vault_append' ? 'File hash check at write' : 'Refuses to overwrite an existing note'}</Chip>
-        </>
-      )}
-      {dryRun && (
-        <Chip tone="warn" icon="flask">
-          Dry-run: sandbox only
-        </Chip>
-      )}
-      {d.edited && <Chip tone="accent" icon="edit">Edited</Chip>}
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-controls="draft-checks"
+      onClick={onToggle}
+      className={cx('-mr-1.5 inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium cursor-pointer hover:bg-track', failed ? 'text-red-fg' : 'text-teal-ink')}
+    >
+      <Icon name={failed ? 'alert' : 'check'} size={13} strokeWidth={2.5} />
+      {failed ? `${failed} check failed` : 'Checks passed'}
+      <Icon name={open ? 'up' : 'down'} size={13} className="text-muted" />
+    </button>
+  );
+}
+
+function ChecksDetail({ checks, d }: { checks: Check[]; d: Draft }) {
+  return (
+    <div id="draft-checks" className="flex flex-col gap-1.5 rounded-lg bg-surface-2 px-3 py-2.5 text-xs">
+      {checks.map((c) => {
+        const i = CHECK_ICON[String(c.ok) as keyof typeof CHECK_ICON];
+        return (
+          <div key={c.label} className="flex items-center gap-2">
+            <Icon name={i.icon} size={13} strokeWidth={2.5} className={cx('shrink-0', i.cls)} />
+            <span className="flex-1 text-ink-2">{c.label}</span>
+            {c.detail && <span className="font-mono text-[11px] text-muted">{c.detail}</span>}
+          </div>
+        );
+      })}
+      <div className="mt-0.5 border-t border-line-soft pt-1.5 font-mono text-[11px] text-muted">
+        Drafted by {d.model} · {d.promptVersion} · {Math.round(d.durationMs / 1000)}s · {fmtTokens(d.tokens)} tokens
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The draft with its edit controls: Edit in the corner (or click the text), and Save / Cancel
+ * under the editor. You edit where you read.
+ */
+function DraftFrame({
+  label,
+  edited,
+  editing,
+  canEdit,
+  onEdit,
+  editActions,
+  className,
+  children,
+}: {
+  label: string;
+  edited: boolean;
+  editing: boolean;
+  canEdit: boolean;
+  onEdit: () => void;
+  editActions: ReactNode;
+  className: string;
+  children: ReactNode;
+}) {
+  const clickToEdit = canEdit && !editing;
+  return (
+    <div className={cx('group flex flex-col gap-2', className)}>
+      <div className="flex min-h-8 items-center gap-2">
+        <span className="font-mono text-[11px] text-teal">{label}</span>
+        {edited && <span className="rounded bg-accent-wash px-1.5 py-px text-[10px] font-semibold text-accent-ink">Edited</span>}
+        <span className="flex-1" />
+        {clickToEdit && (
+          <Button size="sm" variant="ghost" icon="edit" aria-label="Edit text" title="Edit text" className="-mr-1.5" onClick={onEdit}>
+            Edit
+          </Button>
+        )}
+      </div>
+      {/* A mouse shortcut for the Edit button: click the text to start editing. Links still open. */}
+      <div className={cx(clickToEdit && 'cursor-text')} onClick={clickToEdit ? (e) => !(e.target as HTMLElement).closest('a') && onEdit() : undefined}>
+        {children}
+      </div>
+      {editing && <div className="flex flex-wrap items-center gap-2 pt-1">{editActions}</div>}
     </div>
   );
 }
@@ -273,6 +341,7 @@ export function ActionPanel({
   const [editing, setEditing] = useState<{ actionId: string; text: string; original: string } | null>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [busy, setBusy] = useState(false);
+  const [checksOpen, setChecksOpen] = useState(false);
 
   const latest = view.actions.find((a) => a.type === type);
   const action = latest && latest.status !== 'discarded' ? latest : undefined;
@@ -436,10 +505,46 @@ export function ActionPanel({
       note: (path) => obsidianNoteUrl(view.targets.vaultPath, path),
       noteExists: written,
     };
+    const checks = checksFor(draft, allowListed, view.dryRun);
+    const cancelEdit = () =>
+      dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', danger: true, run: () => setEditing(null) }) : setEditing(null);
+    const frame: FrameProps = {
+      edited: draft.edited,
+      editing: isEditing,
+      canEdit: action.status === 'ready' && !editing,
+      onEdit: () => setEditing({ actionId: action.id, text: draft.content, original: draft.content }),
+      editActions: (
+        <>
+          <Button
+            variant="solid"
+            icon="check"
+            disabled={busy || !dirty}
+            onClick={() =>
+              void run(async () => {
+                await api.saveDraftEdit(action.id, doc.value);
+                setEditing(null);
+                toast('Edits saved. The draft is marked as edited.');
+              })
+            }
+          >
+            Save edits
+          </Button>
+          <Button icon="x" onClick={cancelEdit}>
+            Cancel
+          </Button>
+        </>
+      ),
+    };
     body = (
-      <div className="flex flex-col gap-3.5">
-        <TargetLine d={draft} allowListed={allowListed} links={links} />
-        <SafetyChips d={draft} allowListed={allowListed} dryRun={view.dryRun} />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <TargetLine d={draft} allowListed={allowListed} links={links} />
+            <span className="flex-1" />
+            <ChecksToggle checks={checks} open={checksOpen} onToggle={() => setChecksOpen(!checksOpen)} />
+          </div>
+          {checksOpen && <ChecksDetail checks={checks} d={draft} />}
+        </div>
         {prev?.failureReason === 'conflict' && action.status === 'ready' && (
           <Banner tone="info" icon="info">
             <strong>Re-drafted after a conflict.</strong> {(view.results[prev.id] ?? prev.error ?? '').replace(/ Re-drafting instead of writing\.$/, '')} Review this new draft before approving.
@@ -464,15 +569,12 @@ export function ActionPanel({
           </Banner>
         )}
         {draft.kind === 'confluence' ? (
-          <ConfluencePreview d={draft} item={item} doc={doc} />
+          <ConfluencePreview d={draft} item={item} doc={doc} frame={frame} />
         ) : draft.kind === 'vault_append' && !isEditing ? (
-          <VaultAppendPreview d={draft} />
+          <VaultAppendPreview d={draft} frame={frame} />
         ) : (
-          <VaultDoc doc={doc} />
+          <VaultDoc d={draft} doc={doc} frame={frame} />
         )}
-        <div className="-mt-1.5 text-right font-mono text-[11px] text-muted">
-          Drafted by {draft.model} · {Math.round(draft.durationMs / 1000)}s · {fmtTokens(draft.tokens)} tokens
-        </div>
         {action.status === 'done' && (
           <div role="status" className="flex flex-wrap items-center gap-3 rounded-[10px] border border-teal-line bg-teal-wash px-4 py-3 text-[13px] text-teal-ink">
             <Icon name="check" strokeWidth={2.5} />
@@ -499,57 +601,28 @@ export function ActionPanel({
     );
   }
 
+  // Approve and Discard only: Edit lives on the draft and Re-draft by the tabs. While editing,
+  // Save and Cancel sit under the editor and this row steps aside.
   const footer =
-    action && draft && (action.status === 'ready' || action.status === 'approved' || action.status === 'executing') ? (
-      <div className={cx('flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3.5', embedded ? 'px-4' : 'px-6')}>
-        {editing?.actionId === action.id ? (
-          <>
-            <Button
-              variant="solid"
-              icon="check"
-              disabled={busy || !dirty}
-              onClick={() =>
-                void run(async () => {
-                  await api.saveDraftEdit(action.id, editing.text);
-                  setEditing(null);
-                  toast('Edits saved. The draft is marked as edited.');
-                })
-              }
-            >
-              Save edits
-            </Button>
-            <Button icon="x" onClick={() => (dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', danger: true, run: () => setEditing(null) }) : setEditing(null))}>
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            {/* In the narrow panel the commit action gets its own row, which keeps Discard well away from it. */}
-            <Button variant="solid" size="lg" className={cx(embedded && 'w-full')} icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(() => api.approveAction(action.id))}>
-              {action.status === 'ready' ? (
-                view.dryRun ? (
-                  'Approve and write to sandbox'
-                ) : (
-                  'Approve and write'
-                )
-              ) : (
-                <>
-                  <Spinner /> {action.status === 'approved' ? 'Approved…' : 'Writing…'}
-                </>
-              )}
-            </Button>
-            <Button icon="edit" disabled={action.status !== 'ready'} onClick={() => setEditing({ actionId: action.id, text: draft.content, original: draft.content })}>
-              Edit text
-            </Button>
-            <Button icon="redraft" disabled={action.status !== 'ready' || budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : undefined}>
-              Re-draft
-            </Button>
-            <span className="flex-1" />
-            <Button variant="danger" icon="trash" disabled={action.status !== 'ready'} onClick={discard}>
-              Discard
-            </Button>
-          </>
-        )}
+    action && draft && !editing && (action.status === 'ready' || action.status === 'approved' || action.status === 'executing') ? (
+      <div className={cx('flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3', embedded ? 'px-4' : 'px-6')}>
+        <Button variant="solid" size="lg" icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(() => api.approveAction(action.id))}>
+          {action.status === 'ready' ? (
+            view.dryRun ? (
+              'Approve and write to sandbox'
+            ) : (
+              'Approve and write'
+            )
+          ) : (
+            <>
+              <Spinner /> {action.status === 'approved' ? 'Approved…' : 'Writing…'}
+            </>
+          )}
+        </Button>
+        <span className="flex-1" />
+        <Button variant="danger" icon="trash" disabled={action.status !== 'ready'} onClick={discard}>
+          Discard
+        </Button>
       </div>
     ) : null;
 
@@ -567,29 +640,37 @@ export function ActionPanel({
             <span className="text-xs font-semibold uppercase tracking-[0.06em] text-accent">Action</span>
             <h2 className={cx('m-0 font-semibold tracking-[-0.01em]', embedded ? 'text-base' : 'text-xl')}>{heading}</h2>
           </div>
-          <div role="tablist" aria-label="Draft target" className="inline-flex gap-1 rounded-[10px] bg-track-2 p-1">
-            {TYPES.map((t) => {
-              const on = t === type;
-              const badge = STATUS_BADGE[draftState(s, t)];
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  disabled={!!editing && !on}
-                  onClick={() => setType(t)}
-                  className={cx(
-                    'inline-flex min-h-9 items-center gap-1.5 rounded-[7px] px-3.5 text-[13px] font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
-                    on ? 'bg-seg-on text-accent shadow-[0_1px_2px_rgba(20,23,28,0.12)]' : 'text-ink-2',
-                  )}
-                >
-                  {t === 'confluence_entry' && s.containsPeopleObservations && <Icon name="lock" size={12} />}
-                  {TYPE_LABEL[t].short}
-                  {badge && <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold', badge.cls)}>{badge.label}</span>}
-                </button>
-              );
-            })}
+          <div className={cx('flex items-center gap-2', embedded && 'w-full')}>
+            <div role="tablist" aria-label="Draft target" className="inline-flex gap-1 rounded-[10px] bg-track-2 p-1">
+              {TYPES.map((t) => {
+                const on = t === type;
+                const badge = STATUS_BADGE[draftState(s, t)];
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    role="tab"
+                    aria-selected={on}
+                    disabled={!!editing && !on}
+                    onClick={() => setType(t)}
+                    className={cx(
+                      'inline-flex min-h-9 items-center gap-1.5 rounded-[7px] px-3.5 text-[13px] font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
+                      on ? 'bg-seg-on text-accent shadow-[0_1px_2px_rgba(20,23,28,0.12)]' : 'text-ink-2',
+                    )}
+                  >
+                    {t === 'confluence_entry' && s.containsPeopleObservations && <Icon name="lock" size={12} />}
+                    {TYPE_LABEL[t].short}
+                    {badge && <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold', badge.cls)}>{badge.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="flex-1" />
+            {action?.status === 'ready' && !editing && (
+              <Button variant="ghost" icon="redraft" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : 'Ask for a fresh draft'}>
+                Re-draft
+              </Button>
+            )}
           </div>
         </div>
         {state === 'none' && latest?.status === 'discarded' && <div className="-mt-2 text-xs text-muted">The last draft was discarded.</div>}

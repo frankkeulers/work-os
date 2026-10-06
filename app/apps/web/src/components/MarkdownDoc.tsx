@@ -31,6 +31,8 @@ export default function MarkdownDoc({ value, editing, onChange, label }: { value
     content: body,
     contentType: 'markdown',
     editable: editing,
+    // An editor that mounts already editing (a vault append, after its diff) focuses itself.
+    autofocus: editing ? 'end' : false,
     editorProps: { attributes: attrs(editing, label) },
     onUpdate: ({ editor: e }) => {
       const md = joinFrontMatter(latest.current.frontMatter, tidySerialised(e.getMarkdown()));
@@ -39,9 +41,18 @@ export default function MarkdownDoc({ value, editing, onChange, label }: { value
     },
   });
 
+  // Where a click on the read-only text landed, so editing starts with the cursor there. Taken at
+  // click time: the toolbar that appears when editing starts moves the text down.
+  const clickedAt = useRef<number | null>(null);
+
   useEffect(() => {
+    // Until its view is mounted the editor still has the options it was created with.
+    if (!editor.isInitialized) return;
     editor.setOptions({ editorProps: { attributes: attrs(editing, label) } });
     editor.setEditable(editing, false);
+    // Don't move a cursor that's already in the editor.
+    if (editing && !editor.isFocused) editor.commands.focus(clickedAt.current ?? 'end');
+    clickedAt.current = null;
   }, [editor, editing, label]);
 
   // Outside changes (a new draft, Cancel, typing in the Markdown view) replace the editor's content.
@@ -64,7 +75,13 @@ export default function MarkdownDoc({ value, editing, onChange, label }: { value
           onChange={(e) => onChange?.(e.target.value)}
         />
       ) : (
-        <EditorContent editor={editor} className={cx(editing && 'cursor-text rounded-lg border border-line-strong bg-surface px-3.5 py-3 focus-within:border-accent focus-within:ring-3 focus-within:ring-accent/15')} />
+        <EditorContent
+          editor={editor}
+          onClickCapture={(e) => {
+            if (!editing) clickedAt.current = editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? null;
+          }}
+          className={cx(editing && 'cursor-text rounded-lg border border-line-strong bg-surface px-3.5 py-3 focus-within:border-accent focus-within:ring-3 focus-within:ring-accent/15')}
+        />
       )}
     </div>
   );
