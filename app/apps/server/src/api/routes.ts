@@ -1,4 +1,4 @@
-import { SettingsSave, SnoozeInput, seenChanges, type EvalReport } from '@work-os/shared';
+import { CorrectionBody, SettingsSave, SnoozeInput, seenChanges } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
@@ -6,8 +6,7 @@ import { HttpError } from './errors';
 import { sendJson } from './send';
 import { healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
 
-// One route per WorkOsApi method (PLAN.md API table). Triage, draft and eval commands arrive with
-// M2 and M3.
+// One route per WorkOsApi method (PLAN.md API table). Draft commands arrive with M3.
 
 export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: Lifecycle }) {
   const noStore = { 'cache-control': 'no-store' };
@@ -67,6 +66,15 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(204).send();
   });
 
+  // "Correct triage" (FR-6.2): the inbox moves the item and the labelled set gains a line.
+  app.post<{ Params: { id: string } }>('/api/items/:id/correction', async (req, reply) => {
+    const id = item(req.params.id);
+    if (!d.correct) throw new HttpError('unavailable', 'Corrections are not available.');
+    const body = CorrectionBody.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { attention, confluence, vault }.');
+    return reply.headers(noStore).send(await d.correct(id, body.data));
+  });
+
   app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));
 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {
@@ -81,7 +89,18 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
 
   app.get('/api/usage', async (_req, reply) => reply.headers(noStore).send(usageView(d)));
 
-  app.get('/api/evals', async (_req, reply) => reply.headers(noStore).send([] as EvalReport[]));
+  app.get('/api/evals', async (_req, reply) => reply.headers(noStore).send((await d.evals?.list()) ?? []));
+
+  // "Run eval" (FR-6.1): in the background; the usage and evals views say when it is done.
+  app.post('/api/evals', async (_req, reply) => {
+    if (!d.evals) throw new HttpError('unavailable', 'The eval is not available.');
+    if (!d.evals.running && d.runtime && !d.runtime.claudeReady()) {
+      throw new HttpError('unavailable', d.runtime.health.get('claude').fix ?? 'Claude can’t be called right now. Try the eval again later.');
+    }
+    const r = await d.evals.start();
+    if (r === 'no_labels') throw new HttpError('conflict', 'No labelled threads yet. Correct a triage in the inbox to add one.');
+    return reply.code(202).send();
+  });
 
   app.get('/api/settings', async (_req, reply) => reply.headers(noStore).send(await settingsView(d)));
 

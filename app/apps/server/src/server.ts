@@ -47,6 +47,7 @@ export async function createServer(deps: ServerDeps): Promise<WorkOsServer> {
 
   const hub = new NoticeHub();
   deps.store.subscribe((events) => hub.publish(...noticesFor(events)));
+  deps.evals?.onChange(() => hub.publish({ topic: 'usage' }, { topic: 'evals' }));
 
   registerRoutes(app, { ...deps, startedAt });
   deps.extraRoutes?.(app);

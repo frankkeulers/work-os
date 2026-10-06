@@ -1,7 +1,7 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
+import type { ApiErrorBody, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
@@ -233,5 +233,79 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect((await inbox()).items.find((i) => i.id === PROD)?.triageState).toBe('pending');
     const retry = await call<ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/retry-triage`);
     expect(retry.status).toBe(503);
+  });
+});
+
+describe('corrections, labels and the eval (FR-6, FR-7.2, Story 6.1)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const DM = `slack:D01DANA:${isoToTs(START - 20 * MIN)}`;
+  const correct = (id: string, body: object) => call<{ labelCount: number } & ApiErrorBody>('POST', `/api/items/${encodeURIComponent(id)}/correction`, body);
+  const labelLines = async () => (await readFile(join(dir, 'labels/triage.jsonl'), 'utf8').catch(() => '')).split('\n').filter(Boolean);
+
+  it('moves a corrected item and adds one line to the labelled set', async () => {
+    expect((await inbox()).items.find((i) => i.id === DM)?.lane).toBe('else');
+    const r = await correct(DM, { attention: 'today', confluence: false, vault: false });
+    expect(r).toMatchObject({ status: 200, body: { labelCount: 1 } });
+    expect((await inbox()).items.find((i) => i.id === DM)?.lane).toBe('today');
+    expect((await inbox()).labelCount).toBe(1);
+    const lines = await labelLines();
+    expect(lines).toHaveLength(1);
+    const label = JSON.parse(lines[0]);
+    expect(label).toMatchObject({ origin: 'correction', itemId: DM, source: 'slack', label: { attention: 'today' }, was: { attention: 'none', by: 'model' } });
+    expect(label.thread).toMatchObject({ id: DM, kind: 'dm', messages: [{ author: 'Dana Lee' }] });
+    // Correcting it again adds a line, but it is still one labelled thread.
+    await correct(DM, { attention: 'now', confluence: false, vault: false });
+    expect(await labelLines()).toHaveLength(2);
+    expect((await call<SettingsView>('GET', '/api/settings')).body).toMatchObject({ labelCount: 1, correctionCount: 2 });
+  });
+
+  it('refuses a malformed correction and an unknown item', async () => {
+    expect((await correct(DM, { attention: 'soon', confluence: false, vault: false })).status).toBe(422);
+    expect((await correct('slack:nope', { attention: 'now', confluence: false, vault: false })).status).toBe(404);
+    expect(await labelLines()).toHaveLength(0);
+  });
+
+  it('runs the eval over the labels, saves the report and shows it in usage (FR-6.1, FR-6.3)', async () => {
+    expect((await call<ApiErrorBody>('POST', '/api/evals')).status).toBe(409);
+    await correct(DM, { attention: 'today', confluence: false, vault: false }); // the fake says none
+    await correct(PROD, { attention: 'today', confluence: false, vault: true }); // the fake agrees
+    expect((await call('POST', '/api/evals')).status).toBe(202);
+    expect((await call<UsageView>('GET', '/api/usage')).body.evalRunning).toBe(true);
+    await res.evals.settled();
+    expect(claude.calls).toHaveLength(2);
+    expect(claude.calls[1].prompt).toContain('these 2 threads');
+    const reports = (await call<EvalReport[]>('GET', '/api/evals')).body;
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({
+      labelCount: 2,
+      model: 'haiku-4.5',
+      confusion: [
+        [0, 0, 0],
+        [0, 1, 1],
+        [0, 0, 0],
+      ],
+      categories: { today: { precision: 1, recall: 0.5, support: 2 }, vault: { precision: 1, recall: 1, support: 1 } },
+    });
+    expect((await readdir(join(dir, 'logs'))).filter((f) => f.startsWith('eval-'))).toHaveLength(1);
+    const usage = (await call<UsageView>('GET', '/api/usage')).body;
+    expect(usage).toMatchObject({ evalRunning: false, lastEval: { id: reports[0].id } });
+    expect(usage.byPurpose.map((r) => r.purpose).sort()).toEqual(['eval', 'triage']);
+    expect(usage.criteria.find((c) => c.id === 'S1')).toMatchObject({ value: '100%', status: 'on_track' });
+  });
+});
+
+describe('usage view (FR-7.2)', () => {
+  it('counts today’s calls, threads and tokens by purpose and model', async () => {
+    const u = (await call<UsageView>('GET', '/api/usage')).body;
+    expect(u.today).toMatchObject({ triageCalls: 1, threadsTriaged: 2, tokens: { input: 1200, output: 180, cache: 0, total: 1380 } });
+    expect(u.byPurpose).toEqual([{ purpose: 'triage', model: 'haiku-4.5', calls: 1, tokens: 1380, costEquivalent: 0.0012 }]);
+    expect(u.days).toHaveLength(7);
+    expect(u.days.at(-1)).toMatchObject({ date: '2026-10-06', triage: 0.0012, drafts: 0 });
+    // A poll that leaves nothing eligible makes no call, and counts as skipped; a tick doesn't.
+    await tick();
+    expect((await call<UsageView>('GET', '/api/usage')).body.today.pollsSkipped).toBe(0);
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    expect((await call<UsageView>('GET', '/api/usage')).body.today.pollsSkipped).toBe(1);
   });
 });

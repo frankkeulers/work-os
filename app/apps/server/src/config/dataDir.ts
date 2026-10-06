@@ -18,6 +18,7 @@ export const paths = (dataDir: string) => ({
   events: join(dataDir, 'events'),
   refused: join(dataDir, 'state/refused.json'),
   logs: join(dataDir, 'logs'),
+  labels: join(dataDir, 'labels/triage.jsonl'),
 });
 
 const exists = (p: string) =>

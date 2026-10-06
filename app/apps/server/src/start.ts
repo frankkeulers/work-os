@@ -34,6 +34,10 @@ import { DEFAULT_TRIAGE_PROMPT, loadPrompt } from './claude/prompts';
 import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
 import { runTriage, type TriageDeps } from './pipeline/triage';
+import { correctTriage } from './pipeline/corrections';
+import { Evals, runEval } from './pipeline/eval';
+import { LabelStore } from './store/labels';
+import { ClaudeError } from './claude/errors';
 import { ItemFiles } from './store/items';
 import { Store, type RecoveryReport } from './store/store';
 
@@ -73,6 +77,8 @@ export type RunResult =
       items: ItemFiles;
       settings: SettingsState;
       runtime: Runtime;
+      labels: LabelStore;
+      evals: Evals;
       recovery: RecoveryReport;
       token: string;
       logger: Logger;
@@ -188,6 +194,24 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       return b.triage.hit || b.cost.hit;
     },
   };
+  const labels = await LabelStore.open(paths(config.dataDir).labels);
+  lifecycle.onStop('labels', () => labels.close());
+  const correct = (id: string, input: Parameters<typeof correctTriage>[2]) =>
+    correctTriage({ store, items, labels, now, me: triageDeps.me, keepLastMessages: () => settings.editable.settings.triage.keepLastMessages }, id, input);
+  const evals = await Evals.open({
+    logsDir: paths(config.dataDir).logs,
+    labels: () => labels.all(),
+    logger,
+    run: async (records, signal) => {
+      try {
+        return await runEval({ claude, settings: settings.editable.settings, prompt: await triageDeps.prompt(), now, signal, logger }, records);
+      } catch (err) {
+        if (err instanceof ClaudeError) await runtime.reportFailure('claude', err.failure);
+        throw err;
+      }
+    },
+  });
+  lifecycle.onStop('evals', () => evals.stop());
   const runtime: Runtime = new Runtime({
     clock,
     store,
@@ -220,6 +244,9 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     now,
     meId: () => runtime.identity('slack'),
     usage: () => usage.records(),
+    labels,
+    correct,
+    evals,
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
     extraRoutes,
     devOrigins: config.instance === 'dev' ? (deps.env.WORKOS_DEV_ORIGINS ?? DEV_ORIGINS).split(',') : [],
@@ -245,5 +272,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, recovery, token, logger, lifecycle, flush };
 }

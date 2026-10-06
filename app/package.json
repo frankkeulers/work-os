@@ -26,6 +26,7 @@
     "spike:slack": "npm run spike:slack -w @work-os/server",
     "e2e:server": "npm run e2e:server -w @work-os/web",
     "dev:mock": "npm run dev:mock -w @work-os/web",
+    "eval": "npm run eval -w @work-os/server --",
     "gen-data": "npm run gen-data -w @work-os/server --",
     "perf": "npm run perf -w @work-os/server --"
   },

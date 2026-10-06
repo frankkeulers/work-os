@@ -533,6 +533,16 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 >
 > - Given an item labelled `none`, when I set it to `today`, then the inbox moves it and the label file gains one line.
 
+As built (M2 step 16):
+
+- Each line of `labels/triage.jsonl` is one label: the item, its revision and source, the label, the triage it replaced, and **the thread as the model sees it** (truncated, with display names; Frank's messages as "me"). Holding the thread means the eval still works after the item's raw content has gone to retention. The flip side: **labelled threads are kept beyond `retentionDays`.** The labelled set is meant to be kept, but this is a data-protection choice for Frank to confirm.
+- The latest line for an item is its label. The labelled count is the number of distinct threads; the correction count is the number of lines that came from the UI.
+- A correction writes its label line first, then `triage.corrected`. If a crash falls between the two, the result is an extra label, never an inbox change without its label. An item whose content has expired is still moved, but gets no label.
+- The eval scores the prompt and model alone: rules are not applied. It uses the latest label per thread and the triage batching. A thread the model gives no usable answer for is counted in `failed`, not scored.
+- The eval's calls are logged as `eval` and count towards the day's cost-equivalent budget. A large eval run in the morning can therefore pause model triage for the rest of the day; Frank to decide whether `eval` should be left out of the budget.
+- Usage › Run eval runs it in the server, in the background. It answers 409 with no labels and 503 when Claude can't be called, and a Claude failure is reported to health. `npm run eval` does the same from the terminal, but takes the lock, so it runs only while the server is stopped. That way the usage log never has two writers.
+- Success criteria: S1 and S2 come from the last eval, S3 from the usage log. S4–S7 show "Measured in the parallel run" until M4 measures them. "Polls skipped" counts polls today, since the last start, after which triage found nothing eligible.
+
 ### 7.7 E7 Usage tracking
 
 **FR-7.1** Implements CL-5 and CL-6.

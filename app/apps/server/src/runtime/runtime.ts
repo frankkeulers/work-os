@@ -1,4 +1,4 @@
-import type { DepId, HealthView, PollReason, PollStatus, SlackStatus, SourceId, StartupCheck } from '@work-os/shared';
+import { londonParts, type DepId, type HealthView, type PollReason, type PollStatus, type SlackStatus, type SourceId, type StartupCheck } from '@work-os/shared';
 import type { SettingsState } from '../config/settingsState';
 import type { Logger } from '../log';
 import type { Failure } from '../net/classify';
@@ -81,6 +81,8 @@ export class Runtime {
   private checking?: Promise<void>;
   private triaging?: Promise<TriageRun | undefined>;
   private triageWanted = true; // after a poll, a settings change, a failure the breaker now allows
+  private polledSinceTriage = false;
+  private emptyRuns = { day: '', count: 0 }; // polls today whose triage found nothing eligible (usage view)
   private nextTriageAt?: number; // wall ms: when the next waiting thread goes quiet
 
   constructor(private readonly d: RuntimeDeps) {
@@ -189,6 +191,7 @@ export class Runtime {
       for (const dep of s.deps) if (this.health.state(dep) !== 'ok') this.health.ok(dep);
       // Triage what this poll made quiet or new, without waiting for the next tick (FR-5.1).
       this.triageWanted = true;
+      this.polledSinceTriage = true;
       this.maybeTriage();
     } catch (err) {
       // Cut off by sleep: not a failure; the wake catch-up polls again.
@@ -239,7 +242,7 @@ export class Runtime {
   }
 
   /** Whether the model may be asked now: awake long enough, online, and the breaker allows it. */
-  private claudeReady(): boolean {
+  claudeReady(): boolean {
     return this.canUseClaude() && this.health.state('network') !== 'offline' && this.health.ready('claude');
   }
 
@@ -250,17 +253,20 @@ export class Runtime {
     // Runs are one at a time, so a half-open breaker still gets exactly one trial call.
     if (!due) return;
     this.triageWanted = false;
-    this.track((this.triaging = this.triageOnce().finally(() => (this.triaging = undefined))));
+    const afterPoll = this.polledSinceTriage;
+    this.polledSinceTriage = false;
+    this.track((this.triaging = this.triageOnce(undefined, afterPoll).finally(() => (this.triaging = undefined))));
   }
 
   /** One triage run, reported to health. Resolves undefined when it didn't finish. */
-  private async triageOnce(only?: string[]): Promise<TriageRun | undefined> {
+  private async triageOnce(only?: string[], afterPoll = false): Promise<TriageRun | undefined> {
     const signal = this.sleepSignal;
     const now = () => this.d.clock.now().getTime();
     try {
       const r = await this.d.triage!(signal, only);
       if (r.calls > 0 && this.health.state('claude') !== 'ok') this.health.ok('claude');
       if (!only) this.nextTriageAt = r.paused ? now() + BUDGET_RECHECK_MS : r.nextReadyAt?.getTime();
+      if (afterPoll && !r.calls && !r.paused && !r.failed) this.countEmptyRun();
       return r;
     } catch (err) {
       if (signal.aborted) {
@@ -279,6 +285,16 @@ export class Runtime {
       if (only) throw err;
       return undefined;
     }
+  }
+
+  private countEmptyRun() {
+    const day = londonParts(this.d.clock.now()).dateKey;
+    this.emptyRuns = { day, count: (this.emptyRuns.day === day ? this.emptyRuns.count : 0) + 1 };
+  }
+
+  /** Polls today after which triage found nothing eligible, so made no call. Since the last start. */
+  emptyTriageRunsToday(): number {
+    return this.emptyRuns.day === londonParts(this.d.clock.now()).dateKey ? this.emptyRuns.count : 0;
   }
 
   /**

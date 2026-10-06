@@ -349,5 +349,7 @@ export const EvalReport = z.object({
   confusion: z.array(z.array(z.number().int().nonnegative()).length(3)).length(3),
   tokens: z.number().int().nonnegative(),
   costEquivalent: z.number().nonnegative(),
+  /** Labelled threads the model gave no usable answer for; not in the scores. */
+  failed: z.number().int().nonnegative().optional(),
 });
 export type EvalReport = z.infer<typeof EvalReport>;

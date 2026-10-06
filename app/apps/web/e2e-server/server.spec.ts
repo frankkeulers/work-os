@@ -6,7 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 
 // The built web app against the real server, Slack and Claude faked (M1 step 11, M2 step 15): the
 // seeded threads are triaged into their lanes, a poll adds a thread that waits for its quiet
-// window, Done sticks, and after a server restart the page goes reconnecting, then up.
+// window, a correction moves an item, Done sticks, and after a server restart the page goes
+// reconnecting, then up.
 
 const APP = resolve(import.meta.dirname, '../../..');
 const PORT = 4399;
@@ -61,7 +62,7 @@ test.afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test('inbox, poll, done and a server restart against the real server', async ({ page, request }) => {
+test('inbox, poll, correction, done, a server restart and an eval against the real server', async ({ page, request }) => {
   await page.goto('/');
   // The fake model triages the three quiet threads: Matt's go/no-go is Now, the #product review is
   // Today, and the #mvi-launch licensing note is To file (Confluence).
@@ -84,9 +85,17 @@ test('inbox, poll, done and a server restart against the real server', async ({ 
   await expect(waiting.locator('[data-row]')).toHaveCount(1);
   await expect(waiting).toContainText('#mvi-launch');
 
+  // Correct triage: the launch note moves to Today and the labelled set gains it (FR-6.2).
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  await group(page, 'To file').locator('[data-row]').click();
+  await panel.getByRole('button', { name: 'Correct triage' }).click();
+  await panel.getByRole('group', { name: 'Attention' }).getByRole('button', { name: 'Today' }).click();
+  await panel.getByRole('button', { name: 'Save correction' }).click();
+  await expect(page.getByText('Correction saved · moved to Today · labelled set now 1')).toBeVisible();
+  await expect(lane(page, 'today')).toHaveCount(2);
+
   // Done on #product sticks on the server.
   await lane(page, 'today').filter({ hasText: '#product' }).click();
-  const panel = page.getByRole('complementary', { name: 'Item panel' });
   await panel.getByRole('button', { name: /^Done e$/ }).click();
   await expect(panel.getByRole('region', { name: 'Status' })).toContainText('Done');
   const inbox = (await (await request.get(`${BASE}/api/inbox`, { headers: auth })).json()) as { items: { title: string; status: string }[] };
@@ -98,5 +107,20 @@ test('inbox, poll, done and a server restart against the real server', async ({ 
   await startServer();
   await expect(stillActive(page, 1)).toBeVisible({ timeout: 20_000 });
   await expect(lane(page, 'now')).toHaveCount(1);
-  await expect(lane(page, 'today')).toHaveCount(0);
+  await expect(lane(page, 'today')).toHaveCount(1);
+  await expect(lane(page, 'today').getByText('Corrected by you')).toBeVisible();
+
+  // Usage from the real usage log, and an eval over the one label (FR-6.1, FR-7.2).
+  await page.getByRole('link', { name: 'Usage & health' }).click();
+  await expect(page.getByRole('heading', { name: 'Usage & health', level: 1 })).toBeVisible();
+  await expect(page.getByText('No eval run yet')).toBeVisible();
+  await page.getByRole('button', { name: 'Run eval' }).click();
+  await expect(page.getByText(/Last eval .* on 1 labels/)).toBeVisible();
+  // The fake model still says none for the launch note, so there is no Now or Today prediction to score.
+  await expect(page.locator('[data-criterion="S1"]')).toContainText('No now or today predictions');
+  await expect(page.locator('[data-criterion="S2"]')).toContainText('No now labels');
+  await page.screenshot({ path: join(APP, 'screenshots/server-usage-light.png'), fullPage: true });
+  await page.getByRole('link', { name: 'View report' }).click();
+  await expect(page.getByRole('heading', { name: 'Eval report' })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Attention confusion matrix' })).toBeVisible();
 });

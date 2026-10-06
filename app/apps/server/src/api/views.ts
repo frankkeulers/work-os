@@ -7,6 +7,9 @@ import {
   summaryOf,
   type ActionState,
   type BudgetState,
+  type CorrectionInput,
+  type Criterion,
+  type EvalReport,
   type DependencyHealth,
   type HealthView,
   type InboxView,
@@ -16,19 +19,23 @@ import {
   type SourceHealth,
   type StartupCheck,
   type TriageDecision,
+  type UsagePurpose,
   type UsageRecord,
+  type UsageRow,
   type UsageView,
 } from '@work-os/shared';
 import type { RuntimeConfig } from '../config/env';
 import type { SettingsState } from '../config/settingsState';
+import type { Evals } from '../pipeline/eval';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
+import type { LabelStore } from '../store/labels';
 import type { RecoveryReport, Store } from '../store/store';
 import { HttpError } from './errors';
 
 // The read side of the API: each view is built from the projection, the item files and the
-// settings in force. Usage, labels and drafts arrive with M2 and M3; until then those parts of
-// the views are empty rather than made up.
+// settings in force, the usage log, the labelled set and the eval reports. Drafts arrive with M3;
+// until then those parts of the views are empty rather than made up.
 
 export const DONE_VISIBLE_DAYS = 7; // the inbox returns done items from the last week only (NF-11)
 
@@ -46,6 +53,11 @@ export interface ViewDeps {
   runtime?: Runtime;
   /** The last eight days of Claude calls (CL-5), for budgets and the usage view. */
   usage?: () => readonly UsageRecord[];
+  /** The labelled set (FR-6.2) and "Correct triage" itself. */
+  labels?: LabelStore;
+  correct?: (id: string, input: CorrectionInput) => Promise<{ labelCount: number }>;
+  /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */
+  evals?: Evals;
 }
 
 function budgets(d: ViewDeps): BudgetState {
@@ -174,7 +186,7 @@ export function inboxView(d: ViewDeps): InboxView {
     budgets: b,
     dryRun: d.settings.settings?.dryRun ?? true,
     notices: { rebuilt: d.recovery?.rebuiltNotice, fileVaultOff: false },
-    labelCount: 0,
+    labelCount: d.labels?.counts.labels ?? 0,
     firstRun: !source.lastPollAt,
     workHours: isWorkHours(now, s.schedule.workHours),
   };
@@ -234,32 +246,91 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
   };
 }
 
+const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence';
+
+/** Today and the last seven days from the usage log (FR-7.2), against the baseline. */
 export function usageView(d: ViewDeps): UsageView {
   const now = d.now();
+  const records = d.usage?.() ?? [];
+  const byDay = new Map<string, UsageRecord[]>();
+  for (const u of records) {
+    const key = londonParts(u.at).dateKey;
+    const list = byDay.get(key);
+    if (list) list.push(u);
+    else byDay.set(key, [u]);
+  }
   const days: UsageView['days'] = [];
   for (let i = 6; i >= 0; i--) {
     const p = londonParts(new Date(now.getTime() - i * 86_400_000));
-    days.push({ date: p.dateKey, label: p.weekday, triage: 0, drafts: 0 });
+    const rows = byDay.get(p.dateKey) ?? [];
+    const sum = (f: (u: UsageRecord) => boolean) => rows.filter(f).reduce((t, u) => t + u.costEquivalent, 0);
+    days.push({ date: p.dateKey, label: p.weekday, triage: sum((u) => !isDraft(u.purpose)), drafts: sum((u) => isDraft(u.purpose)) });
   }
+  const today = byDay.get(londonParts(now).dateKey) ?? [];
+  const groups = new Map<string, UsageRow>();
+  const tokens = { input: 0, output: 0, cache: 0, total: 0 };
+  for (const u of today) {
+    const k = `${u.purpose}|${u.model}`;
+    const row = groups.get(k) ?? { purpose: u.purpose, model: u.model, calls: 0, tokens: 0, costEquivalent: 0 };
+    row.calls += 1;
+    row.tokens += u.inputTokens + u.outputTokens + u.cacheTokens;
+    row.costEquivalent += u.costEquivalent;
+    groups.set(k, row);
+    tokens.input += u.inputTokens;
+    tokens.output += u.outputTokens;
+    tokens.cache += u.cacheTokens;
+  }
+  tokens.total = tokens.input + tokens.output + tokens.cache;
   const b = budgets(d);
+  const last = d.evals?.last;
   return {
     today: {
       costEquivalent: b.cost.used,
       pctOfBaseline: b.pctOfBaseline,
       triageCalls: b.triage.used,
-      threadsTriaged: 0,
-      pollsSkipped: 0,
-      draftsVault: 0,
-      draftsConfluence: 0,
-      tokens: { input: 0, output: 0, cache: 0, total: 0 },
+      threadsTriaged: today.filter((u) => u.purpose === 'triage').reduce((t, u) => t + u.itemIds.length, 0),
+      pollsSkipped: d.runtime?.emptyTriageRunsToday() ?? 0,
+      draftsVault: today.filter((u) => u.purpose === 'draft_vault').length,
+      draftsConfluence: today.filter((u) => u.purpose === 'draft_confluence').length,
+      tokens,
     },
     days,
     budgets: b,
-    byPurpose: [],
+    byPurpose: [...groups.values()].sort((x, y) => y.costEquivalent - x.costEquivalent),
     source: slackHealth(d),
-    criteria: [],
-    evalRunning: false,
+    criteria: criteria(last, b),
+    ...(last && { lastEval: last }),
+    evalRunning: d.evals?.running ?? false,
   };
+}
+
+/**
+ * The success criteria (§2) the server can measure so far: S1 and S2 from the last eval, S3 from
+ * the usage log. S4–S7 are measured in the parallel run (M4) and say so.
+ */
+export function criteria(last: EvalReport | undefined, b: BudgetState): Criterion[] {
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const c = last?.confusion;
+  const flagged = c ? c[0][0] + c[1][0] + c[2][0] + c[0][1] + c[1][1] + c[2][1] : 0;
+  const precision = c && flagged ? (c[0][0] + c[1][1]) / flagged : undefined;
+  const recall = last && last.categories.now.support ? last.categories.now.recall : undefined;
+  const pending = (id: string, name: string, target: string, statusLabel: string): Criterion => ({ id, name, value: '—', target, status: 'pending', statusLabel });
+  const later = 'Measured in the parallel run';
+  return [
+    precision === undefined
+      ? pending('S1', 'Precision, now + today', '≥ 80%', last ? 'No now or today predictions' : 'No eval yet')
+      : { id: 'S1', name: 'Precision, now + today', value: pct(precision), target: '≥ 80%', status: precision >= 0.8 ? 'on_track' : 'at_risk', statusLabel: precision >= 0.8 ? 'On track' : 'At risk' },
+    recall === undefined
+      ? pending('S2', 'Recall, now', '≥ 90%', last ? 'No now labels' : 'No eval yet')
+      : { id: 'S2', name: 'Recall, now', value: pct(recall), target: '≥ 90%', status: recall >= 0.9 ? 'on_track' : 'at_risk', statusLabel: recall >= 0.9 ? 'On track' : 'At risk' },
+    b.pctOfBaseline === null
+      ? pending('S3', 'Daily usage vs baseline', '≤ 100%', 'Baseline not measured')
+      : { id: 'S3', name: 'Daily usage vs baseline', value: `${b.pctOfBaseline}%`, target: '≤ 100%', status: b.pctOfBaseline <= 100 ? 'on_track' : 'at_risk', statusLabel: b.pctOfBaseline <= 100 ? 'On track' : 'Over baseline' },
+    pending('S4', 'Dashboard opened', '≥ 4 of 5 days', later),
+    pending('S5', 'Writes without approval', '0', later),
+    pending('S6', 'People observations in Confluence', '0', later),
+    pending('S7', 'Slack digest task', 'Disabled', later),
+  ];
 }
 
 export async function settingsView(d: ViewDeps): Promise<SettingsView> {
@@ -275,8 +346,8 @@ export async function settingsView(d: ViewDeps): Promise<SettingsView> {
     savedAt: d.settings.savedAt,
     checks: checksOf(d),
     checkedAt: d.runtime?.checkedAt ?? d.startedAt,
-    labelCount: 0,
-    correctionCount: 0,
+    labelCount: d.labels?.counts.labels ?? 0,
+    correctionCount: d.labels?.counts.corrections ?? 0,
     vaultConventionsLoaded: conventions,
   };
 }
