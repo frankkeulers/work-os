@@ -19,6 +19,16 @@ test.beforeEach(async ({ page }) => {
   await expect(rows(page, 'Now')).toHaveCount(3);
 });
 
+
+/** Replaces the draft text the way a person does: select all in the editor, then type. (Playwright's
+ *  fill() selects through the DOM, which ProseMirror doesn't always pick up before the text arrives.) */
+async function replaceDraftText(page: Page, text: string) {
+  const editor = page.getByLabel('Draft text');
+  await expect(editor).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type(text);
+}
+
 test('J01 morning scan: groups, the item panel, Done with Undo', async ({ page }) => {
   await expect(rows(page, 'Today')).toHaveCount(4);
   await expect(rows(page, 'To file')).toHaveCount(4);
@@ -144,7 +154,7 @@ test('J08 unsaved draft edits in the panel ask before moving to another item', a
   await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
   const action = itemPanel(page).getByRole('region', { name: 'Action' });
   await action.getByRole('button', { name: 'Edit text' }).click();
-  await page.getByLabel('Draft text').fill('Unsaved change');
+  await replaceDraftText(page, 'Unsaved change');
   await page.getByLabel('Draft text').blur();
   await page.keyboard.press('k');
   const leave = page.getByRole('dialog', { name: 'Leave with unsaved edits?' });
@@ -227,7 +237,7 @@ test('a click outside the panel with unsaved draft edits asks first', async ({ p
   await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
   await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
   await itemPanel(page).getByRole('region', { name: 'Action' }).getByRole('button', { name: 'Edit text' }).click();
-  await page.getByLabel('Draft text').fill('Unsaved change');
+  await replaceDraftText(page, 'Unsaved change');
   await page.getByRole('heading', { name: 'Inbox', level: 1 }).click();
   const leave = page.getByRole('dialog', { name: 'Leave with unsaved edits?' });
   await expect(leave).toBeVisible();

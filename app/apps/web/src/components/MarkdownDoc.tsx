@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Markdown } from '@tiptap/markdown';
@@ -45,7 +45,9 @@ export default function MarkdownDoc({ value, editing, onChange, label }: { value
   // click time: the toolbar that appears when editing starts moves the text down.
   const clickedAt = useRef<number | null>(null);
 
-  useEffect(() => {
+  // A layout effect, so editing is set up in the same task as the click on Edit: keys typed
+  // straight away land in a focused, editable editor.
+  useLayoutEffect(() => {
     // Until its view is mounted the editor still has the options it was created with.
     if (!editor.isInitialized) return;
     editor.setOptions({ editorProps: { attributes: attrs(editing, label) } });

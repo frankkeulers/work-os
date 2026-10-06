@@ -12,6 +12,16 @@ async function startJourney(page: Page, id: string) {
 
 const panel = (page: Page) => page.getByRole('region', { name: 'Action' });
 
+
+/** Replaces the draft text the way a person does: select all in the editor, then type. (Playwright's
+ *  fill() selects through the DOM, which ProseMirror doesn't always pick up before the text arrives.) */
+async function replaceDraftText(page: Page, text: string) {
+  const editor = page.getByLabel('Draft text');
+  await expect(editor).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type(text);
+}
+
 test('J10 Confluence happy path: approve, write to sandbox, mark done and next', async ({ page }) => {
   await startJourney(page, 'J10');
   await expect(panel(page).getByRole('tab', { name: /Confluence entry/ })).toHaveAttribute('aria-selected', 'true');
@@ -64,7 +74,7 @@ test('J08 edit a vault append, then the leave guard and re-draft confirmation', 
   await panel(page).getByRole('button', { name: 'Edit text' }).click(DRAFT_TIMEOUT);
   // The note it appends to opens in Obsidian.
   await expect(panel(page).getByRole('link', { name: /\.md$/ })).toHaveAttribute('href', /^obsidian:\/\/open\?vault=PSG%20Vault&file=/);
-  await page.getByLabel('Draft text').fill('- 2026-10-05 · Edited by hand.');
+  await replaceDraftText(page, '- 2026-10-05 · Edited by hand.');
   await panel(page).getByRole('button', { name: 'Save edits' }).click();
   await expect(panel(page).getByText('Edited', { exact: true })).toBeVisible();
 
@@ -73,7 +83,7 @@ test('J08 edit a vault append, then the leave guard and re-draft confirmation', 
   await page.getByRole('button', { name: 'Cancel' }).click();
 
   await panel(page).getByRole('button', { name: 'Edit text' }).click();
-  await page.getByLabel('Draft text').fill('Unsaved change');
+  await replaceDraftText(page, 'Unsaved change');
   await page.getByRole('link', { name: 'Back to inbox' }).click();
   await expect(page.getByRole('dialog', { name: 'Leave with unsaved edits?' })).toBeVisible();
   await page.getByRole('button', { name: 'Leave' }).click();
