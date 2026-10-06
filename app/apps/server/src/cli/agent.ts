@@ -8,6 +8,7 @@ import { macKeychain } from '../config/keychain';
 import { Launchctl } from '../agent/launchctl';
 import { appSupportDir, nodePathWarning, plistPath, plistProblems, plistVars, PROD_PORT, renderPlist } from '../agent/plist';
 import { currentRelease } from '../agent/release';
+import { systemNotifier } from '../notify/macos';
 import { exec } from '../runtime/checks';
 import { writeFileAtomic } from '../store/atomic';
 
@@ -95,6 +96,9 @@ async function status(waitMs = 0): Promise<number> {
   if (refused) line(false, 'Refused', `the server refused to start: see ${paths(dataDir).refused}`);
   line(!h.error, 'Health', h.error ?? `${h.mode}, ${h.phase}, ${h.version}`);
   line(true, 'Release', (await currentRelease(root)) ?? 'none deployed');
+  // Not a failure: without it notifications still show, but a click can't open the item (FR-11.1).
+  const notifier = await systemNotifier();
+  line(notifier.kind === 'terminal-notifier', 'Notifications', notifier.kind === 'terminal-notifier' ? 'terminal-notifier' : 'osascript only: `brew install terminal-notifier` so a click opens the item');
   return installed && info.loaded && !apiKey && !h.error ? 0 : 1;
 }
 

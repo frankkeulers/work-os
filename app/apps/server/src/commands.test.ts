@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
 import { FAKE_CONFLUENCE_CREDS, FakeConfluence } from './actions/fakeConfluence';
+import type { Notification } from './notify/macos';
 import type { Exec } from './runtime/checks';
 import type { Clock } from './runtime/power';
 import { slackFactory } from './sources/slack/adapter';
@@ -27,6 +28,7 @@ let slack: FakeSlack;
 let claude: FakeClaude;
 let confluence: FakeConfluence;
 let instance = 'dev';
+let notes: Notification[];
 let wall: number;
 let wakeTime = 'boot';
 let mono: number;
@@ -51,6 +53,7 @@ beforeEach(async () => {
   wall = START;
   mono = 0;
   wakeTime = 'boot';
+  notes = [];
   slack = new FakeSlack();
   slack.users.set('U02DANA', 'Dana Lee');
   slack.channel({ id: 'C01PROD', name: 'product' }).channel({ id: 'D01DANA', is_im: true, user: 'U02DANA' });
@@ -73,6 +76,7 @@ beforeEach(async () => {
     sources: { slack: slackFactory(directory) },
     claude: claude.query,
     confluenceFetch: (url, init) => confluence.fetch(url, init),
+    notifier: { notify: async (n) => void notes.push(n) },
   });
   if (!r.running) throw new Error('expected a start');
   res = r;
@@ -595,5 +599,74 @@ describe('Confluence writes outside dry-run (FR-10.5, FR-14.5, NF-5)', () => {
     await res.actions.settled();
     expect((await item()).actions[0]).toMatchObject({ id, status: 'done' });
     expect(confluence.pages.get('1234567')!.version).toBe(8);
+  });
+});
+
+describe('notifications (FR-11.1, FR-11.2) and health alerts', () => {
+  const post = (min: number, text: string) => {
+    const ts = isoToTs(START + min * MIN);
+    slack.post('C01PROD', { ts, user: 'U02DANA', text });
+    return `slack:C01PROD:${ts}`;
+  };
+  const settle = async () => {
+    await res.runtime.settled();
+    await res.notifications.settled();
+    await res.alerts.settled();
+  };
+  const setNotifications = async (n: { enabled: boolean; quietHours: string }) => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, notifications: n }, rules: view.rules })).status).toBe(200);
+  };
+
+  it('notifies once when an item becomes Now, and a click opens it', async () => {
+    const id = post(1, 'Go/no-go on the launch before Thursday?');
+    await call('POST', '/api/poll');
+    for (let i = 0; i < 12 * 12; i++) await tick(); // past the quiet window
+    await settle();
+    expect(notes).toEqual([{ title: '#product', message: 'Go/no-go on the launch before Thursday?', group: `work-os-${id}`, url: `${res.url}/item/${encodeURIComponent(id)}` }]);
+    expect(res.store.projection.items[id].notified).toBe(true);
+    // Still Now after a new reply: no second notification.
+    slack.post('C01PROD', { ts: isoToTs(wall), thread_ts: isoToTs(START + MIN), user: 'U02DANA', text: 'Urgent, any news?' });
+    await call('POST', '/api/poll');
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    await settle();
+    expect(claude.calls.at(-1)?.prompt).toContain('Urgent, any news?');
+    expect(notes).toHaveLength(1);
+  });
+
+  it('records but does not show a Now item in quiet hours, and never shows it later', async () => {
+    await setNotifications({ enabled: true, quietHours: '08:00–10:00' }); // 09:00 London now
+    const id = post(1, 'Go/no-go before Thursday?');
+    await call('POST', '/api/poll');
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    await settle();
+    expect(res.store.projection.items[id]).toMatchObject({ notified: true });
+    for (let i = 0; i < 12 * 60; i++) await tick(); // past 10:00
+    await settle();
+    expect(notes).toHaveLength(0);
+  });
+
+  it('turns three or more Now items from a wake catch-up into one summary', async () => {
+    const ids = [post(1, 'Go/no-go on pricing?'), post(2, 'Urgent: contract question'), post(3, 'Need this ASAP please')];
+    wall += 3 * 60 * MIN; // asleep: the wall clock moves, the monotonic clock doesn't
+    wakeTime = 'wake-1';
+    for (let i = 0; i < 14; i++) await tick(); // settle, catch-up poll, then 45 s awake for Claude
+    await settle();
+    expect(ids.map((id) => res.store.projection.items[id].notified)).toEqual([true, true, true]);
+    expect(notes).toEqual([{ title: '3 items need you now', message: '#product, #product, #product', group: 'work-os-now', url: res.url }]);
+  });
+
+  it('alerts when the Claude login is lost, once, and says when it is back', async () => {
+    claude.failNext = Object.assign(new Error('Not logged in · Please run /login'), {});
+    post(1, 'Updated the draft');
+    await call('POST', '/api/poll');
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    await settle();
+    expect(notes).toEqual([{ title: 'Claude needs you', message: 'Run `claude login` in Terminal, then Check again.', group: 'work-os-health-claude', url: `${res.url}/usage` }]);
+    for (let i = 0; i < 12 * 30; i++) await tick(); // still failing would not repeat within 4 h
+    await call('POST', '/api/health/recheck');
+    for (let i = 0; i < 12 * 2; i++) await tick();
+    await settle();
+    expect(notes.map((n) => n.title)).toEqual(['Claude needs you', 'Claude is back']);
   });
 });

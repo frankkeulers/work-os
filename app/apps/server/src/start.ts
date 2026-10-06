@@ -9,7 +9,9 @@ import { macKeychain, type SecretStore } from './config/keychain';
 import { loadSettings } from './config/settings';
 import { SettingsState } from './config/settingsState';
 import { createLogger, type Logger } from './log';
+import { HealthAlerts } from './notify/alerts';
 import { silentNotifier, type Notifier } from './notify/macos';
+import { Notifications } from './notify/notifications';
 import { probeNetwork, type FetchFn } from './net/probe';
 import { exec as systemExec, runChecks, type Exec } from './runtime/checks';
 import { clearCrashes, recordCleanStop, recordStart } from './runtime/crashLoop';
@@ -89,6 +91,8 @@ export type RunResult =
       labels: LabelStore;
       evals: Evals;
       actions: ActionService;
+      notifications: Notifications;
+      alerts: HealthAlerts;
       recovery: RecoveryReport;
       token: string;
       logger: Logger;
@@ -272,6 +276,23 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   });
   await actions.recover();
   lifecycle.onStop('actions', () => actions.stop());
+  // Notifications (FR-11.x): new Now items, and health problems that need Frank.
+  let baseUrl: string | undefined = undefined; // set once the server listens
+  const notifications = new Notifications({ store, items, notifier, settings: () => settings.editable.settings, now, baseUrl: () => baseUrl, publish: (n) => publish(n), logger });
+  const alerts = new HealthAlerts({
+    notifier,
+    settings: () => settings.editable.settings,
+    health: (dep) => runtime.health.get(dep),
+    now,
+    mono: () => clock.mono(),
+    baseUrl: () => baseUrl,
+    settingsPaused: () => !settings.settings,
+    logger,
+  });
+  lifecycle.onStop('notifications', async () => {
+    notifications.stop();
+    await Promise.all([notifications.settled(), alerts.settled()]);
+  });
   const runtime: Runtime = new Runtime({
     clock,
     store,
@@ -279,7 +300,9 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
     sources: () => buildSources(settings.settings, factories),
     triage: (signal, only) => runTriage(triageDeps, signal, { only }),
-    onTick: () => actions.pump(),
+    onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick()]),
+    onTriaged: (catchUp) => notifications.afterTriage(catchUp),
+    onHealthChange: (c) => alerts.onChange(c),
     poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }) }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
@@ -324,7 +347,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // Not a deliberate stop: launchd retries after its throttle interval.
     return { running: false, code: EXIT.crash };
   }
-  logger.info({ url, version: config.version, dataDir: config.dataDir, safeMode: runs.safeMode }, 'Work OS started');
+  baseUrl = url;
+  logger.info({ url, version: config.version, dataDir: config.dataDir, safeMode: runs.safeMode, notifier: notifier.kind }, 'Work OS started');
   await store.append({ type: 'system.started', data: { version: config.version, instance: config.instance } });
   // Stops first: in-flight calls abort before the HTTP server and the store (which snapshots) close.
   lifecycle.onStop('runtime', async (reason) => {
@@ -335,5 +359,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, actions, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, actions, notifications, alerts, recovery, token, logger, lifecycle, flush };
 }

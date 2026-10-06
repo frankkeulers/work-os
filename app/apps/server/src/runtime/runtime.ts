@@ -46,6 +46,10 @@ export interface RuntimeDeps {
   due?: (now: Date) => Promise<unknown>;
   /** Work that runs on every tick once running: drafts and the outbox (FR-9.x, FR-14.5). */
   onTick?: () => Promise<unknown>;
+  /** After each triage run that finished; `catchUp` when it followed a wake or reconnect poll (FR-11.2). */
+  onTriaged?: (catchUp: boolean) => Promise<unknown>;
+  /** Every health change, after it is logged: health alerts. */
+  onHealthChange?: (c: HealthChange) => void;
   /** Model triage of what is due, or of `only` those items. Throws ClaudeError for health. */
   triage?: (signal: AbortSignal, only?: string[]) => Promise<TriageRun>;
   probe: (signal: AbortSignal) => Promise<ProbeResult>;
@@ -84,6 +88,7 @@ export class Runtime {
   private triaging?: Promise<TriageRun | undefined>;
   private triageWanted = true; // after a poll, a settings change, a failure the breaker now allows
   private polledSinceTriage = false;
+  private catchUpSinceTriage = false; // a wake or reconnect poll since the last triage run
   private emptyRuns = { day: '', count: 0 }; // polls today whose triage found nothing eligible (usage view)
   private nextTriageAt?: number; // wall ms: when the next waiting thread goes quiet
 
@@ -197,6 +202,7 @@ export class Runtime {
       // Triage what this poll made quiet or new, without waiting for the next tick (FR-5.1).
       this.triageWanted = true;
       this.polledSinceTriage = true;
+      if (reason === 'wake' || reason === 'reconnect') this.catchUpSinceTriage = true;
       this.maybeTriage();
     } catch (err) {
       // Cut off by sleep: not a failure; the wake catch-up polls again.
@@ -218,7 +224,10 @@ export class Runtime {
 
   /** Frank's own ID in a source, once that source knows it. */
   identity(id: SourceId): string | undefined {
-    return this.d.sources().find((s) => s.id === id)?.identity?.()?.id;
+    return this.d
+      .sources()
+      .find((s) => s.id === id)
+      ?.identity?.()?.id;
   }
 
   /** "Poll now" (FR-2.6). */
@@ -259,8 +268,16 @@ export class Runtime {
     if (!due) return;
     this.triageWanted = false;
     const afterPoll = this.polledSinceTriage;
+    const catchUp = this.catchUpSinceTriage;
     this.polledSinceTriage = false;
-    this.track((this.triaging = this.triageOnce(undefined, afterPoll).finally(() => (this.triaging = undefined))));
+    this.catchUpSinceTriage = false;
+    const run = this.triageOnce(undefined, afterPoll).then(async (r) => {
+      if (!r)
+        this.catchUpSinceTriage ||= catchUp; // didn't finish: the next run still follows the catch-up
+      else await this.afterTriage(catchUp);
+      return r;
+    });
+    this.track((this.triaging = run.finally(() => (this.triaging = undefined))));
   }
 
   /** One triage run, reported to health. Resolves undefined when it didn't finish. */
@@ -292,6 +309,10 @@ export class Runtime {
     }
   }
 
+  private async afterTriage(catchUp: boolean) {
+    await this.d.onTriaged?.(catchUp).catch((err) => this.d.logger?.error({ err }, 'After-triage work failed'));
+  }
+
   private countEmptyRun() {
     const day = londonParts(this.d.clock.now()).dateKey;
     this.emptyRuns = { day, count: (this.emptyRuns.day === day ? this.emptyRuns.count : 0) + 1 };
@@ -314,6 +335,7 @@ export class Runtime {
     this.track(run);
     try {
       const r = await run;
+      if (r) await this.afterTriage(false);
       if (r?.paused) return { ok: false, reason: 'budget', message: 'Triage budget reached for today. Rules still run; model triage resumes tomorrow.' };
       return { ok: true };
     } catch (err) {
@@ -323,7 +345,10 @@ export class Runtime {
 
   /** Who Frank is in a source, once it knows: ID and handle. */
   whoAmI(id: SourceId): { id: string; name?: string } | undefined {
-    return this.d.sources().find((s) => s.id === id)?.identity?.();
+    return this.d
+      .sources()
+      .find((s) => s.id === id)
+      ?.identity?.();
   }
 
   mode(): HealthView['mode'] {
@@ -441,6 +466,7 @@ export class Runtime {
   private onHealthChange(c: HealthChange) {
     this.d.logger?.info({ ...c }, 'Health changed');
     this.track(this.d.store.append({ type: 'health.changed', data: { dep: c.dep, state: c.state, ...(c.reason && { reason: c.reason }) } }).catch(() => undefined));
+    this.d.onHealthChange?.(c);
   }
 
   private track<T>(p: Promise<T>) {

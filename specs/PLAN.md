@@ -639,6 +639,24 @@ As built (M3 step 18):
 
 **FR-11.2** No more than one notification per item, recorded as an `item.notified` event so a restart never repeats one. Quiet hours come from settings. Three or more `now` items found in one catch-up poll after a wake become a single summary notification.
 
+As built (M3 step 19):
+
+- **Which decisions notify.** Any decision that makes an item Now and not yet notified puts it in a pending set: the model's, or a rule's at ingest. Corrections never notify, since Frank made them.
+- **When they go out.** Pending items go out after each triage run, so what one run decides goes out together. After a wake or reconnect catch-up poll, three or more become one summary ("3 items need you now", which opens the inbox). Otherwise each item gets its own notification with its one-line summary, and a click opens `/item/<id>`. Items wait at most 2 minutes for a triage run (Claude may be down), then go out on their own. An item Frank has already marked done or snoozed is skipped.
+- **Recorded before shown.** `item.notified {kind: now|summary}` is synced before anything appears, so a crash shows nothing rather than showing it twice, and a restart never repeats one.
+- **Quiet hours and the off switch.** They record the item as `suppressed: quiet_hours|disabled` and show nothing, then or later; the item is in the inbox either way. The UI also gets an SSE `notification` notice for each one shown.
+- **Health alerts (FR-14.6), `notify/alerts.ts`:**
+  - `auth_failed` on any dependency alerts at once.
+  - Settings paused (invalid, with no good copy) alerts at once.
+  - The network offline alerts only after 30 minutes of awake time in work hours. The monotonic clock stops in sleep.
+  - `degraded` and `rate_limited` never alert.
+  - At most one alert per dependency every 4 hours.
+  - Quiet hours and the off switch hold an alert back rather than drop it.
+  - "<Dependency> is back" follows only an alert that was sent.
+  - A click opens Usage & health.
+  - The 4-hour memory is in memory only, so a restart may repeat an alert once.
+- **terminal-notifier.** It is used when installed (`/opt/homebrew/bin` or `/usr/local/bin`, checked directly because launchd's PATH lacks them); otherwise osascript, whose notifications can't open a URL. Text goes in as arguments, and a leading `-` or `[` is escaped. **It is not installed on this Mac yet: `brew install terminal-notifier`.** `npm run agent:status` shows which one is in use. Tests and `--fakes` runs never show notifications.
+
 ### 7.12 E11 Hardening
 
 - **FR-12.1** Retention job runs daily (section 4.3).

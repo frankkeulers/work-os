@@ -1,5 +1,5 @@
 import { BUILD_VERSION, EXIT } from './config/env';
-import { osascriptNotifier } from './notify/macos';
+import { systemNotifier } from './notify/macos';
 import { STOP_DEADLINE_MS } from './runtime/lifecycle';
 import { run } from './start';
 
@@ -18,7 +18,7 @@ let early: NodeJS.Signals | undefined;
 let onSignal = (sig: NodeJS.Signals) => void (early ??= sig);
 for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.once(sig, () => onSignal(sig));
 
-const notifier = osascriptNotifier(process.env.WORKOS_INSTANCE === 'prod' ? '' : '[dev] ');
+const notifier = await systemNotifier(process.env.WORKOS_INSTANCE === 'prod' ? '' : '[dev] ');
 const fakes = process.argv.includes('--fakes');
 const res = await run({ env: process.env, notifier: fakes ? undefined : notifier, echoLogs: process.env.WORKOS_LAUNCHD !== '1', fakes });
 
