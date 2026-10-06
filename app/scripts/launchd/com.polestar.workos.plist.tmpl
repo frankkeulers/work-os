@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Work OS LaunchAgent (PLAN.md robustness §1). Rendered by `npm run agent:install` into
+  ~/Library/LaunchAgents. Absolute paths only, and no secrets: tokens stay in the Keychain.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{LABEL}}</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{NODE}}</string>
+    <string>--max-old-space-size=256</string>
+    <string>{{ENTRY}}</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{WORKDIR}}</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{PATH}}</string>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>WORKOS_INSTANCE</key>
+    <string>prod</string>
+    <key>WORKOS_LAUNCHD</key>
+    <string>1</string>
+    <key>WORKOS_DATA_DIR</key>
+    <string>{{DATA_DIR}}</string>
+    <key>WORKOS_PORT</key>
+    <string>{{PORT}}</string>
+    <key>WORKOS_WEB_DIR</key>
+    <string>{{WEB_DIR}}</string>
+  </dict>
+
+  <!-- Start at login; restart after a crash only. A deliberate stop or a refusal exits 0. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <!-- Standard, not Background: Background coalesces timers and throttles disk I/O. -->
+  <key>ProcessType</key>
+  <string>Standard</string>
+  <!-- Longer than the server's own 8 s shutdown deadline. -->
+  <key>ExitTimeOut</key>
+  <integer>10</integer>
+  <!-- The GUI session: the login Keychain, the Claude login and notifications. -->
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+  <!-- Child processes (claude, caffeinate) stop with the server. -->
+  <key>AbandonProcessGroup</key>
+  <false/>
+
+  <!-- Output before the logger takes over, e.g. a failed import. -->
+  <key>StandardOutPath</key>
+  <string>{{STDOUT}}</string>
+  <key>StandardErrorPath</key>
+  <string>{{STDERR}}</string>
+</dict>
+</plist>

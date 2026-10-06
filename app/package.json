@@ -18,7 +18,11 @@
     "test": "vitest run",
     "e2e": "npm run e2e -w @work-os/web",
     "dev:server": "npm run dev -w @work-os/server",
-    "rebuild-state": "npm run rebuild-state -w @work-os/server"
+    "rebuild-state": "npm run rebuild-state -w @work-os/server",
+    "deploy": "npm run build && npm run deploy -w @work-os/server --",
+    "agent:install": "npm run agent -w @work-os/server -- install",
+    "agent:uninstall": "npm run agent -w @work-os/server -- uninstall",
+    "agent:status": "npm run agent -w @work-os/server -- status"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

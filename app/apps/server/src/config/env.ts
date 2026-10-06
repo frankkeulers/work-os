@@ -42,10 +42,13 @@ export function resolveConfig(env: NodeJS.ProcessEnv, home = homedir()): Runtime
     host: '127.0.0.1',
     port,
     underLaunchd: env.WORKOS_LAUNCHD === '1',
-    version: env.WORKOS_VERSION || '0.1.0-dev',
+    version: env.WORKOS_VERSION || BUILD_VERSION,
     forceDryRun: instance === 'dev',
   };
 }
+
+/** Set by the deploy bundle (esbuild define); a dev run from source says so. */
+export const BUILD_VERSION: string = process.env.WORKOS_BUILD_VERSION || '0.1.0-dev';
 
 /** Exit codes. Under launchd every deliberate stop exits 0, so KeepAlive restarts crashes only. */
 export const EXIT = { ok: 0, crash: 1, lockHeld: 75, config: 78 } as const;

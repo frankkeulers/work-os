@@ -1,9 +1,15 @@
-import { EXIT } from './config/env';
+import { BUILD_VERSION, EXIT } from './config/env';
 import { osascriptNotifier } from './notify/macos';
 import { STOP_DEADLINE_MS } from './runtime/lifecycle';
 import { run } from './start';
 
 // Process entry point: wires signals and crash handling around run().
+
+// `node server.mjs --version` loads the whole bundle and exits: the deploy's smoke test.
+if (process.argv.includes('--version')) {
+  console.log(BUILD_VERSION);
+  process.exit(0);
+}
 
 const notifier = osascriptNotifier(process.env.WORKOS_INSTANCE === 'prod' ? '' : '[dev] ');
 const res = await run({ env: process.env, notifier, echoLogs: process.env.WORKOS_LAUNCHD !== '1' });

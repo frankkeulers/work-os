@@ -7,7 +7,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "dev": "WORKOS_INSTANCE=dev tsx watch src/main.ts",
-    "rebuild-state": "tsx src/cli/rebuild-state.ts"
+    "rebuild-state": "tsx src/cli/rebuild-state.ts",
+    "deploy": "tsx src/cli/deploy.ts",
+    "agent": "tsx src/cli/agent.ts"
   },
   "dependencies": {
     "@work-os/shared": "*",
@@ -16,6 +18,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15"
   }
 }
