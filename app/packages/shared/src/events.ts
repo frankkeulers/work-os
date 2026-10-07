@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participant, SourceId, TriageCorrection, TriageDecision } from './schemas';
+import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participant, PromptFileId, SourceId, TriageCorrection, TriageDecision } from './schemas';
 
 // The event log (PLAN.md §4.3, §4.4). It is the source of truth: every event carries a gap-free
 // `seq` and a typed payload, so the inbox can be rebuilt from the log alone. Events never carry
@@ -86,6 +86,7 @@ export const EventPayloads = {
   'source.failed': z.object({ source: SourceId, error: z.string().min(1), retryAfterSeconds: z.number().nonnegative().optional() }),
   'settings.changed': z.object({ dryRun: z.boolean() }),
   'rules.changed': z.object({ count: z.number().int().nonnegative() }),
+  'prompt.changed': z.object({ id: PromptFileId, version: z.string().min(1), reset: z.boolean() }),
   'system.started': z.object({ version: z.string().min(1), instance: z.enum(['prod', 'dev']) }),
   'system.stopped': z.object({ reason: z.string().min(1) }),
   'system.woke': z.object({ sleptSeconds: z.number().nonnegative() }),

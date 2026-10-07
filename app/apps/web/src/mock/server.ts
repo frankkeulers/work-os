@@ -39,6 +39,8 @@ import {
   type EarlierView,
   type ItemView,
   type Notice,
+  type PromptFileId,
+  type PromptFileView,
   type Rule,
   type Settings,
   type SettingsView,
@@ -57,6 +59,7 @@ import { buildDraft } from './drafts';
 import { ME } from './me';
 import { FRANK } from './seed/people';
 import { SEED_CLOCK, STATE_VERSION, buildState, type Preset } from './seed';
+import { SEED_PROMPT_FILES } from './seed/prompts';
 import { BATCH_TWELVE, REPLIES, VIP_DM } from './seed/threads';
 import type { DraftOutcome, ItemRec, MockState, ReplySeed, ThreadSeed } from './types';
 
@@ -1045,6 +1048,43 @@ export class MockServer implements WorkOsApi, MockControls {
     return { savedAt: this.s.savedAt };
   }
 
+  // ---------------------------------------------------------------- prompt files (FR-1.7)
+
+  private promptView(id: PromptFileId): PromptFileView {
+    const f = SEED_PROMPT_FILES.find((p) => p.id === id);
+    if (!f) throw new ApiError('not_found', `There is no prompt file called ${id}.`);
+    const text = (this.s.prompts?.[id] ?? '').trim() || f.defaultText.trim();
+    const { defaultText, ...meta } = f;
+    return { ...meta, text, version: promptVersion(text), defaultVersion: promptVersion(defaultText.trim()), edited: text !== defaultText.trim() };
+  }
+
+  async getPrompts(): Promise<PromptFileView[]> {
+    await this.gate(QUERY_MS);
+    return SEED_PROMPT_FILES.map((f) => this.promptView(f.id));
+  }
+
+  private writePrompt(id: PromptFileId, baseVersion: string, text: string, reset: boolean): PromptFileView {
+    const current = this.promptView(id);
+    if (current.version !== baseVersion) throw new ApiError('conflict', `${current.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`);
+    this.s.prompts = { ...this.s.prompts, [id]: text.trim() };
+    const saved = this.promptView(id);
+    this.event('prompt.changed', { id, version: saved.version, reset });
+    this.emit({ topic: 'settings' });
+    return saved;
+  }
+
+  async savePrompt(id: PromptFileId, text: string, baseVersion: string) {
+    await this.gate(COMMAND_MS);
+    if (!text.trim()) throw new ApiError('validation', 'Send { text, baseVersion } with some text.', [{ path: 'text', message: 'The file can’t be empty' }]);
+    return this.writePrompt(id, baseVersion, text, false);
+  }
+
+  async resetPrompt(id: PromptFileId, baseVersion: string) {
+    await this.gate(COMMAND_MS);
+    const f = SEED_PROMPT_FILES.find((p) => p.id === id);
+    return this.writePrompt(id, baseVersion, f?.defaultText ?? '', true);
+  }
+
   // ---------------------------------------------------------------- scenario controls (MockControls)
 
   reset(preset: Preset = 'default') {
@@ -1197,4 +1237,12 @@ export class MockServer implements WorkOsApi, MockControls {
     clearInterval(this.tickTimer);
     if (typeof window !== 'undefined') window.removeEventListener('pagehide', this.flushOnHide);
   }
+}
+
+/** "<declared name>#<8 hex>", like the server's promptVersion; FNV-1a stands in for sha1. */
+function promptVersion(text: string): string {
+  const name = /^<!--\s*prompt:\s*(.+?)\s*-->/.exec(text)?.[1] ?? 'custom';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return `${name}#${(h >>> 0).toString(16).padStart(8, '0')}`;
 }

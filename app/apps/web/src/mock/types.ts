@@ -7,6 +7,7 @@ import type {
   ItemFlags,
   NextStep,
   PollStatus,
+  PromptFileId,
   Rule,
   Settings,
   SlackStatus,
@@ -114,6 +115,8 @@ export interface MockState {
   settings: Settings;
   rules: Rule[];
   ruleHits: Record<string, number>;
+  /** Prompt files Frank has saved in Settings › Prompts; absent ones serve the seed default. */
+  prompts?: Partial<Record<PromptFileId, string>>;
   savedAt: string;
   checkedAt: string;
   labelCount: number;

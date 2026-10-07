@@ -127,4 +127,16 @@ describe('settings', () => {
     expect(err.status).toBe(422);
     expect(err.issues.map((i) => i.path)).toEqual(['settings.schedule.intervalWorkMinutes', 'rules.3.conditions.0.pattern']);
   });
+  it('edits, conflicts on and resets a prompt file (FR-1.7)', async () => {
+    const before = (await settle(server.getPrompts())).find((p) => p.id === 'draft-vault')!;
+    expect(before).toMatchObject({ edited: false, version: before.defaultVersion });
+    const saved = await settle(server.savePrompt('draft-vault', '<!-- prompt: draft-vault v3 -->\nShorter.', before.version));
+    expect(saved).toMatchObject({ edited: true, version: expect.stringMatching(/^draft-vault v3#[0-9a-f]{8}$/) });
+    expect(server.getEvents()[0]).toMatchObject({ type: 'prompt.changed', data: { id: 'draft-vault', reset: false } });
+    const stale = (await settle(server.savePrompt('draft-vault', 'x', before.version).catch((e) => e))) as ApiError;
+    expect(stale.status).toBe(409);
+    const empty = (await settle(server.savePrompt('draft-vault', ' ', saved.version).catch((e) => e))) as ApiError;
+    expect(empty.status).toBe(422);
+    expect(await settle(server.resetPrompt('draft-vault', saved.version))).toMatchObject({ edited: false, version: before.version });
+  });
 });

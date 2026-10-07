@@ -109,6 +109,7 @@ export function noticesFor(events: WorkEvent[]): Notice[] {
       else if (e.type === 'triage.decided' || e.type === 'triage.failed') out.push({ topic: 'usage' }); // a call was made
     } else if (area === 'source') out.push({ topic: 'inbox' }, { topic: 'usage' });
     else if (area === 'settings' || area === 'rules') out.push({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
+    else if (area === 'prompt') out.push({ topic: 'settings' });
     else if (area === 'health' || area === 'system') out.push({ topic: 'health' });
   }
   return out;

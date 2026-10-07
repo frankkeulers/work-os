@@ -1,4 +1,4 @@
-import type { Action, ActionType, ApiErrorBody, CorrectionInput, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, ApiErrorBody, CorrectionInput, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -150,6 +150,9 @@ export class HttpApi implements WorkOsApi {
   runEval = () => this.post('/api/evals');
   rebuildState = () => this.post<{ events: number }>('/api/admin/rebuild-state');
   saveSettings = (settings: Settings, rules: Rule[]) => this.request<{ savedAt: string }>('PUT', '/api/settings', { settings, rules });
+  getPrompts = () => this.get<PromptFileView[]>('/api/prompts');
+  savePrompt = (id: PromptFileId, text: string, baseVersion: string) => this.request<PromptFileView>('PUT', `/api/prompts/${id}`, { text, baseVersion });
+  resetPrompt = (id: PromptFileId, baseVersion: string) => this.post<PromptFileView>(`/api/prompts/${id}/reset`, { baseVersion });
 
   // ---------------------------------------------------------------- notices
 

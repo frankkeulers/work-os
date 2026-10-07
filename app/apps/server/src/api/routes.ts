@@ -1,5 +1,6 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, SettingsSave, SnoozeInput, seenChanges, type EarlierView } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, seenChanges, type EarlierView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
+import { PROMPT_FILES, promptFile, promptFileView, writePromptFile, type PromptFile } from '../claude/promptFiles';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
@@ -176,5 +177,41 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (events.length) await d.store.append(...events);
     if (saved.settingsChanged) d.runtime?.settingsChanged();
     return reply.headers(noStore).send({ savedAt: d.settings.savedAt });
+  });
+
+  // Prompt and guidance files (FR-1.7). Every Claude call reads its file fresh, so a save takes
+  // effect on the next call. A save names the version it was edited from; if the file changed on
+  // disk since then, it fails as a conflict instead of overwriting.
+  const dataDir = d.config.dataDir;
+  const promptOf = (id: string) => {
+    const f = promptFile(id);
+    if (!f) throw new HttpError('not_found', `There is no prompt file called ${id}.`);
+    return f;
+  };
+  const writePrompt = async (f: PromptFile, baseVersion: string, text: string, reset: boolean) => {
+    const current = await promptFileView(dataDir, f);
+    if (current.version !== baseVersion) {
+      throw new HttpError('conflict', `${f.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`);
+    }
+    await writePromptFile(dataDir, f, text);
+    const saved = await promptFileView(dataDir, f);
+    await d.store.append({ type: 'prompt.changed', data: { id: f.id, version: saved.version, reset } });
+    return saved;
+  };
+
+  app.get('/api/prompts', async (_req, reply) => reply.headers(noStore).send(await Promise.all(PROMPT_FILES.map((f) => promptFileView(dataDir, f)))));
+
+  app.put<{ Params: { id: string } }>('/api/prompts/:id', async (req, reply) => {
+    const f = promptOf(req.params.id);
+    const body = PromptSave.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { text, baseVersion } with some text.', [{ path: 'text', message: body.error.issues[0]?.message ?? 'Invalid' }]);
+    return reply.headers(noStore).send(await writePrompt(f, body.data.baseVersion, body.data.text, false));
+  });
+
+  app.post<{ Params: { id: string } }>('/api/prompts/:id/reset', async (req, reply) => {
+    const f = promptOf(req.params.id);
+    const body = PromptReset.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { baseVersion }.');
+    return reply.headers(noStore).send(await writePrompt(f, body.data.baseVersion, f.defaultText, true));
   });
 }

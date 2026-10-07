@@ -2,7 +2,7 @@ import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, SettingsView, WorkEvent } from '@work-os/shared';
+import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, SettingsView, WorkEvent } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDataDir, paths } from '../config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
@@ -294,6 +294,52 @@ describe('settings (FR-1.5)', () => {
     expect(seen.map((e) => e.type)).toEqual(['settings.changed', 'rules.changed']);
     await put('/api/settings', { settings, rules: view.rules.slice(1) });
     expect(seen).toHaveLength(2); // nothing changed, nothing logged
+  });
+});
+
+describe('prompt files (FR-1.7)', () => {
+  beforeEach(() => build());
+  const post = (url: string, payload: unknown, headers: Record<string, string> = auth) => server.app.inject({ method: 'POST', url, headers, payload: payload as object });
+  const prompts = async () => (await get('/api/prompts')).json<PromptFileView[]>();
+
+  it('lists the six files, serving the built-in default when a file is missing', async () => {
+    const list = await prompts();
+    expect(list.map((p) => p.id)).toEqual(['triage', 'draft-vault', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+    const routing = list.find((p) => p.id === 'confluence-routing')!;
+    expect(routing).toMatchObject({ path: 'config/psg-context-builder.md', edited: false, version: routing.defaultVersion });
+    expect(routing.text).toMatch(/^<!-- prompt: confluence-routing v1 -->/);
+  });
+
+  it('saves against the version it was edited from, logs it, and refuses a stale version', async () => {
+    const seen: WorkEvent[] = [];
+    store.subscribe((es) => seen.push(...es));
+    const before = (await prompts()).find((p) => p.id === 'vault-conventions')!;
+    const res = await put('/api/prompts/vault-conventions', { text: '<!-- prompt: vault-conventions v2 -->\nMine.\n\n', baseVersion: before.version });
+    expect(res.statusCode).toBe(200);
+    const saved = res.json<PromptFileView>();
+    expect(saved).toMatchObject({ text: '<!-- prompt: vault-conventions v2 -->\nMine.', edited: true, version: expect.stringMatching(/^vault-conventions v2#/) });
+    expect(await readFile(join(dir, 'config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v2 -->\nMine.\n');
+    expect(seen.map((e) => [e.type, e.data])).toEqual([['prompt.changed', { id: 'vault-conventions', version: saved.version, reset: false }]]);
+    expect(noticesFor(seen)).toEqual([{ topic: 'settings' }]);
+
+    // Edited elsewhere since it was opened: a conflict, and the file is untouched.
+    const stale = await put('/api/prompts/vault-conventions', { text: 'Other', baseVersion: before.version });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json<ApiErrorBody>().message).toMatch(/changed since you opened it/);
+    expect(await readFile(join(dir, 'config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v2 -->\nMine.\n');
+
+    const reset = await post('/api/prompts/vault-conventions/reset', { baseVersion: saved.version });
+    expect(reset.json<PromptFileView>()).toMatchObject({ edited: false, version: before.defaultVersion });
+    expect(seen.at(-1)?.data).toMatchObject({ reset: true });
+  });
+
+  it('rejects empty text, unknown files and foreign origins', async () => {
+    const { version } = (await prompts())[0];
+    const empty = await put('/api/prompts/triage', { text: '  \n', baseVersion: version });
+    expect(empty.statusCode).toBe(422);
+    expect(empty.json<ApiErrorBody>().issues).toEqual([{ path: 'text', message: 'The file can’t be empty' }]);
+    expect((await put('/api/prompts/nope', { text: 'x', baseVersion: version })).statusCode).toBe(404);
+    expect((await post('/api/prompts/triage/reset', { baseVersion: version }, { ...auth, origin: 'https://evil.example' })).statusCode).toBe(403);
   });
 });
 

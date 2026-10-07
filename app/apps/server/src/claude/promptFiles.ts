@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { PromptFileId } from '@work-os/shared';
+import type { PromptFileId, PromptFileView } from '@work-os/shared';
+import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
 import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, type Prompt } from './prompts';
 
@@ -87,7 +88,7 @@ export const sha1 = (text: string) => createHash('sha1').update(text.trim()).dig
 
 /** The file's text, or the built-in default if it is missing or empty. */
 export async function readPromptFile(dataDir: string, f: PromptFile): Promise<Prompt> {
-  const text = (await readFile(promptFilePath(dataDir, f), 'utf8').catch(() => '')).trim() || f.defaultText;
+  const text = (await readFile(promptFilePath(dataDir, f), 'utf8').catch(() => '')).trim() || f.defaultText.trim();
   return { text, version: promptVersion(text) };
 }
 
@@ -95,4 +96,25 @@ export function loadPromptFile(dataDir: string, id: PromptFileId): Promise<Promp
   const f = promptFile(id);
   if (!f) throw new Error(`Unknown prompt file ${id}`);
   return readPromptFile(dataDir, f);
+}
+
+/** What Settings shows for a file (FR-1.7): the text calls use now, its version, and whether it is edited. */
+export async function promptFileView(dataDir: string, f: PromptFile): Promise<PromptFileView> {
+  const p = await readPromptFile(dataDir, f);
+  return {
+    id: f.id,
+    label: f.label,
+    description: f.description,
+    usedBy: f.usedBy,
+    path: `config/${f.file}`,
+    text: p.text,
+    version: p.version,
+    defaultVersion: promptVersion(f.defaultText.trim()),
+    edited: sha1(p.text) !== sha1(f.defaultText),
+  };
+}
+
+/** Writes the file (owner-only, atomic). The next Claude call reads it; nothing needs a restart. */
+export async function writePromptFile(dataDir: string, f: PromptFile, text: string): Promise<void> {
+  await writeFileAtomic(promptFilePath(dataDir, f), `${text.trim()}\n`);
 }

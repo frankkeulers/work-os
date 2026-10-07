@@ -13,6 +13,7 @@ import type {
   ModelId,
   NextStep,
   Participant,
+  PromptFileId,
   Rule,
   SourceId,
   Settings,
@@ -205,6 +206,23 @@ export interface SettingsView {
   vaultConventionsLoaded: boolean;
 }
 
+/** A prompt or guidance file under config/ (FR-1.7). Claude calls read it fresh every time. */
+export interface PromptFileView {
+  id: PromptFileId;
+  label: string;
+  description: string;
+  usedBy: string;
+  /** Relative to the data directory, e.g. config/prompts/triage.md. */
+  path: string;
+  /** What calls use: the file, or the built-in default when the file is missing or empty. */
+  text: string;
+  /** Declared name plus a hash of the text, as in the usage log and eval reports. */
+  version: string;
+  defaultVersion: string;
+  /** The text differs from the built-in default. */
+  edited: boolean;
+}
+
 export type StartupFailure = 'api_key' | 'slack_token' | 'claude_login';
 
 /** Health of one dependency (FR-14.6). */
@@ -288,6 +306,10 @@ export interface WorkOsApi {
   runEval(): Promise<void>;
   rebuildState(): Promise<{ events: number }>;
   saveSettings(settings: Settings, rules: Rule[]): Promise<{ savedAt: string }>;
+  getPrompts(): Promise<PromptFileView[]>;
+  /** Fails as conflict when the file changed since baseVersion. */
+  savePrompt(id: PromptFileId, text: string, baseVersion: string): Promise<PromptFileView>;
+  resetPrompt(id: PromptFileId, baseVersion: string): Promise<PromptFileView>;
 
   subscribe(onNotice: (n: Notice) => void): () => void;
 }

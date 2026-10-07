@@ -19,5 +19,13 @@ export const CorrectionBody = z.object({ attention: z.enum(['now', 'today', 'non
 /** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
 export const DraftRequest = z.object({ type: z.enum(['vault_note', 'confluence_entry']) }).strict();
 
+/** PUT /api/prompts/:id (FR-1.7): the new text, and the version it was edited from. */
+export const PromptSave = z.object({ text: z.string().max(200_000).refine((t) => t.trim().length > 0, 'The file can’t be empty'), baseVersion: z.string().min(1) }).strict();
+export type PromptSave = z.infer<typeof PromptSave>;
+
+/** POST /api/prompts/:id/reset (FR-1.7): back to the built-in default. */
+export const PromptReset = z.object({ baseVersion: z.string().min(1) }).strict();
+export type PromptReset = z.infer<typeof PromptReset>;
+
 /** PUT /api/actions/:id/draft (FR-9.3): Frank's edited text. */
 export const DraftEdit = z.object({ content: z.string().max(200_000) }).strict();
