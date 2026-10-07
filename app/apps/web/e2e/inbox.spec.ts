@@ -86,7 +86,8 @@ test('J04 correct triage in the panel moves the item and grows the labelled set'
   const row = rows(page, 'Today').first();
   const summary = (await row.textContent())!.slice(0, 40);
   await row.click();
-  await itemPanel(page).getByRole('button', { name: 'Correct triage' }).click();
+  await itemPanel(page).getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: /Correct triage/ }).click();
   await itemPanel(page).getByRole('group', { name: 'Attention' }).getByRole('button', { name: 'Now' }).click();
   await itemPanel(page).getByRole('button', { name: 'Save correction' }).click();
   await expect(page.getByText('Correction saved · moved to Now · labelled set now 201')).toBeVisible();

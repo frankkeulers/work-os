@@ -110,6 +110,20 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
           <ChipInput channel label="Exclude channels" placeholder="Add #channel…" items={s.slack.excludeChannels} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
         </Row>
       </Group>
+      <Group title="Links">
+        <Row label="Open Slack links in" help="Where Open in Slack and Reply in Slack go. The browser opens Slack’s web client; the app opens the message in Slack for Mac.">
+          <Segmented
+            label="Open Slack links in"
+            size="sm"
+            value={s.slack.openLinksIn ?? 'browser'}
+            onChange={(v) => set((x) => (x.slack.openLinksIn = v))}
+            options={[
+              { value: 'browser', label: 'Browser' },
+              { value: 'app', label: 'Desktop app' },
+            ]}
+          />
+        </Row>
+      </Group>
       <Group title="Polling">
         <Row label="During work hours" help="How often to poll Slack between the hours below." error={err('schedule.intervalWorkMinutes')}>
           <NumInput label="Poll every, work hours" prefix="Every" suffix="min" value={s.schedule.intervalWorkMinutes} invalid={!!err('schedule.intervalWorkMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.schedule.intervalWorkMinutes = v ?? NaN))} />

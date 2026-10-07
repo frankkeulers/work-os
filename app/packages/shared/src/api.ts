@@ -38,6 +38,8 @@ export interface ItemSummary {
   kind: ItemKind;
   title: string;
   permalink: string;
+  /** Where Open in Slack goes: the web client or the permalink, per settings. Absent in the mock. */
+  openUrl?: string;
   lastActivityAt: string;
   revision: number;
   lane: Lane;
@@ -135,6 +137,8 @@ export interface ItemView {
   targets: { confluenceSite: string; spaceKey: string; vaultPath: string };
   budgets: BudgetState;
   meId: string; // the signed-in Slack user, shown as "You"
+  /** Everyone in a DM or group DM, from the source; absent when it can't say. */
+  members?: Participant[];
 }
 
 /** The messages just before a DM item, read live from the source and never stored. Oldest first. */

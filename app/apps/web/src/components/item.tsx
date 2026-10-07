@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { tomorrowAt9, type Attention, type SourceId } from '@work-os/shared';
+import type { Attention, SourceId } from '@work-os/shared';
 import { API_MODE, api, type ItemSummary } from '../api';
-import { fmtDayDate, fmtTime } from '../lib/format';
 import { SOURCE_NAME } from '../lib/next';
+import { snoozeOptions } from '../lib/snooze';
 import { errorToast, toast } from '../store/toasts';
 import { Icon } from './icons';
 import { Button, MenuItem, Segmented, cx, inputClass } from './ui';
@@ -14,10 +14,13 @@ export const itemPath = (id: string, q = '') => `/item/${encodeURIComponent(id)}
 const KIND_LABEL: Record<ItemSummary['kind'], string> = { thread: 'Thread', dm: 'DM', email: 'Email', meeting: 'Meeting', chat: 'Chat' };
 export const kindLabel = (k: ItemSummary['kind']) => KIND_LABEL[k];
 
-/** Opens the item's permalink in a new tab, which hands over to the desktop app when it is installed (FR-8.2). */
-export function openInSource(item: { permalink: string; title: string; source: SourceId }) {
+/**
+ * Opens the item in a new tab (FR-8.2): Slack's web client, or the permalink, which hands over to
+ * the desktop app, as the Slack settings say.
+ */
+export function openInSource(item: { permalink: string; openUrl?: string; title: string; source: SourceId }) {
   if (API_MODE === 'http') {
-    window.open(item.permalink, '_blank', 'noopener,noreferrer');
+    window.open(item.openUrl ?? item.permalink, '_blank', 'noopener,noreferrer');
     return;
   }
   // The mock's permalinks lead nowhere.
@@ -77,18 +80,15 @@ function Marker({ tone, icon, children }: { tone: 'accent' | 'warn' | 'neutral';
 
 export function SnoozeMenu({ onPick, now }: { onPick: (iso: string) => void; now: Date }) {
   const [custom, setCustom] = useState(false);
-  const inHour = new Date(now.getTime() + 3600_000).toISOString();
-  const tomorrow = tomorrowAt9(now);
   const local = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   const [value, setValue] = useState(local(new Date(now.getTime() + 3 * 3600_000)));
   return (
     <div className="flex w-[240px] flex-col">
-      <MenuItem onClick={() => onPick(inHour)} hint={<span className="font-mono text-[11px] text-muted">{fmtTime(inHour)}</span>}>
-        1 hour
-      </MenuItem>
-      <MenuItem onClick={() => onPick(tomorrow)} hint={<span className="font-mono text-[11px] text-muted">{fmtDayDate(tomorrow)}</span>}>
-        Tomorrow 09:00
-      </MenuItem>
+      {snoozeOptions(now).map((o) => (
+        <MenuItem key={o.label} onClick={() => onPick(o.until)} hint={<span className="font-mono text-[11px] text-muted">{o.hint}</span>}>
+          {o.label}
+        </MenuItem>
+      ))}
       {!custom ? (
         <MenuItem onClick={() => setCustom(true)}>Custom…</MenuItem>
       ) : (
@@ -113,7 +113,17 @@ export function SnoozeMenu({ onPick, now }: { onPick: (iso: string) => void; now
 }
 
 /** Correct the triage (FR-6.2). "inline" sits in Item detail's triage band; "panel" in the Inbox item panel. */
-export function CorrectForm({ item, onDone, layout = 'inline' }: { item: ItemSummary; onDone: (labelCount: number, lane: string) => void; layout?: 'inline' | 'panel' }) {
+export function CorrectForm({
+  item,
+  onDone,
+  onCancel,
+  layout = 'inline',
+}: {
+  item: ItemSummary;
+  onDone: (labelCount: number, lane: string) => void;
+  onCancel?: () => void;
+  layout?: 'inline' | 'panel';
+}) {
   const t = item.triage;
   const [attention, setAttention] = useState<Attention>(t?.attention ?? 'none');
   const [conf, setConf] = useState(!!t?.confluence);
@@ -167,6 +177,7 @@ export function CorrectForm({ item, onDone, layout = 'inline' }: { item: ItemSum
   const save = (
     <Button
       variant="solid"
+      size={layout === 'panel' ? 'sm' : 'md'}
       disabled={busy}
       onClick={async () => {
         setBusy(true);
@@ -183,16 +194,54 @@ export function CorrectForm({ item, onDone, layout = 'inline' }: { item: ItemSum
       Save correction
     </Button>
   );
-  if (layout === 'panel')
-    return (
-      <div className="flex flex-col gap-3 rounded-[10px] bg-surface-2 px-4 py-3.5">
-        <div className="flex flex-wrap items-end gap-4">{fields}</div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          {save}
-          <span className="text-xs leading-relaxed text-muted">{note}</span>
-        </div>
-      </div>
+  if (layout === 'panel') {
+    const check = (on: boolean, label: string, set: (v: boolean) => void, disabled?: string) => (
+      <label title={disabled} className={cx('inline-flex min-h-8 items-center gap-2 text-[13px]', disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer')}>
+        <input type="checkbox" className="h-4 w-4 accent-[var(--accent-bg)]" checked={on} disabled={!!disabled} onChange={(e) => set(e.target.checked)} />
+        {label}
+      </label>
     );
+    return (
+      <section aria-label="Correct triage" className="flex flex-col gap-3 rounded-xl border border-line px-4 py-3.5">
+        <div className="flex flex-col gap-1">
+          <h3 className="m-0 text-[13px] font-semibold">{item.triageState === 'triaged' ? 'Correct triage' : 'Set triage'}</h3>
+          <p className="m-0 text-xs leading-relaxed text-ink-2">
+            Overrides the model for this item: it moves to the lane you pick straight away. The correction is also saved as a test case for the triage eval; it doesn’t retrain triage, and new replies are triaged afresh.
+          </p>
+        </div>
+        <div className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2">
+          <span className="text-xs font-medium text-ink-2">Attention</span>
+          <Segmented<Attention>
+            label="Attention"
+            size="sm"
+            value={attention}
+            onChange={setAttention}
+            options={[
+              { value: 'now', label: 'Now' },
+              { value: 'today', label: 'Today' },
+              { value: 'none', label: 'No action' },
+            ]}
+          />
+          <span className="text-xs font-medium text-ink-2">Suggest filing</span>
+          <span className="flex flex-wrap gap-x-4">
+            {check(conf, 'Confluence', setConf, item.containsPeopleObservations ? 'Mentions named people: vault only' : undefined)}
+            {check(vault, 'Vault', setVault)}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="flex-1 text-xs text-muted">
+            Moves to <strong className="text-ink">{lane}</strong>
+          </span>
+          {onCancel && (
+            <Button size="sm" variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+          {save}
+        </div>
+      </section>
+    );
+  }
   return (
     <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
       {fields}

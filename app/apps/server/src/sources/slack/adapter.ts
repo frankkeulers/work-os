@@ -123,6 +123,11 @@ export class SlackAdapter implements SourceAdapter {
       drafts.flatMap((d) => [...d.messages.map((m) => m.user!), ...(d.channel.user ? [d.channel.user] : []), ...mentionedIds(d.messages.map((m) => m.text ?? ''))]),
       signal,
     );
+    await mapLimit(
+      [...new Map(drafts.filter((d) => d.channel.is_mpim).map((d) => [d.channel.id, d.channel])).values()],
+      CONCURRENCY,
+      (c) => this.directory.dmMembers(c, signal),
+    );
     const items: Item[] = drafts.map((d) =>
       buildItem({
         ...d,

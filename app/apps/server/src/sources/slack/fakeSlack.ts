@@ -8,6 +8,7 @@ import type { Conversation, SlackMessage } from './types';
 
 export interface FakeChannel extends Conversation {
   member: boolean;
+  members?: string[];
   messages: SlackMessage[];
 }
 
@@ -69,9 +70,13 @@ export class FakeSlack {
   private answer(method: string, p: Record<string, string>): object {
     switch (method) {
       case 'auth.test':
-        return { url: this.team, user: 'frank', user_id: this.me, team: 'Pole Star' };
+        return { url: this.team, user: 'frank', user_id: this.me, team: 'Pole Star', team_id: 'T0POLE' };
       case 'users.info':
         return { user: { id: p.user, profile: { display_name: this.users.get(p.user) ?? '' }, name: p.user.toLowerCase() } };
+      case 'conversations.members': {
+        const c = this.channels.get(p.channel)!;
+        return page(c.members ?? [...new Set([this.me, ...(c.user ? [c.user] : []), ...c.messages.flatMap((m) => (m.user ? [m.user] : []))])], p, 'members');
+      }
       case 'users.conversations':
         return page([...this.channels.values()].filter((c) => c.member).map(strip), p, 'channels');
       case 'conversations.replies': {
@@ -121,7 +126,7 @@ export class FakeSlack {
 }
 
 const json = (body: object) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
-const strip = ({ member: _m, messages: _ms, ...c }: FakeChannel): Conversation => c;
+const strip = ({ member: _m, members: _mb, messages: _ms, ...c }: FakeChannel): Conversation => c;
 
 function page<T>(all: T[], p: Record<string, string>, key: string): object {
   const limit = Number(p.limit ?? 100);

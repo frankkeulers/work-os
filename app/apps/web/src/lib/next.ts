@@ -104,7 +104,7 @@ export function openLabel(i: Pick<ItemSummary, 'source' | 'kind'>): string {
   const app = SOURCE_NAME[i.source];
   if (i.source === 'outlook') return 'Reply in Outlook';
   if (i.kind === 'meeting') return `Open transcript in ${app}`;
-  if (i.kind === 'dm' || i.kind === 'chat') return `Open ${i.source === 'slack' ? 'DM' : 'chat'} in ${app}`;
+  if (i.kind === 'dm' || i.kind === 'chat') return `Reply in ${app}`;
   return `Open thread in ${app}`;
 }
 

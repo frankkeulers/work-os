@@ -54,6 +54,10 @@ export interface AuthTest {
   team_id?: string;
 }
 
+export interface MembersResponse extends Paged {
+  members: string[];
+}
+
 export interface UserInfo {
   user: { id: string; name?: string; real_name?: string; is_bot?: boolean; deleted?: boolean; profile?: { display_name?: string; real_name?: string } };
 }

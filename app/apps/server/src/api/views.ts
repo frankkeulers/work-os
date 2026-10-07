@@ -15,6 +15,8 @@ import {
   type HealthView,
   type InboxView,
   type Item,
+  type ItemSummary,
+  type Participant,
   type ItemView,
   type SettingsView,
   type SourceHealth,
@@ -33,6 +35,7 @@ import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { LabelStore } from '../store/labels';
 import type { RecoveryReport, Store } from '../store/store';
+import { webClientUrl } from '../sources/slack/normalise';
 import { HttpError } from './errors';
 
 // The read side of the API: each view is built from the projection, the item files and the
@@ -59,10 +62,22 @@ export interface ViewDeps {
   correct?: (id: string, input: CorrectionInput) => Promise<{ labelCount: number }>;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */
   evals?: Evals;
+  /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
+  slackTeamId?: () => string | undefined;
+  /** Everyone in a DM item's conversation, from Slack. */
+  members?: (item: Item, signal?: AbortSignal) => Promise<Participant[] | undefined>;
   /** The messages before a DM item, read live from Slack. */
   earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
   /** Drafts, approvals and the outbox (FR-9.x, FR-14.5). */
   actions?: ActionService;
+}
+
+/** Open in Slack: the web client when settings say browser (the default) and the workspace is known. */
+function withOpenUrl(d: ViewDeps, s: ItemSummary): ItemSummary {
+  if (s.source !== 'slack') return s;
+  const team = d.slackTeamId?.();
+  const web = d.settings.editable.settings.slack.openLinksIn !== 'app' && team ? webClientUrl(team, s.id, s.kind) : undefined;
+  return { ...s, openUrl: web ?? s.permalink };
 }
 
 function budgets(d: ViewDeps): BudgetState {
@@ -173,13 +188,16 @@ export function inboxView(d: ViewDeps): InboxView {
   const items = Object.values(d.store.projection.items)
     .filter((i) => i.status !== 'done' || !i.doneAt || i.doneAt >= cutoff)
     .map((i) =>
-      summaryOf(i, i, {
-        actions: actions.get(i.id) ?? [],
-        quietMinutes: s.triage.quietMinutes,
-        now: nowIso,
-        triageBudgetHit: b.triage.hit,
-        text: d.items.text(i.id) ?? {},
-      }),
+      withOpenUrl(
+        d,
+        summaryOf(i, i, {
+          actions: actions.get(i.id) ?? [],
+          quietMinutes: s.triage.quietMinutes,
+          now: nowIso,
+          triageBudgetHit: b.triage.hit,
+          text: d.items.text(i.id) ?? {},
+        }),
+      ),
     )
     .sort((a, b2) => b2.lastActivityAt.localeCompare(a.lastActivityAt));
   const source = slackHealth(d);
@@ -206,13 +224,16 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
   const acts = d.actions ? await d.actions.view(id) : { actions: actionsByItem(d).get(id) ?? [], drafts: {}, progress: {}, results: {} };
   const actions = acts.actions;
   const text = stored?.text;
-  const summary = summaryOf(it, it, {
-    actions,
-    quietMinutes: s.triage.quietMinutes,
-    now: d.now().toISOString(),
-    triageBudgetHit: b.triage.hit,
-    text: d.items.text(id) ?? {},
-  });
+  const summary = withOpenUrl(
+    d,
+    summaryOf(it, it, {
+      actions,
+      quietMinutes: s.triage.quietMinutes,
+      now: d.now().toISOString(),
+      triageBudgetHit: b.triage.hit,
+      text: d.items.text(id) ?? {},
+    }),
+  );
   // Without its file the item shows its metadata and permalink only (FR-12.1).
   const item: Item = stored?.item ?? {
     id,
@@ -228,6 +249,8 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
     contentExpired: true,
     schemaVersion: 1,
   };
+  // Who is in the DM, for the header. Nice to have: a Slack failure leaves it out.
+  const members = it.kind === 'dm' && d.members ? await d.members(item).catch(() => undefined) : undefined;
   const decision: TriageDecision | undefined = it.decision && {
     ...it.decision,
     summary: text?.summary ?? '',
@@ -249,6 +272,7 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
     targets: { confluenceSite: s.confluence.siteUrl, spaceKey: s.confluence.spaceKey, vaultPath: s.vaultPath },
     budgets: b,
     meId: d.meId?.() ?? '',
+    ...(members && { members }),
   };
 }
 

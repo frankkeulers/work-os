@@ -8,7 +8,7 @@ import { SlackAdapter } from './adapter';
 import { SlackApi } from './api';
 import { EarlierMessages } from './earlier';
 import { FakeSlack } from './fakeSlack';
-import { buildItem, channelListed, cmpTs, mentionedIds, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
+import { buildItem, channelListed, cmpTs, mentionedIds, webClientUrl, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
 
 const NOW = Date.parse('2026-10-06T09:00:00Z');
 const MIN = 60_000;
@@ -212,6 +212,21 @@ describe('Slack adapter, search mode (FR-2.3)', () => {
   });
 });
 
+describe('Group DMs and links', () => {
+  it('titles a group DM with everyone in it, not only who wrote', async () => {
+    workspace();
+    slack.users.set('U05ANK', 'Ankush');
+    slack.channels.get('G01MPDM')!.members = ['UFRANK', 'U03SAM', 'U05ANK'];
+    const items = byId((await adapter().fetchSince(undefined, ctx())).items);
+    expect(items[`slack:G01MPDM:${ts(5)}`].title).toBe('Sam, Ankush');
+  });
+
+  it('links to the web client: a thread in its pane, a DM at its latest messages', () => {
+    expect(webClientUrl('T0POLE', 'slack:C01PROD:1791277200.000100', 'thread')).toBe('https://app.slack.com/client/T0POLE/C01PROD/thread/C01PROD-1791277200.000100');
+    expect(webClientUrl('T0POLE', 'slack:D01MATT:1791277200.000100', 'dm')).toBe('https://app.slack.com/client/T0POLE/D01MATT');
+  });
+});
+
 describe('Earlier messages before a DM item', () => {
   it('reads the conversation before the item from Slack, with names, and caches it', async () => {
     workspace();
@@ -226,6 +241,9 @@ describe('Earlier messages before a DM item', () => {
     const calls = slack.count('conversations.history');
     await earlier.forItem(dm);
     expect(slack.count('conversations.history')).toBe(calls);
+    // Never more than a week before the item.
+    slack.post('D01MATT', { ts: ts(60 * 24 * 8), user: 'U04MATT', text: 'Last week' });
+    expect((await new EarlierMessages(a.directory).forItem(dm)).messages.map((m) => m.text)).not.toContain('Last week');
     // Threads are fetched whole already: nothing before them.
     expect(await earlier.forItem(items[`slack:C01PROD:${ts(20)}`])).toEqual({ messages: [], people: [] });
   });

@@ -4,12 +4,12 @@ import { api, type EarlierView } from '../api';
 
 export type EarlierState = { state: 'loading' } | { state: 'ready'; view: EarlierView } | { state: 'failed' };
 
-/** The messages before a DM item, read from the source when the item is opened. */
-export function useEarlier(item: Item): EarlierState | undefined {
-  const wanted = item.kind === 'dm' && !item.contentExpired;
+/** The week before a DM item, read from the source once `wanted` turns on, then kept for the item. */
+export function useEarlier(item: Item, wanted: boolean): EarlierState | undefined {
   const [s, setS] = useState<{ id: string; v: EarlierState }>();
+  const have = s?.id === item.id;
   useEffect(() => {
-    if (!wanted) return;
+    if (!wanted || have) return;
     let live = true;
     api.getEarlier(item.id).then(
       (view) => live && setS({ id: item.id, v: { state: 'ready', view } }),
@@ -18,7 +18,7 @@ export function useEarlier(item: Item): EarlierState | undefined {
     return () => {
       live = false;
     };
-  }, [item.id, wanted]);
-  if (!wanted) return undefined;
-  return s?.id === item.id ? s.v : { state: 'loading' };
+  }, [item.id, wanted, have]);
+  if (have) return s.v;
+  return wanted ? { state: 'loading' } : undefined;
 }

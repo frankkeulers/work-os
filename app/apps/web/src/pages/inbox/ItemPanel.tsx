@@ -5,7 +5,7 @@ import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
 import { CorrectForm, ItemMarkers, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
-import { Icon, MoreIcon } from '../../components/icons';
+import { Icon, MoreIcon, type IconName } from '../../components/icons';
 import { useEarlier } from '../../components/Earlier';
 import { MessageText } from '../../components/SlackText';
 import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../../components/ui';
@@ -48,6 +48,33 @@ function Section({ title, aside, children, gap = 'gap-2.5' }: { title: string; a
   );
 }
 
+/** Snooze for the suggested time in one click, or pick another from the menu. */
+function SnoozeSplit({ item, hint }: { item: ItemSummary; hint: { label: string; until: string } }) {
+  const now = useNow(30_000);
+  const { open, setOpen, close, trigger, panel } = usePopover();
+  return (
+    <div className="relative inline-flex">
+      <Button icon="clock" className="rounded-r-none" onClick={() => void snooze(item, hint.until)}>
+        {hint.label}
+      </Button>
+      <Button ref={trigger} aria-label="More snooze times" aria-haspopup="menu" aria-expanded={open} className="-ml-px rounded-l-none px-2" onClick={() => setOpen(!open)}>
+        <Icon name="down" size={14} />
+      </Button>
+      {open && (
+        <PopoverPanel panelRef={panel} label="Snooze for" role="menu" align="left">
+          <SnoozeMenu
+            now={now}
+            onPick={(iso) => {
+              close();
+              void snooze(item, iso);
+            }}
+          />
+        </PopoverPanel>
+      )}
+    </div>
+  );
+}
+
 function NextStepCard({ item, draftsBudgetHit, onFile }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void }) {
   const now = useNow(30_000);
   const step = shownStep(item, draftsBudgetHit, now);
@@ -68,20 +95,23 @@ function NextStepCard({ item, draftsBudgetHit, onFile }: { item: ItemSummary; dr
       </div>
       <div className="flex flex-wrap gap-2">
         {p.kind === 'open' ? (
-          <Button variant="solid" className="min-h-10 px-3.5" onClick={() => openInSource(item)}>
+          <Button variant="solid" icon={item.kind === 'dm' || item.kind === 'chat' ? 'dm' : 'external'} onClick={() => openInSource(item)}>
             {p.label}
           </Button>
         ) : (
           <span title={p.button.disabledReason} className="inline-flex">
-            <Button variant="solid" className="min-h-10 px-3.5" disabled={!!p.button.disabledReason && p.button.state === 'none'} onClick={() => onFile(p.button.type)}>
+            <Button
+              variant="solid"
+              icon={p.button.type === 'vault_note' ? 'vault' : 'confluence'}
+              disabled={!!p.button.disabledReason && p.button.state === 'none'}
+              onClick={() => onFile(p.button.type)}
+            >
               {(p.button.state === 'drafting' || p.button.state === 'writing') && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
               {p.button.label}
             </Button>
           </span>
         )}
-        <Button className="min-h-10 px-3.5" onClick={() => void snooze(item, hint.until)}>
-          {hint.label}
-        </Button>
+        <SnoozeSplit item={item} hint={hint} />
       </div>
     </section>
   );
@@ -150,12 +180,23 @@ function ActionItems({ items }: { items: string[] }) {
   );
 }
 
+function EarlierButton({ icon, onClick, children }: { icon?: IconName; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={onClick}>
+      {icon && <Icon name={icon} size={13} />}
+      {children}
+    </button>
+  );
+}
+
 function Messages({ view }: { view: ItemView }) {
   const now = useNow(60_000);
   const [all, setAll] = useState(false);
-  const [allEarlier, setAllEarlier] = useState(false);
+  // Earlier messages: hidden, the last three, or the whole week before the item.
+  const [earlierMode, setEarlierMode] = useState<'hidden' | 'recent' | 'all'>('hidden');
   const { item, meId } = view;
-  const earlier = useEarlier(item);
+  const canEarlier = item.kind === 'dm';
+  const earlier = useEarlier(item, canEarlier && earlierMode !== 'hidden');
   const name = (id: string) => (id === meId ? 'You' : ([...item.participants, ...(earlier?.state === 'ready' ? earlier.view.people : [])].find((p) => p.id === id)?.name ?? id));
   const title = item.kind === 'email' ? 'Email' : item.kind === 'meeting' ? 'From the transcript' : item.kind === 'dm' || item.kind === 'chat' ? (item.messages.length === 1 ? 'Message' : 'Messages') : 'Latest in the thread';
   if (item.contentExpired)
@@ -170,8 +211,8 @@ function Messages({ view }: { view: ItemView }) {
       </Section>
     );
   const shown = all ? item.messages : item.messages.slice(-3);
-  const before = earlier?.state === 'ready' ? earlier.view.messages : [];
-  const shownBefore = allEarlier ? before : before.slice(-3);
+  const before = earlierMode !== 'hidden' && earlier?.state === 'ready' ? earlier.view.messages : [];
+  const shownBefore = earlierMode === 'all' ? before : before.slice(-3);
   const people = earlier?.state === 'ready' ? earlier.view.people : [];
   const row = (m: Message, muted: boolean) => (
     <div key={m.id} className={cx('flex flex-col gap-0.5 border-t border-line-soft-2 py-2.5 first-of-type:mt-1', muted && 'opacity-75')}>
@@ -201,15 +242,32 @@ function Messages({ view }: { view: ItemView }) {
         ))
       }
     >
-      {earlier?.state === 'loading' && <div className="mt-1 py-2 text-xs text-muted">Loading earlier messages…</div>}
-      {earlier?.state === 'failed' && <div className="mt-1 py-2 text-xs text-muted">Couldn’t load the earlier messages from {SOURCE_NAME[item.source]}.</div>}
-      {before.length > 0 && (
-        <div className="mt-1 flex items-baseline gap-2 py-1.5">
-          <span className="flex-1 font-mono text-[11px] text-muted">Earlier in the conversation</span>
-          {before.length > shownBefore.length && (
-            <button type="button" className="min-h-7 rounded-lg px-2 text-xs font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={() => setAllEarlier(true)}>
-              Show {before.length - shownBefore.length} more
-            </button>
+      {canEarlier && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 py-1.5">
+          {earlierMode === 'hidden' ? (
+            <EarlierButton icon="up" onClick={() => setEarlierMode('recent')}>
+              Show earlier messages
+            </EarlierButton>
+          ) : (
+            <>
+              <span className="flex-1 font-mono text-[11px] text-muted">
+                {earlier?.state === 'loading'
+                  ? 'Loading earlier messages…'
+                  : earlier?.state === 'failed'
+                    ? `Couldn’t load the earlier messages from ${SOURCE_NAME[item.source]}.`
+                    : before.length
+                      ? earlierMode === 'all'
+                        ? `${plural(before.length, 'earlier message')} · the 7 days before`
+                        : 'Earlier in the conversation'
+                      : 'Nothing earlier in the 7 days before'}
+              </span>
+              {earlierMode === 'recent' && before.length > shownBefore.length && (
+                <EarlierButton onClick={() => setEarlierMode('all')}>Show all {before.length} from the 7 days before</EarlierButton>
+              )}
+              <EarlierButton icon="x" onClick={() => setEarlierMode('hidden')}>
+                Hide
+              </EarlierButton>
+            </>
           )}
         </div>
       )}
@@ -347,6 +405,10 @@ export function ItemPanel({
 
   const reopen = () => void api.reopen(item.id).then(() => toast(item.status === 'snoozed' ? 'Unsnoozed.' : 'Reopened.'), errorToast);
   const ago = fmtAgo(item.lastActivityAt, now);
+  // A DM's header names everyone in it, not only who wrote in this item.
+  const others = view?.item.id === item.id ? view.members?.filter((m) => m.id !== view.meId) : undefined;
+  const group = !!others && others.length > 1;
+  const who = others?.length ? others.map((m) => m.name).join(', ') : item.title;
 
   return (
     <aside aria-label="Item panel" className="flex h-full min-h-0 flex-col border-l border-line bg-surface shadow-[-12px_0_32px_rgba(20,23,28,0.06)]">
@@ -360,31 +422,6 @@ export function ItemPanel({
         <Link to={itemPath(item.id)} aria-label="Open as a full page" title="Open as a full page (o)" className="inline-flex h-9 w-9 items-center justify-center rounded-lg !text-ink-2 hover:bg-track">
           <Icon name="expand" size={17} />
         </Link>
-        <div className="relative">
-          <IconButton label="More actions" ref={moreTrigger} active={moreOpen} aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>
-            <MoreIcon />
-          </IconButton>
-          {moreOpen && (
-            <PopoverPanel panelRef={morePanel} label="More actions" role="menu" className="min-w-[230px]">
-              <MenuItem onClick={() => (closeMore(), openInSource(item))}>Open in {SOURCE_NAME[item.source]}</MenuItem>
-              <MenuItem
-                onClick={() => {
-                  closeMore();
-                  void navigator.clipboard?.writeText(item.permalink).catch(() => undefined);
-                  toast('Permalink copied.');
-                }}
-              >
-                Copy link
-              </MenuItem>
-              {full &&
-                (['Draft reply', 'Create JPD idea', 'Create Jira task'] as const).map((l) => (
-                  <MenuItem key={l} tone="future" onClick={() => (closeMore(), phaseToast('P3', l))} hint={<span className="font-mono text-[10px] text-violet-fg">P3</span>}>
-                    {l}
-                  </MenuItem>
-                ))}
-            </PopoverPanel>
-          )}
-        </div>
         <IconButton label="Close panel" title="Close panel (Esc)" icon="x" onClick={onClose} />
       </div>
 
@@ -392,13 +429,42 @@ export function ItemPanel({
         <div className="flex flex-wrap items-center gap-2">
           <SourceMark source={item.source} size={20} />
           <span className="min-w-0 flex-[1_1_200px] text-[13px] text-ink-2">
-            <strong className="font-semibold text-ink">{item.title}</strong> · {kindLabel(item.kind)} · {ago === 'now' ? 'just now' : /^\d+[mh]$/.test(ago) ? `${ago} ago` : ago}
+            <strong className="font-semibold text-ink" title={who}>
+              {who}
+            </strong>{' '}
+            · {group ? 'Group DM' : kindLabel(item.kind)} · {ago === 'now' ? 'just now' : /^\d+[mh]$/.test(ago) ? `${ago} ago` : ago}
             {item.source !== 'slack' && <PhaseTag phase="P2" className="ml-2" />}
           </span>
-          <Button className="min-h-10 px-3.5" onClick={() => openInSource(item)}>
+          <Button size="sm" icon="external" onClick={() => openInSource(item)}>
             Open in {SOURCE_NAME[item.source]}
-            <Icon name="external" size={14} />
           </Button>
+          <div className="relative">
+            <IconButton label="More actions" size={32} ref={moreTrigger} active={moreOpen} aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>
+              <MoreIcon />
+            </IconButton>
+            {moreOpen && (
+              <PopoverPanel panelRef={morePanel} label="More actions" role="menu" className="min-w-[230px]">
+                <MenuItem onClick={() => (closeMore(), setCorrecting(true))} hint={<Kbd>c</Kbd>}>
+                  {item.triageState === 'triaged' ? 'Correct triage…' : 'Set triage…'}
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    closeMore();
+                    void navigator.clipboard?.writeText(item.permalink).catch(() => undefined);
+                    toast('Permalink copied.');
+                  }}
+                >
+                  Copy link
+                </MenuItem>
+                {full &&
+                  (['Draft reply', 'Create JPD idea', 'Create Jira task'] as const).map((l) => (
+                    <MenuItem key={l} tone="future" onClick={() => (closeMore(), phaseToast('P3', l))} hint={<span className="font-mono text-[10px] text-violet-fg">P3</span>}>
+                      {l}
+                    </MenuItem>
+                  ))}
+              </PopoverPanel>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">
@@ -406,14 +472,6 @@ export function ItemPanel({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-ink-2">
             <LaneChip lane={item.lane} />
             {item.reason && <span>{item.reason}</span>}
-            <button
-              type="button"
-              aria-expanded={correcting}
-              onClick={() => setCorrecting(!correcting)}
-              className="inline-flex min-h-7 items-center rounded-lg px-2 text-[13px] font-medium text-accent hover:bg-accent-wash cursor-pointer"
-            >
-              {item.triageState === 'triaged' ? 'Correct triage' : 'Set triage'}
-            </button>
           </div>
           <ItemMarkers item={item} />
         </div>
@@ -423,6 +481,7 @@ export function ItemPanel({
             key={item.id}
             layout="panel"
             item={item}
+            onCancel={() => setCorrecting(false)}
             onDone={(n, lane) => {
               setCorrecting(false);
               toast(`Correction saved · moved to ${lane} · labelled set now ${n}`, { tone: 'success' });

@@ -339,6 +339,12 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     now,
     meId: () => runtime.identity('slack'),
     earlier: (item, signal) => earlier.forItem(item, signal),
+    slackTeamId: () => slackDirectory.identityKnown?.team_id,
+    members: async (item, signal) => {
+      const c = slackDirectory.conversation(item.id.split(':')[1]);
+      const ids = c && (await slackDirectory.dmMembers(c, signal));
+      return ids?.map((id) => ({ id, name: slackDirectory.name(id) }));
+    },
     usage: () => usage.records(),
     labels,
     correct,

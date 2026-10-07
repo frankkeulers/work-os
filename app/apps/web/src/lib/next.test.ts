@@ -116,7 +116,7 @@ describe('next step', () => {
     expect(needLabel({ need: 'approve' })).toBe('Approve');
   });
   it('falls back to a reply for Now and Today items without a model next step', () => {
-    expect(shownStep(item({ kind: 'dm', title: 'Matt M.' }), false, now)).toMatchObject({ need: 'Reply', step: 'Reply to Matt M.', primary: { kind: 'open', label: 'Open DM in Slack' } });
+    expect(shownStep(item({ kind: 'dm', title: 'Matt M.' }), false, now)).toMatchObject({ need: 'Reply', step: 'Reply to Matt M.', primary: { kind: 'open', label: 'Reply in Slack' } });
   });
   it('makes the filing draft the primary action in To file', () => {
     const s = shownStep(item({ lane: 'file', triage: { attention: 'none', confluence: true, vault: false, by: 'model' } }), false, now);

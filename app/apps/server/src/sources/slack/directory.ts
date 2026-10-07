@@ -1,5 +1,5 @@
 import type { SlackApi } from './api';
-import type { AuthTest, Conversation, ConversationsResponse, UserInfo } from './types';
+import type { AuthTest, Conversation, ConversationsResponse, MembersResponse, UserInfo } from './types';
 
 // Who is who, and which conversations Frank is in. Kept in memory: names for participants and
 // titles, membership to keep search to Frank's own conversations. Refreshed hourly; a user seen for
@@ -13,6 +13,7 @@ export class SlackDirectory {
   private users = new Map<string, string>();
   private convs = new Map<string, Conversation>();
   private convsAt = 0;
+  private members = new Map<string, { at: number; ids: string[] }>();
 
   constructor(
     readonly api: SlackApi,
@@ -67,11 +68,27 @@ export class SlackDirectory {
 
   name = (id: string): string => this.users.get(id) ?? id;
 
+  /** Everyone in a DM or group DM, named. Refreshed hourly; undefined for channels. */
+  async dmMembers(c: Conversation, signal?: AbortSignal): Promise<string[] | undefined> {
+    if (!c.is_im && !c.is_mpim) return undefined;
+    if (c.is_im) return [this.me?.user_id, c.user].filter((x): x is string => !!x);
+    const hit = this.members.get(c.id);
+    if (hit && this.now() - hit.at < REFRESH_MS) return hit.ids;
+    const r = await this.api.call<MembersResponse>('conversations.members', { channel: c.id, limit: 200 }, signal);
+    await this.resolveUsers(r.members, signal);
+    this.members.set(c.id, { at: this.now(), ids: r.members });
+    return r.members;
+  }
+
+  /** The members cached by dmMembers, without asking Slack. */
+  knownMembers = (channel: string): string[] | undefined => this.members.get(channel)?.ids;
+
   /** A conversation's title: "#channel", the DM partner's name, or a group DM's names. */
   title(c: Conversation, participants: string[]): string {
     if (c.is_im) return this.name(c.user ?? participants.find((p) => p !== this.me?.user_id) ?? c.id);
     if (c.is_mpim) {
-      const names = participants.filter((p) => p !== this.me?.user_id).map(this.name);
+      // Everyone in the group, not only who wrote in this window.
+      const names = (this.knownMembers(c.id) ?? participants).filter((p) => p !== this.me?.user_id).map(this.name);
       return names.length ? names.join(', ') : (c.name ?? c.id);
     }
     return c.name ? `#${c.name}` : c.id;

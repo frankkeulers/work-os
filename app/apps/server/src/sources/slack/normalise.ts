@@ -56,6 +56,17 @@ export function permalinkFor(teamUrl: string, channel: string, ts: string, threa
   return threadTs && threadTs !== ts ? `${base}?thread_ts=${threadTs}&cid=${channel}` : base;
 }
 
+/**
+ * The item in Slack's web client, which opens in the browser rather than handing over to the app:
+ * a thread opens in its side pane, a DM at its latest messages.
+ */
+export function webClientUrl(teamId: string, itemId: string, kind: string): string | undefined {
+  const [, channel, key] = itemId.split(':');
+  if (!channel || !key) return undefined;
+  const base = `https://app.slack.com/client/${teamId}/${channel}`;
+  return kind === 'thread' ? `${base}/thread/${channel}-${key}` : base;
+}
+
 export const DM_GAP_MS = 30 * 60_000;
 
 /**
