@@ -53,7 +53,7 @@ function expectReplayMatches(s: MockState, events: WorkEvent[]) {
 
 describe('replaying the seed log', () => {
   // inboxZero is left out: it marks waiting items triaged directly, to stage a screen.
-  it.each<Preset>(['default', 'heavy', 'noBaseline', 'firstRun'])('rebuilds the %s preset', (preset) => {
+  it.each<Preset>(['default', 'heavy', 'noBaseline', 'firstRun', 'topics'])('rebuilds the %s preset', (preset) => {
     const s = buildState(preset);
     expectReplayMatches(s, s.events);
   });
@@ -76,7 +76,7 @@ describe('replaying a session', () => {
   it('rebuilds the state after polls, replies, commands and drafts', async () => {
     vi.useFakeTimers();
     server = new MockServer();
-    server.reset('default');
+    server.reset('topics'); // the default seed, plus topics
     const id = (key: string) => server.itemIdForKey(key)!;
     const ignore = () => undefined;
 

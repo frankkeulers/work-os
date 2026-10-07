@@ -12,9 +12,9 @@ import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverP
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
-import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, needLabel, sortItems, type InboxSort } from '../lib/next';
+import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, needLabel, sortItems, topicAsks, type InboxSort } from '../lib/next';
 import { usePrefs } from '../store/prefs';
-import { errorToast } from '../store/toasts';
+import { errorToast, toast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
 import { ItemPanel } from './inbox/ItemPanel';
 
@@ -421,6 +421,8 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
   const target = targetChip(item);
   const meta = top && !failed ? undefined : lowerMeta(item, now);
   const ago = fmtAgo(item.lastActivityAt, now);
+  // A topic: more asks than the one on the chip, and the pieces it gathers.
+  const moreAsks = topicAsks(item).filter((a) => !a.done).length - 1;
   // The row opens the item; Done sits beside it (a button can't hold another), for items you
   // already know are finished or don't matter.
   return (
@@ -447,6 +449,7 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
           <span className="truncate text-xs font-medium text-ink-2">{item.title}</span>
           <span className="text-[11px] text-muted">
             {kindLabel(item.kind)} · {ago}
+            {item.pieces > 1 && <span data-pieces={item.pieces}> · {plural(item.pieces, 'part')}</span>}
           </span>
         </span>
         {/* Chips sit at the right edge, or wrap under the summary when the list is narrow. */}
@@ -460,6 +463,7 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
           </span>
           <span className="flex flex-wrap gap-1">
             {top && !failed && <NeedTag>{item.next ? needLabel(item.next) : item.lane === 'file' ? 'File' : 'Reply'}</NeedTag>}
+            {top && moreAsks > 0 && <span className="self-center font-mono text-[11px] text-muted">+{plural(moreAsks, 'ask')}</span>}
             {due && <DueChip due={due} />}
             {target && <StatusChip tone="file">{target}</StatusChip>}
             {item.lane === 'failed' && <StatusChip tone="bad">Triage failed</StatusChip>}
@@ -483,15 +487,43 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
   );
 }
 
+/** Asks routing to merge a conversation's open topics that share a subject (topics). */
+async function regroup(conversation: string, name: string) {
+  try {
+    const { merged } = await api.regroup(conversation);
+    toast(merged ? `Regrouped ${name} · ${plural(merged, 'entry', 'entries')} merged into ${merged === 1 ? 'its' : 'their'} topic` : `Nothing to merge in ${name}: each entry is its own topic.`);
+  } catch (e) {
+    errorToast(e);
+  }
+}
+
 /** The name over a Slack channel's rows when the Inbox groups by channel. */
-function ChannelHead({ item, items }: { item: ItemSummary; items: ItemSummary[] }) {
+function ChannelHead({ item, items, topics }: { item: ItemSummary; items: ItemSummary[]; topics: number }) {
   const name = item.kind === 'dm' ? `DM · ${item.title}` : item.title;
   const open = items.filter((i) => i.status !== 'done');
+  const [busy, setBusy] = useState(false);
+  const key = channelKey(item);
   return (
-    <div data-channel={channelKey(item)} className="flex items-center gap-2 border-t border-line-soft bg-surface-2 px-6 py-1">
+    <div data-channel={key} className="flex items-center gap-2 border-t border-line-soft bg-surface-2 px-6 py-1">
       <h3 className="m-0 min-w-0 truncate text-xs font-semibold text-ink-2">{name}</h3>
       <span className="font-mono text-[11px] text-muted">{items.length}</span>
       <span className="flex-1" />
+      {key && topics > 1 && (
+        <button
+          type="button"
+          disabled={busy}
+          aria-label={`Regroup ${name} by topic`}
+          title="Merge entries in this conversation that are about the same thing"
+          className="inline-flex min-h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted hover:bg-track hover:text-ink disabled:opacity-60 cursor-pointer"
+          onClick={async () => {
+            setBusy(true);
+            await regroup(key, name);
+            setBusy(false);
+          }}
+        >
+          {busy ? <Spinner size={12} /> : <Icon name="layers" size={12} />} Regroup
+        </button>
+      )}
       {open.length > 0 && (
         <button
           type="button"
@@ -586,6 +618,15 @@ export function InboxPage() {
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
     return m;
   }, [all, heldIds, now, sort, grouped]);
+  // Open topics per conversation, across every group: Regroup is offered where there are two or more.
+  const openTopics = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of all) {
+      const key = channelKey(i);
+      if (key && i.status !== 'done') m.set(key, (m.get(key) ?? 0) + 1);
+    }
+    return m;
+  }, [all]);
   // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open.
   const order = useMemo(() => [...by.needs, ...by.file, ...(open ? by[open] : [])].map((i) => i.id), [by, open]);
   const selItem = sel ? all.find((i) => i.id === sel) : undefined;
@@ -723,7 +764,7 @@ export function InboxPage() {
     const key = grouped ? channelKey(i) : undefined;
     const head = key && (n === 0 || channelKey(list[n - 1]) !== key);
     return [
-      head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => channelKey(x) === key)} />,
+      head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => channelKey(x) === key)} topics={openTopics.get(key) ?? 0} />,
       <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} divide={!grouped && sort === 'priority' && n > 0 && list[n - 1].lane === 'now' && i.lane !== 'now'} onPick={() => pick(i.id)} />,
     ];
   };

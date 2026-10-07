@@ -1,6 +1,7 @@
 import type { ActionSummary, BudgetState, ItemSummary } from '../api';
 import { effectiveTriage, laneFor } from '../lanes';
 import type { NextStep, Settings, UsageRecord } from '../schemas';
+import { askId } from './topics';
 import { londonParts } from '../time';
 import type { ActionState, ItemFlags, ItemMeta } from './state';
 
@@ -36,6 +37,19 @@ export interface SummaryContext {
   text: DecisionText;
 }
 
+/**
+ * The next step once Frank has ticked off some of a topic's asks: the first ask still open, or none
+ * when all are done. A topic without asks keeps its next step.
+ */
+export function openNext(next: NextStep | undefined, asksDone: string[] = []): NextStep | undefined {
+  if (!next?.asks?.length || !asksDone.length) return next;
+  const open = next.asks.filter((a) => !asksDone.includes(askId(a.step)));
+  if (!open.length) return undefined;
+  if (!asksDone.includes(askId(next.step))) return next;
+  const [first] = open;
+  return { need: first.need, step: first.step, why: '', ...(first.dueAt && { dueAt: first.dueAt }), ...(first.dueLabel && { dueLabel: first.dueLabel }), asks: next.asks };
+}
+
 export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>, s: ItemFlags, ctx: SummaryContext): ItemSummary {
   const d = s.decision;
   const quietUntil = s.triageState === 'pending' ? new Date(Date.parse(meta.lastActivityAt) + ctx.quietMinutes * MIN).toISOString() : undefined;
@@ -53,7 +67,7 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
     triageState: s.triageState,
     summary: ctx.text.summary ?? (first.length > SUMMARY_MAX ? `${first.slice(0, SUMMARY_MAX - 3)}…` : first),
     reason: ctx.text.reason,
-    next: ctx.text.next,
+    next: openNext(ctx.text.next, s.asksDone),
     triage: effectiveTriage(d, s.correction),
     correctedFrom: s.correctedFrom,
     containsPeopleObservations: d?.containsPeopleObservations ?? false,

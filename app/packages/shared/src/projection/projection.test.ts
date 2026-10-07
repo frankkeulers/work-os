@@ -4,7 +4,7 @@ import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
 import { askId, conversationOf } from './topics';
-import { budgetsOf, summaryOf } from './views';
+import { budgetsOf, openNext, summaryOf } from './views';
 
 const ITEM = 'slack:C1:1791189720.000100';
 const T0 = '2026-10-05T08:00:00.000Z';
@@ -295,6 +295,21 @@ describe('summaryOf', () => {
     const p = replay(events);
     const s = summaryOf(p.items[ITEM], p.items[ITEM], { ...ctx, actions: Object.values(p.actions) });
     expect(s.actions.vault_note).toMatchObject({ status: 'ready', stale: true });
+  });
+});
+
+describe('openNext', () => {
+  const asks = [
+    { need: 'approve' as const, step: 'Approve branch protection', dueAt: at(60) },
+    { need: 'review' as const, step: 'Review PR 63' },
+  ];
+  const next = { need: 'approve' as const, step: 'Approve branch protection', why: 'Team waiting', dueAt: at(60), asks };
+
+  it('keeps the next step until it is ticked off, then moves to the first open ask', () => {
+    expect(openNext(next, [])).toBe(next);
+    expect(openNext(next, [askId('Review PR 63')])).toBe(next);
+    expect(openNext(next, [askId('Approve branch protection')])).toEqual({ need: 'review', step: 'Review PR 63', why: '', asks });
+    expect(openNext(next, asks.map((a) => askId(a.step)))).toBeUndefined();
   });
 });
 

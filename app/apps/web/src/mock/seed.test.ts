@@ -4,7 +4,7 @@ import { buildState } from './seed';
 
 // The seed doubles as the fixture set for the future server (CLAUDE.md rule 10),
 // so it must validate against the shared schemas.
-describe.each(['default', 'firstRun', 'inboxZero', 'heavy', 'noBaseline'] as const)('seed preset %s', (preset) => {
+describe.each(['default', 'firstRun', 'inboxZero', 'heavy', 'noBaseline', 'topics'] as const)('seed preset %s', (preset) => {
   const s = buildState(preset);
 
   it('validates against the shared schemas', () => {

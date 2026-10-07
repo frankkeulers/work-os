@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { ActionType, Message } from '@work-os/shared';
+import type { ActionType, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
@@ -12,7 +12,7 @@ import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx,
 import { useNow } from '../../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime, fmtWhen, plural } from '../../lib/format';
 import { TYPE_LABEL, draftButton, draftState } from '../../lib/lanes';
-import { SOURCE_NAME, shownStep, suggestedSnooze } from '../../lib/next';
+import { SOURCE_NAME, dueInfo, needLabel, shownStep, suggestedSnooze, topicAsks } from '../../lib/next';
 import { usePrefs } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { DueChip, LaneChip, NeedTag, StatusChip } from './chips';
@@ -180,13 +180,96 @@ function ActionItems({ items }: { items: string[] }) {
   );
 }
 
+/** A topic's checklist (topics): every ask the triage found, ticked off one at a time. */
+function Asks({ item }: { item: ItemSummary }) {
+  const now = useNow(30_000);
+  const [ticking, setTicking] = useState<string>();
+  const asks = topicAsks(item);
+  if (!asks.length) return null;
+  const open = asks.filter((a) => !a.done).length;
+  const tick = async (id: string, step: string) => {
+    setTicking(id);
+    await api.markAskDone(item.id, id).then(() => toast(`Ticked off · ${step}`), errorToast);
+    setTicking(undefined);
+  };
+  return (
+    <Section title="Asks in this topic" aside={<span className="font-mono text-[11px] text-muted">{open} of {asks.length} open</span>}>
+      {asks.map(({ ask, id, done }) => {
+        const due = done ? undefined : dueInfo(ask, now);
+        return (
+          <label key={id} data-ask={id} className="flex min-h-10 items-center gap-2.5 rounded-lg border border-line px-3 py-1.5 text-[13px] cursor-pointer has-[:disabled]:cursor-default">
+            <input
+              type="checkbox"
+              className="h-4 w-4 shrink-0 accent-[var(--accent-bg)]"
+              aria-label={`Done: ${ask.step}`}
+              checked={done || ticking === id}
+              disabled={done || !!ticking}
+              onChange={() => void tick(id, ask.step)}
+            />
+            <NeedTag>{needLabel(ask)}</NeedTag>
+            <span className={cx('min-w-0 flex-1', done && 'text-muted line-through')}>{ask.step}</span>
+            {due && <DueChip due={due} />}
+          </label>
+        );
+      })}
+    </Section>
+  );
+}
+
+/** One thread or stretch of chat in a topic: what it is, where to open it, and a way out of the topic. */
+function PieceHead({ piece, messages }: { piece: TopicPiece; messages: Message[] }) {
+  const [busy, setBusy] = useState(false);
+  const first = messages[0]?.ts;
+  const last = messages.at(-1)?.ts;
+  const label =
+    piece.kind === 'thread'
+      ? `Thread · ${plural(piece.messageCount, 'message')}`
+      : `Chat · ${first ? fmtTime(first) : ''}${last && last !== first ? `–${fmtTime(last)}` : ''}`;
+  const split = async () => {
+    setBusy(true);
+    await api.splitPiece(piece.id).then(() => toast('Split out · it gets its own entry once triaged'), errorToast);
+    setBusy(false);
+  };
+  return (
+    <div data-piece={piece.id} className="flex items-center gap-1.5 pt-3.5 pb-0.5">
+      <Icon name={piece.kind === 'thread' ? 'hash' : 'dm'} size={12} className="text-muted" />
+      <span className="font-mono text-[11px] text-muted">{label}</span>
+      <span className="flex-1" />
+      <a href={piece.openUrl ?? piece.permalink} target="_blank" rel="noreferrer" className="inline-flex min-h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted hover:bg-track hover:text-ink">
+        <Icon name="external" size={11} /> Open
+      </a>
+      {!piece.anchor && (
+        <button
+          type="button"
+          disabled={busy}
+          title="Take this out of the topic: it is triaged on its own and never put back here"
+          className="inline-flex min-h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted hover:bg-track hover:text-ink disabled:opacity-60 cursor-pointer"
+          onClick={() => void split()}
+        >
+          {busy ? <Spinner size={11} /> : <Icon name="split" size={11} />} Not this topic
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Messages({ view }: { view: ItemView }) {
   const now = useNow(60_000);
   const [all, setAll] = useState(false);
   const { item, meId } = view;
   const { controls, before: shownBefore, people } = useEarlierToggle(item);
   const name = (id: string) => (id === meId ? 'You' : ([...item.participants, ...people].find((p) => p.id === id)?.name ?? id));
-  const title = item.kind === 'email' ? 'Email' : item.kind === 'meeting' ? 'From the transcript' : item.kind === 'dm' || item.kind === 'chat' ? (item.messages.length === 1 ? 'Message' : 'Messages') : 'Latest in the thread';
+  const title = view.pieces
+    ? `In this topic · ${plural(view.pieces.length, 'part')}`
+    : item.kind === 'email'
+      ? 'Email'
+      : item.kind === 'meeting'
+        ? 'From the transcript'
+        : item.kind === 'dm' || item.kind === 'chat'
+          ? item.messages.length === 1
+            ? 'Message'
+            : 'Messages'
+          : 'Latest in the thread';
   if (item.contentExpired)
     return (
       <Section title={title}>
@@ -199,6 +282,7 @@ function Messages({ view }: { view: ItemView }) {
       </Section>
     );
   const shown = all ? item.messages : item.messages.slice(-3);
+  const pieces = view.pieces;
   const row = (m: Message, muted: boolean) => (
     <div key={m.id} className={cx('flex flex-col gap-0.5 border-t border-line-soft-2 py-2.5 first-of-type:mt-1', muted && 'opacity-75')}>
       <span className="text-xs">
@@ -230,7 +314,19 @@ function Messages({ view }: { view: ItemView }) {
       {controls && <div className="mt-1">{controls}</div>}
       {shownBefore.map((m) => row(m, true))}
       {shownBefore.length > 0 && <div className="pt-3 pb-1.5 font-mono text-[11px] text-muted">This item</div>}
-      {shown.map((m) => row(m, false))}
+      {pieces
+        ? // A topic: each piece under its own heading, its latest two messages until Show all.
+          pieces.map((p) => {
+            const ids = new Set(p.messageIds);
+            const msgs = item.messages.filter((m) => ids.has(m.id));
+            return (
+              <div key={p.id} className="flex flex-col">
+                <PieceHead piece={p} messages={msgs} />
+                {(all ? msgs : msgs.slice(-2)).map((m) => row(m, false))}
+              </div>
+            );
+          })
+        : shown.map((m) => row(m, false))}
     </Section>
   );
 }
@@ -447,6 +543,7 @@ export function ItemPanel({
         )}
 
         <NextStepCard item={item} draftsBudgetHit={draftsBudgetHit} onFile={file} />
+        <Asks key={`asks:${item.id}`} item={item} />
 
         {item.next?.actionItems?.length ? <ActionItems key={item.id} items={item.next.actionItems} /> : null}
         {view ? <Messages key={item.id} view={view} /> : <div className="text-[13px] text-muted">Loading…</div>}

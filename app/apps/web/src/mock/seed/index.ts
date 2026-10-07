@@ -19,13 +19,13 @@ import { buildDraft } from '../drafts';
 import { ME } from '../me';
 import type { ItemRec, MockState, ThreadSeed } from '../types';
 import { SEED_RULE_HITS, SEED_RULES, SEED_SETTINGS } from './config';
-import { BATCH_TWELVE, SEED_THREADS, TIMELINE } from './threads';
+import { BATCH_TWELVE, SEED_THREADS, TIMELINE, TOPIC_THREADS } from './threads';
 import { SEED_EVALS, seedUsage } from './usage';
 
 export const SEED_CLOCK = '2026-10-05T08:45:00.000Z'; // Mon 5 Oct 2026, 09:45 London
 export const STATE_VERSION = 8; // 6: events carry seq and typed payloads; 7: the log replays to the mock's state; 8: topics
 
-export type Preset = 'default' | 'firstRun' | 'inboxZero' | 'heavy' | 'noBaseline';
+export type Preset = 'default' | 'firstRun' | 'inboxZero' | 'heavy' | 'noBaseline' | 'topics';
 
 const clone = <T>(v: T): T => structuredClone(v);
 
@@ -94,7 +94,7 @@ export function buildState(preset: Preset = 'default'): MockState {
     return state;
   }
 
-  const seeds: ThreadSeed[] = [...SEED_THREADS];
+  const seeds: ThreadSeed[] = [...SEED_THREADS, ...(preset === 'topics' ? TOPIC_THREADS : [])];
   if (preset === 'heavy') {
     for (let round = 0; round < 4; round++) {
       BATCH_TWELVE.forEach((b, i) =>

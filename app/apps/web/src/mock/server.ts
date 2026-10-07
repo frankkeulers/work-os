@@ -83,6 +83,7 @@ const DRAFT_STAGES: Record<ActionType, string[]> = {
 };
 
 const ACTIVE: Action['status'][] = ['drafting', 'ready', 'approved', 'executing'];
+const RANK = { none: 0, today: 1, now: 2 } as const;
 
 export class MockServer implements WorkOsApi, MockControls {
   private s: MockState;
@@ -834,6 +835,8 @@ export class MockServer implements WorkOsApi, MockControls {
       if (!into || r.notWith?.includes(into.item.id)) continue;
       routeTopic(this.s.items, recActivity, r.item.id, into.item.id, 'regroup');
       this.event('topic.routed', { into: into.item.id, by: 'regroup' }, { itemId: r.item.id });
+      // The "model" re-triages the topic as a whole: as urgent as its most urgent piece.
+      if (RANK[r.script.attention] > RANK[into.script.attention]) into.script = { ...r.script };
       topics.add(into);
       merged++;
     }

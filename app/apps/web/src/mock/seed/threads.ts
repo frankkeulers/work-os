@@ -493,8 +493,10 @@ export const SEED_THREADS: ThreadSeed[] = [
     messages: [{ by: 'U17DATAENG', minsAgo: 50, text: 'Shared the port-call notebook you asked for.' }],
     decision: { attention: 'none', summary: 'Data engineer shared the port-call notebook.', reason: 'Reply to your request; nothing to do.' },
   },
+];
 
-  // ---------- Topics: one group DM, cut into pieces by Slack, routed into two topics ----------
+/** The Topics preset (amendment): a group DM routed into two topics, and two threads Regroup merges. */
+export const TOPIC_THREADS: ThreadSeed[] = [
   ...API_GROUP_DM(),
 
   // ---------- Topics: two threads on one subject, triaged apart; Regroup merges them ----------

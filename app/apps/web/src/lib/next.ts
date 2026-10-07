@@ -1,4 +1,4 @@
-import { conversationOf, londonAt, londonParts, tomorrowAt9, type Need, type NextStep, type SourceId } from '@work-os/shared';
+import { askId, conversationOf, londonAt, londonParts, tomorrowAt9, type Ask, type Need, type NextStep, type SourceId } from '@work-os/shared';
 import type { ItemSummary } from '../api';
 import { fmtIn, fmtTime, fmtWhen } from './format';
 import { cardActions, type DraftButton, type DraftState } from './lanes';
@@ -20,7 +20,7 @@ export type DueTone = 'now' | 'today' | 'later';
 const sameDay = (a: Date | string, b: Date | string) => londonParts(a).dateKey === londonParts(b).dateKey;
 
 /** "12:00 · in 2 h 15 min", "Thu 09:00", "this week". Close or overdue deadlines read as Now. */
-export function dueInfo(next: NextStep | undefined, now: Date): { text: string; tone: DueTone } | undefined {
+export function dueInfo(next: Partial<NextStep> | undefined, now: Date): { text: string; tone: DueTone } | undefined {
   if (!next) return undefined;
   if (!next.dueAt) return next.dueLabel ? { text: next.dueLabel, tone: next.dueLabel === 'today' ? 'today' : 'later' } : undefined;
   const mins = (Date.parse(next.dueAt) - now.getTime()) / 60_000;
@@ -81,6 +81,16 @@ export function sortItems(items: ItemSummary[], sort: InboxSort, needs: boolean,
 }
 
 /** A Slack item's channel or DM, from its id (`slack:<channel>:<key>`). Other sources have none. */
+/** A topic's checklist: its asks, each with whether Frank ticked it off. Empty with fewer than two asks. */
+export function topicAsks(i: Pick<ItemSummary, 'next' | 'asksDone'>): { ask: Ask; id: string; done: boolean }[] {
+  const asks = i.next?.asks ?? [];
+  if (asks.length < 2) return [];
+  return asks.map((ask) => {
+    const id = askId(ask.step);
+    return { ask, id, done: i.asksDone.includes(id) };
+  });
+}
+
 export function channelKey(i: Pick<ItemSummary, 'id' | 'source'>): string | undefined {
   return conversationOf(i);
 }

@@ -123,6 +123,7 @@ function Controls() {
         <Ctl onClick={() => (mockControls.reset('firstRun'), navigate('/'))}>First run</Ctl>
         <Ctl onClick={() => (mockControls.reset('inboxZero'), navigate('/'))}>Inbox zero</Ctl>
         <Ctl onClick={() => (mockControls.reset('heavy'), navigate('/'))}>Heavy day</Ctl>
+        <Ctl onClick={() => (mockControls.reset('topics'), navigate('/'))}>Topics</Ctl>
         <Ctl onClick={() => (mockControls.reset('noBaseline'), navigate('/usage'))}>No baseline</Ctl>
       </Group>
       <div className="flex flex-wrap gap-4">
