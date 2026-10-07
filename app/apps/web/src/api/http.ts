@@ -1,4 +1,4 @@
-import type { Action, ActionType, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -130,6 +130,7 @@ export class HttpApi implements WorkOsApi {
   getChannels = () => this.get<string[]>('/api/channels');
   getPeople = () => this.get<PersonOption[]>('/api/people');
   getConfluenceCatalogue = () => this.get<ConfluenceCatalogueView>('/api/confluence/catalogue');
+  getGuide = () => this.get<GuideFilesView>('/api/guide');
   getUsage = () => this.get<UsageView>('/api/usage');
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');
   getSettings = () => this.get<SettingsView>('/api/settings');

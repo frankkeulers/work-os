@@ -34,7 +34,7 @@ async function install(): Promise<number> {
   const warning = nodePathWarning(node);
   if (warning) console.warn(`Warning: ${warning}`);
 
-  const vars = plistVars({ home, node, root, dataDir });
+  const vars = plistVars({ home, node, root, dataDir, guideDir: join(APP, 'docs/guide') });
   const rendered = renderPlist(await readFile(TEMPLATE, 'utf8'), vars);
   const problems = plistProblems(rendered, vars);
   if (problems.length) {

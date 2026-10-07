@@ -98,14 +98,35 @@ export function parsePage(slug: string, source: string): GuidePage {
   };
 }
 
+const order = (a: GuidePage, b: GuidePage) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.order - b.order;
+
 const FILES = import.meta.glob<string>('../../../../docs/guide/*.md', { query: '?raw', import: 'default', eager: true });
 
-/** Every page, in nav order: by group, then by order. */
+/** The copy bundled into this build, in nav order: by group, then by order. guide.test.ts keeps it valid. */
 export const PAGES: GuidePage[] = Object.entries(FILES)
   .map(([path, source]) => parsePage(path.replace(/^.*\/(.+)\.md$/, '$1'), source))
-  .sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.order - b.order);
+  .sort(order);
 
-export const pageBySlug = (slug: string | undefined) => PAGES.find((p) => p.slug === slug);
+export const pageBySlug = (slug: string | undefined, pages: GuidePage[] = PAGES) => pages.find((p) => p.slug === slug);
+
+/**
+ * The guide from files read live (FR-1.8), in nav order. A file mid-edit may not parse: it keeps
+ * its built-in copy, if it has one, and says what is wrong rather than vanishing from the nav.
+ */
+export function pagesFrom(files: { slug: string; source: string }[], builtIn: GuidePage[] = PAGES): { pages: GuidePage[]; problems: string[] } {
+  const pages: GuidePage[] = [];
+  const problems: string[] = [];
+  for (const f of files) {
+    try {
+      pages.push(parsePage(f.slug, f.source));
+    } catch (err) {
+      problems.push(err instanceof Error ? err.message : String(err));
+      const copy = pageBySlug(f.slug, builtIn);
+      if (copy) pages.push(copy);
+    }
+  }
+  return { pages: pages.sort(order), problems };
+}
 
 // ---------- Search ----------
 

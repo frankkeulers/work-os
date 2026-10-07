@@ -270,6 +270,13 @@ export interface ConfluenceCatalogueView {
   truncated: boolean;
 }
 
+/** The user guide's Markdown files, read from the guide folder now (FR-1.8). */
+export interface GuideFilesView {
+  /** The folder they were read from. */
+  dir: string;
+  files: { slug: string; source: string }[];
+}
+
 export interface PromptSourceView {
   id: string;
   label: string;
@@ -343,6 +350,8 @@ export interface WorkOsApi {
   getPeople(): Promise<PersonOption[]>;
   /** Every page in the Confluence scope as the saved settings define it, read live. */
   getConfluenceCatalogue(): Promise<ConfluenceCatalogueView>;
+  /** The guide's pages as they are on disk now; unavailable when the server has no guide folder. */
+  getGuide(): Promise<GuideFilesView>;
   getUsage(): Promise<UsageView>;
   getEvalReports(): Promise<EvalReport[]>;
   getSettings(): Promise<SettingsView>;

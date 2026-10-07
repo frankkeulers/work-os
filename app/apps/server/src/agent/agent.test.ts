@@ -10,7 +10,7 @@ import { currentRelease, pruneReleases, releaseName, swapCurrent, toPrune } from
 
 const TEMPLATE = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../scripts/launchd/com.polestar.workos.plist.tmpl');
 const HOME = '/Users/test user';
-const input = { home: HOME, node: '/usr/local/bin/node', root: `${HOME}/Library/Application Support/WorkOS`, dataDir: `${HOME}/WorkOS-data` };
+const input = { home: HOME, node: '/usr/local/bin/node', root: `${HOME}/Library/Application Support/WorkOS`, dataDir: `${HOME}/WorkOS-data`, guideDir: `${HOME}/Documents/WORK_OS/app/docs/guide` };
 
 let dir: string;
 beforeEach(async () => {
@@ -46,9 +46,10 @@ describe('LaunchAgent plist (FR-12.3)', () => {
         WORKOS_DATA_DIR: `${HOME}/WorkOS-data`,
         WORKOS_PORT: '4317',
         WORKOS_WEB_DIR: `${input.root}/current/web`,
+        WORKOS_GUIDE_DIR: input.guideDir,
       },
     });
-    expect(Object.keys(p.EnvironmentVariables).sort()).toEqual(['NODE_ENV', 'PATH', 'WORKOS_DATA_DIR', 'WORKOS_INSTANCE', 'WORKOS_LAUNCHD', 'WORKOS_PORT', 'WORKOS_WEB_DIR']);
+    expect(Object.keys(p.EnvironmentVariables).sort()).toEqual(['NODE_ENV', 'PATH', 'WORKOS_DATA_DIR', 'WORKOS_GUIDE_DIR', 'WORKOS_INSTANCE', 'WORKOS_LAUNCHD', 'WORKOS_PORT', 'WORKOS_WEB_DIR']);
   });
 
   it('escapes paths for XML', () => {

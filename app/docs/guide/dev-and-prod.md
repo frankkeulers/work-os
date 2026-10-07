@@ -44,6 +44,12 @@ scope across, or set them again in prod's Settings. The inbox fills from Slack o
 After a change has been tried in dev, `npm run deploy` again. It builds a new release, swaps it in
 and restarts the agent. Settings, data and prompt edits in `~/WorkOS-data` are kept.
 
+This guide is the exception: both instances read it from `app/docs/guide` in the repo, so an edited
+page shows the next time you come back to the window, without a deploy. The first time prod reads
+the folder, macOS may ask whether node can access your Documents folder; allow it. If the folder
+can't be read, the guide shows the copy built into the release, and says "Built-in copy from this
+build" under the page list.
+
 ## Turning dry-run off
 
 Keep it on in prod for the first day and check the drafts. Then turn it off in

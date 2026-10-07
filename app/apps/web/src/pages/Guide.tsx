@@ -2,14 +2,16 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import { Link, NavLink, Navigate, useLocation, useNavigate, useParams } from 'react-router';
 import { HealthBanner } from '../components/HealthBanner';
 import { Icon } from '../components/icons';
-import { Kbd, cx } from '../components/ui';
-import { GROUPS, PAGES, pageBySlug, search, type GuidePage, type SearchHit } from '../guide/pages';
+import { Banner, Kbd, cx } from '../components/ui';
+import { api } from '../api';
+import { GROUPS, PAGES, pageBySlug, pagesFrom, search, type GuidePage, type SearchHit } from '../guide/pages';
 import { renderGuide } from '../guide/render';
 import { toast } from '../store/toasts';
 
 // The user guide (FR-1.8). Laid out like Settings: the pages in groups on the left, the page as
 // prose in the middle, and its sections on the right on wide screens. Content comes from
-// app/docs/guide/*.md; see guide/pages.ts.
+// app/docs/guide/*.md; see guide/pages.ts. The build carries a copy, shown at once; the server's
+// copy, read from the folder now, replaces it, so an edited page shows without a deploy.
 
 const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
@@ -34,14 +36,52 @@ function Highlight({ text, terms }: { text: string; terms: string[] }) {
   );
 }
 
+interface GuideState {
+  pages: GuidePage[];
+  /** Read from the guide folder (its path), rather than the copy in this build. */
+  liveDir?: string;
+  /** Files in the folder that don't parse; they show their built-in copy. */
+  problems: string[];
+  /** The server has answered, one way or the other. */
+  settled: boolean;
+}
+
+/** The guide's pages: the built-in copy until the server's arrives, and again whenever the window regains focus. */
+function useGuidePages(): GuideState {
+  const [state, setState] = useState<GuideState>({ pages: PAGES, problems: [], settled: false });
+  useEffect(() => {
+    let stale = false;
+    const load = () =>
+      api.getGuide().then(
+        (view) => {
+          if (stale) return;
+          const { pages, problems } = pagesFrom(view.files);
+          // An empty folder is a mistake, not a guide with no pages.
+          setState(pages.length ? { pages, liveDir: view.dir, problems, settled: true } : { pages: PAGES, problems: [`${view.dir} has no pages`], settled: true });
+        },
+        () => !stale && setState({ pages: PAGES, problems: [], settled: true }),
+      );
+    void load();
+    const onFocus = () => document.visibilityState === 'visible' && void load();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      stale = true;
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, []);
+  return state;
+}
+
 const hitHref = (h: SearchHit) => `/guide/${h.page.slug}${h.heading ? `#${h.heading.id}` : ''}`;
 
-function GuideSearch() {
+function GuideSearch({ pages }: { pages: GuidePage[] }) {
   const navigate = useNavigate();
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
-  const hits = useMemo(() => search(query), [query]);
+  const hits = useMemo(() => search(query, pages), [query, pages]);
   const open = query.trim().length > 0;
 
   // / focuses search, as in most docs sites.
@@ -151,15 +191,15 @@ function useCurrentSection(page: GuidePage, root: RefObject<HTMLElement | null>)
   return current;
 }
 
-function GuideBody({ page }: { page: GuidePage }) {
+function GuideBody({ page, pages, problems }: { page: GuidePage; pages: GuidePage[]; problems: string[] }) {
   const navigate = useNavigate();
   const { hash } = useLocation();
   const article = useRef<HTMLDivElement>(null);
   const html = useMemo(() => renderGuide(page.body, page.slug), [page]);
   const current = useCurrentSection(page, article);
-  const index = PAGES.indexOf(page);
-  const prev = PAGES[index - 1];
-  const next = PAGES[index + 1];
+  const index = pages.indexOf(page);
+  const prev = pages[index - 1];
+  const next = pages[index + 1];
   const toc = page.headings.filter((h) => h.depth === 2);
 
   useEffect(() => {
@@ -197,6 +237,13 @@ function GuideBody({ page }: { page: GuidePage }) {
   return (
     <>
       <div className="flex min-w-0 max-w-[720px] flex-1 flex-col" aria-label={page.title}>
+        {problems.length > 0 && (
+          <div className="mb-5">
+            <Banner tone="warn" icon="alert">
+              <strong>A guide file has a problem.</strong> {problems.join('; ')}. Until it is fixed, the page shows its built-in copy.
+            </Banner>
+          </div>
+        )}
         <div className="flex flex-col gap-1.5 border-b border-line pb-5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">{page.group}</span>
           <h2 className="m-0 text-2xl font-semibold tracking-[-0.015em]">{page.title}</h2>
@@ -245,8 +292,11 @@ function GuideBody({ page }: { page: GuidePage }) {
 
 export function GuidePage() {
   const { page: slug } = useParams();
-  const page = pageBySlug(slug);
-  if (!page) return <Navigate replace to={`/guide/${PAGES[0].slug}`} />;
+  const { pages, liveDir, problems, settled } = useGuidePages();
+  const page = pageBySlug(slug, pages);
+  // A page just added to the folder isn't in the built-in copy: wait for the server before giving up on it.
+  if (!page && !settled) return <div className="flex-1 bg-surface" />;
+  if (!page) return <Navigate replace to={`/guide/${pages[0].slug}`} />;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
@@ -254,7 +304,7 @@ export function GuidePage() {
       <header className="flex h-16 shrink-0 items-center border-b border-line px-8">
         <div className="flex max-w-[1240px] flex-1 items-center gap-x-6">
           <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Guide</h1>
-          <GuideSearch />
+          <GuideSearch pages={pages} />
         </div>
       </header>
       <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
@@ -263,10 +313,10 @@ export function GuidePage() {
         </div>
         <div className="flex max-w-[1304px] items-start gap-12 px-8 pb-24 pt-8">
           <nav aria-label="Guide pages" className="sticky top-8 flex w-[200px] shrink-0 flex-col gap-6">
-            {GROUPS.map((g) => (
+            {GROUPS.filter((g) => pages.some((p) => p.group === g)).map((g) => (
               <div key={g} className="flex flex-col gap-0.5">
                 <span className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">{g}</span>
-                {PAGES.filter((p) => p.group === g).map((p) => (
+                {pages.filter((p) => p.group === g).map((p) => (
                   <NavLink
                     key={p.slug}
                     to={`/guide/${p.slug}`}
@@ -277,8 +327,13 @@ export function GuidePage() {
                 ))}
               </div>
             ))}
+            {settled && (
+              <span className="px-3 text-xs leading-snug text-muted" data-testid="guide-source" title={liveDir}>
+                {liveDir ? 'Read live from docs/guide' : 'Built-in copy from this build'}
+              </span>
+            )}
           </nav>
-          <GuideBody page={page} />
+          <GuideBody page={page} pages={pages} problems={problems} />
         </div>
       </div>
     </div>

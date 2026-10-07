@@ -25,6 +25,7 @@ test('J43 the guide opens from the sidebar, in groups, with an outline and Previ
     'Keyboard shortcuts',
   ]);
   await expect(page.getByTestId('guide-updated')).toContainText('Updated');
+  await expect(page.getByTestId('guide-source')).toHaveText('Built-in copy from this build'); // the mock has no guide folder
 
   await nav.getByRole('link', { name: 'Filing to Confluence' }).click();
   const outline = page.getByRole('navigation', { name: 'On this page' });

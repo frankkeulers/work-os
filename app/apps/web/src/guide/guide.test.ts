@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import appSource from '../App.tsx?raw';
 import sectionsSource from '../pages/settings/sections.tsx?raw';
 import { HELP } from './links';
-import { GROUPS, PAGES, pageBySlug, parsePage, search } from './pages';
+import { GROUPS, PAGES, pageBySlug, pagesFrom, parsePage, search } from './pages';
 import { classifyHref, renderGuide } from './render';
 
 // The guide is kept up to date by hand, so this checks what a renamed heading, page or route would
@@ -79,6 +79,32 @@ describe('guide pages', () => {
       expect(pageBySlug(slug), topic).toBeDefined();
       if (id) expect(anchorExists(slug, id), target).toBe(true);
     }
+  });
+});
+
+describe('pagesFrom: the guide read live from its folder', () => {
+  const fm = (title: string, group: string, order: number) => `---\ntitle: ${title}\ngroup: ${group}\norder: ${order}\nupdated: 2026-10-07\n---\n`;
+
+  it('uses the files as they are now, in nav order, including a page the build has never seen', () => {
+    const { pages, problems } = pagesFrom([
+      { slug: 'shortcuts', source: `${fm('Keys', 'Help', 90)}Edited.` },
+      { slug: 'new-page', source: `${fm('Brand new', 'Start here', 15)}Hello.` },
+    ]);
+    expect(problems).toEqual([]);
+    expect(pages.map((p) => [p.slug, p.title])).toEqual([
+      ['new-page', 'Brand new'],
+      ['shortcuts', 'Keys'],
+    ]);
+    expect(pages[1].body).toContain('Edited.');
+  });
+
+  it('keeps the built-in copy of a page whose file does not parse, and says why', () => {
+    const { pages, problems } = pagesFrom([
+      { slug: 'shortcuts', source: '---\ntitle: Keys\n---\nhalf-edited' },
+      { slug: 'scratch', source: 'no front matter at all' },
+    ]);
+    expect(pages).toEqual([pageBySlug('shortcuts')]);
+    expect(problems).toEqual([expect.stringMatching(/shortcuts\.md: front matter needs group, order, updated/), expect.stringMatching(/scratch\.md/)]);
   });
 });
 

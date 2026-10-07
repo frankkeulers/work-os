@@ -23,6 +23,8 @@ export interface AgentPaths {
   root: string;
   dataDir: string;
   port?: number;
+  /** The repo's guide folder, read live so an edited page shows without a deploy (FR-1.8). */
+  guideDir: string;
 }
 
 /** A PATH with no shell profile behind it: system tools, Homebrew and node's own folder. */
@@ -42,6 +44,7 @@ export function plistVars(p: AgentPaths): Record<string, string> {
     DATA_DIR: p.dataDir,
     PORT: String(p.port ?? PROD_PORT),
     WEB_DIR: join(current, 'web'),
+    GUIDE_DIR: p.guideDir,
     STDOUT: join(p.dataDir, 'logs', 'launchd.out.log'),
     STDERR: join(p.dataDir, 'logs', 'launchd.err.log'),
   };
@@ -57,7 +60,7 @@ export function renderPlist(template: string, vars: Record<string, string>): str
   });
 }
 
-const PATH_KEYS = ['NODE', 'ENTRY', 'WORKDIR', 'DATA_DIR', 'WEB_DIR', 'STDOUT', 'STDERR'];
+const PATH_KEYS = ['NODE', 'ENTRY', 'WORKDIR', 'DATA_DIR', 'WEB_DIR', 'GUIDE_DIR', 'STDOUT', 'STDERR'];
 const SECRETISH = /(API_KEY|TOKEN|SECRET|PASSWORD|xox[a-z]-|sk-ant-)/i;
 
 /** What is wrong with a rendered plist, if anything. */

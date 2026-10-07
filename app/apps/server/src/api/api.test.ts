@@ -31,7 +31,7 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources'] } = {}) {
+async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources'] } = {}) {
   await initDataDir(dir, { settings: defaultSettings(dir), rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
@@ -52,6 +52,7 @@ async function build(opts: { webDir?: string; earlier?: ViewDeps['earlier']; pro
     tokenPersisted: true,
     now: () => NOW,
     webDir: opts.webDir,
+    guideDir: opts.guideDir,
     earlier: opts.earlier,
     promptSources: opts.promptSources,
     devOrigins: ['http://localhost:5173'],
@@ -496,5 +497,43 @@ describe('inbox caching (NF-11)', () => {
     expect(zipped.headers['content-encoding']).toBe('gzip');
     expect(zipped.rawPayload.length).toBeLessThan(plain.rawPayload.length / 4);
     expect(JSON.parse(gunzipSync(zipped.rawPayload).toString())).toEqual(plain.json());
+  });
+});
+
+describe('GET /api/guide (FR-1.8)', () => {
+  it('reads the guide folder as it is now: <slug>.md files only, nothing else', async () => {
+    const guide = join(dir, 'guide');
+    await mkdir(join(guide, 'nested.md'), { recursive: true });
+    await writeFile(join(guide, 'rules.md'), '---\ntitle: Rules\n---\nOld');
+    await writeFile(join(guide, 'README.txt'), 'not a page');
+    await writeFile(join(guide, 'Bad Name.md'), 'not a page');
+    await writeFile(join(guide, 'big.md'), 'x'.repeat(300 * 1024));
+    await build({ guideDir: guide });
+    const res = await get('/api/guide');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.json()).toEqual({ dir: guide, files: [{ slug: 'rules', source: '---\ntitle: Rules\n---\nOld' }] });
+
+    // An edit shows on the next request, without a restart.
+    await writeFile(join(guide, 'rules.md'), 'New');
+    expect((await get('/api/guide')).json().files[0].source).toBe('New');
+  });
+
+  it('is unavailable without a guide folder, or with one that is missing, so the app shows its own copy', async () => {
+    await build();
+    const none = await get('/api/guide');
+    expect(none.statusCode).toBe(503);
+    expect(none.json<ApiErrorBody>().code).toBe('unavailable');
+    await lifecycle.stop('test');
+
+    await build({ guideDir: join(dir, 'nowhere') });
+    const missing = await get('/api/guide');
+    expect(missing.statusCode).toBe(503);
+    expect(missing.json<ApiErrorBody>().message).toMatch(/nowhere is missing/);
+  });
+
+  it('needs the bearer token, like every other API route', async () => {
+    await build({ guideDir: dir });
+    expect((await get('/api/guide', {})).statusCode).toBe(401);
   });
 });

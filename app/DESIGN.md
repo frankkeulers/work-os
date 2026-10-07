@@ -62,7 +62,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 ## Guide (applied)
 
 - **Way in:** a quiet **Guide** item (book icon) at the bottom of the sidebar, above Scope; an icon with a tooltip in the rail. `?` anywhere outside a text field opens Keyboard shortcuts.
-- **Source:** Markdown files in `app/docs/guide/`, one page each, bundled at build time. Front matter gives the title, nav group, order, summary and `updated` date. The page loads lazily, so it costs nothing until opened.
+- **Source:** Markdown files in `app/docs/guide/`, one page each. Front matter gives the title, nav group, order, summary and `updated` date. The build carries a copy, shown at once; the server then reads the folder (`GET /api/guide`) and its pages replace the copy, again whenever the window regains focus. So an edit shows without a deploy. Under the page list, a muted line says which it is: "Read live from docs/guide" or "Built-in copy from this build". A file that doesn't parse keeps its built-in copy, with a warning banner naming the problem. The page loads lazily, so it costs nothing until opened.
 - **Layout:** like Settings, so it feels native:
   - a 64px top bar with the title and a search box (`/` focuses it);
   - the pages on the left in groups (Start here, Inbox, Filing, Settings, Help);

@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
@@ -23,7 +23,7 @@ let output = '';
 async function startServer() {
   output = '';
   server = spawn(join(APP, 'node_modules/.bin/tsx'), [join(APP, 'apps/server/src/main.ts'), '--fakes'], {
-    env: { ...process.env, WORKOS_INSTANCE: 'dev', WORKOS_DATA_DIR: join(dir, 'data'), WORKOS_PORT: String(PORT), WORKOS_WEB_DIR: join(APP, 'apps/web/dist') },
+    env: { ...process.env, WORKOS_INSTANCE: 'dev', WORKOS_DATA_DIR: join(dir, 'data'), WORKOS_PORT: String(PORT), WORKOS_WEB_DIR: join(APP, 'apps/web/dist'), WORKOS_GUIDE_DIR: join(dir, 'guide') },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   server.stdout?.on('data', (b) => (output += b));
@@ -56,6 +56,7 @@ const lane = (page: Page, name: 'now' | 'today') => group(page, 'Needs you').loc
 
 test.beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'workos-e2e-server-'));
+  await cp(join(APP, 'docs/guide'), join(dir, 'guide'), { recursive: true }); // a copy the guide test can edit
   await startServer();
 });
 test.afterAll(async () => {
@@ -184,4 +185,30 @@ test('the prompt and guidance files are listed from the data directory, and a sa
   await page.getByRole('button', { name: 'Reset to default' }).click();
   await page.getByRole('dialog', { name: 'Reset Vault conventions?' }).getByRole('button', { name: 'Reset to default' }).click();
   await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
+});
+
+test('the guide is read live from its folder: an edit shows on focus, without a deploy (FR-1.8)', async ({ page }) => {
+  const file = join(dir, 'guide/shortcuts.md');
+  const original = await readFile(file, 'utf8');
+  await page.goto('/guide/shortcuts');
+  await expect(page.getByTestId('guide-source')).toHaveText('Read live from docs/guide');
+
+  await writeFile(file, original.replace('title: Keyboard shortcuts', 'title: Keys, edited').replace('Shortcuts work anywhere', 'Edited live. Shortcuts work anywhere'));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('heading', { name: 'Keys, edited', level: 2 })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Guide pages' }).getByRole('link', { name: 'Keys, edited' })).toBeVisible();
+  await expect(page.locator('.wos-guide')).toContainText('Edited live.');
+
+  // Mid-edit, with the front matter broken: the built-in copy, and what is wrong.
+  await writeFile(file, '---\ntitle: Keys\n---\nhalf done');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByText('A guide file has a problem.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Keyboard shortcuts', level: 2 })).toBeVisible();
+
+  // A page added to the folder opens straight from its URL.
+  await writeFile(file, original);
+  await writeFile(join(dir, 'guide/new-page.md'), '---\ntitle: A new page\ngroup: Help\norder: 95\nupdated: 2026-10-07\n---\nWritten after the build.');
+  await page.goto('/guide/new-page');
+  await expect(page.getByRole('heading', { name: 'A new page', level: 2 })).toBeVisible();
+  await expect(page.getByText('A guide file has a problem.')).toHaveCount(0);
 });

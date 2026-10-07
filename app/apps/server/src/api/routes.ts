@@ -6,6 +6,7 @@ import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writ
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
+import { readGuide } from './guide';
 import { sendJson } from './send';
 import { healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
 
@@ -216,6 +217,9 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     };
     return reply.headers(noStore).send(view);
   });
+
+  // The user guide as it is on disk now (FR-1.8), so an edited page shows without a deploy.
+  app.get('/api/guide', async (_req, reply) => reply.headers(noStore).send(await readGuide(d.guideDir)));
 
   app.get('/api/usage', async (_req, reply) => reply.headers(noStore).send(usageView(d)));
 

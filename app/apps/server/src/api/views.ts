@@ -76,6 +76,8 @@ export interface ViewDeps {
   dmTitle?: (itemId: string) => string | undefined;
   /** Everyone in a DM item's conversation, from Slack. */
   members?: (item: Item, signal?: AbortSignal) => Promise<Participant[] | undefined>;
+  /** The user guide's Markdown folder (FR-1.8). Absent: the app shows the copy in its build. */
+  guideDir?: string;
   /** Where the guidance files' sources live, to flag a source that changed (FR-1.7). Absent in tests and fakes. */
   promptSources?: () => SourceEnv;
   /** The messages before a DM item, read live from Slack. */

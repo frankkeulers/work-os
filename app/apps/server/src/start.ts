@@ -3,6 +3,7 @@ import { initDataDir, paths } from './config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from './config/defaults';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { loadApiToken } from './api/auth';
 import { settingsCheck } from './api/views';
@@ -107,6 +108,8 @@ export type RunResult =
 
 /** Vite's dev server, which proxies /api to the development instance. */
 const DEV_ORIGINS = 'http://localhost:5173,http://127.0.0.1:5173';
+/** app/docs/guide, when the server runs from the repo (FR-1.8). From a bundled release this points nowhere, and the app shows its built-in copy. */
+const REPO_GUIDE_DIR = fileURLToPath(new URL('../../../docs/guide', import.meta.url));
 
 export async function run(deps: RunDeps): Promise<RunResult> {
   const notifier = deps.notifier ?? silentNotifier;
@@ -391,6 +394,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     evals,
     actions,
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
+    // The guide's Markdown: set by agent:install for prod; development reads the repo's copy.
+    guideDir: deps.env.WORKOS_GUIDE_DIR ? resolve(deps.env.WORKOS_GUIDE_DIR) : config.instance === 'dev' ? REPO_GUIDE_DIR : undefined,
     extraRoutes,
     devOrigins: config.instance === 'dev' ? (deps.env.WORKOS_DEV_ORIGINS ?? DEV_ORIGINS).split(',') : [],
   });

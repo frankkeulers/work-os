@@ -33,6 +33,7 @@ import {
   unsnooze,
   type Action,
   type ConfluenceCatalogueView,
+  type GuideFilesView,
   type ActionType,
   type BudgetState,
   type CorrectionInput,
@@ -551,6 +552,12 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(QUERY_MS);
     const names = Object.values(this.s.items).flatMap((r) => (r.item.source === 'slack' ? r.item.participants : []).filter((p) => p.id !== FRANK).map((p) => p.name));
     return [...new Set([...names, ...this.s.settings.slack.vips])].sort((a, b) => a.localeCompare(b)).map((name) => ({ name }));
+  }
+
+  /** The mock has no guide folder: the app shows the copy in its build, as a server without one does. */
+  async getGuide(): Promise<GuideFilesView> {
+    await this.gate(QUERY_MS);
+    throw new ApiError('unavailable', 'The mock has no guide folder; the app shows its built-in copy.');
   }
 
   async getConfluenceCatalogue(): Promise<ConfluenceCatalogueView> {
