@@ -296,6 +296,24 @@ describe('summaryOf', () => {
     const s = summaryOf(p.items[ITEM], p.items[ITEM], { ...ctx, actions: Object.values(p.actions) });
     expect(s.actions.vault_note).toMatchObject({ status: 'ready', stale: true });
   });
+
+  it('drops an action its retry replaced, so a discarded retry does not bring back the failure', () => {
+    const { events, add } = log();
+    const first = { itemId: ITEM, actionId: 'act-1' };
+    const retry = { itemId: ITEM, actionId: 'act-2' };
+    add('item.upserted', 0, upserted(1))
+      .add('action.requested', 1, { type: 'confluence_entry', revision: 1 }, first)
+      .add('action.failed', 2, { reason: 'model_error' }, first)
+      .add('action.requested', 3, { type: 'confluence_entry', revision: 1, supersedes: 'act-1' }, retry)
+      .add('action.drafted', 4, { type: 'confluence_entry', revision: 1, draftRef: 'drafts/act-2.json', tokens: 900, target: { pageId: '42', baseVersion: 7 } }, retry);
+    const summary = () => {
+      const p = replay(events);
+      return summaryOf(p.items[ITEM], p.items[ITEM], { ...ctx, actions: Object.values(p.actions).reverse() }).actions;
+    };
+    expect(summary().confluence_entry).toMatchObject({ id: 'act-2', status: 'ready' });
+    add('action.discarded', 5, { reason: 'discarded' }, retry);
+    expect(summary().confluence_entry).toBeUndefined();
+  });
 });
 
 describe('openNext', () => {

@@ -10,11 +10,17 @@ import type { ActionState, ItemFlags, ItemMeta } from './state';
 const MIN = 60_000;
 const SUMMARY_MAX = 110;
 
-/** The latest non-discarded action per type. `actions` must be newest first. */
+/**
+ * The latest non-discarded action per type. `actions` must be newest first. An action a re-draft
+ * replaced is skipped too: a failed draft stays failed after its Retry, and must not come back
+ * when that retry is discarded.
+ */
 export function actionSummaries(actions: Iterable<ActionState>, revision: number): ItemSummary['actions'] {
+  const all = [...actions];
+  const replaced = new Set(all.map((a) => a.supersedes).filter(Boolean));
   const out: ItemSummary['actions'] = {};
-  for (const a of actions) {
-    if (out[a.type] || a.status === 'discarded') continue;
+  for (const a of all) {
+    if (out[a.type] || a.status === 'discarded' || replaced.has(a.id)) continue;
     const s: ActionSummary = { id: a.id, type: a.type, status: a.status, failureReason: a.failureReason, stale: a.status === 'ready' && a.itemRevision < revision };
     out[a.type] = s;
   }
