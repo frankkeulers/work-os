@@ -11,6 +11,7 @@ import { fmtMoney, fmtTime } from '../../lib/format';
 import { confluencePageUrl } from '../../lib/links';
 import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
+import { GuideLink } from '../../components/GuideLink';
 import { FutureRow, Group, Meter, NumInput, Row, SectionHeader } from './parts';
 
 export interface Confirm {
@@ -50,9 +51,12 @@ function RulesSection({ rules, view, full, setRules, ruleError }: Ctx) {
         title="Triage rules"
         description="Checked top to bottom before the model. The first match wins, and a fixed outcome skips the model call."
         action={
-          <Button variant="solid" icon="plus" onClick={() => setEdit(newRuleEdit())}>
-            Add rule
-          </Button>
+          <div className="flex items-center gap-4">
+            <GuideLink topic="rules" />
+            <Button variant="solid" icon="plus" onClick={() => setEdit(newRuleEdit())}>
+              Add rule
+            </Button>
+          </div>
         }
       />
       <RulesList rules={rules} hits={view.ruleHits} errorFor={ruleError} editing={edit} setEditing={setEdit} onChange={setRules} />
@@ -211,7 +215,7 @@ function NotificationsSection({ s, full, set, type, flush, err }: Ctx) {
 function WritingSection({ s, view, full, set, type, flush, err, confirm }: Ctx) {
   return (
     <>
-      <SectionHeader title="Write targets" description="Where approved actions can write. The executor checks all of this again at write time, whatever the draft says." />
+      <SectionHeader title="Write targets" description="Where approved actions can write. The executor checks all of this again at write time, whatever the draft says." action={<GuideLink topic="scope" label="Guide: Confluence scope" />} />
       <Group>
         <Row
           id="dry-run"
@@ -824,6 +828,7 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
       <SectionHeader
         title="Prompts"
         description="What each Claude call is told. Every call reads its file from the data directory, so a saved change applies to the next call. Versions match the usage log and eval reports."
+        action={<GuideLink topic="prompts" />}
       />
       {!files ? (
         <div className="py-6 text-[13px] text-muted">{q.error ? 'Could not load the prompt files.' : 'Loading…'}</div>

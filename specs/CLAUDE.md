@@ -57,6 +57,10 @@ Follow the milestones: M1 → M2 → M3 → M4. Do not start a milestone until t
 - `npm run deploy`: build and install a release for the autostarted instance.
 - `npm run agent:install`, `agent:uninstall`, `agent:status`: manage the launchd LaunchAgent (FR-14.1).
 
+## User guide
+
+The in-app guide is `app/docs/guide/*.md` (FR-1.8). When behaviour Frank sees changes (a screen, a setting, a message, a shortcut), update the guide page that covers it in the same commit and bump its `updated` date. `apps/web/src/guide/guide.test.ts` fails on a broken link or anchor, not on stale text.
+
 ## When unsure
 
 Ask Frank one question if the answer changes what you build. Otherwise pick the option that matches PLAN.md's design principles, state the assumption in the PR, and carry on.

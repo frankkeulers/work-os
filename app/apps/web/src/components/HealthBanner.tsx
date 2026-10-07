@@ -3,6 +3,7 @@ import type { DependencyHealth, HealthView, StartupCheck } from '../api';
 import { api } from '../api';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
 import { errorToast } from '../store/toasts';
+import { GuideLink } from './GuideLink';
 import { Banner, Button, Spinner } from './ui';
 
 // Degraded and safe mode (FR-12.2, FR-14.6): the server keeps running and says what is wrong, with
@@ -91,7 +92,16 @@ export function HealthBanner() {
   if (!problems.length) return null;
   const [first, ...rest] = problems;
   return (
-    <Banner tone="warn" icon="alert" action={action}>
+    <Banner
+      tone="warn"
+      icon="alert"
+      action={
+        <div className="flex items-center gap-3">
+          <GuideLink topic="health" label="Help" />
+          {action}
+        </div>
+      }
+    >
       <strong>Running with a problem.</strong> {first.title}.{first.fix ? ` ${first.fix}` : ''}
       {rest.length > 0 && (
         <span className="text-ink-2">

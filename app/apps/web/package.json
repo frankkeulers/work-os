@@ -25,6 +25,7 @@
     "@tiptap/react": "^3.31.4",
     "@tiptap/starter-kit": "^3.31.4",
     "@work-os/shared": "*",
+    "marked": "^17.0.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router": "^8.4.0",

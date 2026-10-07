@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useRef } from 'react';
 import { Outlet, RouterProvider, createBrowserRouter, useLocation, useNavigate } from 'react-router';
 import { API_MODE, api } from './api';
 import { Shell } from './components/Shell';
@@ -14,6 +14,9 @@ import { UsagePage } from './pages/Usage';
 import { ScenarioDrawer } from './scenarios/ScenarioDrawer';
 import { usePrefs } from './store/prefs';
 import { toast, useToasts } from './store/toasts';
+
+// The guide carries its own Markdown and renderer, so it loads only when opened.
+const GuidePage = lazy(() => import('./pages/Guide').then((m) => ({ default: m.GuidePage })));
 
 // The Scenarios drawer drives the mock; the real app has nothing for it to drive (and, API_MODE
 // being a build-time constant, doesn't carry it).
@@ -48,9 +51,31 @@ function useNoticeToasts() {
   );
 }
 
+/** ? opens the keyboard shortcuts, from anywhere but a text field. */
+function useHelpKey() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '?' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]')) return;
+      e.preventDefault();
+      navigate('/guide/shortcuts');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navigate]);
+}
+
+const guide = (
+  <Suspense fallback={<div className="min-h-screen bg-surface" />}>
+    <GuidePage />
+  </Suspense>
+);
+
 function Root() {
   useThemeAttribute();
   useNoticeToasts();
+  useHelpKey();
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []);
   const h = health.data;
   let body = <Outlet />;
@@ -79,6 +104,8 @@ const router = createBrowserRouter([
           { path: 'usage/eval/:id', element: <EvalReportPage /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'settings/:section', element: <SettingsPage /> },
+          { path: 'guide', element: guide },
+          { path: 'guide/:page', element: guide },
         ],
       },
       { path: 'item/:id', element: <ItemDetailPage /> },

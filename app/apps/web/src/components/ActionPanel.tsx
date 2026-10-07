@@ -8,6 +8,7 @@ import { TYPE_LABEL, draftState, type DraftState } from '../lib/lanes';
 import { SOURCE_NAME } from '../lib/next';
 import { errorToast, toast } from '../store/toasts';
 import { BrandIcon } from './BrandIcon';
+import { GuideLink } from './GuideLink';
 import { Icon } from './icons';
 import { itemPath } from './item';
 import { Banner, Button, ConfirmDialog, Spinner, cx } from './ui';
@@ -467,7 +468,16 @@ export function ActionPanel({
         </div>
       ) : action.failureReason === 'no_fit' ? (
         <div className="flex flex-col gap-3">
-          <Banner tone="warn" icon="confluence" action={<Link to="/settings/writing" className="text-[13px] font-medium">Settings › Write targets</Link>}>
+          <Banner tone="warn" icon="confluence"
+            action={
+              <div className="flex items-center gap-3">
+                <GuideLink topic="noFit" />
+                <Link to="/settings/writing" className="text-[13px] font-medium">
+                  Settings › Write targets
+                </Link>
+              </div>
+            }
+          >
             <strong>No page in scope fits.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
@@ -484,7 +494,16 @@ export function ActionPanel({
         </div>
       ) : action.failureReason === 'allow_list' ? (
         <div className="flex flex-col gap-3">
-          <Banner tone="bad" icon="lock" action={<Link to="/settings/writing" className="text-[13px] font-medium">Settings › Write targets</Link>}>
+          <Banner tone="bad" icon="lock"
+            action={
+              <div className="flex items-center gap-3">
+                <GuideLink topic="refusedWrites" />
+                <Link to="/settings/writing" className="text-[13px] font-medium">
+                  Settings › Write targets
+                </Link>
+              </div>
+            }
+          >
             <strong>Not written.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">

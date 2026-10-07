@@ -176,18 +176,22 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
             </div>
           )}
         </div>
+        {/* The guide sits at the bottom, out of the way of the work. */}
+        <div className="mt-auto flex flex-col gap-0.5">
+          <NavItem to="/guide" icon="book" label="Guide" collapsed={collapsed} />
+        </div>
         {collapsed ? (
           <button
             type="button"
             onClick={() => setScope(full ? 'mvp' : 'full')}
             aria-label={`Scope: ${full ? 'Full' : 'MVP'}. Switch to ${full ? 'MVP' : 'Full'}`}
             title={`Scope: ${full ? 'Full' : 'MVP'} (click for ${full ? 'MVP' : 'Full'})`}
-            className="mt-auto min-h-8 rounded-lg bg-track font-mono text-[10px] font-medium text-ink-2 cursor-pointer hover:text-ink"
+            className="min-h-8 rounded-lg bg-track font-mono text-[10px] font-medium text-ink-2 cursor-pointer hover:text-ink"
           >
             {full ? 'Full' : 'MVP'}
           </button>
         ) : (
-          <div className="mt-auto flex flex-col gap-1.5 px-1">
+          <div className="flex flex-col gap-1.5 px-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Scope</span>
             <Segmented
               label="Scope"

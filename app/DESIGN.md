@@ -59,6 +59,19 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
   **Preview catalogue** reads the scope live and lists the pages in a bordered, scrolling box. They are grouped by root under sticky headers, and pages with children carry an "index" chip. Each row links to the page.
 
+## Guide (applied)
+
+- **Way in:** a quiet **Guide** item (book icon) at the bottom of the sidebar, above Scope; an icon with a tooltip in the rail. `?` anywhere outside a text field opens Keyboard shortcuts.
+- **Source:** Markdown files in `app/docs/guide/`, one page each, bundled at build time. Front matter gives the title, nav group, order, summary and `updated` date. The page loads lazily, so it costs nothing until opened.
+- **Layout:** like Settings, so it feels native:
+  - a 64px top bar with the title and a search box (`/` focuses it);
+  - the pages on the left in groups (Start here, Inbox, Filing, Settings, Help);
+  - the page as prose in the middle, at most 720px wide, with its group, title, summary and "Updated" date above, and Previous / Next below;
+  - "On this page" on the right from 1280px, marking the section in view.
+- **Search:** filters as you type over titles, headings and text, and shows the page, the heading and a snippet with the words marked. Arrow keys move, Enter opens, Esc clears.
+- **Links in the Markdown:** another page (`rules.md#tips`) and app routes (`/settings/writing`) navigate in the app; `https:` opens a new tab; anything else renders as text. Raw HTML shows escaped. Code blocks have a Copy button.
+- **Contextual links:** a small "Guide" link with the book icon in the headers of Settings › Triage rules, Write targets and Prompts, in the health banner ("Help"), and on the Confluence "Nothing to file" and "Write refused" banners. Each lands on the right section.
+
 ## Inbox (applied, from `specs/Inbox Redesign Options.html`)
 
 - **Layout:** one list and an item panel. The list has two groups of equal weight, Needs you and To file. Each group has a coloured dot, a title and a count, and its rows are separated by hairlines. There are no trays and no cards. Needs you lists Now rows first, with a faint orange wash and a darker hairline under the last one, then failed triage, then Today rows by deadline. The selected row has an accent wash and a 3px accent bar.
