@@ -5,8 +5,8 @@ import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
 import { CorrectForm, ItemMarkers, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
-import { Icon, MoreIcon, type IconName } from '../../components/icons';
-import { useEarlier } from '../../components/Earlier';
+import { Icon, MoreIcon } from '../../components/icons';
+import { useEarlierToggle } from '../../components/Earlier';
 import { MessageText } from '../../components/SlackText';
 import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
@@ -180,24 +180,12 @@ function ActionItems({ items }: { items: string[] }) {
   );
 }
 
-function EarlierButton({ icon, onClick, children }: { icon?: IconName; onClick: () => void; children: ReactNode }) {
-  return (
-    <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-xs font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={onClick}>
-      {icon && <Icon name={icon} size={13} />}
-      {children}
-    </button>
-  );
-}
-
 function Messages({ view }: { view: ItemView }) {
   const now = useNow(60_000);
   const [all, setAll] = useState(false);
-  // Earlier messages: hidden, the last three, or the whole week before the item.
-  const [earlierMode, setEarlierMode] = useState<'hidden' | 'recent' | 'all'>('hidden');
   const { item, meId } = view;
-  const canEarlier = item.kind === 'dm';
-  const earlier = useEarlier(item, canEarlier && earlierMode !== 'hidden');
-  const name = (id: string) => (id === meId ? 'You' : ([...item.participants, ...(earlier?.state === 'ready' ? earlier.view.people : [])].find((p) => p.id === id)?.name ?? id));
+  const { controls, before: shownBefore, people } = useEarlierToggle(item);
+  const name = (id: string) => (id === meId ? 'You' : ([...item.participants, ...people].find((p) => p.id === id)?.name ?? id));
   const title = item.kind === 'email' ? 'Email' : item.kind === 'meeting' ? 'From the transcript' : item.kind === 'dm' || item.kind === 'chat' ? (item.messages.length === 1 ? 'Message' : 'Messages') : 'Latest in the thread';
   if (item.contentExpired)
     return (
@@ -211,9 +199,6 @@ function Messages({ view }: { view: ItemView }) {
       </Section>
     );
   const shown = all ? item.messages : item.messages.slice(-3);
-  const before = earlierMode !== 'hidden' && earlier?.state === 'ready' ? earlier.view.messages : [];
-  const shownBefore = earlierMode === 'all' ? before : before.slice(-3);
-  const people = earlier?.state === 'ready' ? earlier.view.people : [];
   const row = (m: Message, muted: boolean) => (
     <div key={m.id} className={cx('flex flex-col gap-0.5 border-t border-line-soft-2 py-2.5 first-of-type:mt-1', muted && 'opacity-75')}>
       <span className="text-xs">
@@ -230,7 +215,7 @@ function Messages({ view }: { view: ItemView }) {
       aside={
         item.messageCount > 3 &&
         (all && more > 0 ? (
-          <button type="button" className="min-h-7 px-2 text-[13px] font-medium text-accent hover:underline cursor-pointer" onClick={() => openInSource(item)}>
+          <button type="button" className="min-h-7 px-2 text-[13px] font-medium text-accent hover:underline cursor-pointer" onClick={() => openInSource(view.summary)}>
             {more} more in {SOURCE_NAME[item.source]}
           </button>
         ) : (
@@ -242,37 +227,9 @@ function Messages({ view }: { view: ItemView }) {
         ))
       }
     >
-      {canEarlier && (
-        <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 py-1.5">
-          {earlierMode === 'hidden' ? (
-            <EarlierButton icon="up" onClick={() => setEarlierMode('recent')}>
-              Show earlier messages
-            </EarlierButton>
-          ) : (
-            <>
-              <span className="flex-1 font-mono text-[11px] text-muted">
-                {earlier?.state === 'loading'
-                  ? 'Loading earlier messages…'
-                  : earlier?.state === 'failed'
-                    ? `Couldn’t load the earlier messages from ${SOURCE_NAME[item.source]}.`
-                    : before.length
-                      ? earlierMode === 'all'
-                        ? `${plural(before.length, 'earlier message')} · the 7 days before`
-                        : 'Earlier in the conversation'
-                      : 'Nothing earlier in the 7 days before'}
-              </span>
-              {earlierMode === 'recent' && before.length > shownBefore.length && (
-                <EarlierButton onClick={() => setEarlierMode('all')}>Show all {before.length} from the 7 days before</EarlierButton>
-              )}
-              <EarlierButton icon="x" onClick={() => setEarlierMode('hidden')}>
-                Hide
-              </EarlierButton>
-            </>
-          )}
-        </div>
-      )}
+      {controls && <div className="mt-1">{controls}</div>}
       {shownBefore.map((m) => row(m, true))}
-      {before.length > 0 && <div className="pt-3 pb-1.5 font-mono text-[11px] text-muted">This item</div>}
+      {shownBefore.length > 0 && <div className="pt-3 pb-1.5 font-mono text-[11px] text-muted">This item</div>}
       {shown.map((m) => row(m, false))}
     </Section>
   );

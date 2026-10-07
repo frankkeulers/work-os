@@ -270,6 +270,10 @@ export interface WorkOsApi {
   pollNow(): Promise<void>;
   markDone(itemId: string): Promise<void>;
   reopen(itemId: string): Promise<void>;
+  /** Marks many items done in one write; returns how many changed (items already done are skipped). */
+  markDoneMany(itemIds: string[]): Promise<{ count: number }>;
+  /** Undo for markDoneMany. */
+  reopenMany(itemIds: string[]): Promise<{ count: number }>;
   snooze(itemId: string, untilIso: string): Promise<void>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
   retryTriage(itemId: string): Promise<void>;

@@ -36,6 +36,20 @@ export function openInSource(item: { permalink: string; openUrl?: string; title:
   });
 }
 
+/** Marks a set of items done in one write, e.g. a channel's run or all of Low priority, with Undo. */
+export async function markManyDoneWithUndo(items: ItemSummary[], what: string) {
+  const ids = items.filter((i) => i.status !== 'done').map((i) => i.id);
+  if (!ids.length) return;
+  try {
+    const { count } = await api.markDoneMany(ids);
+    toast(`Done · ${count} ${count === 1 ? 'item' : 'items'} in ${what}`, {
+      action: { label: 'Undo', run: () => void api.reopenMany(ids).catch(errorToast) },
+    });
+  } catch (e) {
+    errorToast(e);
+  }
+}
+
 export async function markDoneWithUndo(item: ItemSummary) {
   try {
     await api.markDone(item.id);

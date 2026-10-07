@@ -6,6 +6,7 @@ import { SourceError } from '../errors';
 import { mapLimit } from '../limit';
 import { SlackAdapter } from './adapter';
 import { SlackApi } from './api';
+import { mpdmTitle } from './directory';
 import { EarlierMessages } from './earlier';
 import { FakeSlack } from './fakeSlack';
 import { buildItem, channelListed, cmpTs, mentionedIds, webClientUrl, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
@@ -219,6 +220,12 @@ describe('Group DMs and links', () => {
     slack.channels.get('G01MPDM')!.members = ['UFRANK', 'U03SAM', 'U05ANK'];
     const items = byId((await adapter().fetchSince(undefined, ctx())).items);
     expect(items[`slack:G01MPDM:${ts(5)}`].title).toBe('Sam, Ankush');
+  });
+
+  it('reads a group DM’s own name as the others’ handles until their names are known', () => {
+    expect(mpdmTitle('mpdm-charlie.aitkin473--frank.keulers--ankush.khapre-1', 'frank.keulers')).toBe('charlie.aitkin473, ankush.khapre');
+    expect(mpdmTitle('mpdm-charlie.aitkin473--frank.keulers--ankush.khapre-1')).toBe('charlie.aitkin473, frank.keulers, ankush.khapre');
+    expect(mpdmTitle('#general')).toBeUndefined();
   });
 
   it('links to the web client: a thread in its pane, a DM at its latest messages', () => {

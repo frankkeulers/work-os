@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { triageQueue } from './eligibility';
 import { meFrom, ruleVerdict } from './rules';
-import { MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
+import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
 
 const NOW = new Date('2026-10-06T09:00:00.000Z');
 const ago = (mins: number) => new Date(NOW.getTime() - mins * 60_000).toISOString();
@@ -84,6 +84,19 @@ describe('truncation and batching (§5.3, CL-4)', () => {
     expect(t.messages.map((m) => m.text)).toEqual(['message 1', 'Over to <@UFRANK> for the sign-off', 'message 18', 'Thanks', 'message 20']);
     expect(t.messages.map((m) => m.author)).toEqual(['Dana Lee', 'Dana Lee', 'Dana Lee', 'me', 'Dana Lee']);
     expect(t.omitted).toBe(20); // 25 in the thread, 5 sent
+  });
+
+  it('adds the last few messages before a DM, named, short, and leaves threads without', () => {
+    const earlier = {
+      messages: [...Array.from({ length: 7 }, (_, i) => msg(i + 1, `earlier ${i + 1}`, 'U9')), msg(8, 'y'.repeat(BEFORE_MAX_CHARS + 50), 'UFRANK')],
+      people: [{ id: 'U9', name: 'Matt' }],
+    };
+    const t = threadForTriage(thread([msg(10)], { kind: 'dm' }), me, 3, earlier);
+    expect(t.before?.map((m) => m.text.slice(0, 9))).toEqual(['earlier 4', 'earlier 5', 'earlier 6', 'earlier 7', 'yyyyyyyyy']);
+    expect(t.before).toHaveLength(BEFORE_MAX_MESSAGES);
+    expect(t.before?.map((m) => m.author)).toEqual(['Matt', 'Matt', 'Matt', 'Matt', 'me']);
+    expect(t.before?.at(-1)?.text).toHaveLength(BEFORE_MAX_CHARS);
+    expect(threadForTriage(thread([msg(10)]), me, 3, { messages: [], people: [] }).before).toBeUndefined();
   });
 
   it('sends a short thread whole and cuts a very long message', () => {

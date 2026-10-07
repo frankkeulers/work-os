@@ -4,7 +4,7 @@ import type { ActionType } from '@work-os/shared';
 import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
 import { parseType } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
-import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo } from '../components/item';
+import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo, markManyDoneWithUndo } from '../components/item';
 import { HealthBanner } from '../components/HealthBanner';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
@@ -465,11 +465,24 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
 }
 
 /** The name over a Slack channel's rows when the Inbox groups by channel. */
-function ChannelHead({ item, count }: { item: ItemSummary; count: number }) {
+function ChannelHead({ item, items }: { item: ItemSummary; items: ItemSummary[] }) {
+  const name = item.kind === 'dm' ? `DM · ${item.title}` : item.title;
+  const open = items.filter((i) => i.status !== 'done');
   return (
-    <div data-channel={channelKey(item)} className="flex items-baseline gap-2 border-t border-line-soft bg-surface-2 px-6 pb-1 pt-1.5">
-      <h3 className="m-0 truncate text-xs font-semibold text-ink-2">{item.kind === 'dm' ? `DM · ${item.title}` : item.title}</h3>
-      <span className="font-mono text-[11px] text-muted">{count}</span>
+    <div data-channel={channelKey(item)} className="flex items-center gap-2 border-t border-line-soft bg-surface-2 px-6 py-1">
+      <h3 className="m-0 min-w-0 truncate text-xs font-semibold text-ink-2">{name}</h3>
+      <span className="font-mono text-[11px] text-muted">{items.length}</span>
+      <span className="flex-1" />
+      {open.length > 0 && (
+        <button
+          type="button"
+          aria-label={`Mark all ${open.length} in ${name} done`}
+          className="inline-flex min-h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted hover:bg-track hover:text-ink cursor-pointer"
+          onClick={() => void markManyDoneWithUndo(open, name)}
+        >
+          <Icon name="check" size={12} /> Mark all done
+        </button>
+      )}
     </div>
   );
 }
@@ -691,7 +704,7 @@ export function InboxPage() {
     const key = grouped ? channelKey(i) : undefined;
     const head = key && (n === 0 || channelKey(list[n - 1]) !== key);
     return [
-      head && <ChannelHead key={`head:${i.id}`} item={i} count={list.filter((x) => channelKey(x) === key).length} />,
+      head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => channelKey(x) === key)} />,
       <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} divide={!grouped && sort === 'priority' && n > 0 && list[n - 1].lane === 'now' && i.lane !== 'now'} onPick={() => pick(i.id)} />,
     ];
   };
@@ -782,6 +795,11 @@ export function InboxPage() {
                     <h2 className="m-0 text-[13px] font-semibold">{LOWER[open].title}</h2>
                     <span className="font-mono text-xs text-muted">{by[open].length}</span>
                     <span className="min-w-0 flex-[1_1_200px] pl-1 text-xs text-muted">{LOWER[open].note}</span>
+                    {open === 'else' && by.else.length > 0 && (
+                      <Button size="sm" icon="check" onClick={() => void markManyDoneWithUndo(by.else, 'Low priority')}>
+                        Mark all {by.else.length} done
+                      </Button>
+                    )}
                   </div>
                   <div className="border-b border-line-soft">{by[open].length ? by[open].flatMap(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
                 </section>

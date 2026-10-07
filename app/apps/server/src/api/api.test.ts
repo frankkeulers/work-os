@@ -234,6 +234,25 @@ describe('views', () => {
     expect((await get('/api/items/slack%3Anope/earlier')).statusCode).toBe(404);
   });
 
+  it('marks many items done in one write, skipping ones already done, and reopens them', async () => {
+    const other = 'slack:C9:1790000000.000100';
+    await store.append(upsert(), { ...upsert(), itemId: other }, { type: 'item.done', itemId: other, data: undefined });
+    const post = (url: string, payload: unknown) => server.app.inject({ method: 'POST', url, headers: auth, payload: payload as object });
+    expect((await post('/api/items/done', { ids: [ITEM, other, ITEM] })).json()).toEqual({ count: 1 });
+    expect(store.projection.items[ITEM].status).toBe('done');
+    expect((await post('/api/items/reopen', { ids: [ITEM, other] })).json()).toEqual({ count: 2 });
+    expect((await post('/api/items/done', { ids: [] })).statusCode).toBe(422);
+    expect((await post('/api/items/done', { ids: ['slack:nope'] })).statusCode).toBe(404);
+  });
+
+  it('hides items from channels excluded after they were fetched, and drops repeated names from DM titles', async () => {
+    await store.append(upsert({ title: '#tech-all' }), { ...upsert({ kind: 'dm', title: 'Matt, Matt, Ankush' }), itemId: 'slack:G1:1790000000.000100' });
+    const s = (await get('/api/settings')).json<SettingsView>();
+    await put('/api/settings', { settings: { ...s.settings, slack: { ...s.settings.slack, excludeChannels: ['#tech-all'] } }, rules: s.rules });
+    const inbox = (await get('/api/inbox')).json<InboxView>();
+    expect(inbox.items.map((i) => i.title)).toEqual(['Matt, Ankush']);
+  });
+
   it('logs item.seen when opening clears a flag, and only then', async () => {
     await store.append(upsert(), { type: 'item.snoozed', itemId: ITEM, data: { until: '2026-10-05T08:59:00.000Z' } }, { type: 'item.unsnoozed', itemId: ITEM, data: undefined });
     const view = (await get(`/api/items/${encodeURIComponent(ITEM)}`)).json<ItemView>();

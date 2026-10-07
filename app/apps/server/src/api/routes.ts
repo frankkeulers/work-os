@@ -1,4 +1,4 @@
-import { CorrectionBody, DraftEdit, DraftRequest, SettingsSave, SnoozeInput, seenChanges, type EarlierView } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, SettingsSave, SnoozeInput, seenChanges, type EarlierView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
@@ -39,6 +39,16 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!d.store.projection.items[id]) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     return id;
   };
+  // Many at once (a channel's items, or all of Low priority): one write, skipping those already there.
+  const many = (type: 'item.done' | 'item.reopened') => async (req: { body: unknown }) => {
+    const body = ItemIds.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { ids } with at least one item ID.', [{ path: 'ids', message: 'Pick at least one item' }]);
+    const ids = [...new Set(body.data.ids)].map(item).filter((id) => (d.store.projection.items[id].status === 'done') === (type === 'item.reopened'));
+    if (ids.length) await d.store.append(...ids.map((itemId) => ({ type, itemId, data: undefined })));
+    return { count: ids.length };
+  };
+  app.post('/api/items/done', many('item.done'));
+  app.post('/api/items/reopen', many('item.reopened'));
   app.post<{ Params: { id: string } }>('/api/items/:id/done', async (req, reply) => {
     await d.store.append({ type: 'item.done', itemId: item(req.params.id), data: undefined });
     return reply.code(204).send();

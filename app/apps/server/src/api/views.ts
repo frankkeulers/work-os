@@ -35,7 +35,8 @@ import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { LabelStore } from '../store/labels';
 import type { RecoveryReport, Store } from '../store/store';
-import { webClientUrl } from '../sources/slack/normalise';
+import { mpdmTitle } from '../sources/slack/directory';
+import { channelListed, webClientUrl } from '../sources/slack/normalise';
 import { HttpError } from './errors';
 
 // The read side of the API: each view is built from the projection, the item files and the
@@ -64,6 +65,8 @@ export interface ViewDeps {
   evals?: Evals;
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
   slackTeamId?: () => string | undefined;
+  /** A group DM's title from its members, when Slack has said who they are. */
+  dmTitle?: (itemId: string) => string | undefined;
   /** Everyone in a DM item's conversation, from Slack. */
   members?: (item: Item, signal?: AbortSignal) => Promise<Participant[] | undefined>;
   /** The messages before a DM item, read live from Slack. */
@@ -72,12 +75,23 @@ export interface ViewDeps {
   actions?: ActionService;
 }
 
-/** Open in Slack: the web client when settings say browser (the default) and the workspace is known. */
+/**
+ * What the stored summary can't know: Open in Slack's URL (the web client when settings say browser,
+ * the default, and the workspace is known), and a group DM's title from its members. Titles stored
+ * before those were known list each message's author, so repeats are dropped.
+ */
 function withOpenUrl(d: ViewDeps, s: ItemSummary): ItemSummary {
   if (s.source !== 'slack') return s;
   const team = d.slackTeamId?.();
   const web = d.settings.editable.settings.slack.openLinksIn !== 'app' && team ? webClientUrl(team, s.id, s.kind) : undefined;
-  return { ...s, openUrl: web ?? s.permalink };
+  const title = s.kind === 'dm' ? (d.dmTitle?.(s.id) ?? mpdmTitle(s.title) ?? [...new Set(s.title.split(', '))].join(', ')) : s.title;
+  return { ...s, title, openUrl: web ?? s.permalink };
+}
+
+/** A channel item from a channel now under "Never read these channels": fetched before it was excluded. */
+export function inExcludedChannel(i: { id: string; source: string; kind: string; title: string }, exclude: string[]): boolean {
+  if (i.source !== 'slack' || i.kind === 'dm' || !exclude.length) return false;
+  return channelListed(exclude, { id: i.id.split(':')[1], name: i.title.replace(/^#/, '') });
 }
 
 function budgets(d: ViewDeps): BudgetState {
@@ -187,6 +201,7 @@ export function inboxView(d: ViewDeps): InboxView {
   const actions = actionsByItem(d);
   const items = Object.values(d.store.projection.items)
     .filter((i) => i.status !== 'done' || !i.doneAt || i.doneAt >= cutoff)
+    .filter((i) => !inExcludedChannel(i, s.slack.excludeChannels))
     .map((i) =>
       withOpenUrl(
         d,

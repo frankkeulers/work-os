@@ -199,6 +199,18 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // settings change, but the token, Frank's identity and names stay cached.
   const slackDirectory = new SlackDirectory(new SlackApi(secrets, deps.fetch ?? fetch));
   const earlier = new EarlierMessages(slackDirectory);
+  // A group DM's members, asked for once in the background when the inbox shows it unnamed (after a
+  // restart, before a poll); the inbox is told to refresh once they are known.
+  const warming = new Set<string>();
+  const warmMembers = (channel: string) => {
+    if (warming.has(channel) || !channel.startsWith('C') && !channel.startsWith('G')) return;
+    warming.add(channel);
+    void slackDirectory
+      .dmMembersById(channel)
+      .then((ids) => ids && publish({ topic: 'inbox' }))
+      .catch((err: unknown) => logger.debug?.({ channel, err: String(err) }, 'Could not read group DM members'))
+      .finally(() => setTimeout(() => warming.delete(channel), 10 * 60_000).unref());
+  };
   const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger) };
   // Claude (M2): one adapter for the process; triage reads the prompt file on every run.
   const claude = new ClaudeAdapter({
@@ -221,6 +233,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     config: () => ({ settings: settings.editable.settings, rules: settings.rules }),
     me: () => meFrom(runtime.whoAmI('slack')),
     prompt: () => loadPrompt(config.dataDir, 'triage.md', DEFAULT_TRIAGE_PROMPT),
+    earlier: (item, signal) => earlier.forItem(item, signal),
     budgetHit: () => {
       const b = budgetsOf(usage.records(), settings.editable.settings, now());
       return b.triage.hit || b.cost.hit;
@@ -340,9 +353,15 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     meId: () => runtime.identity('slack'),
     earlier: (item, signal) => earlier.forItem(item, signal),
     slackTeamId: () => slackDirectory.identityKnown?.team_id,
+    dmTitle: (itemId) => {
+      const channel = itemId.split(':')[1];
+      const c = slackDirectory.conversation(channel);
+      if (c?.is_mpim && slackDirectory.knownMembers(c.id)) return slackDirectory.title(c, []);
+      warmMembers(channel);
+      return undefined;
+    },
     members: async (item, signal) => {
-      const c = slackDirectory.conversation(item.id.split(':')[1]);
-      const ids = c && (await slackDirectory.dmMembers(c, signal));
+      const ids = await slackDirectory.dmMembersById(item.id.split(':')[1], signal);
       return ids?.map((id) => ({ id, name: slackDirectory.name(id) }));
     },
     usage: () => usage.records(),

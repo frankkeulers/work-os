@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useBlocker, useParams, useSearchParams } from 'react-router';
-import type { ActionType } from '@work-os/shared';
+import type { ActionType, Message } from '@work-os/shared';
 import { api, isApiError, type ItemView } from '../api';
 import { ActionPanel, defaultType, parseType } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
 import { CorrectForm, SnoozeMenu, kindLabel, markDoneWithUndo, openInSource } from '../components/item';
 import { Icon, type IconName } from '../components/icons';
+import { useEarlierToggle } from '../components/Earlier';
 import { MessageText } from '../components/SlackText';
 import { Banner, Button, ConfirmDialog, IconButton, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
 import { useApiQuery } from '../hooks/useApiQuery';
@@ -28,29 +29,33 @@ function Header({ view }: { view: ItemView }) {
   const now = useNow();
   const { summary: s, item } = view;
   const { open: snoozeOpen, setOpen: setSnoozeOpen, close: closeSnooze, trigger: snoozeTrigger, panel: snoozePanel } = usePopover();
-  const others = item.participants.length;
+  // A DM names everyone in it, as in the item panel; otherwise who wrote.
+  const members = view.members?.filter((m) => m.id !== view.meId);
+  const group = !!members && members.length > 1;
+  const who = members?.length ? members.map((m) => m.name).join(', ') : s.title;
+  const others = view.members?.length ?? item.participants.length;
   const reopen = () => void api.reopen(item.id).then(() => toast('Reopened.'), errorToast);
   return (
     <header className="flex flex-wrap items-start gap-4">
       <div className="flex flex-[1_1_420px] flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
           <SourceMark source={item.source} size={16} />
-          <span className="font-medium">{item.title}</span>
+          <span className="font-medium">{who}</span>
           <span className="text-muted">
-            · {item.kind === 'dm' ? 'direct message' : kindLabel(item.kind).toLowerCase()} · {plural(others, 'participant')} · {lastActive(item.lastActivityAt, now)}
+            · {group ? 'group DM' : item.kind === 'dm' ? 'direct message' : kindLabel(item.kind).toLowerCase()} · {plural(others, view.members ? 'member' : 'participant')} · {lastActive(item.lastActivityAt, now)}
           </span>
         </div>
         <h1 className="m-0 text-2xl font-semibold leading-[1.3] tracking-[-0.015em]">{s.summary}</h1>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Button size="lg" className="min-h-10 px-3.5 text-[13px] font-normal" icon="external" onClick={() => openInSource(item)}>
+        <Button icon="external" onClick={() => openInSource(s)}>
           Open in {SOURCE_NAME[item.source]}
         </Button>
         {s.status === 'open' ? (
           <>
-            <IconButton label="Done" icon="check" bordered size={40} onClick={() => void markDoneWithUndo(s)} />
+            <IconButton label="Done" icon="check" bordered size={36} onClick={() => void markDoneWithUndo(s)} />
             <div className="relative">
-              <IconButton label="Snooze" icon="clock" bordered size={40} ref={snoozeTrigger} active={snoozeOpen} aria-haspopup="dialog" aria-expanded={snoozeOpen} onClick={() => setSnoozeOpen(!snoozeOpen)} />
+              <IconButton label="Snooze" icon="clock" bordered size={36} ref={snoozeTrigger} active={snoozeOpen} aria-haspopup="dialog" aria-expanded={snoozeOpen} onClick={() => setSnoozeOpen(!snoozeOpen)} />
               {snoozeOpen && (
                 <PopoverPanel panelRef={snoozePanel} label="Snooze" role="menu">
                   <SnoozeMenu
@@ -70,7 +75,7 @@ function Header({ view }: { view: ItemView }) {
             </div>
           </>
         ) : (
-          <Button size="lg" className="min-h-10 px-3.5 text-[13px]" icon="undo" onClick={reopen}>
+          <Button icon="undo" onClick={reopen}>
             {s.status === 'snoozed' ? 'Unsnooze' : 'Reopen'}
           </Button>
         )}
@@ -140,8 +145,8 @@ function TriageBand({ view }: { view: ItemView }) {
           </Button>
         </div>
         {correcting && (
-          <div className="border-t border-line pt-3.5">
-            <CorrectForm item={s} onDone={(n, lane) => (setCorrecting(false), toast(`Correction saved · moved to ${lane} · labelled set now ${n}`, { tone: 'success' }))} />
+          <div className="rounded-xl bg-surface">
+            <CorrectForm layout="panel" item={s} onCancel={() => setCorrecting(false)} onDone={(n, lane) => (setCorrecting(false), toast(`Correction saved · moved to ${lane} · labelled set now ${n}`, { tone: 'success' }))} />
           </div>
         )}
       </section>
@@ -177,8 +182,8 @@ function TriageBand({ view }: { view: ItemView }) {
           {t.confluence && <FileChip icon="confluence" line={m.band.line} label="Confluence" />}
           {t.vault && <FileChip icon="vault" line={m.band.line} label="Vault" />}
           {!t.confluence && !t.vault && <span className="text-xs text-muted">nowhere</span>}
-          <Button className="ml-2 border-off" onClick={() => setCorrecting(!correcting)} aria-expanded={correcting}>
-            {correcting ? 'Close' : 'Correct triage'}
+          <Button variant="ghost" size="sm" className="ml-2" onClick={() => setCorrecting(!correcting)} aria-expanded={correcting}>
+            Correct triage
           </Button>
         </div>
       </div>
@@ -189,8 +194,8 @@ function TriageBand({ view }: { view: ItemView }) {
         </div>
       )}
       {correcting && (
-        <div className="border-t pt-3.5" style={{ borderColor: m.band.line }}>
-          <CorrectForm item={s} onDone={(n, lane) => (setCorrecting(false), toast(`Correction saved · moved to ${lane} · labelled set now ${n}`, { tone: 'success' }))} />
+        <div className="rounded-xl bg-surface">
+          <CorrectForm layout="panel" item={s} onCancel={() => setCorrecting(false)} onDone={(n, lane) => (setCorrecting(false), toast(`Correction saved · moved to ${lane} · labelled set now ${n}`, { tone: 'success' }))} />
         </div>
       )}
       <div className="font-mono text-[11px] text-muted">{meta}</div>
@@ -212,7 +217,8 @@ function FileChip({ icon, label, line }: { icon: IconName; label: string; line: 
 function Thread({ view }: { view: ItemView }) {
   const now = useNow();
   const { item, meId } = view;
-  const name = (id: string) => (id === meId ? 'You' : (item.participants.find((p) => p.id === id)?.name ?? id));
+  const { controls, before, people } = useEarlierToggle(item);
+  const name = (id: string) => (id === meId ? 'You' : ([...item.participants, ...people].find((p) => p.id === id)?.name ?? id));
   const initials = (n: string) =>
     n === 'You'
       ? 'FK'
@@ -224,6 +230,23 @@ function Thread({ view }: { view: ItemView }) {
           .slice(0, 2)
           .toUpperCase();
   const shown = item.messages.length;
+  const message = (m: Message) => {
+    const n = name(m.authorId);
+    return (
+      <div className="flex gap-2.5">
+        <div aria-hidden="true" className={cx('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold', n === 'You' ? 'bg-accent-wash text-accent-ink' : 'bg-track text-ink-2')}>
+          {initials(n)}
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[13px] font-semibold">{n}</span>
+            <span className="font-mono text-[11px] text-muted">{fmtWhen(m.ts, now)}</span>
+          </div>
+          <MessageText item={item} meId={meId} people={people} text={m.text} className="text-[13px] leading-normal text-ink-2" />
+        </div>
+      </div>
+    );
+  };
   return (
     <section aria-label="Thread" className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
       <div className="flex items-baseline gap-2">
@@ -238,29 +261,27 @@ function Thread({ view }: { view: ItemView }) {
           Retention removed the thread text from the local store. The summary, decision and permalink are kept (FR-12.1).
         </div>
       ) : (
-        item.messages.map((m, i) => {
-          const n = name(m.authorId);
-          const gap = i > 0 && shown < item.messageCount && i === Math.ceil(shown / 2);
-          return (
-            <div key={m.id} className="flex flex-col gap-3">
-              {gap && <div className="text-center font-mono text-[11px] text-muted">· · · {item.messageCount - shown} more in {SOURCE_NAME[item.source]} · · ·</div>}
-              <div className="flex gap-2.5">
-                <div aria-hidden="true" className={cx('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold', n === 'You' ? 'bg-accent-wash text-accent-ink' : 'bg-track text-ink-2')}>
-                  {initials(n)}
-                </div>
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-[13px] font-semibold">{n}</span>
-                    <span className="font-mono text-[11px] text-muted">{fmtWhen(m.ts, now)}</span>
-                  </div>
-                  <MessageText item={item} meId={meId} text={m.text} className="text-[13px] leading-normal text-ink-2" />
-                </div>
-              </div>
+        <>
+          {controls}
+          {before.map((m) => (
+            <div key={m.id} className="opacity-75">
+              {message(m)}
             </div>
-          );
-        })
+          ))}
+          {before.length > 0 && <div className="border-t border-line-soft pt-2 font-mono text-[11px] text-muted">This item</div>}
+          {item.messages.map((m, i) => {
+            const gap = i > 0 && shown < item.messageCount && i === Math.ceil(shown / 2);
+            return (
+              <div key={m.id} className="flex flex-col gap-3">
+                {gap && <div className="text-center font-mono text-[11px] text-muted">· · · {item.messageCount - shown} more in {SOURCE_NAME[item.source]} · · ·</div>}
+                {message(m)}
+              </div>
+            );
+          })}
+        </>
       )}
-      <button type="button" className="self-start text-[13px] font-medium text-accent hover:underline cursor-pointer" onClick={() => openInSource(item)}>
+
+      <button type="button" className="self-start text-[13px] font-medium text-accent hover:underline cursor-pointer" onClick={() => openInSource(view.summary)}>
         Open in {SOURCE_NAME[item.source]}
       </button>
     </section>

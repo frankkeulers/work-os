@@ -8,6 +8,17 @@ import type { AuthTest, Conversation, ConversationsResponse, MembersResponse, Us
 const REFRESH_MS = 60 * 60_000;
 const MAX_PAGES = 20;
 
+/**
+ * A group DM's own name, "mpdm-frank.keulers--dana.lee--sam-1", as "dana.lee, sam": the handles of
+ * the others, for when their names aren't known yet.
+ */
+export function mpdmTitle(name: string | undefined, myHandle?: string): string | undefined {
+  const m = name?.match(/^mpdm-(.+)-\d+$/);
+  if (!m) return undefined;
+  const handles = m[1].split('--').filter((h) => h && h !== myHandle);
+  return handles.length ? handles.join(', ') : undefined;
+}
+
 export class SlackDirectory {
   private me?: AuthTest;
   private users = new Map<string, string>();
@@ -32,6 +43,14 @@ export class SlackDirectory {
   /** The conversations Frank is a member of, including DMs and group DMs. */
   async conversations(signal?: AbortSignal): Promise<Map<string, Conversation>> {
     if (this.convs.size && this.now() - this.convsAt < REFRESH_MS) return this.convs;
+    // Callers at the same moment (a poll, the inbox naming group DMs) share one listing.
+    this.loading ??= this.listConversations(signal).finally(() => (this.loading = undefined));
+    return this.loading;
+  }
+
+  private loading?: Promise<Map<string, Conversation>>;
+
+  private async listConversations(signal?: AbortSignal): Promise<Map<string, Conversation>> {
     const next = new Map<string, Conversation>();
     let cursor: string | undefined;
     for (let page = 0; page < MAX_PAGES; page++) {
@@ -80,6 +99,13 @@ export class SlackDirectory {
     return r.members;
   }
 
+  /** Who is in a DM, by channel ID, asking Slack for whatever isn't known yet (after a restart). */
+  async dmMembersById(channel: string, signal?: AbortSignal): Promise<string[] | undefined> {
+    await this.identity(signal);
+    const c = (await this.conversations(signal)).get(channel);
+    return c && this.dmMembers(c, signal);
+  }
+
   /** The members cached by dmMembers, without asking Slack. */
   knownMembers = (channel: string): string[] | undefined => this.members.get(channel)?.ids;
 
@@ -88,8 +114,8 @@ export class SlackDirectory {
     if (c.is_im) return this.name(c.user ?? participants.find((p) => p !== this.me?.user_id) ?? c.id);
     if (c.is_mpim) {
       // Everyone in the group, not only who wrote in this window.
-      const names = (this.knownMembers(c.id) ?? participants).filter((p) => p !== this.me?.user_id).map(this.name);
-      return names.length ? names.join(', ') : (c.name ?? c.id);
+      const names = [...new Set(this.knownMembers(c.id) ?? participants)].filter((p) => p !== this.me?.user_id).map(this.name);
+      return names.length ? names.join(', ') : mpdmTitle(c.name, this.me?.user) ?? c.id;
     }
     return c.name ? `#${c.name}` : c.id;
   }

@@ -325,6 +325,19 @@ test('the footer opens Low priority, Snoozed and Done one at a time, and j/k wal
   await expect(page.getByRole('region', { name: 'Done' })).toHaveCount(0);
 });
 
+test('Low priority can be marked done as a whole, and Undo brings it back', async ({ page }) => {
+  const footer = page.getByTestId('inbox-footer');
+  await footer.getByRole('button', { name: /low priority/ }).click();
+  const list = page.getByRole('region', { name: 'Low priority' });
+  const n = await list.locator('[data-row]').count();
+  expect(n).toBeGreaterThan(0);
+  await list.getByRole('button', { name: `Mark all ${n} done` }).click();
+  await expect(page.getByText(`Done · ${n} items in Low priority`)).toBeVisible();
+  await expect(footer.getByRole('button', { name: /^0 low priority/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(footer.getByRole('button', { name: new RegExp(`^${n} low priority`) })).toBeVisible();
+});
+
 test('threads still active show as a quiet header link that opens their list', async ({ page }) => {
   await openControls(page);
   await page.getByRole('button', { name: 'Triage budget hit', exact: true }).click();

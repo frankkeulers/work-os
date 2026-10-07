@@ -1,4 +1,4 @@
-import { Attention, NextStep, toLoggedDecision, type EventDraft, type Item, type Me, type Rule, type Settings, type TriageDecision } from '@work-os/shared';
+import { Attention, NextStep, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type TriageDecision } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -52,6 +52,8 @@ export interface TriageDeps {
   config: () => { settings: Settings; rules: Rule[] };
   me: () => Me;
   prompt: () => Promise<Prompt>;
+  /** A DM item's earlier conversation, for context. A failure is logged and triage goes ahead without it. */
+  earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
   /** Today's triage calls or cost-equivalent are at their budget (CL-6). */
   budgetHit: () => boolean;
 }
@@ -96,7 +98,15 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
       continue;
     }
     if (stored.item.revision !== it.revision) continue; // a poll is between its file and its log entry
-    threads.push({ item: stored.item, thread: threadForTriage(stored.item, me, t.keepLastMessages) });
+    let earlier: EarlierView | undefined;
+    if (stored.item.kind === 'dm' && d.earlier) {
+      earlier = await d.earlier(stored.item, signal).catch((err: unknown) => {
+        if (signal.aborted) throw err;
+        d.logger?.warn({ itemId: it.id, err: String(err) }, 'Could not read the conversation before a DM; triaging without it');
+        return undefined;
+      });
+    }
+    threads.push({ item: stored.item, thread: threadForTriage(stored.item, me, t.keepLastMessages, earlier) });
   }
   if (missing.length) {
     await d.store.append(...missing);

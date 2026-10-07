@@ -691,6 +691,28 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
 
+  async markDoneMany(itemIds: string[]) {
+    await this.gate(COMMAND_MS);
+    const ids = [...new Set(itemIds)].filter((id) => this.rec(id).status !== 'done');
+    for (const id of ids) {
+      markDone(this.rec(id), this.iso());
+      this.event('item.done', undefined, { itemId: id });
+    }
+    this.emit({ topic: 'inbox' }, ...ids.map((id) => ({ topic: 'item' as const, id })));
+    return { count: ids.length };
+  }
+
+  async reopenMany(itemIds: string[]) {
+    await this.gate(COMMAND_MS);
+    const ids = [...new Set(itemIds)].filter((id) => this.rec(id).status === 'done');
+    for (const id of ids) {
+      reopen(this.rec(id));
+      this.event('item.reopened', undefined, { itemId: id });
+    }
+    this.emit({ topic: 'inbox' }, ...ids.map((id) => ({ topic: 'item' as const, id })));
+    return { count: ids.length };
+  }
+
   async reopen(itemId: string) {
     await this.gate(COMMAND_MS);
     reopen(this.rec(itemId));

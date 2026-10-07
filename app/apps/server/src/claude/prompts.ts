@@ -25,11 +25,16 @@ export async function loadPrompt(dataDir: string, file: string, fallback: string
   return { text, version: promptVersion(text) };
 }
 
-export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v1 -->
+export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v2 -->
 You triage Slack threads for Frank, Product Innovation Lead at Pole Star Global (maritime data,
 vessel tracking and compliance products). He owns product discovery and prototypes, works with
 engineering, sales and customers, and keeps product context in Confluence and his own notes in an
 Obsidian vault. Messages written by Frank have the author "me".
+
+A DM is split into threads at 30 minutes of quiet, so a DM thread may come with "before": the last
+few messages of the same conversation before it, oldest first. Use them to understand the thread,
+for example the question that a reply answers, but judge attention, filing and the summary on
+"messages" alone: what came before has already been triaged.
 
 For each thread, decide three things.
 

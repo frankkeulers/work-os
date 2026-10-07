@@ -1,4 +1,4 @@
-import { mentionsMe, type Item, type Me } from '@work-os/shared';
+import { mentionsMe, type EarlierView, type Item, type Me } from '@work-os/shared';
 
 // What the model sees of a thread, and how threads are packed into calls (§5.3, CL-4).
 //
@@ -24,11 +24,17 @@ export interface TriageThread {
   messages: TriageMessage[];
   /** Messages in the thread that are not in `messages`. */
   omitted: number;
+  /** A DM's last few messages before this item, for context only (oldest first). */
+  before?: TriageMessage[];
 }
+
+/** How much of a DM's earlier conversation triage sees: enough for the question a reply answers. */
+export const BEFORE_MAX_MESSAGES = 5;
+export const BEFORE_MAX_CHARS = 500;
 
 const cut = (text: string) => (text.length > MESSAGE_MAX_CHARS ? `${text.slice(0, MESSAGE_MAX_CHARS - 1)}…` : text);
 
-export function threadForTriage(item: Item, me: Me, keepLast: number): TriageThread {
+export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: EarlierView): TriageThread {
   const msgs = item.messages;
   const keep = new Set<number>();
   if (msgs.length) keep.add(0);
@@ -41,7 +47,14 @@ export function threadForTriage(item: Item, me: Me, keepLast: number): TriageThr
     .sort((a, b) => a - b)
     .map((i) => msgs[i])
     .map((m) => ({ author: me.id && m.authorId === me.id ? 'me' : (names.get(m.authorId) ?? m.authorId), at: m.ts, text: cut(m.text) }));
-  return { id: item.id, kind: item.kind, title: item.title, messages, omitted: Math.max(0, item.messageCount - messages.length) };
+  const thread: TriageThread = { id: item.id, kind: item.kind, title: item.title, messages, omitted: Math.max(0, item.messageCount - messages.length) };
+  const prior = earlier?.messages.slice(-BEFORE_MAX_MESSAGES) ?? [];
+  if (prior.length) {
+    const known = new Map([...names, ...(earlier?.people ?? []).map((p): [string, string] => [p.id, p.name])]);
+    const short = (t: string) => (t.length > BEFORE_MAX_CHARS ? `${t.slice(0, BEFORE_MAX_CHARS - 1)}…` : t);
+    thread.before = prior.map((m) => ({ author: me.id && m.authorId === me.id ? 'me' : (known.get(m.authorId) ?? m.authorId), at: m.ts, text: short(m.text) }));
+  }
+  return thread;
 }
 
 export const estimateTokens = (text: string) => Math.ceil(text.length / CHARS_PER_TOKEN);
