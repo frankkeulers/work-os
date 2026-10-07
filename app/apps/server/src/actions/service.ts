@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Me, Notice, Settings } from '@work-os/shared';
+import { londonParts } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeError, ClaudeOutputError } from '../claude/errors';
@@ -100,6 +101,7 @@ export class ActionService {
       vaultRoot: this.vaultRoot(),
       sandboxRoot: join(this.d.dataDir, 'sandbox/vault'),
       dryRun: this.d.dryRun(),
+      today: londonParts(this.d.now()).dateKey,
     };
   }
 

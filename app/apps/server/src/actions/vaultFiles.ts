@@ -76,3 +76,15 @@ export function insertUnderHeading(content: string, heading: string, block: stri
   const text = out.join('\n') + (!tail.length && content.endsWith('\n') ? '\n' : '');
   return { content: text, context: before.filter((l) => l.trim() !== '').slice(-3) };
 }
+
+/**
+ * Sets the frontmatter's "updated:" line to `date` (YYYY-MM-DD), as the vault conventions ask on
+ * every edit. Only an existing line in a leading frontmatter block changes; a note without one
+ * is returned as it is.
+ */
+export function touchUpdated(content: string, date: string): string {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/.exec(content);
+  if (!fm) return content;
+  const body = fm[1].replace(/^updated:[ \t]*[^\r\n]*$/m, `updated: ${date}`);
+  return body === fm[1] ? content : content.replace(fm[1], () => body);
+}

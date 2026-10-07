@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readVerdict } from '../claude/readGuard';
 import type { StoredDraft } from '../store/drafts';
 import { planVaultWrite, writeVaultFile, type VaultPlan } from './vaultExecutor';
-import { checkNotePath, insertUnderHeading, sha256 } from './vaultFiles';
+import { checkNotePath, insertUnderHeading, sha256, touchUpdated } from './vaultFiles';
 
 // The vault side of FR-9.x against a synthetic vault in a temp folder: where a note may go, how an
 // append lands, and the executor's reconciliation (FR-9.4, FR-14.5). Never the real vault.
@@ -51,6 +51,15 @@ describe('insertUnderHeading', () => {
   });
 });
 
+describe('touchUpdated', () => {
+  it('sets an existing updated: line in the frontmatter, and leaves everything else alone', () => {
+    const note = '---\ntype: note\ncreated: 2026-06-01\nupdated: 2026-09-30\n---\n# X\n\nupdated: 2020-01-01 in the body\n';
+    expect(touchUpdated(note, '2026-10-07')).toBe('---\ntype: note\ncreated: 2026-06-01\nupdated: 2026-10-07\n---\n# X\n\nupdated: 2020-01-01 in the body\n');
+    expect(touchUpdated(NOTE, '2026-10-07')).toBe(NOTE); // no updated: line, so none is added
+    expect(touchUpdated('# No frontmatter\nupdated: 2020-01-01\n', '2026-10-07')).toBe('# No frontmatter\nupdated: 2020-01-01\n');
+  });
+});
+
 describe('note paths', () => {
   it('accepts a Markdown path inside the vault and refuses the rest', async () => {
     expect(await checkNotePath(vault, './Projects/MVI V2.md')).toBe('Projects/MVI V2.md');
@@ -81,7 +90,7 @@ describe('read guard', () => {
 
 describe('vault executor (FR-9.4, FR-14.5)', () => {
   const real = { vaultRoot: () => vault, sandboxRoot: () => sandbox };
-  const targets = (dryRun: boolean) => ({ vaultRoot: real.vaultRoot(), sandboxRoot: real.sandboxRoot(), dryRun });
+  const targets = (dryRun: boolean) => ({ vaultRoot: real.vaultRoot(), sandboxRoot: real.sandboxRoot(), dryRun, today: '2026-10-07' });
 
   it('appends when the note is as drafted, then sees its own write as already done', async () => {
     await writeFile(join(vault, 'Projects/MVI V2.md'), NOTE);
@@ -89,6 +98,15 @@ describe('vault executor (FR-9.4, FR-14.5)', () => {
     const plan = await write(await planVaultWrite(targets(false), stored));
     expect(await readFile(join(vault, 'Projects/MVI V2.md'), 'utf8')).toContain('- Licence wording agreed with legal.');
     expect(await planVaultWrite(targets(false), { ...stored, expectedHash: plan.expectedHash })).toMatchObject({ kind: 'already' });
+  });
+
+  it('bumps the note’s updated: date when it appends', async () => {
+    const dated = NOTE.replace('tags: [mvi]\n', 'tags: [mvi]\nupdated: 2026-09-01\n');
+    await writeFile(join(vault, 'Projects/MVI V2.md'), dated);
+    await write(await planVaultWrite(targets(false), appendDraft(sha256(dated))));
+    const text = await readFile(join(vault, 'Projects/MVI V2.md'), 'utf8');
+    expect(text).toMatch(/^---\ntags: \[mvi\]\nupdated: 2026-10-07\n---/);
+    expect(text).toContain('- Licence wording agreed with legal.');
   });
 
   it('re-drafts instead of writing when the note changed after drafting', async () => {

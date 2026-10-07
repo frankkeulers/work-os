@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import type { VaultAppendDraft, VaultNewDraft } from '@work-os/shared';
 import { fsyncDir, tmpName, writeFileAtomic, writeSynced } from '../store/atomic';
 import type { StoredDraft } from '../store/drafts';
-import { checkNotePath, insertUnderHeading, readOrNull, sha256, VaultPathError } from './vaultFiles';
+import { checkNotePath, insertUnderHeading, readOrNull, sha256, touchUpdated, VaultPathError } from './vaultFiles';
 
 // The vault executor (FR-9.4, FR-14.5, NF-5): code, never a model, writes an approved draft. Before
 // every attempt it reconciles against the file as it is now:
@@ -17,6 +17,8 @@ export interface VaultTargets {
   vaultRoot: string;
   sandboxRoot: string;
   dryRun: boolean;
+  /** Today in London (YYYY-MM-DD): an append sets the note's "updated:" to it. */
+  today: string;
 }
 
 export type VaultPlan =
@@ -53,7 +55,8 @@ export async function planVaultWrite(t: VaultTargets, stored: StoredDraft): Prom
   if (currentHash !== stored.baseHash) return { kind: 'conflict', message: `${path} changed after drafting (file hash differs). Re-drafting instead of writing.` };
   const ins = insertUnderHeading(current, d.heading, d.content);
   if (!ins) return { kind: 'conflict', message: `${path} no longer has the heading ${d.heading}. Re-drafting instead of writing.` };
-  return { kind: 'write', file, content: ins.content, expectedHash: sha256(ins.content), isNew: false, message: doneMessage(t, d, file) };
+  const content = touchUpdated(ins.content, t.today);
+  return { kind: 'write', file, content, expectedHash: sha256(content), isNew: false, message: doneMessage(t, d, file) };
 }
 
 /** A new note must not exist when it lands. */
