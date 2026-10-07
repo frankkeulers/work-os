@@ -199,6 +199,23 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // settings change, but the token, Frank's identity and names stay cached.
   const slackDirectory = new SlackDirectory(new SlackApi(secrets, deps.fetch ?? fetch));
   const earlier = new EarlierMessages(slackDirectory);
+  // Items stored with an empty message (an app's post read before its blocks were) are read again
+  // on the next poll. Found once at start, in the background; the merge then re-triages them.
+  const refetch = new Set<string>();
+  const takeRefetch = (source: string) => {
+    if (source !== 'slack' || !refetch.size) return [];
+    const ids = [...refetch];
+    refetch.clear();
+    return ids;
+  };
+  void (async () => {
+    for (const it of Object.values(store.projection.items)) {
+      if (it.source !== 'slack' || it.status === 'done') continue;
+      const stored = await items.read(it.source, it.id).catch(() => undefined);
+      if (stored?.item.messages.some((m) => m.text === '')) refetch.add(it.id);
+    }
+    if (refetch.size) logger.info({ items: refetch.size }, 'Reading items with empty messages again on the next poll');
+  })();
   // A group DM's members, asked for once in the background when the inbox shows it unnamed (after a
   // restart, before a poll); the inbox is told to refresh once they are known.
   const warming = new Set<string>();
@@ -327,7 +344,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),
     onHealthChange: (c) => alerts.onChange(c),
-    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }) }, s, reason, signal),
+    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }), refetch: takeRefetch }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
     checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings), claude: () => runtime.health.get('claude') }),

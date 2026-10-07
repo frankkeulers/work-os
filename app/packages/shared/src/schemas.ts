@@ -254,6 +254,7 @@ export const Settings = z.object({
     customerChannels: z.array(z.string()),
     vips: z.array(z.string()),
     openLinksIn: z.enum(['browser', 'app']).optional(), // amendment: where Open in Slack goes; browser when unset
+    appChannels: z.array(z.string()).optional(), // amendment: channels whose app posts (Gong, say) are read; dropped elsewhere (FR-2.10)
   }),
   schedule: z.object({
     workHours: z.string().min(1, 'Enter work hours'),

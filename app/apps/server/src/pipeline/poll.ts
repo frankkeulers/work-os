@@ -37,6 +37,8 @@ export interface PollDeps {
   logger?: Logger;
   /** The rules and settings in force; without them every item waits for the model. */
   rules?: () => { rules: Rule[]; settings: Settings };
+  /** Items to read again whole on this source's next poll (taken once). */
+  refetch?: (source: string) => string[];
 }
 
 const EXCERPT_MAX = 110;
@@ -46,6 +48,10 @@ const excerpt = (text = '') => (text.length > EXCERPT_MAX ? `${text.slice(0, EXC
 export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision: number | undefined): { item: Item; newIds: string[] } {
   const known = new Set(stored?.messages.map((m) => m.id) ?? []);
   const newIds = fetched.messages.filter((m) => !known.has(m.id)).map((m) => m.id);
+  // A message stored empty (an app's post read before its blocks were) whose text has now arrived
+  // is new content: triage it again.
+  const was = new Map(stored?.messages.map((m) => [m.id, m.text]) ?? []);
+  const filled = fetched.messages.some((m) => was.get(m.id) === '' && m.text !== '');
   const byId = new Map((stored?.messages ?? []).map((m) => [m.id, m]));
   for (const m of fetched.messages) byId.set(m.id, m); // an edited message replaces its old text
   const messages = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id.localeCompare(b.id)).slice(-MAX_STORED_MESSAGES);
@@ -67,7 +73,7 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
       messageCount: Math.max(stored?.messageCount ?? 0, fetched.messageCount, messages.length),
       lastActivityAt,
       // A file ahead of the log (a crash between the two) keeps its revision, so the poll logs it.
-      revision: newIds.length || prevRevision === undefined ? (prevRevision ?? 0) + 1 : Math.max(prevRevision, stored?.revision ?? 0),
+      revision: newIds.length || filled || prevRevision === undefined ? (prevRevision ?? 0) + 1 : Math.max(prevRevision, stored?.revision ?? 0),
     },
   };
 }
@@ -75,7 +81,8 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
 export async function pollSource(d: PollDeps, source: SourceAdapter, reason: PollReason, signal: AbortSignal): Promise<PollStats> {
   const t0 = performance.now();
   const cursor = d.cursors.get(source.id, d.store.projection.sources[source.id]?.cursor);
-  const result = await source.fetchSince(cursor, { signal, now: d.now(), reason });
+  const refetch = d.refetch?.(source.id);
+  const result = await source.fetchSince(cursor, { signal, now: d.now(), reason, ...(refetch?.length && { refetch }) });
   signal.throwIfAborted(); // asleep mid-poll: don't write half a picture
 
   const identity = source.identity?.();

@@ -9,9 +9,30 @@ export interface SlackMessage {
   bot_id?: string;
   app_id?: string;
   text?: string;
+  /** Block Kit layout. For an app's post (Gong, say) this is the message; `text` is only its notification line. */
+  blocks?: SlackBlock[];
+  /** Legacy attachments, which older apps post their content in. */
+  attachments?: SlackAttachment[];
+  /** Shared files: a message can be only these. */
+  files?: { name?: string; title?: string }[];
   reply_count?: number;
   latest_reply?: string;
   permalink?: string;
+}
+
+export interface SlackBlock {
+  type: string;
+  text?: { type: string; text: string };
+  fields?: { type: string; text: string }[];
+  elements?: { type: string; text?: string }[];
+}
+
+export interface SlackAttachment {
+  fallback?: string;
+  pretext?: string;
+  title?: string;
+  text?: string;
+  fields?: { title?: string; value?: string }[];
 }
 
 /** A search match carries its channel and permalink with it. */

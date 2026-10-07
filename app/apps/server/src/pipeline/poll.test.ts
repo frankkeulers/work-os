@@ -82,6 +82,11 @@ describe('mergeItem', () => {
     expect(more.item.participants.map((p) => p.id)).toEqual(['U2', 'U3']);
   });
 
+  it('moves the revision when a message stored empty gets its text, so it is triaged again', () => {
+    const empty = item([{ ...msg('1', 30), text: '' }]);
+    expect(mergeItem(empty, item([msg('1', 30)]), 1)).toMatchObject({ newIds: [], item: { revision: 2, messages: [{ text: 'text 1' }] } });
+  });
+
   it('takes an edited message’s new text', () => {
     const edited = mergeItem(item([msg('1', 30)]), item([{ ...msg('1', 30), text: 'fixed typo' }]), 1);
     expect(edited.item.messages[0].text).toBe('fixed typo');

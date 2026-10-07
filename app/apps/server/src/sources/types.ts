@@ -9,6 +9,8 @@ export interface FetchContext {
   signal: AbortSignal; // aborts on the call's deadline and when the Mac sleeps
   now: Date;
   reason: PollReason;
+  /** Items to read again whole, whatever the cursor: stored before their content could be read. */
+  refetch?: string[];
 }
 
 export interface FetchResult {

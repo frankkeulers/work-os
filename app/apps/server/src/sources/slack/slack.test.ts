@@ -9,7 +9,7 @@ import { SlackApi } from './api';
 import { mpdmTitle } from './directory';
 import { EarlierMessages } from './earlier';
 import { FakeSlack } from './fakeSlack';
-import { buildItem, channelListed, cmpTs, mentionedIds, webClientUrl, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
+import { buildItem, channelListed, cmpTs, mentionedIds, messageText, webClientUrl, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
 
 const NOW = Date.parse('2026-10-06T09:00:00Z');
 const MIN = 60_000;
@@ -210,6 +210,56 @@ describe('Slack adapter, search mode (FR-2.3)', () => {
     expect(slack.count('conversations.replies')).toBe(10); // these 9, and #product's thread with its reply at 30 min ago
 
     expect(slack.maxInFlight).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('App posts (Gong) and message text', () => {
+  const gong = (ts: string) => ({
+    ts,
+    user: 'U09GONG',
+    bot_id: 'B09GONG',
+    text: 'PurpleTrac Product Feedback',
+    blocks: [
+      { type: 'section', text: { type: 'mrkdwn', text: ':telephone_receiver: *<https://gong.io/call?id=1|External Call - PurpleTRAC Demo>*' } },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: 'Oct 6 · 75m' }] },
+      { type: 'divider' },
+      { type: 'section', text: { type: 'mrkdwn', text: '*Recap*\nCharles and Robert discussed PurpleTRAC with the bank.' } },
+    ],
+  });
+
+  it('reads an app post from its blocks, and a person’s text as written', () => {
+    expect(messageText(gong('1'))).toBe(':telephone_receiver: *<https://gong.io/call?id=1|External Call - PurpleTRAC Demo>*\n\nOct 6 · 75m\n\n*Recap*\nCharles and Robert discussed PurpleTRAC with the bank.');
+    expect(messageText({ ts: '1', user: 'U1', text: 'Hi *there*', blocks: [{ type: 'rich_text', elements: [] }], attachments: [{ title: 'Unfurl', text: 'Page preview' }] })).toBe('Hi *there*');
+    expect(messageText({ ts: '1', bot_id: 'B1', text: 'Build failed', attachments: [{ title: 'main', fields: [{ title: 'Stage', value: 'test' }] }] })).toBe('Build failed\n\n*main*\n*Stage*: test');
+    expect(messageText({ ts: '1', user: 'U1', text: '', attachments: [{ fallback: 'Shared a link' }] })).toBe('Shared a link');
+    expect(messageText({ ts: '1', user: 'U1', subtype: 'file_share', text: '', files: [{ name: 'IMG_1.png' }, { title: 'Q4 plan.pdf', name: 'q4.pdf' }] })).toBe('📎 IMG_1.png\n📎 Q4 plan.pdf');
+  });
+
+  it('keeps app posts only in the channels listed for them, in search and in threads', async () => {
+    workspace();
+    slack.users.set('U09GONG', 'Gong');
+    slack.bots.add('U09GONG');
+    slack.channel({ id: 'C09SIG', name: 'product-signals' });
+    slack.post('C09SIG', gong(ts(25)));
+    slack.post('C01PROD', gong(ts(24)));
+
+    const without = byId((await adapter().fetchSince(undefined, ctx())).items);
+    expect(Object.keys(without).filter((k) => k.includes(ts(25)) || k.includes(ts(24)))).toEqual([]);
+
+    const items = byId((await adapter({ appChannels: ['#product-signals'] }).fetchSince(undefined, ctx())).items);
+    const item = items[`slack:C09SIG:${ts(25)}`];
+    expect(item.messages[0]).toMatchObject({ authorId: 'U09GONG', text: expect.stringContaining('*Recap*') });
+    expect(item.participants).toEqual([{ id: 'U09GONG', name: 'Gong' }]);
+    expect(items[`slack:C01PROD:${ts(24)}`]).toBeUndefined();
+  });
+
+  it('reads named items again whole, so an empty one gets its text', async () => {
+    workspace();
+    slack.users.set('U09GONG', 'Gong');
+    slack.channel({ id: 'C09SIG', name: 'product-signals' });
+    slack.post('C09SIG', gong(ts(60 * 24 * 5))); // older than the cursor
+    const r = await adapter({ appChannels: ['#product-signals'] }).fetchSince(ts(20), { ...ctx(), refetch: [`slack:C09SIG:${ts(60 * 24 * 5)}`, 'slack:C404:1.000000'] });
+    expect(byId(r.items)[`slack:C09SIG:${ts(60 * 24 * 5)}`].messages[0].text).toContain('*Recap*');
   });
 });
 

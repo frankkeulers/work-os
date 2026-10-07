@@ -32,6 +32,56 @@ export function isHuman(m: SlackMessage): boolean {
   return !m.bot_id && !!m.user && KEEP_SUBTYPES.has(m.subtype);
 }
 
+/** Who wrote a message: the user, or for an app posting without one, the bot. */
+export const authorOf = (m: SlackMessage): string => m.user ?? m.bot_id ?? 'unknown';
+
+const isAppMessage = (m: SlackMessage) => !!m.bot_id || m.subtype === 'bot_message';
+
+/**
+ * Whether to keep a message. People's messages always; an app's posts (Gong's call recaps, say)
+ * only in the channels listed under "Read app posts in". Search answers without bot_id, so an app
+ * is also known by its user being a bot.
+ */
+export function keepMessage(m: SlackMessage, o: { apps: boolean; isBot?: (userId: string) => boolean }): boolean {
+  const app = isAppMessage(m) || (!!m.user && !!o.isBot?.(m.user));
+  if (!app) return isHuman(m);
+  return o.apps && (!!m.user || !!m.bot_id) && (KEEP_SUBTYPES.has(m.subtype) || m.subtype === 'bot_message');
+}
+
+/**
+ * A message's text. Layout blocks (section, header, context) are the message when present: an
+ * app's `text` is then just the notification line, and search sends it empty. A person's message
+ * repeats its text in rich_text blocks, which are skipped. Attachments fill in when there is no
+ * text, and follow an app's text; a message of only files is their names.
+ */
+export function messageText(m: SlackMessage): string {
+  const blocks = (m.blocks ?? [])
+    .flatMap((b): string[] => {
+      if (b.type === 'section') return [b.text?.text ?? '', ...(b.fields ?? []).map((f) => f.text)].filter(Boolean);
+      if (b.type === 'header') return b.text?.text ? [`*${b.text.text}*`] : [];
+      if (b.type === 'context') {
+        const t = (b.elements ?? []).flatMap((e) => (e.text ? [e.text] : [])).join(' ');
+        return t ? [t] : [];
+      }
+      return [];
+    })
+    .join('\n\n');
+  if (blocks) return blocks;
+  const attached = (m.attachments ?? [])
+    .map((a) =>
+      [a.pretext, a.title && `*${a.title}*`, a.text ?? (a.title ? undefined : a.fallback), ...(a.fields ?? []).map((f) => [f.title && `*${f.title}*`, f.value].filter(Boolean).join(': '))]
+        .filter(Boolean)
+        .join('\n'),
+    )
+    .filter(Boolean)
+    .join('\n\n');
+  const text = m.text ?? '';
+  const files = (m.files ?? []).flatMap((f) => (f.title || f.name ? [`📎 ${f.title || f.name}`] : [])).join('\n');
+  if (!attached) return text || files;
+  if (!text) return attached;
+  return isAppMessage(m) ? `${text}\n\n${attached}` : text;
+}
+
 /** Matches a channel against a settings list, which may hold "#name", "name" or an ID. */
 export function channelListed(list: string[], c: { id: string; name?: string }): boolean {
   return list.some((entry) => {
@@ -97,6 +147,8 @@ export interface ItemInput {
   title: string;
   permalink: string;
   names: (userId: string) => string;
+  /** Which messages to keep; people's only, by default. */
+  keep?: (m: SlackMessage) => boolean;
 }
 
 const MENTION = /<@([UW][A-Z0-9]+)(?:\|[^>]*)?>/g;
@@ -110,15 +162,16 @@ export function itemId(channel: string, key: string): string {
 
 /** Builds the item. Its revision is set by the poll pipeline, which knows what was there before. */
 export function buildItem(i: ItemInput): Item {
-  const human = i.messages.filter(isHuman).sort((a, b) => cmpTs(a.ts, b.ts));
+  const human = i.messages.filter(i.keep ?? isHuman).sort((a, b) => cmpTs(a.ts, b.ts));
   const kept = human.slice(-MAX_STORED_MESSAGES);
-  const messages: Message[] = kept.map((m) => ({ id: m.ts, authorId: m.user!, ts: tsToIso(m.ts), text: m.text ?? '' }));
+  const messages: Message[] = kept.map((m) => ({ id: m.ts, authorId: authorOf(m), ts: tsToIso(m.ts), text: messageText(m) }));
   const seen = new Set<string>();
   const participants: Participant[] = [];
   for (const m of human) {
-    if (seen.has(m.user!)) continue;
-    seen.add(m.user!);
-    participants.push({ id: m.user!, name: i.names(m.user!) });
+    const author = authorOf(m);
+    if (seen.has(author)) continue;
+    seen.add(author);
+    participants.push({ id: author, name: i.names(author) });
   }
   const mentioned = mentionedIds(messages.map((m) => m.text))
     .map((id) => ({ id, name: i.names(id) }))

@@ -106,6 +106,9 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
         <Row stacked label="Only read these channels" help="Leave empty to read every channel you can see.">
           <ChipInput channel label="Include channels" placeholder="Every channel you can see" items={s.slack.includeChannels} onChange={(v) => set((x) => (x.slack.includeChannels = v))} />
         </Row>
+        <Row stacked label="Read app posts in these channels" help="Posts from apps such as Gong (call recaps, mentions) are read here and dropped everywhere else.">
+          <ChipInput channel label="App channels" placeholder="Add #channel…" items={s.slack.appChannels ?? []} onChange={(v) => set((x) => (x.slack.appChannels = v))} />
+        </Row>
         <Row stacked label="Never read these channels" help="Dropped as they’re fetched, and never stored.">
           <ChipInput channel label="Exclude channels" placeholder="Add #channel…" items={s.slack.excludeChannels} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
         </Row>

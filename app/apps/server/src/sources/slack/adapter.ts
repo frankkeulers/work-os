@@ -5,7 +5,7 @@ import { mapLimit } from '../limit';
 import type { FetchContext, FetchResult, SourceAdapter } from '../types';
 import type { SlackApi } from './api';
 import { SlackDirectory } from './directory';
-import { buildItem, channelListed, mentionedIds, cmpTs, dmWindows, isDirect, isHuman, isoToTs, maxTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
+import { authorOf, buildItem, channelListed, mentionedIds, cmpTs, dmWindows, isDirect, isoToTs, keepMessage, maxTs, messageText, permalinkFor, threadTsOf, tsToIso } from './normalise';
 import type { Conversation, HistoryResponse, SearchMatch, SearchResponse, SlackMessage } from './types';
 
 // The Slack source (FR-2.3–2.10). One poll:
@@ -54,6 +54,12 @@ export class SlackAdapter implements SourceAdapter {
     return me && { id: me.user_id, name: me.user };
   }
 
+  /** Which messages to keep in a conversation: people's, and apps' where settings allow (FR-2.10). */
+  private keep(c: Conversation) {
+    const apps = channelListed(this.o.settings.slack.appChannels ?? [], c);
+    return (m: SlackMessage) => keepMessage(m, { apps, isBot: this.directory.isBot });
+  }
+
   async probe(signal: AbortSignal): Promise<DepState> {
     try {
       await this.o.api.call('auth.test', {}, signal);
@@ -85,7 +91,9 @@ export class SlackAdapter implements SourceAdapter {
       if (f.msg.latest_reply) nextCursor = maxTs(nextCursor, f.msg.latest_reply);
     }
     const isNew = (m: SlackMessage) => cmpTs(m.ts, since) > 0 || (!!m.latest_reply && cmpTs(m.latest_reply, since) > 0);
-    const found = fetched.filter((f) => isHuman(f.msg) && allowed(f.channel) && isNew(f.msg));
+    // Search drops bot_id: an app's post is known by its user being a bot, so look the authors up first.
+    await this.directory.resolveUsers(fetched.flatMap((f) => (f.msg.user && allowed(f.channel) ? [f.msg.user] : [])), signal);
+    const found = fetched.filter((f) => allowed(f.channel) && isNew(f.msg) && this.keep(f.channel)(f.msg));
 
     // Group: threads by thread_ts, DM messages outside a thread into windows. A thread is fetched
     // whole only when a reply points at it: a new reply always shows up in the search itself, so a
@@ -118,9 +126,17 @@ export class SlackAdapter implements SourceAdapter {
       (fs) => this.dmWindows(fs, me.url, signal),
     );
     const drafts = [...threadItems, ...dmItems.flat()].filter((d): d is ItemDraft => !!d);
+    const have = new Set(drafts.map((d) => `${d.channel.id}:${d.key}`));
+    for (const id of ctx.refetch ?? []) {
+      const [, cid, key] = id.split(':');
+      const channel = members.get(cid) ?? this.directory.conversation(cid);
+      if (!channel || !key || !allowed(channel) || have.has(`${cid}:${key}`)) continue;
+      const again = await this.again(channel, key, me.url, signal);
+      if (again) drafts.push(again);
+    }
 
     await this.directory.resolveUsers(
-      drafts.flatMap((d) => [...d.messages.map((m) => m.user!), ...(d.channel.user ? [d.channel.user] : []), ...mentionedIds(d.messages.map((m) => m.text ?? ''))]),
+      drafts.flatMap((d) => [...d.messages.flatMap((m) => (m.user ? [m.user] : [])), ...(d.channel.user ? [d.channel.user] : []), ...mentionedIds(d.messages.map(messageText))]),
       signal,
     );
     await mapLimit(
@@ -131,8 +147,9 @@ export class SlackAdapter implements SourceAdapter {
     const items: Item[] = drafts.map((d) =>
       buildItem({
         ...d,
-        title: this.directory.title(d.channel, d.messages.map((m) => m.user!)),
+        title: this.directory.title(d.channel, d.messages.map(authorOf)),
         names: this.directory.name,
+        keep: this.keep(d.channel),
       }),
     );
     return { items, nextCursor: nextCursor ?? isoToTs(sinceMs) };
@@ -186,7 +203,7 @@ export class SlackAdapter implements SourceAdapter {
   /** A whole thread, from conversations.replies. */
   private async thread(channel: Conversation, threadTs: string, teamUrl: string, signal: AbortSignal): Promise<ItemDraft | undefined> {
     const msgs = await this.paged<HistoryResponse>('conversations.replies', { channel: channel.id, ts: threadTs, limit: 200 }, MAX_REPLY_PAGES, signal);
-    const human = msgs.filter(isHuman);
+    const human = msgs.filter(this.keep(channel));
     if (!human.length) return undefined;
     const parent = msgs.find((m) => m.ts === threadTs);
     return {
@@ -196,6 +213,20 @@ export class SlackAdapter implements SourceAdapter {
       total: parent?.reply_count !== undefined ? parent.reply_count + 1 : undefined,
       permalink: permalinkFor(teamUrl, channel.id, threadTs),
     };
+  }
+
+  /**
+   * An item read again whole: a thread, or the DM window it starts. For items stored before their
+   * content could be read, such as an app's post whose text was only in its blocks.
+   */
+  private async again(channel: Conversation, key: string, teamUrl: string, signal: AbortSignal): Promise<ItemDraft | undefined> {
+    const thread = await this.thread(channel, key, teamUrl, signal);
+    if (!isDirect(channel) || (thread && thread.messages.length > 1)) return thread;
+    const history = await this.paged<HistoryResponse>('conversations.history', { channel: channel.id, oldest: key, inclusive: 1, limit: 200 }, MAX_HISTORY_PAGES, signal);
+    const keep = this.keep(channel);
+    const outside = history.filter((m) => keep(m) && !m.reply_count && (!m.thread_ts || m.thread_ts === m.ts)).sort((a, b) => cmpTs(a.ts, b.ts));
+    const w = dmWindows(outside).find((x) => x[0].ts === key);
+    return w ? { channel, key, messages: w, permalink: permalinkFor(teamUrl, channel.id, key) } : thread;
   }
 
   /** DM messages outside threads, as windows split by 30 minutes of quiet (FR-2.6). */
@@ -208,7 +239,8 @@ export class SlackAdapter implements SourceAdapter {
     const history = await this.paged<HistoryResponse>('conversations.history', { channel: channel.id, oldest, latest: sorted.at(-1)!, inclusive: 1, limit: 200 }, MAX_HISTORY_PAGES, signal);
     const byTs = new Map<string, SlackMessage>(history.map((m) => [m.ts, m]));
     for (const f of fs) if (!byTs.has(f.msg.ts)) byTs.set(f.msg.ts, f.msg);
-    const outside = [...byTs.values()].filter((m) => isHuman(m) && !m.reply_count && (!m.thread_ts || m.thread_ts === m.ts)).sort((a, b) => cmpTs(a.ts, b.ts));
+    const keep = this.keep(channel);
+    const outside = [...byTs.values()].filter((m) => keep(m) && !m.reply_count && (!m.thread_ts || m.thread_ts === m.ts)).sort((a, b) => cmpTs(a.ts, b.ts));
     return dmWindows(outside)
       .filter((w) => w.some((m) => newTs.has(m.ts)))
       .map((w) => ({ channel, key: w[0].ts, messages: w, permalink: permalinkFor(teamUrl, channel.id, w[0].ts) }));

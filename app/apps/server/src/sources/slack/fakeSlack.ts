@@ -19,6 +19,8 @@ export class FakeSlack {
   readonly me = 'UFRANK';
   channels = new Map<string, FakeChannel>();
   users = new Map<string, string>([[this.me, 'Frank']]);
+  /** Users that are apps' bot users, as users.info says. */
+  bots = new Set<string>();
   calls: { method: string; params: Record<string, string>; token?: string }[] = [];
   failures = new Map<string, Injected>();
   token = 'xoxp-fake-token';
@@ -72,7 +74,7 @@ export class FakeSlack {
       case 'auth.test':
         return { url: this.team, user: 'frank', user_id: this.me, team: 'Pole Star', team_id: 'T0POLE' };
       case 'users.info':
-        return { user: { id: p.user, profile: { display_name: this.users.get(p.user) ?? '' }, name: p.user.toLowerCase() } };
+        return { user: { id: p.user, profile: { display_name: this.users.get(p.user) ?? '' }, name: p.user.toLowerCase(), ...(this.bots.has(p.user) && { is_bot: true }) } };
       case 'conversations.members': {
         const c = this.channels.get(p.channel)!;
         return page(c.members ?? [...new Set([this.me, ...(c.user ? [c.user] : []), ...c.messages.flatMap((m) => (m.user ? [m.user] : []))])], p, 'members');
@@ -104,6 +106,8 @@ export class FakeSlack {
               .filter((m) => Number(m.ts.split('.')[0]) >= from)
               .map(({ thread_ts, reply_count: _r, latest_reply: _l, ...m }) => ({
                 ...m,
+                // Like Slack, search answers an app's post without bot_id, and with its blocks but no text.
+                ...(m.user && this.bots.has(m.user) && { bot_id: undefined, text: m.blocks ? '' : m.text }),
                 channel: { id: c.id, name: c.name, is_im: c.is_im, is_mpim: c.is_mpim, is_private: c.is_private },
                 permalink: `${this.team}archives/${c.id}/p${m.ts.replace('.', '')}${thread_ts && thread_ts !== m.ts ? `?thread_ts=${thread_ts}&cid=${c.id}` : ''}`,
               })),

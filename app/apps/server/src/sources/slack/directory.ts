@@ -22,6 +22,7 @@ export function mpdmTitle(name: string | undefined, myHandle?: string): string |
 export class SlackDirectory {
   private me?: AuthTest;
   private users = new Map<string, string>();
+  private bots = new Set<string>();
   private convs = new Map<string, Conversation>();
   private convsAt = 0;
   private members = new Map<string, { at: number; ids: string[] }>();
@@ -77,6 +78,7 @@ export class SlackDirectory {
         const r = await this.api.call<UserInfo>('users.info', { user: id }, signal);
         const p = r.user.profile;
         this.users.set(id, p?.display_name || p?.real_name || r.user.real_name || r.user.name || id);
+        if (r.user.is_bot) this.bots.add(id);
       } catch (err) {
         // A missing name is not worth failing a poll over, but an outage is.
         if ((err as { failure?: { state?: string } }).failure?.state === 'degraded') this.users.set(id, id);
@@ -86,6 +88,9 @@ export class SlackDirectory {
   }
 
   name = (id: string): string => this.users.get(id) ?? id;
+
+  /** Whether a user resolved so far is an app's bot user. */
+  isBot = (id: string): boolean => this.bots.has(id);
 
   /** Everyone in a DM or group DM, named. Refreshed hourly; undefined for channels. */
   async dmMembers(c: Conversation, signal?: AbortSignal): Promise<string[] | undefined> {

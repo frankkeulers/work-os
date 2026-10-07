@@ -1,6 +1,6 @@
 import type { EarlierView, Item } from '@work-os/shared';
 import type { SlackDirectory } from './directory';
-import { cmpTs, isHuman, isoToTs, mentionedIds, tsToIso } from './normalise';
+import { authorOf, cmpTs, isoToTs, keepMessage, mentionedIds, messageText, tsToIso } from './normalise';
 import type { HistoryResponse } from './types';
 
 // The messages in the week before a DM item. A DM is split into items at 30 minutes of quiet (FR-2.6), so
@@ -29,11 +29,11 @@ export class EarlierMessages {
     if (hit && this.now() - hit.at < CACHE_MS) return hit.view;
 
     const r = await this.directory.api.call<HistoryResponse>('conversations.history', { channel, latest: first, oldest: isoToTs(Date.parse(tsToIso(first)) - EARLIER_DAYS * 86_400_000), inclusive: 0, limit: EARLIER_LIMIT }, signal);
-    const msgs = r.messages.filter((m) => isHuman(m) && cmpTs(m.ts, first) < 0).sort((a, b) => cmpTs(a.ts, b.ts));
-    const ids = [...new Set([...msgs.map((m) => m.user!), ...mentionedIds(msgs.map((m) => m.text ?? ''))])];
+    const msgs = r.messages.filter((m) => keepMessage(m, { apps: false, isBot: this.directory.isBot }) && cmpTs(m.ts, first) < 0).sort((a, b) => cmpTs(a.ts, b.ts));
+    const ids = [...new Set([...msgs.map(authorOf), ...mentionedIds(msgs.map(messageText))])];
     await this.directory.resolveUsers(ids, signal);
     const view: EarlierView = {
-      messages: msgs.map((m) => ({ id: m.ts, authorId: m.user!, ts: tsToIso(m.ts), text: m.text ?? '' })),
+      messages: msgs.map((m) => ({ id: m.ts, authorId: authorOf(m), ts: tsToIso(m.ts), text: messageText(m) })),
       people: ids.map((id) => ({ id, name: this.directory.name(id) })).filter((p) => p.name !== p.id),
     };
     for (const [k, v] of this.cache) if (this.now() - v.at >= CACHE_MS) this.cache.delete(k);
