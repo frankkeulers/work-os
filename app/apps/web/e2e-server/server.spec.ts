@@ -89,7 +89,8 @@ test('inbox, poll, correction, done, a restart, a vault note, a Confluence entry
   // Correct triage: the launch note moves to Today and the labelled set gains it (FR-6.2).
   const panel = page.getByRole('complementary', { name: 'Item panel' });
   await group(page, 'To file').locator('[data-row]').click();
-  await panel.getByRole('button', { name: 'Correct triage' }).click();
+  await panel.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: /Correct triage/ }).click();
   await panel.getByRole('group', { name: 'Attention' }).getByRole('button', { name: 'Today' }).click();
   await panel.getByRole('button', { name: 'Save correction' }).click();
   await expect(page.getByText('Correction saved · moved to Today · labelled set now 1')).toBeVisible();
