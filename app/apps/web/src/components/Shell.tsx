@@ -4,6 +4,7 @@ import { API_MODE, api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
+import { shownName } from '../lib/profile';
 import { usePrefs, type Scope, type Theme } from '../store/prefs';
 import { Avatar } from './Avatar';
 import { BrandIcon } from './BrandIcon';
@@ -70,7 +71,7 @@ const MenuLabel = ({ children }: { children: ReactNode }) => <span className="te
 
 /**
  * The account button at the foot of the sidebar, and its menu: the view preferences you change
- * often (theme, scope), with the profile picture and the rest in Settings › Appearance. The menu is
+ * often (theme, scope), with your name and picture in Settings › Profile. The menu is
  * fixed, not absolute, so it isn't clipped by the sidebar, collapsed or not.
  */
 function AccountMenu({ collapsed }: { collapsed: boolean }) {
@@ -78,6 +79,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const setTheme = usePrefs((s) => s.setTheme);
   const scope = usePrefs((s) => s.scope);
   const setScope = usePrefs((s) => s.setScope);
+  const name = usePrefs((s) => shownName(s));
   const { open, setOpen, close, trigger, panel } = usePopover();
   const button = useRef<HTMLButtonElement | null>(null);
   const [at, setAt] = useState<{ left: number; bottom: number }>();
@@ -96,8 +98,8 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
           trigger(el);
         }}
         type="button"
-        aria-label="Account"
-        title={collapsed ? `Account · ${scope === 'full' ? 'Full' : 'MVP'} scope` : undefined}
+        aria-label={name ? `Account: ${name}` : 'Account'}
+        title={collapsed ? `${name ?? 'Account'} · ${scope === 'full' ? 'Full' : 'MVP'} scope` : undefined}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={toggle}
@@ -107,7 +109,9 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         <Avatar size={24} />
         {!collapsed && (
           <>
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">Account</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink" title={name}>
+              {name ?? 'Account'}
+            </span>
             {/* Full changes what every page shows, so the button says which scope is on. */}
             <span className="rounded bg-track px-1.5 py-px font-mono text-[10px] font-medium text-ink-2">{scope === 'full' ? 'Full' : 'MVP'}</span>
             <Icon name="up" size={14} className="text-muted" />
@@ -125,7 +129,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
           <div className="flex items-center gap-2.5">
             <Avatar size={36} />
             <div className="flex min-w-0 flex-col">
-              <span className="text-[13px] font-semibold">Account</span>
+              <span className="truncate text-[13px] font-semibold">{name ?? 'Account'}</span>
               <span className="text-xs text-muted">Preferences in this browser</span>
             </div>
           </div>
@@ -160,12 +164,12 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
             <span className="text-[11px] leading-snug text-muted">Full shows later phases as dashed placeholders.</span>
           </div>
           <Link
-            to="/settings/appearance"
+            to="/settings/profile"
             onClick={() => close(false)}
             className="-mx-1.5 -mb-1.5 flex min-h-9 items-center gap-2 rounded-md border-t border-line-soft px-2.5 pt-0.5 text-[13px] !text-ink no-underline hover:bg-surface-2"
           >
-            <Icon name="settings" size={14} className="text-muted" />
-            Profile picture and appearance
+            <Icon name="user" size={14} className="text-muted" />
+            Edit profile
           </Link>
         </div>
       )}

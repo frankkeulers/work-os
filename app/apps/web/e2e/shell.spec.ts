@@ -94,9 +94,9 @@ test('the account menu: theme and scope, and a profile picture from Settings', a
   await menu.getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
   await expect(account).toContainText('Full');
 
-  // The picture is set in Settings › Appearance.
-  await menu.getByRole('link', { name: 'Profile picture and appearance' }).click();
-  await expect(page).toHaveURL(/\/settings\/appearance$/);
+  // The picture is set in Settings › Profile.
+  await menu.getByRole('link', { name: 'Edit profile' }).click();
+  await expect(page).toHaveURL(/\/settings\/profile$/);
   await expect(menu).toHaveCount(0);
   await page.getByLabel('Profile picture file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: Buffer.from(PNG_2x1, 'base64') });
   await expect(page.getByText('Profile picture updated.')).toBeVisible();
@@ -112,6 +112,48 @@ test('the account menu: theme and scope, and a profile picture from Settings', a
   await expect(picture).toBeVisible();
 
   await page.getByRole('button', { name: 'Remove' }).click();
+  await expect(account.locator('[data-avatar="icon"]')).toBeVisible();
+});
+
+test('the profile: names show on the account button, as initials until there is a picture', async ({ page }) => {
+  await page.goto('/settings/profile');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const account = nav.getByRole('button', { name: /^Account/ });
+  await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
+  await expect(account).toHaveAccessibleName('Account');
+
+  await page.getByLabel('First name').fill('Ada');
+  await page.getByLabel('Last name').fill(' lovelace ');
+  await expect(account).toHaveAccessibleName('Account: Ada lovelace');
+  await expect(account.locator('[data-avatar="initials"]')).toHaveText('AL');
+  // The display name falls back to the full name, shown as its placeholder.
+  const display = page.getByLabel('Display name');
+  await expect(display).toHaveAttribute('placeholder', 'Ada lovelace');
+  await expect(display).toHaveAttribute('maxlength', '60');
+  // Spaces at the ends go when you leave the field.
+  await page.getByLabel('Last name').fill(' Lovelace ');
+  await display.focus();
+  await expect(page.getByLabel('Last name')).toHaveValue('Lovelace');
+
+  await display.fill('Countess');
+  await expect(account).toHaveAccessibleName('Account: Countess');
+  await expect(account).toContainText('Countess');
+  // Initials stay with the real name.
+  await expect(account.locator('[data-avatar="initials"]')).toHaveText('AL');
+
+  // Kept across reloads, and shown in the menu.
+  await page.reload();
+  await expect(display).toHaveValue('Countess');
+  await account.click();
+  await expect(page.getByRole('dialog', { name: 'Account' })).toContainText('Countess');
+  await page.keyboard.press('Escape');
+
+  // A picture wins over initials; with no names left, the person icon is back.
+  await page.getByLabel('Profile picture file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: Buffer.from(PNG_2x1, 'base64') });
+  await expect(account.locator('img[data-avatar="picture"]')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove' }).click();
+  for (const field of ['First name', 'Last name', 'Display name']) await page.getByLabel(field).fill('');
+  await expect(account).toHaveAccessibleName('Account');
   await expect(account.locator('[data-avatar="icon"]')).toBeVisible();
 });
 

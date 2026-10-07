@@ -42,8 +42,9 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 - **Rail contents:** the same items in the same order, as icons only. Each label moves to a tooltip and stays available to screen readers. The Inbox count becomes a small badge on the icon. Slack's health shows as a dot on its mark. The account button shows only the avatar. Placeholders keep their dashed style.
 - **Header:** 64px tall in both states, so it stays level with the page top bars. Collapsing hides the brand and leaves only the toggle.
 - **Fixed height:** the app is one screen high. The sidebar never scrolls with the page, and pages with a 64px top bar (Inbox, Settings, Usage, Guide) keep the bar fixed and scroll only their body.
-- **Account menu:** the foot of the sidebar is an account button: the avatar, "Account" and a small MVP / Full chip, since scope changes what every page shows. It opens a menu above the button (beside the rail when collapsed) with a Light / Dark / System theme switch, the Scope switch, and a link to Settings › Appearance.
-- **Avatar:** a person icon until a profile picture is uploaded in Settings › Appearance. The picture is cropped to a centred square, scaled down and kept in this browser, like the theme. It never goes to the server.
+- **Account menu:** the foot of the sidebar is an account button: the avatar, your display name ("Account" until a name is set) and a small MVP / Full chip, since scope changes what every page shows. It opens a menu above the button (beside the rail when collapsed) with a Light / Dark / System theme switch, the Scope switch, and an Edit profile link to Settings › Profile.
+- **Avatar:** the profile picture from Settings › Profile. Without one it shows your initials from the first and last name (or the display name), and a person icon when no name is set. The picture is cropped to a centred square, scaled down and kept in this browser, like the theme. It never goes to the server.
+- **Profile:** first name, last name, display name and the profile picture, in Settings › Profile. The display name is what the account button shows; when it's empty, the first and last name are used instead. Like the picture, the names stay in this browser and aren't part of `settings.json`.
 - **Icons:** Settings & rules uses a gear. The old sun-like glyph read as a light-mode control.
 
 ## Settings (applied)
@@ -52,7 +53,8 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
   - **Inbox:** Triage rules, Slack, Notifications
   - **Actions:** Write targets
   - **Claude:** Models, Prompts, Budgets
-  - **System:** Storage & data, Appearance
+  - **System:** Storage & data
+  - **Account:** Profile, Appearance
 - **Nav badges:**
   - Write targets shows "Dry-run" while dry-run is on.
   - A section with an unsaved invalid field shows a red dot.

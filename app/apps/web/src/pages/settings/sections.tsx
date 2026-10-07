@@ -10,6 +10,7 @@ import { Banner, Button, Chip, IconButton, Segmented, Spinner, Switch, cx, input
 import { onTopics, useApiQuery } from '../../hooks/useApiQuery';
 import { fmtMoney, fmtTime } from '../../lib/format';
 import { avatarDataUrl } from '../../lib/avatar';
+import { NAME_MAX, shownName } from '../../lib/profile';
 import { confluencePageUrl } from '../../lib/links';
 import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
@@ -944,7 +945,7 @@ function StorageSection({ s, view, full, type, flush, err }: Ctx) {
 
 // ---------- Appearance ----------
 
-/** The avatar in the sidebar's account menu: a picture from disk, or the person icon. */
+/** The avatar in the sidebar's account menu: a picture from disk, or initials (or a person icon) without one. */
 function ProfilePicture() {
   const avatar = usePrefs((s) => s.avatar);
   const setAvatar = usePrefs((s) => s.setAvatar);
@@ -980,6 +981,53 @@ function ProfilePicture() {
   );
 }
 
+function NameField({ id, label, help, value, placeholder, autoComplete, onChange }: { id: string; label: string; help?: string; value?: string; placeholder?: string; autoComplete: string; onChange: (v: string) => void }) {
+  return (
+    <Row label={label} help={help} htmlFor={id}>
+      <input
+        id={id}
+        className={cx(inputBase, 'w-[260px]')}
+        value={value ?? ''}
+        placeholder={placeholder}
+        maxLength={NAME_MAX}
+        autoComplete={autoComplete}
+        spellCheck={false}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => e.target.value !== e.target.value.trim() && onChange(e.target.value.trim())}
+      />
+    </Row>
+  );
+}
+
+function ProfileSection() {
+  const firstName = usePrefs((s) => s.firstName);
+  const lastName = usePrefs((s) => s.lastName);
+  const displayName = usePrefs((s) => s.displayName);
+  const setProfile = usePrefs((s) => s.setProfile);
+  const fullName = shownName({ firstName, lastName });
+  return (
+    <>
+      <SectionHeader title="Profile" description="Saved in this browser only, not in settings.json." />
+      <Group>
+        <NameField id="profile-first" label="First name" autoComplete="given-name" value={firstName} onChange={(v) => setProfile({ firstName: v })} />
+        <NameField id="profile-last" label="Last name" autoComplete="family-name" value={lastName} onChange={(v) => setProfile({ lastName: v })} />
+        <NameField
+          id="profile-display"
+          label="Display name"
+          help="Shown on the account button in the sidebar. Leave it empty to use your first and last name."
+          autoComplete="nickname"
+          value={displayName}
+          placeholder={fullName ?? 'Your name'}
+          onChange={(v) => setProfile({ displayName: v })}
+        />
+        <Row label="Profile picture" help="Shown in the sidebar, cropped to a square. Until you add one, your initials show.">
+          <ProfilePicture />
+        </Row>
+      </Group>
+    </>
+  );
+}
+
 function AppearanceSection() {
   const theme = usePrefs((s) => s.theme);
   const setTheme = usePrefs((s) => s.setTheme);
@@ -1000,9 +1048,6 @@ function AppearanceSection() {
             ]}
           />
         </Row>
-        <Row label="Profile picture" help="Shown in the sidebar’s account menu. Cropped to a square.">
-          <ProfilePicture />
-        </Row>
       </Group>
     </>
   );
@@ -1013,7 +1058,7 @@ function AppearanceSection() {
 export interface SectionDef {
   id: string;
   label: string;
-  group: 'Inbox' | 'Actions' | 'Claude' | 'System';
+  group: 'Inbox' | 'Actions' | 'Claude' | 'System' | 'Account';
   View: ComponentType<Ctx>;
   /** Which validation paths belong to this section, for the nav's error dot. */
   owns: (path: string) => boolean;
@@ -1030,7 +1075,8 @@ export const SECTIONS: SectionDef[] = [
   { id: 'prompts', label: 'Prompts', group: 'Claude', View: PromptsSection, owns: () => false },
   { id: 'budgets', label: 'Budgets', group: 'Claude', View: BudgetsSection, owns: under('settings.budgets', 'settings.baselineCostPerDay') },
   { id: 'storage', label: 'Storage & data', group: 'System', View: StorageSection, owns: under('settings.retentionDays', 'settings.dataDir') },
-  { id: 'appearance', label: 'Appearance', group: 'System', View: AppearanceSection, owns: () => false },
+  { id: 'profile', label: 'Profile', group: 'Account', View: ProfileSection, owns: () => false },
+  { id: 'appearance', label: 'Appearance', group: 'Account', View: AppearanceSection, owns: () => false },
 ];
 
 /** Where the old single-page anchors now live, so existing links keep working. */
