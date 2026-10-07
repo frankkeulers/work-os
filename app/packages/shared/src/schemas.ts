@@ -104,8 +104,12 @@ export type ActionStatus = z.infer<typeof ActionStatus>;
 
 // amendment: why an action failed, so the UI can offer the right recovery.
 // unreachable: the outbox gave up after repeated transient failures; draft_missing: the draft file was lost (FR-14.5, FR-14.7).
-export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', 'model_error', 'unreachable', 'draft_missing']);
+export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', 'no_fit', 'model_error', 'unreachable', 'draft_missing']);
 export type FailureReason = z.infer<typeof FailureReason>;
+
+/** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
+export const PromptFileId = z.enum(['triage', 'draft-vault', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
   path: z.string().optional(),

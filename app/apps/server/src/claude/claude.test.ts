@@ -10,6 +10,7 @@ import { ClaudeAdapter, type QueryFn } from './adapter';
 import { API_KEY_ACCOUNT, backendEnv } from './backends';
 import { ClaudeError, ClaudeOutputError } from './errors';
 import { extractJson } from './outputs';
+import { loadPromptFile, PROMPT_FILES } from './promptFiles';
 import { relayToolCall, type Connector } from './relay';
 import { UsageLog } from './usage';
 
@@ -293,5 +294,24 @@ describe('read-only draft calls (FR-9.1)', () => {
   it('keeps triage calls tool-free (CL-4)', async () => {
     await adapter(fakeQuery(async () => [result('{}')])).run(spec);
     expect(seen[0].options).toMatchObject({ tools: [], cwd: dir, hooks: {} });
+  });
+});
+
+describe('prompt and guidance files (FR-1.1, FR-1.7)', () => {
+  it('names each default after its id, keeps the paths distinct, and falls back to the default for an empty file', async () => {
+    for (const f of PROMPT_FILES) expect(f.defaultText).toMatch(new RegExp(`^<!-- prompt: ${f.id} v\\d+ -->`));
+    expect(new Set(PROMPT_FILES.map((f) => f.file)).size).toBe(PROMPT_FILES.length);
+    for (const f of PROMPT_FILES) expect(Buffer.byteLength(f.defaultText)).toBeLessThan(12_000); // every call pays for it
+    const dir = await mkdtemp(join(tmpdir(), 'workos-prompts-'));
+    try {
+      await mkdir(join(dir, 'config'), { recursive: true });
+      await writeFile(join(dir, 'config/psg-context-builder.md'), '  \n');
+      const p = await loadPromptFile(dir, 'confluence-routing');
+      expect(p.version).toMatch(/^confluence-routing v1#[0-9a-f]{8}$/);
+      await writeFile(join(dir, 'config/psg-context-builder.md'), '<!-- prompt: confluence-routing v9 -->\nMine');
+      expect(await loadPromptFile(dir, 'confluence-routing')).toMatchObject({ text: '<!-- prompt: confluence-routing v9 -->\nMine', version: expect.stringMatching(/^confluence-routing v9#/) });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

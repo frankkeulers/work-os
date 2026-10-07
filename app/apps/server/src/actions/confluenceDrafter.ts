@@ -14,14 +14,23 @@ import { DRAFT_KEEP_LAST } from './vaultDrafter';
 // the model their outlines, so the model gets no tools and can only see allow-listed pages
 // (FR-10.2). It answers with a page, a section, a title and Markdown; code checks the page and
 // section exist, records the page version (FR-10.3), and a second Haiku call checks the entry for
-// observations about people before anyone sees it (FR-10.4).
+// observations about people before anyone sees it (FR-10.4). The model may instead decline with
+// noFit when the right home isn't allow-listed or nothing in the thread should be filed.
 
-export const ConfluenceAnswer = z.object({
+export const ConfluenceEntryAnswer = z.object({
   pageId: z.string().min(1),
   section: z.string().min(1),
   title: z.string().min(1).max(200),
   content: z.string().min(1),
 });
+
+export const ConfluenceNoFitAnswer = z.object({
+  noFit: z.literal(true),
+  reason: z.string().min(1).max(400),
+  suggestedHome: z.string().max(200).optional(),
+});
+
+export const ConfluenceAnswer = z.union([ConfluenceNoFitAnswer, ConfluenceEntryAnswer]);
 
 export const PeopleCheckAnswer = z.object({ containsPeopleObservations: z.boolean(), reason: z.string().max(400) });
 
@@ -91,6 +100,10 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
     },
     ConfluenceAnswer,
   );
+  if ('noFit' in r.value) {
+    const { reason, suggestedHome } = r.value;
+    throw new DraftError(suggestedHome?.trim() ? `${reason} Suggested home: ${suggestedHome.trim()}.` : reason, 'no_fit');
+  }
   const a = r.value;
   const page = pages.find((p) => p.id === a.pageId);
   if (!page) throw new DraftError(`The draft targets page ${a.pageId}, which is not on the allow-list.`, 'allow_list');

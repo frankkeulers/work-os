@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -61,6 +62,24 @@ describe('data directory and settings', () => {
     await writeFile(paths(dir).settings, '{"edited": true}');
     expect((await init()).created).toEqual([]);
     expect(await readFile(paths(dir).settings, 'utf8')).toBe('{"edited": true}');
+  });
+
+  it('writes default text files, replaces untouched old defaults and keeps edited ones (FR-1.1)', async () => {
+    const OLD = 'old default\n';
+    const oldHash = createHash('sha1').update(OLD.trim()).digest('hex');
+    const files = [
+      { file: 'prompts/a.md', text: 'A v2', previous: [oldHash] },
+      { file: 'prompts/b.md', text: 'B v2', previous: [oldHash] },
+      { file: 'guide.md', text: 'G v1' },
+    ];
+    const withFiles = () => initDataDir(dir, { settings: defaultSettings(dir), rules: DEFAULT_RULES, files });
+    expect((await withFiles()).created).toEqual(['config/settings.json', 'config/rules.json', 'config/prompts/a.md', 'config/prompts/b.md', 'config/guide.md']);
+    await writeFile(join(dir, 'config/prompts/a.md'), OLD); // still the old default
+    await writeFile(join(dir, 'config/prompts/b.md'), 'Frank edited this');
+    expect(await withFiles()).toEqual({ created: [], upgraded: ['config/prompts/a.md'] });
+    expect(await readFile(join(dir, 'config/prompts/a.md'), 'utf8')).toBe('A v2');
+    expect(await readFile(join(dir, 'config/prompts/b.md'), 'utf8')).toBe('Frank edited this');
+    expect(await readFile(join(dir, 'config/guide.md'), 'utf8')).toBe('G v1');
   });
 
   it('falls back to the last good settings when the file is invalid (FR-1.2)', async () => {

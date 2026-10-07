@@ -372,7 +372,9 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     // The call could read the vault, and nothing else (FR-9.1).
     const draftCall = claude.calls.at(-1)!;
     expect(draftCall.options).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], cwd: vault });
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v1 -->/);
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v2 -->/);
+    // The vault conventions written on first run go with the request.
+    expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v1 -->/);
 
     // Frank edits, then approves; the outbox writes once it may.
     expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: '# Product\n\nEdited.\n' })).status).toBe(204);
@@ -481,6 +483,8 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     const [draftCall, check] = claude.calls.slice(-2);
     expect(draftCall.options).toMatchObject({ tools: [], mcpServers: {} });
     expect(draftCall.prompt).toContain('"pageId":"1234567"');
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v2 -->/);
+    expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v1 -->/);
     expect(check.system).toMatch(/^<!-- prompt: people-check v1 -->/);
     expect(check.options.model).toBe('claude-haiku-4-5');
 
@@ -498,6 +502,14 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     claude.nextTexts.push(JSON.stringify({ pageId: '1234567', section: 'Decisions', title: 'Release', content: 'Dana has been unreliable on reviews.' }));
     const r = await request();
     expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'people_check', error: expect.stringMatching(/people check found/) });
+  });
+
+  it('fails as no_fit, without a people check, when the model finds no allow-listed home', async () => {
+    const before = claude.calls.length;
+    claude.nextTexts.push(JSON.stringify({ noFit: true, reason: 'The thread is about DP pricing, which is not on the allow-list.', suggestedHome: 'DP - Pricing' }));
+    const r = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'no_fit', error: expect.stringMatching(/^The thread is about DP pricing, which is not on the allow-list. Suggested home: DP - Pricing./) });
+    expect(claude.calls.length - before).toBe(1); // the draft call only
   });
 
   it('re-drafts instead of writing when the page was edited after drafting', async () => {

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { EvalReport } from '@work-os/shared';
 import { ClaudeAdapter } from '../claude/adapter';
-import { DEFAULT_TRIAGE_PROMPT, loadPrompt } from '../claude/prompts';
+import { loadPromptFile } from '../claude/promptFiles';
 import { UsageLog } from '../claude/usage';
 import { paths } from '../config/dataDir';
 import { ConfigError, EXIT, resolveConfig } from '../config/env';
@@ -72,7 +72,7 @@ async function main(): Promise<number> {
       cwd: join(config.dataDir, 'sandbox'),
       client: `work-os-eval/${config.version}`,
     });
-    const prompt = await loadPrompt(config.dataDir, 'triage.md', DEFAULT_TRIAGE_PROMPT);
+    const prompt = await loadPromptFile(config.dataDir, 'triage');
     const report = await runEval({ claude, settings, prompt, now: () => new Date() }, records);
     print(report, await saveReport(p.logs, report));
     return EXIT.ok;

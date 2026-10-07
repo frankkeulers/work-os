@@ -772,7 +772,7 @@ export class MockServer implements WorkOsApi, MockControls {
     if (type === 'confluence_entry' && rec.decision?.containsPeopleObservations) {
       throw new ApiError('forbidden', 'This thread contains observations about people, so it can only go to the vault (FR-10.1).');
     }
-    const outcome = this.takeOutcome((o) => o === 'model_error' || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list')));
+    const outcome = this.takeOutcome((o) => o === 'model_error' || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
     return structuredClone(this.createAction(rec, type, outcome));
   }
 
@@ -790,7 +790,7 @@ export class MockServer implements WorkOsApi, MockControls {
     this.progress[action.id] = { stages, stage: 0, startedAt: Date.now() };
     const timers: ReturnType<typeof setTimeout>[] = [];
     // People check fails on its own stage, so the failure lands where it happens.
-    const lastStage = outcome === 'people_check' ? stages.length - 1 : stages.length;
+    const lastStage = outcome === 'people_check' || outcome === 'no_fit' ? stages.length - 1 : stages.length;
     for (let i = 1; i < stages.length; i++) {
       timers.push(
         setTimeout(() => {
@@ -827,6 +827,11 @@ export class MockServer implements WorkOsApi, MockControls {
       action.error = 'The draft did not match the expected format twice, so it was dropped.';
       this.s.results[actionId] = action.error;
       this.event('action.failed', { reason: 'model_error' }, { itemId: rec.item.id, actionId });
+    } else if (outcome === 'no_fit') {
+      this.recordUsage(purpose, model, 18000, 120, [rec.item.id], 'draft-confluence v2', 21000);
+      action.error = 'The thread is about AIS pricing for Data Products, and DP - Pricing is not on the allow-list. Suggested home: DP - Pricing.';
+      this.s.results[actionId] = action.error;
+      this.event('action.failed', { reason: 'no_fit' }, { itemId: rec.item.id, actionId });
     } else {
       const attempt = this.actionsFor(rec.item.id).filter((a) => a.type === action.type).length;
       const draft = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
@@ -885,7 +890,7 @@ export class MockServer implements WorkOsApi, MockControls {
       }
     }
     const rec = this.rec(a.itemId);
-    const outcome = this.takeOutcome((o) => o === 'model_error' || (a.type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list')));
+    const outcome = this.takeOutcome((o) => o === 'model_error' || (a.type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
     return structuredClone(this.createAction(rec, a.type, outcome, a.id));
   }
 

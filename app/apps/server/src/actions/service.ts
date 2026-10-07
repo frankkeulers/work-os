@@ -66,9 +66,10 @@ export interface ActionDeps {
   reportOk: (dep: DepId) => Promise<void> | void;
   online: () => boolean;
   confluence: ConfluenceApi;
-  prompt: (name: 'draft-vault.md' | 'draft-confluence.md' | 'people-check.md') => Promise<Prompt>;
+  prompt: (id: 'draft-vault' | 'draft-confluence' | 'people-check') => Promise<Prompt>;
+  /** The vault conventions for vault drafts. */
   conventions: () => Promise<string>;
-  /** The psg-context-builder routing guidance for Confluence drafts, or ''. */
+  /** The Confluence routing guidance (from psg-context-builder) for Confluence drafts. */
   routing: () => Promise<string>;
   notify: (n: Notice) => void;
 }
@@ -361,7 +362,7 @@ export class ActionService {
                   claude: this.d.claude,
                   settings: this.d.settings(),
                   vaultRoot: this.vaultRoot(),
-                  prompt: await this.d.prompt('draft-vault.md'),
+                  prompt: await this.d.prompt('draft-vault'),
                   conventions: await this.d.conventions(),
                   now: this.d.now,
                   signal,
@@ -375,8 +376,8 @@ export class ActionService {
                   claude: this.d.claude,
                   api: this.d.confluence,
                   settings: this.d.settings(),
-                  prompt: await this.d.prompt('draft-confluence.md'),
-                  peoplePrompt: await this.d.prompt('people-check.md'),
+                  prompt: await this.d.prompt('draft-confluence'),
+                  peoplePrompt: await this.d.prompt('people-check'),
                   routing: await this.d.routing(),
                   now: this.d.now,
                   signal,

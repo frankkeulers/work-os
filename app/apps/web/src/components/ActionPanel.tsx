@@ -404,7 +404,7 @@ export function ActionPanel({
   else if (action?.status === 'ready') heading = 'Review and approve the draft';
   else if (action?.status === 'approved' || action?.status === 'executing') heading = 'Writing…';
   else if (action?.status === 'done') heading = view.dryRun ? 'Written to the sandbox' : 'Written';
-  else if (action?.status === 'failed') heading = action.failureReason === 'allow_list' ? 'Write refused' : action.failureReason === 'conflict' ? 'Changed since draft' : 'Draft blocked';
+  else if (action?.status === 'failed') heading = action.failureReason === 'allow_list' ? 'Write refused' : action.failureReason === 'conflict' ? 'Changed since draft' : action.failureReason === 'no_fit' ? 'Nothing to file' : 'Draft blocked';
 
   let body: ReactNode;
   if (!action) {
@@ -453,6 +453,23 @@ export function ActionPanel({
           <div className="flex flex-wrap gap-2">
             <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
               Draft vault note instead
+            </Button>
+            <Button icon="x" onClick={discard}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      ) : action.failureReason === 'no_fit' ? (
+        <div className="flex flex-col gap-3">
+          <Banner tone="warn" icon="confluence" action={<Link to="/settings/writing" className="text-[13px] font-medium">Settings › Write targets</Link>}>
+            <strong>No allow-listed page fits.</strong> {msg}
+          </Banner>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
+              Draft vault note instead
+            </Button>
+            <Button icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
+              Re-draft
             </Button>
             <Button icon="x" onClick={discard}>
               Dismiss

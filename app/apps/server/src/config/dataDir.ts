@@ -1,4 +1,5 @@
-import { access, chmod, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { access, chmod, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Rule, Settings } from '@work-os/shared';
 import { writeFileAtomic, writeJsonAtomic } from '../store/atomic';
@@ -27,9 +28,20 @@ const exists = (p: string) =>
     () => false,
   );
 
-/** Creates any missing directories and default config files. Never overwrites an existing file. */
-export async function initDataDir(dataDir: string, defaults: { settings: Settings; rules: Rule[]; prompts?: Record<string, string> }): Promise<{ created: string[] }> {
+/** A default text file under config/, and the sha1s (of trimmed text) of earlier defaults it replaces. */
+export interface DefaultFile {
+  file: string;
+  text: string;
+  previous?: string[];
+}
+
+/**
+ * Creates any missing directories and default config files. Never overwrites an existing file,
+ * except a text file that still holds an earlier built-in default, which gets the current one.
+ */
+export async function initDataDir(dataDir: string, defaults: { settings: Settings; rules: Rule[]; files?: DefaultFile[] }): Promise<{ created: string[]; upgraded: string[] }> {
   const created: string[] = [];
+  const upgraded: string[] = [];
   const fresh = !(await exists(dataDir));
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
   if (fresh) await chmod(dataDir, 0o700);
@@ -43,11 +55,16 @@ export async function initDataDir(dataDir: string, defaults: { settings: Setting
     await writeJsonAtomic(p.rules, defaults.rules);
     created.push('config/rules.json');
   }
-  for (const [file, text] of Object.entries(defaults.prompts ?? {})) {
-    const path = join(dataDir, 'config/prompts', file);
-    if (await exists(path)) continue;
-    await writeFileAtomic(path, text);
-    created.push(`config/prompts/${file}`);
+  for (const { file, text, previous = [] } of defaults.files ?? []) {
+    const path = join(dataDir, 'config', file);
+    const current = await readFile(path, 'utf8').catch(() => null);
+    if (current === null) {
+      await writeFileAtomic(path, text);
+      created.push(`config/${file}`);
+    } else if (previous.includes(createHash('sha1').update(current.trim()).digest('hex'))) {
+      await writeFileAtomic(path, text);
+      upgraded.push(`config/${file}`);
+    }
   }
-  return { created };
+  return { created, upgraded };
 }

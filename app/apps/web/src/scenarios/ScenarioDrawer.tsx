@@ -53,6 +53,7 @@ const OUTCOMES: [DraftOutcome, string][] = [
   ['confluence_conflict', 'Confluence version conflict'],
   ['people_check', 'People check blocks'],
   ['allow_list', 'Page off allow-list'],
+  ['no_fit', 'No page fits'],
   ['model_error', 'Model error'],
 ];
 
