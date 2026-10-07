@@ -69,6 +69,7 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
       ...fetched,
       participants: participants.map((p) => fetched.participants.find((q) => q.id === p.id) ?? p), // fresher names
       ...(mentioned.length && { mentioned }),
+      ...((fetched.thread || stored?.thread) && { thread: true }),
       messages,
       messageCount: Math.max(stored?.messageCount ?? 0, fetched.messageCount, messages.length),
       lastActivityAt,

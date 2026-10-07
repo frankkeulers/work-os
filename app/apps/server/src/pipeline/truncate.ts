@@ -15,6 +15,7 @@ export interface TriageMessage {
   author: string; // "me" for Frank, otherwise the display name
   at: string;
   text: string;
+  thread?: true; // a reply in a Slack thread, in a topic that also has chat outside it
 }
 
 export interface TriageThread {
@@ -34,7 +35,8 @@ export const BEFORE_MAX_CHARS = 500;
 
 const cut = (text: string) => (text.length > MESSAGE_MAX_CHARS ? `${text.slice(0, MESSAGE_MAX_CHARS - 1)}…` : text);
 
-export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: EarlierView): TriageThread {
+/** `inThread`: the messages of a topic that came from a Slack thread (topics.ts), marked when the topic mixes thread and chat. */
+export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: EarlierView, inThread?: Set<string>): TriageThread {
   const msgs = item.messages;
   const keep = new Set<number>();
   if (msgs.length) keep.add(0);
@@ -43,10 +45,17 @@ export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: 
     if (mentionsMe(m.text, me)) keep.add(i);
   });
   const names = new Map(item.participants.map((p) => [p.id, p.name]));
+  // Thread replies are marked only in a topic that also has chat outside the thread.
+  const mixed = !!inThread?.size && inThread.size < msgs.length;
   const messages = [...keep]
     .sort((a, b) => a - b)
     .map((i) => msgs[i])
-    .map((m) => ({ author: me.id && m.authorId === me.id ? 'me' : (names.get(m.authorId) ?? m.authorId), at: m.ts, text: cut(m.text) }));
+    .map((m): TriageMessage => ({
+      author: me.id && m.authorId === me.id ? 'me' : (names.get(m.authorId) ?? m.authorId),
+      at: m.ts,
+      text: cut(m.text),
+      ...(mixed && inThread.has(m.id) && { thread: true as const }),
+    }));
   const thread: TriageThread = { id: item.id, kind: item.kind, title: item.title, messages, omitted: Math.max(0, item.messageCount - messages.length) };
   const prior = earlier?.messages.slice(-BEFORE_MAX_MESSAGES) ?? [];
   if (prior.length) {

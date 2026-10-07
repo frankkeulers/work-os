@@ -83,7 +83,7 @@ export function budgetsOf(
   let cost = 0;
   for (const u of usage) {
     if (londonParts(u.at).dateKey !== today) continue;
-    if (u.purpose === 'triage') triage += 1;
+    if (u.purpose === 'triage' || u.purpose === 'routing') triage += 1; // routing is part of triage
     else if (u.purpose === 'draft_vault' || u.purpose === 'draft_confluence') drafts += 1;
     cost += u.costEquivalent;
   }

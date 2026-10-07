@@ -16,7 +16,7 @@ export function triageQueue(items: Iterable<ItemState>, now: Date, quietMinutes:
   const ready: ItemState[] = [];
   let next: number | undefined;
   for (const it of items) {
-    if (it.triageState !== 'pending') continue;
+    if (it.triageState !== 'pending' || it.topicOf) continue; // a part is triaged with its topic
     const quietAt = Date.parse(it.lastActivityAt) + quietMs;
     if (quietAt <= now.getTime()) ready.push(it);
     else next = next === undefined ? quietAt : Math.min(next, quietAt);

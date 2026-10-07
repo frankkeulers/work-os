@@ -6,6 +6,7 @@ import type { QueryFn } from './adapter';
 //   today  a question, or check / review / decision
 //   none   anything else
 // Confluence for launch, licensing and pricing talk; the vault for release notes and ideas.
+// Routing joins pieces that name the same PR or ticket (topicsFor).
 // A vault draft request gets a new note under Inbox/, named after the thread. A Confluence draft
 // goes to the first page's first section; the people check flags words about how someone works.
 
@@ -47,6 +48,27 @@ export function answerFor(threads: Thread[]) {
   };
 }
 
+type Conversation = { topics: { id: string; summary: string; recent: { text: string }[] }[]; pieces: Thread[] };
+
+// A PR number or a ticket key: the fake's idea of a subject.
+const SUBJECT = /\b(PR[ -]?\d+|[A-Z][A-Z0-9]+-\d+)\b/gi;
+const subjects = (text: string) => new Set([...text.matchAll(SUBJECT)].map((m) => m[1].toUpperCase().replace(/[ -]/, '')));
+
+/** Routing: a piece joins the open topic or earlier piece that names the same PR or ticket, else "new". */
+export function topicsFor(convs: Conversation[]) {
+  return {
+    assignments: convs.flatMap((c) => {
+      const seen: { id: string; subjects: Set<string> }[] = c.topics.map((t) => ({ id: t.id, subjects: subjects([t.summary, ...t.recent.map((m) => m.text)].join(' ')) }));
+      return c.pieces.map((p) => {
+        const mine = subjects(p.messages.map((m) => m.text).join(' '));
+        const match = seen.find((x) => [...mine].some((k) => x.subjects.has(k)));
+        seen.push({ id: p.id, subjects: mine });
+        return { id: p.id, topic: match?.id ?? 'new' };
+      });
+    }),
+  };
+}
+
 /** A new note for the thread in a vault draft request. */
 export function vaultNoteFor(prompt: string) {
   const m = /<thread>\n([\s\S]*?)\n<\/thread>/.exec(prompt);
@@ -81,7 +103,10 @@ export function fakeClaude(): FakeClaude {
         if (fail) throw fail;
         yield { type: 'system', subtype: 'init', mcp_servers: [] };
         const m = /<threads>\n([\s\S]*)\n<\/threads>/.exec(prompt);
-        const answer = prompt.includes('<vault-conventions>')
+        const convs = /<conversations>\n([\s\S]*)\n<\/conversations>/.exec(prompt);
+        const answer = convs
+          ? topicsFor(JSON.parse(convs[1]) as Conversation[])
+          : prompt.includes('<vault-conventions>')
           ? vaultNoteFor(prompt)
           : prompt.includes('<confluence-pages>')
             ? confluenceEntryFor(prompt)

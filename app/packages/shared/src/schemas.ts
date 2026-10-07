@@ -38,6 +38,7 @@ export const Item = z.object({
   lastActivityAt: isoDate,
   revision: z.number().int().positive(),
   contentExpired: z.boolean().optional(), // amendment: raw content removed by retention (FR-12.1)
+  thread: z.boolean().optional(), // amendment (topics): a Slack thread with replies, not a stretch of chat or a lone post
   schemaVersion: z.literal(1),
 });
 export type Item = z.infer<typeof Item>;

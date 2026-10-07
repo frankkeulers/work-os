@@ -9,6 +9,7 @@ import type { ItemFiles } from '../store/items';
 import type { Store } from '../store/store';
 import { triageQueue } from './eligibility';
 import { ruleVerdict } from './rules';
+import { routeTopics } from './topics';
 import { estimateTokens, packBatches, threadForTriage, threadTokens, type TriageThread } from './truncate';
 
 // Batched model triage (FR-5.1–5.5, §5.3, CL-6, CL-7). Quiet pending threads go to the model in as
@@ -56,6 +57,8 @@ export interface TriageDeps {
   earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
   /** Today's triage calls or cost-equivalent are at their budget (CL-6). */
   budgetHit: () => boolean;
+  /** The topics prompt (amendment). Without it, routing is off and every piece is its own topic. */
+  topicsPrompt?: () => Promise<Prompt>;
 }
 
 export interface TriageRun {
@@ -79,10 +82,12 @@ export function renderBatch(threads: TriageThread[], now: Date): string {
 export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only?: string[] } = {}): Promise<TriageRun> {
   const { settings, rules } = d.config();
   const t = settings.triage;
+  // New pieces find their topic first, so each topic is triaged once, over all its pieces.
+  const routing = !opts.only && d.topicsPrompt ? await routeTopics({ ...d, topicsPrompt: d.topicsPrompt }, signal) : undefined;
   const now = d.now();
   const queue = triageQueue(Object.values(d.store.projection.items), now, t.quietMinutes);
   const due = opts.only ? opts.only.map((id) => d.store.projection.items[id]).filter((i) => !!i) : queue.ready;
-  const run: TriageRun = { calls: 0, triaged: 0, failed: 0, paused: 0, ...(queue.nextReadyAt && { nextReadyAt: queue.nextReadyAt }) };
+  const run: TriageRun = { calls: routing?.calls ?? 0, triaged: 0, failed: 0, paused: 0, ...(queue.nextReadyAt && { nextReadyAt: queue.nextReadyAt }) };
   if (!due.length) return run;
   if (d.budgetHit()) return { ...run, paused: due.length };
 

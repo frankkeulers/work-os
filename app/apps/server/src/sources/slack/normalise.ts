@@ -188,6 +188,7 @@ export function buildItem(i: ItemInput): Item {
     messages,
     messageCount: Math.max(i.total ?? 0, human.length),
     lastActivityAt: last ? tsToIso(last.ts) : tsToIso(i.key),
+    ...(i.messages.some((m) => threadTsOf(m) === i.key && m.ts !== i.key) && { thread: true }),
     revision: 1,
     schemaVersion: 1,
   };

@@ -247,6 +247,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     config: () => ({ settings: settings.editable.settings, rules: settings.rules }),
     me: () => meFrom(runtime.whoAmI('slack')),
     prompt: () => loadPromptFile(config.dataDir, 'triage'),
+    topicsPrompt: () => loadPromptFile(config.dataDir, 'topics'),
     earlier: (item, signal) => earlier.forItem(item, signal),
     budgetHit: () => {
       const b = budgetsOf(usage.records(), settings.editable.settings, now());

@@ -71,6 +71,38 @@ Answer with JSON only, no prose, in exactly this shape, one entry per thread, us
 {"decisions":[{"id":"...","attention":"now|today|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"reply","step":"...","why":"..."}}]}
 `;
 
+export const DEFAULT_TOPICS_PROMPT = `<!-- prompt: topics v1 -->
+You sort Slack conversations into topics for Frank, Product Innovation Lead at Pole Star Global
+(maritime data, vessel tracking and compliance products). Messages written by Frank have the
+author "me".
+
+Slack cuts a conversation into pieces: each reply thread is a piece, and a DM or group DM is cut
+into a new piece after 30 minutes of quiet. Frank wants one inbox entry per topic, not per piece,
+so he can see everything he has to do on a subject in one place.
+
+Each conversation comes with:
+- topics: the open topics in it, each with its id, summary, the need triage gave it (if any), and
+  its latest messages;
+- pieces: new pieces, each with its id and messages.
+
+For every piece, answer which topic it belongs to:
+- the id of an open topic when the piece continues that subject;
+- the id of another new piece when the two share a subject that no open topic covers;
+- "new" when it starts a subject of its own.
+
+The same topic means the same decision, deliverable, workstream or question: "the Apidog
+pre-publish branch workflow" or "the PR 63 contract checks", not just "API work" or the same
+people talking. Follow-ups, answers, status updates and new asks on that subject belong to it,
+even hours later. A different PR, customer, feature or decision is a different topic, even in
+the same chat and on the same day. Small talk and greetings go with the subject they lead into.
+
+When unsure, answer "new": Frank can merge two entries quickly, but an ask hidden inside the
+wrong topic can be missed.
+
+Answer with JSON only, no prose, in exactly this shape, one entry per piece:
+{"assignments":[{"id":"<piece id>","topic":"<topic id, piece id, or new>"}]}
+`;
+
 export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v2 -->
 You draft a note for Frank's Obsidian vault from a Slack thread. Frank is Product Innovation Lead at
 Pole Star Global. The vault is his knowledge base, written for models and agents to read: decisions,
