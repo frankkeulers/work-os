@@ -83,7 +83,7 @@ export function Toasts() {
   const notifications = useToasts((s) => s.notifications);
   return (
     <>
-      <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex flex-col items-end gap-2 pl-5" aria-live="polite">
+      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-[60] flex flex-col items-center gap-2 px-4" aria-live="polite">
         {toasts.map((t) => (
           <ToastRow key={t.id} t={t} />
         ))}

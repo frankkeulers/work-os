@@ -72,5 +72,6 @@ test('Regroup merges a conversation’s topics on the same subject', async ({ pa
   await expect(page.getByText('Regrouped #insights-api · 1 entry merged into its topic')).toBeVisible({ timeout: 10_000 });
   await expect(rows).toHaveCount(1);
   await expect(rows.locator('[data-pieces]')).toHaveText(' · 2 parts');
+  await page.screenshot({ path: join(APP, 'screenshots/topics-regroup-light.png'), animations: 'disabled' }); // toast at the bottom middle
   await expect(rows).toHaveAttribute('data-lane', 'today');
 });
