@@ -314,6 +314,32 @@ describe('summaryOf', () => {
     add('action.discarded', 5, { reason: 'discarded' }, retry);
     expect(summary().confluence_entry).toBeUndefined();
   });
+
+  it('numbers entries by what was filed before: a draft after a filing is v2, and discarding it brings the filing back', () => {
+    const { events, add } = log();
+    const draft = (id: string) => ({ itemId: ITEM, actionId: id });
+    const drafted = (id: string): EventData<'action.drafted'> => ({ type: 'confluence_entry', revision: 1, draftRef: `drafts/${id}.json`, tokens: 900, target: { pageId: '42', baseVersion: 7 } });
+    add('item.upserted', 0, upserted(1))
+      .add('action.requested', 1, { type: 'confluence_entry', revision: 1 }, draft('act-1'))
+      .add('action.drafted', 2, drafted('act-1'), draft('act-1'))
+      .add('action.approved', 3, undefined, draft('act-1'))
+      .add('action.executed', 4, { dryRun: true, pageId: '42', pageVersion: 8 }, draft('act-1'));
+    const summary = () => {
+      const p = replay(events);
+      return summaryOf(p.items[ITEM], p.items[ITEM], { ...ctx, actions: Object.values(p.actions).reverse() }).actions.confluence_entry;
+    };
+    expect(summary()).toMatchObject({ id: 'act-1', status: 'done', version: 1, repliesSince: false });
+    add('item.upserted', 5, upserted(2, false, 5));
+    expect(summary()).toMatchObject({ id: 'act-1', version: 1, repliesSince: true, stale: false });
+
+    // A failed try and its retry don't count: the next entry is still v2.
+    add('action.requested', 6, { type: 'confluence_entry', revision: 2 }, draft('act-2'))
+      .add('action.failed', 7, { reason: 'model_error' }, draft('act-2'))
+      .add('action.requested', 8, { type: 'confluence_entry', revision: 2, supersedes: 'act-2' }, draft('act-3'));
+    expect(summary()).toMatchObject({ id: 'act-3', status: 'drafting', version: 2 });
+    add('action.discarded', 9, { reason: 'discarded' }, draft('act-3'));
+    expect(summary()).toMatchObject({ id: 'act-1', status: 'done', version: 1 });
+  });
 });
 
 describe('openNext', () => {

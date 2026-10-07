@@ -170,6 +170,32 @@ test('the Next step card holds the filing: its options, the draft’s progress a
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 });
 
+test('a filed entry with new replies offers a v2 draft, and discarding it goes back to the filed entry', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  await action.getByRole('button', { name: 'Approve and write to sandbox' }).click();
+  await expect(action.getByRole('status')).toContainText('Dry-run: write logged only', { timeout: 20_000 });
+  // Nothing new since the draft, so nothing to add.
+  await expect(action.getByRole('button', { name: 'Draft v2' })).toHaveCount(0);
+
+  await openControls(page);
+  await page.getByRole('button', { name: 'Reply on a drafted item', exact: true }).click();
+  await closeDrawer(page);
+  await expect(action.getByText('New replies since this entry was drafted.')).toBeVisible({ timeout: 10_000 });
+  await action.getByRole('button', { name: 'Draft v2' }).click();
+  await expect(action.getByRole('button', { name: 'Approve and write to sandbox' })).toBeVisible({ timeout: 20_000 });
+  await expect(action.getByRole('heading', { name: 'Review and approve the draft v2' })).toBeVisible();
+  await expect(action.getByRole('tab', { name: /Confluence entry/ })).toContainText('v2 · Ready');
+
+  // Discarding v2 leaves the first entry as it was, ready for another try.
+  await action.getByRole('button', { name: 'Discard' }).click();
+  await expect(action.getByRole('status').filter({ hasText: 'Dry-run: write logged only' })).toBeVisible();
+  await expect(action.getByText('The last draft was discarded.')).toBeVisible();
+  await expect(action.getByRole('tab', { name: /Confluence entry/ })).toContainText('Filed');
+  await expect(action.getByRole('button', { name: 'Draft v2' })).toBeVisible();
+});
+
 test('Full scope adds the Outlook and Teams items with their brand marks', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('11');

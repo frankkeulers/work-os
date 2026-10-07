@@ -360,19 +360,23 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
         const b = draftButton(item, t, draftsBudgetHit);
         const suggested = t === 'vault_note' ? item.triage?.vault : item.triage?.confluence;
         const target = targetOf(item, t);
+        const a = item.actions[t];
+        // From the second entry on, the draft names its version: "v2 draft ready".
+        const v = a && a.version > 1 ? `v${a.version}` : '';
+        const draftWord = v ? `${v} draft` : 'Draft';
         const hint =
           b.state === 'none'
             ? (b.disabledReason ?? (suggested ? `Suggested by triage${target ? ` · ${target}` : ''}` : 'Not suggested'))
             : b.state === 'ready'
-              ? `Draft ready${target ? ` · ${target}` : ''}`
+              ? `${draftWord} ready${target ? ` · ${target}` : ''}`
               : b.state === 'stale'
-                ? 'Draft out of date: new messages since'
+                ? `${draftWord} out of date: new messages since`
                 : b.state === 'done'
-                  ? 'Filed'
+                  ? `${v ? `${v} filed` : 'Filed'}${a?.repliesSince ? ' · new replies since' : ''}`
                   : b.state === 'failed'
-                    ? 'The last draft failed'
+                    ? `The last ${draftWord.toLowerCase()} failed`
                     : b.state === 'drafting'
-                      ? 'Drafting…'
+                      ? `Drafting${v && ` ${v}`}…`
                       : 'Writing…';
         return (
           <div key={t} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-soft-2 py-2.5 first-of-type:border-t-0">

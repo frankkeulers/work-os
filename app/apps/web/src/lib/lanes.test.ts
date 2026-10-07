@@ -51,7 +51,7 @@ describe('cardActions (design guide §3)', () => {
       item({
         lane: 'file',
         triage: { attention: 'none', confluence: true, vault: true, by: 'model' },
-        actions: { confluence_entry: { id: 'a', type: 'confluence_entry', status: 'done', stale: false } },
+        actions: { confluence_entry: { id: 'a', type: 'confluence_entry', status: 'done', stale: false, repliesSince: false, version: 1 } },
       }),
       false,
     );

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import type { Action, ActionType, ConfluenceDraft, Draft, VaultAppendDraft } from '@work-os/shared';
+import { currentAction, entryVersion, type Action, type ActionType, type ConfluenceDraft, type Draft, type VaultAppendDraft } from '@work-os/shared';
 import { api, type ItemView } from '../api';
 import { fmtTokens } from '../lib/format';
 import { confluencePageUrl, obsidianNoteUrl } from '../lib/links';
@@ -346,11 +346,12 @@ export function ActionPanel({
   const [busy, setBusy] = useState(false);
   const [checksOpen, setChecksOpen] = useState(false);
 
-  const latest = view.actions.find((a) => a.type === type);
-  const action = latest && latest.status !== 'discarded' ? latest : undefined;
+  const newest = view.actions.find((a) => a.type === type);
+  // The action the item summary (tabs, rows, next step) stands for too: a filed entry comes back when its next version is discarded.
+  const action = currentAction(view.actions, type);
+  const version = action ? entryVersion(view.actions, action) : 1;
   const draft = action ? view.drafts[action.id] : undefined;
   const prev = action?.supersedes ? view.actions.find((a) => a.id === action.supersedes) : undefined;
-  const state = draftState(s, type);
   const peopleBlocked = type === 'confluence_entry' && s.containsPeopleObservations;
   const budgetHit = view.budgets.drafts.hit;
   // Picked from the live catalogue, so in scope when drafted; excluded since if it or a page above
@@ -597,6 +598,19 @@ export function ActionPanel({
         ) : (
           <VaultDoc d={draft} doc={doc} frame={frame} />
         )}
+        {action.status === 'done' && action.itemRevision < item.revision && !peopleBlocked && (
+          <Banner
+            tone="info"
+            icon="info"
+            action={
+              <Button size="sm" icon="redraft" disabled={budgetHit || busy} title={budgetHit ? 'Drafts budget reached for today' : undefined} onClick={() => void request(type)}>
+                Draft v{version + 1}
+              </Button>
+            }
+          >
+            <strong>New replies since this entry was drafted.</strong> Draft a v{version + 1} to file what’s new.
+          </Banner>
+        )}
         {action.status === 'done' && (
           <div role="status" className="flex flex-wrap items-center gap-3 rounded-[10px] border border-teal-line bg-teal-wash px-4 py-3 text-[13px] text-teal-ink">
             <Icon name="check" strokeWidth={2.5} />
@@ -648,12 +662,19 @@ export function ActionPanel({
       </div>
     ) : null;
 
+  const versionTag = version > 1 && (
+    <span title={`Version ${version}: ${version - 1} filed before it`} className="rounded bg-accent-wash px-1.5 py-px font-mono text-[11px] font-semibold tracking-normal text-accent-ink">
+      v{version}
+    </span>
+  );
+
   const tabs = (
     <div className={cx('flex items-center gap-2', embedded && 'w-full')}>
       <div role="tablist" aria-label="Draft target" className="inline-flex gap-1 rounded-[10px] bg-track-2 p-1">
         {TYPES.map((t) => {
           const on = t === type;
           const badge = STATUS_BADGE[draftState(s, t)];
+          const v = s.actions[t]?.version ?? 1;
           return (
             <button
               key={t}
@@ -669,7 +690,7 @@ export function ActionPanel({
             >
               {t === 'confluence_entry' && s.containsPeopleObservations && <Icon name="lock" size={12} />}
               {TYPE_LABEL[t].short}
-              {badge && <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold', badge.cls)}>{badge.label}</span>}
+              {badge && <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold', badge.cls)}>{v > 1 ? `v${v} · ${badge.label}` : badge.label}</span>}
             </button>
           );
         })}
@@ -698,7 +719,10 @@ export function ActionPanel({
           // The Next step card above says what to do; this part says where the filing has got to.
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="m-0 flex-1 text-[15px] font-semibold">{heading}</h3>
+              <h3 className="m-0 flex flex-1 items-center gap-2 text-[15px] font-semibold">
+                {heading}
+                {versionTag}
+              </h3>
               {onClose && (
                 <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={onClose}>
                   <Icon name="back" size={14} />
@@ -712,12 +736,15 @@ export function ActionPanel({
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex flex-[1_1_260px] flex-col gap-0.5">
               <span className="text-xs font-semibold uppercase tracking-[0.06em] text-accent">Action</span>
-              <h2 className="m-0 text-xl font-semibold tracking-[-0.01em]">{heading}</h2>
+              <h2 className="m-0 flex items-center gap-2 text-xl font-semibold tracking-[-0.01em]">
+                {heading}
+                {versionTag}
+              </h2>
             </div>
             {tabs}
           </div>
         )}
-        {state === 'none' && latest?.status === 'discarded' && <div className="-mt-2 text-xs text-muted">The last draft was discarded.</div>}
+        {newest?.status === 'discarded' && (!action || action.status === 'done') && <div className="-mt-2 text-xs text-muted">The last draft was discarded.</div>}
         {body}
       </div>
       {footer}

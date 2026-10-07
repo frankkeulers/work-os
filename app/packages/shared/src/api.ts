@@ -30,7 +30,9 @@ export interface ActionSummary {
   type: ActionType;
   status: Action['status'];
   failureReason?: FailureReason;
-  stale: boolean; // drafted from an older revision than the item has now
+  stale: boolean; // a ready draft made from an older revision than the item has now
+  repliesSince: boolean; // drafted from an older revision, whatever the status: a filed entry with new replies can take a next version
+  version: number; // entries of this type filed before this one, plus one: v2 is the draft after the first filing
 }
 
 export interface ItemSummary {

@@ -1,6 +1,6 @@
-import type { ActionSummary, BudgetState, ItemSummary } from '../api';
+import type { BudgetState, ItemSummary } from '../api';
 import { effectiveTriage, laneFor } from '../lanes';
-import type { NextStep, Settings, UsageRecord } from '../schemas';
+import type { ActionType, NextStep, Settings, UsageRecord } from '../schemas';
 import { askId } from './topics';
 import { londonParts } from '../time';
 import type { ActionState, ItemFlags, ItemMeta } from './state';
@@ -10,19 +10,32 @@ import type { ActionState, ItemFlags, ItemMeta } from './state';
 const MIN = 60_000;
 const SUMMARY_MAX = 110;
 
+type ActionLike = Pick<ActionState, 'id' | 'type' | 'status' | 'supersedes' | 'createdAt'>;
+
 /**
- * The latest non-discarded action per type. `actions` must be newest first. An action a re-draft
- * replaced is skipped too: a failed draft stays failed after its Retry, and must not come back
- * when that retry is discarded.
+ * The action that stands for a type: the newest one that wasn't discarded or replaced by a re-draft.
+ * `actions` must be newest first. A failed draft stays failed after its Retry, and must not come back
+ * when that retry is discarded; a filed entry does come back when a later version is discarded.
  */
+export function currentAction<A extends ActionLike>(actions: readonly A[], type: ActionType): A | undefined {
+  const replaced = new Set(actions.map((a) => a.supersedes));
+  return actions.find((a) => a.type === type && a.status !== 'discarded' && !replaced.has(a.id));
+}
+
+/** An entry's version: the entries of its type filed before it, plus one. Failed, retried and discarded drafts don't count. */
+export function entryVersion(actions: readonly ActionLike[], a: ActionLike): number {
+  return 1 + actions.filter((b) => b.type === a.type && b.status === 'done' && b.id !== a.id && b.createdAt < a.createdAt).length;
+}
+
+/** The current action per type (see currentAction). `actions` must be newest first. */
 export function actionSummaries(actions: Iterable<ActionState>, revision: number): ItemSummary['actions'] {
   const all = [...actions];
-  const replaced = new Set(all.map((a) => a.supersedes).filter(Boolean));
   const out: ItemSummary['actions'] = {};
-  for (const a of all) {
-    if (out[a.type] || a.status === 'discarded' || replaced.has(a.id)) continue;
-    const s: ActionSummary = { id: a.id, type: a.type, status: a.status, failureReason: a.failureReason, stale: a.status === 'ready' && a.itemRevision < revision };
-    out[a.type] = s;
+  for (const type of ['confluence_entry', 'vault_note'] as const) {
+    const a = currentAction(all, type);
+    if (!a) continue;
+    const repliesSince = a.itemRevision < revision;
+    out[type] = { id: a.id, type, status: a.status, failureReason: a.failureReason, stale: a.status === 'ready' && repliesSince, repliesSince, version: entryVersion(all, a) };
   }
   return out;
 }
