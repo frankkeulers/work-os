@@ -13,6 +13,7 @@ import {
   snooze,
   unsnooze,
 } from './transitions';
+import { followAnchor, markAskDone, partGrew, routeTopic } from './topics';
 
 /** The log skipped or repeated a seq. The store decides how to recover (PLAN.md §4.3). */
 export class SeqGapError extends Error {
@@ -116,12 +117,16 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
         title: meta.title,
         permalink: meta.permalink,
         participants: meta.participants,
-        lastActivityAt: meta.lastActivityAt,
+        // An anchor's activity is its whole topic's.
+        lastActivityAt: item.parts ? [item.lastActivityAt, meta.lastActivityAt].sort().at(-1) : meta.lastActivityAt,
         revision: meta.revision,
         messageCount: meta.messageCount,
       });
       // A replayed poll carries the same revision and changes nothing (FR-2.8).
-      if (grew) receiveMessages(item, fromMeOnly);
+      if (grew) {
+        receiveMessages(item, fromMeOnly);
+        partGrew(p.items, e.itemId, fromMeOnly);
+      }
     }
     return p;
   }
@@ -129,9 +134,18 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
   const item = p.items[e.itemId];
   if (!item) return p;
   switch (e.type) {
-    case 'triage.decided':
-      // A decision made from older messages than the item now has is stale (§5.3).
-      if (e.data.decision.itemRevision >= item.revision) applyDecision(item, e.data.decision);
+    case 'triage.decided': {
+      // A decision made from older messages than the item now has is stale (§5.3); so is one
+      // made before the topic's parts changed.
+      const d = e.data.decision;
+      if (d.itemRevision >= item.revision && (d.topicVersion === undefined || d.topicVersion === item.topicVersion)) applyDecision(item, d);
+      break;
+    }
+    case 'topic.routed':
+      routeTopic(p.items, e.itemId, e.data.into, e.data.by);
+      break;
+    case 'topic.askDone':
+      markAskDone(item, e.data.askId);
       break;
     case 'triage.corrected':
       correct(item, e.data.correction);
@@ -158,6 +172,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       markNotified(item);
       break;
   }
+  if (item.parts) followAnchor(p.items, item.id);
   return p;
 }
 

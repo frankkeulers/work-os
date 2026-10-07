@@ -1,4 +1,4 @@
-import { londonAt, londonParts, tomorrowAt9, type Need, type NextStep, type SourceId } from '@work-os/shared';
+import { conversationOf, londonAt, londonParts, tomorrowAt9, type Need, type NextStep, type SourceId } from '@work-os/shared';
 import type { ItemSummary } from '../api';
 import { fmtIn, fmtTime, fmtWhen } from './format';
 import { cardActions, type DraftButton, type DraftState } from './lanes';
@@ -82,7 +82,7 @@ export function sortItems(items: ItemSummary[], sort: InboxSort, needs: boolean,
 
 /** A Slack item's channel or DM, from its id (`slack:<channel>:<key>`). Other sources have none. */
 export function channelKey(i: Pick<ItemSummary, 'id' | 'source'>): string | undefined {
-  return i.source === 'slack' ? i.id.split(':')[1] : undefined;
+  return conversationOf(i);
 }
 
 /**

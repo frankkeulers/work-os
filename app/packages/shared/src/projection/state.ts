@@ -5,7 +5,7 @@ import type { Action, Attention, ItemKind, Participant, SourceId, TriageCorrecti
 // The inbox state that the event log projects to (PLAN.md §4.3). The server keeps it in memory
 // and in snapshot.json; the mock keeps the same flags on its own records. Bump PROJECTION_VERSION
 // whenever reduce() changes, so the server replays the whole log instead of trusting the snapshot.
-export const PROJECTION_VERSION = 1;
+export const PROJECTION_VERSION = 2;
 
 /**
  * What the inbox knows about an item beyond its content. `D` is the decision type: the server
@@ -23,6 +23,14 @@ export interface ItemFlags<D extends LoggedDecision = LoggedDecision> {
   backFromSnooze: boolean;
   failCount: number; // triage attempts that returned invalid output (CL-7)
   notified: boolean; // at most one notification per item (FR-11.2)
+  // Topics (amendment): pieces of a conversation (threads, DM windows) on the same subject are
+  // shown and triaged as one topic, anchored on one of them. See topics.ts.
+  routed: boolean; // routing has placed this piece in a topic, its own or another's
+  topicOf?: string; // the anchor, when this piece is part of another piece's topic
+  parts?: string[]; // on an anchor: the topic's other pieces, in the order they joined
+  notWith?: string[]; // anchors Frank split this piece from: routing never puts it back
+  topicVersion: number; // on an anchor: bumped whenever a part joins, leaves or grows
+  asksDone?: string[]; // on an anchor: asks Frank ticked off, by askId
 }
 
 /** Item metadata from item.upserted. Message bodies live in items/, never here. */

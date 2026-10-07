@@ -35,6 +35,12 @@ function expectReplayMatches(s: MockState, events: WorkEvent[]) {
       backFromSnooze: rec.backFromSnooze,
       failCount: rec.failCount,
       notified: rec.notified,
+      routed: rec.routed,
+      topicOf: rec.topicOf,
+      parts: rec.parts,
+      notWith: rec.notWith,
+      topicVersion: rec.topicVersion,
+      asksDone: rec.asksDone,
     });
   }
 

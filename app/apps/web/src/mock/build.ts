@@ -58,6 +58,8 @@ export function newRec(seed: ThreadSeed, clock: string, uniq = ''): ItemRec {
     backFromSnooze: false,
     failCount: 0,
     notified: false,
+    routed: false,
+    topicVersion: 0,
     arrivedAt: clock,
     script: seed.decision,
     failTriage: seed.failTriage ?? 0,

@@ -3,6 +3,7 @@ import { toLoggedDecision, type EventData, type EventType, type WorkEvent } from
 import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
+import { askId, conversationOf } from './topics';
 import { budgetsOf, summaryOf } from './views';
 
 const ITEM = 'slack:C1:1791189720.000100';
@@ -166,6 +167,108 @@ describe('reduce', () => {
     const { events, add } = log();
     add('source.polled', 0, { source: 'slack', reason: 'first', fetched: 3, cursor: '1791189720.000100' }, {}).add('source.polled', 10, { source: 'slack', reason: 'scheduled', fetched: 0 }, {});
     expect(replay(events).sources.slack).toEqual({ lastPollAt: at(10), cursor: '1791189720.000100' });
+  });
+});
+
+describe('topics', () => {
+  const A = 'slack:G1:1791189720.000100';
+  const B = 'slack:G1:1791193320.000100';
+  const C = 'slack:G1:1791196920.000100';
+  const on = (itemId: string) => ({ itemId });
+  const piece = (mins: number, revision = 1, fromMeOnly = false) => ({ ...upserted(revision, fromMeOnly, mins), kind: 'dm' as const });
+  const decidedOn = (itemId: string, revision: number, topicVersion?: number) => ({
+    decision: toLoggedDecision({ ...decision(revision), itemId, ...(topicVersion !== undefined && { topicVersion }) }),
+  });
+
+  it('joins a piece to a topic: hidden behind the anchor, which waits for a fresh triage', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A))
+      .add('topic.routed', 10, { by: 'model' }, on(A))
+      .add('triage.decided', 11, decidedOn(A, 1, 0), on(A))
+      .add('item.upserted', 40, piece(40), on(B))
+      .add('topic.routed', 50, { into: A, by: 'model' }, on(B));
+    const p = replay(events);
+    expect(p.items[B]).toMatchObject({ routed: true, topicOf: A });
+    expect(p.items[A]).toMatchObject({ parts: [B], topicVersion: 1, triageState: 'pending', newReplies: true, lastActivityAt: at(40) });
+  });
+
+  it('marks a fresh topic pending without new replies, and a regroup too', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A)).add('item.upserted', 5, piece(5), on(B)).add('topic.routed', 10, { into: A, by: 'model' }, on(B));
+    expect(replay(events).items[A]).toMatchObject({ triageState: 'pending', newReplies: false });
+  });
+
+  it('re-triages the topic when a part grows, and drops a decision made before', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A))
+      .add('item.upserted', 5, piece(5), on(B))
+      .add('topic.routed', 10, { into: A, by: 'model' }, on(B))
+      .add('triage.decided', 20, decidedOn(A, 1, 1), on(A));
+    expect(replay(events).items[A]).toMatchObject({ triageState: 'triaged', topicVersion: 1 });
+
+    add('item.upserted', 30, piece(30, 2), on(B)).add('triage.decided', 31, decidedOn(A, 1, 1), on(A));
+    expect(replay(events).items[A]).toMatchObject({ triageState: 'pending', newReplies: true, topicVersion: 2, lastActivityAt: at(30) });
+
+    add('triage.decided', 40, decidedOn(A, 1, 2), on(A));
+    expect(replay(events).items[A].triageState).toBe('triaged');
+  });
+
+  it('reopens a done topic when a part brings new replies, and parts follow the anchor', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A))
+      .add('item.upserted', 5, piece(5), on(B))
+      .add('topic.routed', 10, { into: A, by: 'model' }, on(B))
+      .add('triage.decided', 11, decidedOn(A, 1, 1), on(A))
+      .add('item.done', 12, undefined, on(A));
+    expect(replay(events).items[B]).toMatchObject({ status: 'done', doneAt: at(12) });
+
+    add('item.upserted', 30, piece(30, 2), on(B)).add('triage.decided', 40, decidedOn(A, 1, 2), on(A));
+    const p = replay(events);
+    expect(p.items[A]).toMatchObject({ status: 'open', doneAt: undefined });
+    expect(p.items[B].status).toBe('open');
+  });
+
+  it('merges a topic into another, parts and all, and routes into a part’s anchor', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A))
+      .add('item.upserted', 5, piece(5), on(B))
+      .add('item.upserted', 6, piece(6), on(C))
+      .add('topic.routed', 10, { into: B, by: 'model' }, on(C))
+      .add('topic.routed', 11, { into: A, by: 'regroup' }, on(B));
+    let p = replay(events);
+    expect(p.items[A].parts).toEqual([B, C]);
+    expect(p.items[C].topicOf).toBe(A);
+    expect(p.items[B].parts).toBeUndefined();
+
+    const d = 'slack:G1:1791200520.000100';
+    add('item.upserted', 20, piece(20), on(d)).add('topic.routed', 21, { into: C, by: 'model' }, on(d));
+    p = replay(events);
+    expect(p.items[d].topicOf).toBe(A);
+  });
+
+  it('splits a piece out: on its own, waiting for triage, never routed back there', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A))
+      .add('triage.decided', 1, decidedOn(A, 1, 0), on(A))
+      .add('item.upserted', 5, piece(5), on(B))
+      .add('triage.decided', 6, decidedOn(B, 1, 0), on(B))
+      .add('topic.routed', 10, { into: A, by: 'model' }, on(B))
+      .add('triage.decided', 11, decidedOn(A, 1, 1), on(A))
+      .add('topic.routed', 20, { by: 'user' }, on(B));
+    const p = replay(events);
+    expect(p.items[B]).toMatchObject({ topicOf: undefined, notWith: [A], triageState: 'pending', decision: undefined, status: 'open' });
+    expect(p.items[A]).toMatchObject({ parts: undefined, topicVersion: 2, triageState: 'pending' });
+  });
+
+  it('ticks off asks by their wording', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A)).add('topic.askDone', 5, { askId: askId('Approve the branch protection') }, on(A));
+    expect(replay(events).items[A].asksDone).toEqual([askId('  approve the   branch protection ')]);
+  });
+
+  it('keys conversations by Slack channel only', () => {
+    expect(conversationOf({ id: A, source: 'slack' })).toBe('G1');
+    expect(conversationOf({ id: 'outlook:INBOX:1', source: 'outlook' })).toBeUndefined();
   });
 });
 

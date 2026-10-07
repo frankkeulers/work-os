@@ -20,6 +20,8 @@ const item = (over: Partial<ItemSummary>): ItemSummary => ({
   newReplies: false,
   backFromSnooze: false,
   modelPaused: false,
+  pieces: 1,
+  asksDone: [],
   ...over,
 });
 

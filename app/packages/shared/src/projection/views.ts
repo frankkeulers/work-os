@@ -65,6 +65,8 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
     snoozedUntil: s.snoozedUntil,
     quietUntil,
     doneAt: s.doneAt,
+    pieces: 1 + (s.parts?.length ?? 0),
+    asksDone: s.asksDone ?? [],
   };
 }
 

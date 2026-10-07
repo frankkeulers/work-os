@@ -55,6 +55,16 @@ const FilingSuggestion = z.object({
 export const Need = z.enum(['reply', 'approve', 'decide', 'prepare', 'review', 'actions', 'file']);
 export type Need = z.infer<typeof Need>;
 
+// amendment (topics): one thing Frank has to do in a topic. A topic can hold several; the
+// decision's `next` is the most urgent of them.
+export const Ask = z.object({
+  need: Need,
+  step: z.string().min(1),
+  dueAt: isoDate.optional(),
+  dueLabel: z.string().optional(),
+});
+export type Ask = z.infer<typeof Ask>;
+
 export const NextStep = z.object({
   need: Need,
   step: z.string().min(1), // "Choose wording A or B in the thread"
@@ -63,12 +73,14 @@ export const NextStep = z.object({
   dueLabel: z.string().optional(), // "planning", or "this week" when there's no exact time
   blocks: z.string().optional(), // who or what is waiting: "Marketing waiting"
   actionItems: z.array(z.string()).optional(), // meeting action items assigned to Frank
+  asks: z.array(Ask).optional(), // amendment (topics): every open ask in the topic, `next` among them
 });
 export type NextStep = z.infer<typeof NextStep>;
 
 export const TriageDecision = z.object({
   itemId: z.string().min(1),
   itemRevision: z.number().int().positive(),
+  topicVersion: z.number().int().nonnegative().optional(), // amendment (topics): the topic's parts as triaged
   attention: Attention,
   confluence: FilingSuggestion,
   vault: FilingSuggestion,
@@ -108,7 +120,7 @@ export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', '
 export type FailureReason = z.infer<typeof FailureReason>;
 
 /** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
-export const PromptFileId = z.enum(['triage', 'draft-vault', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export const PromptFileId = z.enum(['triage', 'topics', 'draft-vault', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
 export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
@@ -278,6 +290,7 @@ export const Settings = z.object({
     triage: ModelId,
     draftVault: ModelId,
     draftConfluence: ModelId,
+    routing: ModelId.optional(), // amendment (topics): Haiku when unset
   }),
   claudeBackend: z.enum(['subscription', 'api_key', 'bedrock']),
   budgets: z.object({
@@ -322,7 +335,7 @@ export function sourceSchedule(settings: Pick<Settings, 'schedule' | 'sources'>,
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------
 
-export const UsagePurpose = z.enum(['triage', 'draft_vault', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch']); // fetch: connector relay (CL-9)
+export const UsagePurpose = z.enum(['triage', 'draft_vault', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing']); // fetch: connector relay (CL-9); routing: topics
 export type UsagePurpose = z.infer<typeof UsagePurpose>;
 
 export const UsageRecord = z.object({

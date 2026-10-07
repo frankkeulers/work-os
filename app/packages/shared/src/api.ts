@@ -60,6 +60,8 @@ export interface ItemSummary {
   snoozedUntil?: string;
   quietUntil?: string; // when a waiting thread becomes eligible for triage
   doneAt?: string;
+  pieces: number; // amendment (topics): threads and stretches of chat in the topic; 1 for a lone piece
+  asksDone: string[]; // amendment (topics): asks in next.asks Frank ticked off, by askId
 }
 
 export type PollPhase = 'idle' | 'polling' | 'triaging';
@@ -140,6 +142,19 @@ export interface ItemView {
   meId: string; // the signed-in Slack user, shown as "You"
   /** Everyone in a DM or group DM, from the source; absent when it can't say. */
   members?: Participant[];
+  /** The topic's pieces, oldest first; `item.messages` holds all their messages (amendment, topics). Absent: the item is its only piece. */
+  pieces?: TopicPiece[];
+}
+
+/** One thread or stretch of chat in a topic. */
+export interface TopicPiece {
+  id: string;
+  kind: 'thread' | 'chat';
+  permalink: string;
+  openUrl?: string;
+  messageIds: string[];
+  messageCount: number;
+  anchor: boolean; // the piece the topic is anchored on: it can't be split out
 }
 
 /** The messages just before a DM item, read live from the source and never stored. Oldest first. */

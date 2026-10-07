@@ -13,6 +13,8 @@ export const newItemFlags = (): ItemFlags => ({
   backFromSnooze: false,
   failCount: 0,
   notified: false,
+  routed: false,
+  topicVersion: 0,
 });
 
 /** New messages on a known item. Messages from Frank alone don't need a re-triage (§5.3). */

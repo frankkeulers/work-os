@@ -53,6 +53,10 @@ export const EventPayloads = {
   // At most one per item (FR-11.2). Logged even when quiet hours or the setting held it back,
   // so the item is never notified later.
   'item.notified': z.object({ kind: z.enum(['now', 'summary']), suppressed: z.enum(['quiet_hours', 'disabled']).optional() }),
+  // Topics (amendment). On a piece: routing put it in another piece's topic (into), or in its own.
+  // A piece Frank splits out is routed by 'user' with no into, and never rejoins that topic.
+  'topic.routed': z.object({ into: z.string().min(1).optional(), by: z.enum(['model', 'user', 'regroup']) }),
+  'topic.askDone': z.object({ askId: z.string().min(1) }), // on an anchor: Frank ticked off one ask
   'triage.decided': z.object({ decision: LoggedDecision }),
   'triage.corrected': z.object({ correction: TriageCorrection }),
   'triage.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
