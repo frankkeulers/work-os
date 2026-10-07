@@ -41,6 +41,7 @@ import { ConfluenceApi } from './actions/confluenceApi';
 import { noConfluence } from './actions/fakeConfluence';
 import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
+import { routeTopics } from './pipeline/topics';
 import { runTriage, type TriageDeps } from './pipeline/triage';
 import { correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
@@ -336,6 +337,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
     sources: () => buildSources(settings.settings, factories),
     triage: (signal, only) => runTriage(triageDeps, signal, { only }),
+    regroup: (signal, conversation) => routeTopics({ ...triageDeps, topicsPrompt: triageDeps.topicsPrompt! }, signal, { regroup: conversation }),
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),
     onHealthChange: (c) => alerts.onChange(c),

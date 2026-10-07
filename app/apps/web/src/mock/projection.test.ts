@@ -1,4 +1,4 @@
-import { replay, toLoggedDecision, type Projection, type WorkEvent } from '@work-os/shared';
+import { askId, replay, toLoggedDecision, type Projection, type WorkEvent } from '@work-os/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildState, type Preset } from './seed';
 import { MockServer } from './server';
@@ -100,6 +100,18 @@ describe('replaying a session', () => {
     await run(6000);
     await settle(server.getItem(id('t3'))); // and is seen
 
+    // Topics: tick an ask, done on a topic, split a piece out, regroup a conversation.
+    const k1 = await settle(server.getItem(id('k1')));
+    await settle(server.markAskDone(id('k1'), askId(k1.decision!.next!.asks![1].step)));
+    await settle(server.markDone(id('k5')));
+    await settle(server.splitPiece(id('k4')), 2000);
+    await settle(server.regroup('C04INSIGHTS'), 2000);
+    const items = state().items;
+    expect(items[id('k4')]).toMatchObject({ topicOf: undefined, notWith: [id('k1')] });
+    expect(items[id('k1')].parts).toEqual([id('k3'), id('k2')]);
+    expect(items[id('k6')].status).toBe('done'); // a part follows its topic
+    expect(items[id('r2')].topicOf).toBe(id('r1'));
+
     // Drafts: ready and approved, a page conflict, a people check, a cancel, a discard and a model error.
     const vault = await settle(server.requestDraft(id('f4'), 'vault_note'));
     await run(8000);
@@ -128,7 +140,7 @@ describe('replaying a session', () => {
     expectReplayMatches(s, s.events);
     // The session covered every item and action event type.
     const types = new Set(s.events.map((e) => e.type));
-    for (const t of ['item.unsnoozed', 'item.seen', 'item.notified', 'item.reopened', 'triage.corrected', 'action.edited', 'action.executing', 'action.executed', 'action.failed', 'action.discarded']) {
+    for (const t of ['item.unsnoozed', 'item.seen', 'item.notified', 'item.reopened', 'triage.corrected', 'topic.routed', 'topic.askDone', 'action.edited', 'action.executing', 'action.executed', 'action.failed', 'action.discarded']) {
       expect(types, t).toContain(t);
     }
   });

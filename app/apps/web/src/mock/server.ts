@@ -1,6 +1,7 @@
 import {
   Rules,
   Settings as SettingsSchema,
+  anchorOf,
   applyActionEvent,
   applyDecision,
   budgetsOf,
@@ -8,20 +9,27 @@ import {
   costOf,
   failTriage,
   firstMatchingRule,
+  followAnchor,
   inTimeRange,
   isSnoozeDue,
   isWorkHours,
   londonParts,
+  markAskDone,
   markDone,
   markNotified,
   markSeen,
   needsNotification,
+  partGrew,
   receiveMessages,
   reopen,
+  routeTopic,
   seenChanges,
   snooze,
   summaryOf,
+  conversationOf,
   toLoggedDecision,
+  topicItem,
+  topicPiecesView,
   unsnooze,
   type Action,
   type ActionType,
@@ -53,7 +61,7 @@ import {
   type WorkOsApi,
 } from '@work-os/shared';
 import { ApiError, type FieldIssue } from '../api/errors';
-import { MIN, addMins, buildDecision, makeEvent, newRec, slackTs, upserted, type EventIds } from './build';
+import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
 import { ME } from './me';
@@ -258,9 +266,10 @@ export class MockServer implements WorkOsApi, MockControls {
       this.event('source.polled', { source: 'slack', reason, fetched, cursor: slackTs(now) });
 
       const quiet = this.s.settings.triage.quietMinutes;
-      const eligible = Object.values(this.s.items).filter(
-        (r) => r.triageState === 'pending' && Date.parse(now) - Date.parse(r.item.lastActivityAt) >= quiet * MIN,
-      );
+      const isQuiet = (r: ItemRec) => Date.parse(now) - Date.parse(r.item.lastActivityAt) >= quiet * MIN;
+      // Topics: a scripted piece joins its topic once quiet; a part is triaged with its topic.
+      for (const r of Object.values(this.s.items)) if (r.topicKey && !r.routed && r.triageState === 'pending' && isQuiet(r)) this.route(r);
+      const eligible = Object.values(this.s.items).filter((r) => r.triageState === 'pending' && !r.topicOf && isQuiet(r));
       let triaged = 0;
       let calls = 0;
       if (eligible.length && !this.budgets().triage.hit) {
@@ -318,8 +327,9 @@ export class MockServer implements WorkOsApi, MockControls {
     }
     if (reply.decision) rec.script = { ...rec.script, ...reply.decision };
     this.event('item.upserted', upserted(item, reply.by === FRANK), { itemId: item.id });
-    // Re-triage only when the new messages are not from Frank alone (§5.3).
+    // Re-triage only when the new messages are not from Frank alone (§5.3). A part's new messages are its topic's.
     receiveMessages(rec, reply.by === FRANK);
+    partGrew(this.s.items, recActivity, item.id, reply.by === FRANK);
     if (reply.by !== FRANK) {
       const rule = firstMatchingRule(item, this.s.rules, this.s.settings, ME);
       if (rule && (rule.outcome.type === 'now' || rule.outcome.type === 'today')) {
@@ -336,6 +346,18 @@ export class MockServer implements WorkOsApi, MockControls {
       if (p) return p.name;
     }
     return id;
+  }
+
+  /** Routing, as scripted by the seed: the piece joins its topic (topics). */
+  private route(rec: ItemRec) {
+    const into = Object.values(this.s.items).find((r) => r.key === rec.topicKey);
+    routeTopic(this.s.items, recActivity, rec.item.id, into?.item.id, 'model');
+    this.event('topic.routed', { ...(into && { into: into.item.id }), by: 'model' }, { itemId: rec.item.id });
+  }
+
+  /** The record a topic shows as: a part's anchor, or itself. */
+  private anchor(id: string): ItemRec {
+    return this.rec(anchorOf(this.s.items, this.rec(id).item.id));
   }
 
   /** One batched Haiku call per maxThreadsPerCall threads (CL-4, §5.3). */
@@ -471,6 +493,7 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(QUERY_MS);
     const budgets = this.budgets();
     const items = Object.values(this.s.items)
+      .filter((r) => !r.topicOf) // a part shows in its topic
       .map((r) => this.summaryOf(r, budgets))
       .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
     return {
@@ -520,9 +543,13 @@ export class MockServer implements WorkOsApi, MockControls {
     return [...new Set([...fromItems, ...sl.includeChannels, ...sl.excludeChannels, ...sl.customerChannels, ...(sl.appChannels ?? [])])].sort((a, b) => a.localeCompare(b));
   }
 
-  async getItem(id: string): Promise<ItemView> {
+  async getItem(requested: string): Promise<ItemView> {
     await this.gate(QUERY_MS);
-    const rec = this.rec(id);
+    // A part opens as its topic, with every piece's messages.
+    const rec = this.anchor(requested);
+    const id = rec.item.id;
+    const parts = (rec.parts ?? []).map((p) => this.rec(p).item);
+    const pieces = topicPiecesView(id, [rec.item, ...parts]);
     const budgets = this.budgets();
     const summary = this.summaryOf(rec, budgets);
     // Opening an item counts as seeing it.
@@ -536,7 +563,8 @@ export class MockServer implements WorkOsApi, MockControls {
     const results = Object.fromEntries(actions.filter((a) => this.s.results[a.id]).map((a) => [a.id, this.s.results[a.id]]));
     return {
       summary,
-      item: structuredClone(rec.item),
+      item: structuredClone(topicItem(rec.item, parts).item),
+      ...(pieces && { pieces }),
       decision: rec.decision,
       correction: rec.correction,
       batch: rec.batch,
@@ -698,6 +726,7 @@ export class MockServer implements WorkOsApi, MockControls {
   async markDone(itemId: string) {
     await this.gate(COMMAND_MS);
     markDone(this.rec(itemId), this.iso());
+    followAnchor(this.s.items, itemId);
     this.event('item.done', undefined, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
@@ -707,6 +736,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const ids = [...new Set(itemIds)].filter((id) => this.rec(id).status !== 'done');
     for (const id of ids) {
       markDone(this.rec(id), this.iso());
+      followAnchor(this.s.items, id);
       this.event('item.done', undefined, { itemId: id });
     }
     this.emit({ topic: 'inbox' }, ...ids.map((id) => ({ topic: 'item' as const, id })));
@@ -718,6 +748,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const ids = [...new Set(itemIds)].filter((id) => this.rec(id).status === 'done');
     for (const id of ids) {
       reopen(this.rec(id));
+      followAnchor(this.s.items, id);
       this.event('item.reopened', undefined, { itemId: id });
     }
     this.emit({ topic: 'inbox' }, ...ids.map((id) => ({ topic: 'item' as const, id })));
@@ -727,6 +758,7 @@ export class MockServer implements WorkOsApi, MockControls {
   async reopen(itemId: string) {
     await this.gate(COMMAND_MS);
     reopen(this.rec(itemId));
+    followAnchor(this.s.items, itemId);
     this.event('item.reopened', undefined, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
@@ -735,6 +767,7 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(COMMAND_MS);
     if (untilIso <= this.iso()) throw new ApiError('validation', 'Pick a time in the future.', [{ path: 'until', message: 'Pick a time in the future' }]);
     snooze(this.rec(itemId), untilIso);
+    followAnchor(this.s.items, itemId);
     this.event('item.snoozed', { until: untilIso }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
   }
@@ -761,6 +794,52 @@ export class MockServer implements WorkOsApi, MockControls {
     await sleep(1200);
     this.triageBatch([rec]);
     this.emit({ topic: 'inbox' }, { topic: 'usage' }, { topic: 'item', id: itemId });
+  }
+
+  // ---------------------------------------------------------------- topics
+
+  async markAskDone(itemId: string, askId: string) {
+    await this.gate(COMMAND_MS);
+    const rec = this.anchor(itemId);
+    markAskDone(rec, askId);
+    this.event('topic.askDone', { askId }, { itemId: rec.item.id });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: rec.item.id });
+  }
+
+  async splitPiece(pieceId: string) {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(pieceId);
+    const from = rec.topicOf;
+    if (!from) throw new ApiError('conflict', 'This piece is the topic itself, so it can’t be split out. Split out the other pieces instead.');
+    routeTopic(this.s.items, recActivity, pieceId, undefined, 'user');
+    this.event('topic.routed', { by: 'user' }, { itemId: pieceId });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: pieceId }, { topic: 'item', id: from });
+    // Both are triaged again: the piece on its own, the topic without it.
+    await sleep(1200);
+    if (!this.budgets().triage.hit) this.triageBatch([rec, this.rec(from)]);
+    this.emit({ topic: 'inbox' }, { topic: 'usage' }, { topic: 'item', id: pieceId }, { topic: 'item', id: from });
+  }
+
+  async regroup(conversation: string) {
+    await this.gate(COMMAND_MS);
+    if (this.budgets().triage.hit) throw new ApiError('budget', 'Triage budget reached for today, so topics can’t be regrouped until tomorrow.');
+    const open = Object.values(this.s.items).filter((r) => !r.topicOf && r.status !== 'done' && conversationOf(r.item) === conversation);
+    await sleep(900);
+    this.recordUsage('routing', 'haiku-4.5', 900 + open.length * 400, 40 + open.length * 20, open.map((r) => r.item.id), 'topics v1', 1400);
+    // As scripted by the seed: a piece with regroupWith joins that seed's topic.
+    const topics = new Set<ItemRec>();
+    let merged = 0;
+    for (const r of open) {
+      const into = r.regroupKey ? open.find((x) => x.key === r.regroupKey) : undefined;
+      if (!into || r.notWith?.includes(into.item.id)) continue;
+      routeTopic(this.s.items, recActivity, r.item.id, into.item.id, 'regroup');
+      this.event('topic.routed', { into: into.item.id, by: 'regroup' }, { itemId: r.item.id });
+      topics.add(into);
+      merged++;
+    }
+    if (topics.size) this.triageBatch([...topics]);
+    this.emit({ topic: 'inbox' }, { topic: 'usage' }, ...open.map((r) => ({ topic: 'item' as const, id: r.item.id })));
+    return { merged };
   }
 
   // ---------------------------------------------------------------- drafts & actions

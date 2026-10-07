@@ -298,6 +298,66 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
   });
 });
 
+describe('topics (amendment)', () => {
+  const A = isoToTs(START + 1 * MIN);
+  const B = isoToTs(START + 2 * MIN);
+  const idOf = (ts: string) => `slack:C01PROD:${ts}`;
+  const enc = encodeURIComponent;
+  const settleAfter = async (mins: number) => {
+    wall += mins * MIN;
+    mono += mins * MIN;
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    await tick();
+  };
+
+  it('routes two posts on one PR into one topic, shows its pieces, ticks an ask and splits a piece out', async () => {
+    slack.post('C01PROD', { ts: A, user: 'U02DANA', text: 'PR 63 adds GOVERNANCE-RULES.md for the contract checks' });
+    slack.post('C01PROD', { ts: B, user: 'U02DANA', text: 'PR 63: the security scheme lands on the wrong module, can you check?' });
+    await settleAfter(12);
+    const routing = claude.calls.filter((c) => c.prompt.includes('<conversations>'));
+    expect(routing).toHaveLength(1);
+    const topic = (await inbox()).items.find((i) => i.id === idOf(A))!;
+    expect(topic).toMatchObject({ pieces: 2, triageState: 'triaged' });
+    expect((await inbox()).items.some((i) => i.id === idOf(B))).toBe(false);
+
+    const view = (await call<ItemView>('GET', `/api/items/${enc(idOf(B))}`)).body; // a part opens as its topic
+    expect(view.summary.id).toBe(idOf(A));
+    expect(view.item.messages.map((m) => m.text)).toEqual([expect.stringMatching(/^PR 63 adds/), expect.stringMatching(/^PR 63: the security/)]);
+    expect(view.pieces?.map((p) => [p.id, p.kind, p.anchor])).toEqual([
+      [idOf(A), 'chat', true],
+      [idOf(B), 'chat', false],
+    ]);
+
+    expect((await call('POST', `/api/items/${enc(idOf(A))}/asks/abc123/done`)).status).toBe(204);
+    expect((await inbox()).items.find((i) => i.id === idOf(A))?.asksDone).toEqual(['abc123']);
+
+    expect((await call<ApiErrorBody>('POST', `/api/items/${enc(idOf(A))}/split`)).body.code).toBe('conflict');
+    expect((await call('POST', `/api/items/${enc(idOf(B))}/split`)).status).toBe(204);
+    await tick();
+    const items = (await inbox()).items;
+    expect(items.find((i) => i.id === idOf(A))).toMatchObject({ pieces: 1, triageState: 'triaged' });
+    expect(items.find((i) => i.id === idOf(B))).toMatchObject({ pieces: 1, triageState: 'triaged' });
+  });
+
+  it('regroups topics that routing left apart', async () => {
+    slack.post('C01PROD', { ts: A, user: 'U02DANA', text: 'PR 63 adds GOVERNANCE-RULES.md for the contract checks' });
+    await settleAfter(12);
+    slack.post('C01PROD', { ts: isoToTs(START + 14 * MIN), user: 'U02DANA', text: 'PR 63 is merged' });
+    claude.nextTexts.push('not json', 'still not json'); // routing fails: the piece stays on its own
+    await settleAfter(12);
+    expect((await inbox()).items.filter((i) => i.title === '#product')).toHaveLength(3);
+
+    const r = await call<{ merged: number }>('POST', '/api/topics/regroup', { conversation: 'C01PROD' });
+    expect(r).toMatchObject({ status: 200, body: { merged: 1 } });
+    await res.runtime.settled();
+    const prod = (await inbox()).items.filter((i) => i.title === '#product');
+    expect(prod).toHaveLength(2);
+    expect(prod.find((i) => i.id === idOf(A))).toMatchObject({ pieces: 2, triageState: 'triaged' });
+    expect((await call<ApiErrorBody>('POST', '/api/topics/regroup', {})).body.code).toBe('validation');
+  });
+});
+
 describe('corrections, labels and the eval (FR-6, FR-7.2, Story 6.1)', () => {
   const PROD = `slack:C01PROD:${P}`;
   const DM = `slack:D01DANA:${isoToTs(START - 20 * MIN)}`;

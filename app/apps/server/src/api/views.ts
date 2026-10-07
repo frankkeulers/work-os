@@ -2,10 +2,13 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SourceEnv } from '../claude/promptFiles';
 import {
+  anchorOf,
   budgetsOf,
   isWorkHours,
   londonParts,
   summaryOf,
+  topicItem,
+  topicPiecesView,
   type ActionState,
   type BudgetState,
   type CorrectionInput,
@@ -32,6 +35,7 @@ import type { RuntimeConfig } from '../config/env';
 import type { SettingsState } from '../config/settingsState';
 import type { ActionService } from '../actions/service';
 import type { Evals } from '../pipeline/eval';
+import { readTopic } from '../pipeline/topics';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { LabelStore } from '../store/labels';
@@ -205,6 +209,7 @@ export function inboxView(d: ViewDeps): InboxView {
   const cutoff = new Date(now.getTime() - DONE_VISIBLE_DAYS * 86_400_000).toISOString();
   const actions = actionsByItem(d);
   const items = Object.values(d.store.projection.items)
+    .filter((i) => !i.topicOf) // a part shows in its topic
     .filter((i) => i.status !== 'done' || !i.doneAt || i.doneAt >= cutoff)
     .filter((i) => !inExcludedChannel(i, s.slack.excludeChannels))
     .map((i) =>
@@ -235,12 +240,18 @@ export function inboxView(d: ViewDeps): InboxView {
   };
 }
 
-export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
+export async function itemView(d: ViewDeps, requested: string): Promise<ItemView> {
+  // A part opens as its topic.
+  const id = anchorOf(d.store.projection.items, requested);
   const it = d.store.projection.items[id];
   if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
   const s = d.settings.editable.settings;
   const b = budgets(d);
-  const stored = await d.items.read(it.source, id);
+  const topic = await readTopic(d.store.projection, d.items, id);
+  const stored = topic?.anchor;
+  const team = d.slackTeamId?.();
+  const web = d.settings.editable.settings.slack.openLinksIn !== 'app' && team;
+  const pieces = topic && topicPiecesView(id, [topic.anchor.item, ...topic.parts], (p, kind) => (web && p.source === 'slack' ? webClientUrl(web, p.id, kind) : undefined));
   const acts = d.actions ? await d.actions.view(id) : { actions: actionsByItem(d).get(id) ?? [], drafts: {}, progress: {}, results: {} };
   const actions = acts.actions;
   const text = stored?.text;
@@ -254,8 +265,8 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
       text: d.items.text(id) ?? {},
     }),
   );
-  // Without its file the item shows its metadata and permalink only (FR-12.1).
-  const item: Item = stored?.item ?? {
+  // A topic shows every piece's messages. Without its file the item shows its metadata and permalink only (FR-12.1).
+  const item: Item = (topic && topicItem(topic.anchor.item, topic.parts).item) ?? {
     id,
     source: it.source,
     kind: it.kind,
@@ -293,6 +304,7 @@ export async function itemView(d: ViewDeps, id: string): Promise<ItemView> {
     budgets: b,
     meId: d.meId?.() ?? '',
     ...(members && { members }),
+    ...(pieces && { pieces }),
   };
 }
 

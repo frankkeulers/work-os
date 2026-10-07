@@ -42,6 +42,7 @@ export function makeItem(seed: ThreadSeed, clock: string, uniq = ''): Item {
     messages,
     messageCount: seed.messageCount ?? messages.length,
     lastActivityAt: messages[messages.length - 1]?.ts ?? clock,
+    ...(seed.thread && { thread: true }),
     revision: 1,
     schemaVersion: 1,
   };
@@ -64,8 +65,13 @@ export function newRec(seed: ThreadSeed, clock: string, uniq = ''): ItemRec {
     script: seed.decision,
     failTriage: seed.failTriage ?? 0,
     drafts: seed.drafts,
+    ...(seed.topic && { topicKey: seed.topic }),
+    ...(seed.regroupWith && { regroupKey: seed.regroupWith }),
   };
 }
+
+/** Where a mock record keeps its activity time, for the shared topic rules. */
+export const recActivity = (r: ItemRec) => r.item;
 
 const RANK: Record<Attention, number> = { none: 0, today: 1, now: 2 };
 export const atLeast = (a: Attention, min?: Attention): Attention => (min && RANK[min] > RANK[a] ? min : a);
@@ -79,6 +85,7 @@ export function buildDecision(
   const base = {
     itemId: rec.item.id,
     itemRevision: rec.item.revision,
+    topicVersion: rec.topicVersion,
     containsPeopleObservations: !!script.people,
     summary: script.summary,
     decidedAt: at,

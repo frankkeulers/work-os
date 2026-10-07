@@ -324,6 +324,12 @@ export interface WorkOsApi {
   snooze(itemId: string, untilIso: string): Promise<void>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
   retryTriage(itemId: string): Promise<void>;
+  /** Topics (amendment): ticks off one ask in a topic's checklist. */
+  markAskDone(itemId: string, askId: string): Promise<void>;
+  /** Takes a piece out of its topic: it is triaged on its own and never routed back there. */
+  splitPiece(pieceId: string): Promise<void>;
+  /** Asks routing to merge a conversation's open topics; triage then runs on the merged ones. */
+  regroup(conversation: string): Promise<{ merged: number }>;
 
   requestDraft(itemId: string, type: ActionType): Promise<Action>;
   cancelDraft(actionId: string): Promise<void>;

@@ -493,7 +493,147 @@ export const SEED_THREADS: ThreadSeed[] = [
     messages: [{ by: 'U17DATAENG', minsAgo: 50, text: 'Shared the port-call notebook you asked for.' }],
     decision: { attention: 'none', summary: 'Data engineer shared the port-call notebook.', reason: 'Reply to your request; nothing to do.' },
   },
+
+  // ---------- Topics: one group DM, cut into pieces by Slack, routed into two topics ----------
+  ...API_GROUP_DM(),
+
+  // ---------- Topics: two threads on one subject, triaged apart; Regroup merges them ----------
+  {
+    key: 'r1',
+    channelId: 'C04INSIGHTS',
+    kind: 'thread',
+    title: '#insights-api',
+    thread: true,
+    messages: [
+      { by: 'U04BACKEND', minsAgo: 4 * H, text: 'Insights module API key auth: moving the key check from folder level to module level so it matches the spec.' },
+      { by: 'U20QA', minsAgo: 3 * H + 40, text: 'Pre-publish diffs look clean with the module-level check.' },
+    ],
+    decision: { attention: 'none', summary: 'Insights API key auth moved to module level; pre-publish diffs clean.', reason: 'Status update; nothing for you yet.' },
+  },
+  {
+    key: 'r2',
+    channelId: 'C04INSIGHTS',
+    kind: 'thread',
+    title: '#insights-api',
+    thread: true,
+    regroupWith: 'r1',
+    messages: [
+      { by: 'U04BACKEND', minsAgo: 2 * H, text: 'Insights API key auth is merged to pre-publish. @Frank can you check the portal shows the module-level scheme before we publish?' },
+      { by: 'U20QA', minsAgo: 1 * H + 50, text: 'Tested the three endpoints against it, all good.' },
+    ],
+    decision: {
+      attention: 'today',
+      summary: 'Insights API key auth on pre-publish: check the portal before it’s published.',
+      reason: 'Direct ask before a publish.',
+      next: { need: 'review', step: 'Check the portal shows the module-level key scheme', why: 'Backend lead wants your eye on it before publishing.' },
+    },
+  },
 ];
+
+/**
+ * A group DM about API governance, as Slack cuts it: chat split at 30 minutes of quiet, plus reply
+ * threads. Routing puts the pieces on the pre-publish branch in one topic and the API contract
+ * pieces in another, so the inbox shows two entries with a checklist each instead of six.
+ */
+function API_GROUP_DM(): ThreadSeed[] {
+  const base = { channelId: 'G01APIGOV', kind: 'dm' as const, title: 'Backend lead, Platform engineer, QA engineer, Data engineer' };
+  const part = { attention: 'today' as const, summary: 'Part of a topic.', reason: 'Triaged with its topic.' };
+  const due = london(5, '18:00');
+  return [
+    {
+      ...base,
+      key: 'k1',
+      messages: [
+        { by: 'U06PLATFORM', minsAgo: 5 * H, text: 'Apidog branch workflow is live: the pre-publish branch holds portal changes until Frank merges via MR.' },
+        { by: 'U06PLATFORM', minsAgo: 5 * H - 2, text: 'It’s experimental, so it needs an end-to-end run before we rely on it.' },
+      ],
+      decision: {
+        attention: 'now',
+        summary: 'Pre-publish branch workflow: main branch protection waits on your go; PR 63 needs a look.',
+        reason: 'The team is waiting on your approval today.',
+        next: {
+          need: 'approve',
+          step: 'Give the go to enable main branch protection',
+          why: 'The team has tested the pre-publish flow and needs your go to switch protection on.',
+          dueAt: due,
+          blocks: 'Team waiting',
+          asks: [
+            { need: 'approve', step: 'Give the go to enable main branch protection', dueAt: due },
+            { need: 'review', step: 'Check the PR 63 security scheme lands on the right module' },
+            { need: 'reply', step: 'Tell the Backend lead whether the PR 60 cleanup can be reverted' },
+          ],
+        },
+      },
+    },
+    {
+      ...base,
+      key: 'k2',
+      topic: 'k1',
+      thread: true,
+      messages: [
+        { by: 'U04BACKEND', minsAgo: 2 * H + 10, text: 'PR 63 adds GOVERNANCE-RULES.md for the contract checks.' },
+        { by: 'U01FRANK', minsAgo: 2 * H, text: 'The security scheme merge in pre-publish is landing on the wrong module, can you check?' },
+        { by: 'U04BACKEND', minsAgo: 1 * H + 50, text: 'Looking. Will push a fix to the same PR.' },
+      ],
+      decision: part,
+    },
+    {
+      ...base,
+      key: 'k3',
+      topic: 'k1',
+      messages: [
+        { by: 'U20QA', minsAgo: 5 * H - 50, text: 'Pre-publish branch workflow is ready for main branch protection. We tested it end to end.' },
+        { by: 'U06PLATFORM', minsAgo: 5 * H - 48, text: 'Just needs Frank’s go to enable it. Can we have it by 18:00?' },
+      ],
+      decision: part,
+    },
+    {
+      ...base,
+      key: 'k4',
+      topic: 'k1',
+      thread: true,
+      messages: [
+        { by: 'U04BACKEND', minsAgo: 2 * H - 5, text: 'Is the PR 60 cleanup done? Want to revert the temporary rules.' },
+        { by: 'U01FRANK', minsAgo: 2 * H - 8, text: 'Running checks before reverting.' },
+      ],
+      decision: part,
+    },
+    {
+      ...base,
+      key: 'k5',
+      messages: [
+        { by: 'U17DATAENG', minsAgo: 1 * H + 10, text: 'Can you review the API contract change for the timestamp_end default? Future dates would be clamped to now.' },
+        { by: 'U17DATAENG', minsAgo: 1 * H + 8, text: 'Need it before 18:00 so it makes the release.' },
+      ],
+      decision: {
+        attention: 'today',
+        summary: 'API contract validation: review the timestamp_end default and agree the plan for the gaps.',
+        reason: 'Two asks for you, one due today.',
+        next: {
+          need: 'review',
+          step: 'Review the timestamp_end default change (future dates clamped)',
+          why: 'It has to make today’s release.',
+          dueAt: due,
+          asks: [
+            { need: 'review', step: 'Review the timestamp_end default change (future dates clamped)', dueAt: due },
+            { need: 'decide', step: 'Agree to fix the contract gaps at 2–3 points a sprint', dueAt: due },
+          ],
+        },
+      },
+    },
+    {
+      ...base,
+      key: 'k6',
+      topic: 'k5',
+      thread: true,
+      messages: [
+        { by: 'U20QA', minsAgo: 1 * H + 5, text: 'Reviewed the API contract validation findings. Proposal: resolve the gaps incrementally, 2–3 story points per sprint, and add validation rules.' },
+        { by: 'U17DATAENG', minsAgo: 58, text: 'Fine by me if Frank agrees.' },
+      ],
+      decision: part,
+    },
+  ];
+}
 
 // Arrivals on the scripted timeline (minutes after the seed clock). Polls pick them up.
 export const TIMELINE: { afterMins: number; thread?: ThreadSeed; reply?: ReplySeed }[] = [

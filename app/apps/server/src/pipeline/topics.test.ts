@@ -10,8 +10,8 @@ import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { initDataDir } from '../config/dataDir';
 import { ItemFiles } from '../store/items';
 import { Store } from '../store/store';
-import { askId } from '@work-os/shared';
-import { resolveAssignments, routeTopics, topicItem, type TopicsAnswer, type TopicsDeps } from './topics';
+import { askId, topicItem } from '@work-os/shared';
+import { resolveAssignments, routeTopics, type TopicsAnswer, type TopicsDeps } from './topics';
 import { runTriage, type TriageAnswer } from './triage';
 import type { TriageThread } from './truncate';
 
@@ -187,7 +187,7 @@ describe('routeTopics', () => {
     await add(piece(300, ['PR 63 rules']), { summary: 'PR 63' });
     await add(piece(60, ['PR 63 again']));
     deps.budgetHit = () => true;
-    await routeTopics(deps, new AbortController().signal);
+    expect(await routeTopics(deps, new AbortController().signal)).toMatchObject({ calls: 0, paused: true });
     expect(calls).toHaveLength(0);
     expect(p()[pid(60)].routed).toBe(false);
   });

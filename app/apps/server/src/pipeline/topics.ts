@@ -1,4 +1,4 @@
-import { anchorOf, conversationOf, topicPieces, type EarlierView, type EventDraft, type Item, type ItemState, type Me, type Projection, type Settings } from '@work-os/shared';
+import { conversationOf, topicItem, type EarlierView, type EventDraft, type Item, type ItemState, type Me, type Projection, type Settings } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -64,6 +64,8 @@ export interface RoutingRun {
   calls: number;
   routed: number;
   joined: number;
+  /** Pieces waited: the budget is spent. */
+  paused?: boolean;
 }
 
 // ---------------------------------------------------------------- topic content
@@ -81,36 +83,6 @@ export async function readTopic(p: Projection, items: ItemFiles, id: string): Pr
     if (stored) parts.push(stored.item);
   }
   return { anchor, parts };
-}
-
-/**
- * One item holding a whole topic: every piece's messages in time order, under the anchor's ID and
- * revision. `inThread` names the messages that came from a Slack thread. `ends(n)` names each
- * piece's first message and its last n: what triage keeps of a topic, so an ask in an earlier piece
- * isn't trimmed away by the later ones.
- */
-export function topicItem(anchor: Item, parts: Item[]): { item: Item; inThread: Set<string>; ends: (n: number) => Set<string> } {
-  const inThread = new Set<string>();
-  const pieces = [anchor, ...parts];
-  for (const piece of pieces) if (piece.thread) for (const m of piece.messages) inThread.add(m.id);
-  const ends = (n: number) => new Set(parts.length ? pieces.flatMap((piece) => [piece.messages[0], ...piece.messages.slice(-n)].filter((m) => !!m).map((m) => m.id)) : []);
-  if (!parts.length) return { item: anchor, inThread, ends };
-  const byId = new Map(pieces.flatMap((piece) => piece.messages.map((m): [string, Item['messages'][number]] => [m.id, m])));
-  const messages = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id.localeCompare(b.id));
-  const participants = [...new Map(pieces.flatMap((piece) => piece.participants.map((x): [string, typeof x] => [x.id, x]))).values()];
-  const mentioned = [...new Map(pieces.flatMap((piece) => (piece.mentioned ?? []).map((x): [string, typeof x] => [x.id, x]))).values()];
-  return {
-    inThread,
-    ends,
-    item: {
-      ...anchor,
-      participants,
-      ...(mentioned.length && { mentioned }),
-      messages,
-      messageCount: pieces.reduce((n, piece) => n + piece.messageCount, 0),
-      lastActivityAt: pieces.map((piece) => piece.lastActivityAt).sort().at(-1)!,
-    },
-  };
 }
 
 /** What triage sees of a topic, and the content it was built from. Undefined when the anchor's file is gone. */
@@ -273,7 +245,7 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
     run.routed += alone.length;
   }
   if (!convs.length) return run;
-  if (d.budgetHit()) return run; // triage waits on the budget too; the pieces are routed once it lifts
+  if (d.budgetHit()) return { ...run, paused: true }; // triage waits on the budget too; the pieces are routed once it lifts
 
   const prompt = await d.topicsPrompt();
   const model = settings.models.routing ?? 'haiku-4.5';
@@ -284,7 +256,10 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
     overheadTokens: estimateTokens(prompt.text) + 200,
   });
   for (const [n, batch] of batches.entries()) {
-    if (n > 0 && d.budgetHit()) break;
+    if (n > 0 && d.budgetHit()) {
+      run.paused = true;
+      break;
+    }
     let answer: TopicsAnswer;
     try {
       const r = await d.claude.structured(
@@ -339,9 +314,3 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
   return run;
 }
 
-/** Every piece of the topic `id` shows in, for the API. */
-export const piecesOf = (p: Projection, id: string): string[] => {
-  const anchor = anchorOf(p.items, id);
-  const it = p.items[anchor];
-  return it ? topicPieces(it, anchor) : [];
-};

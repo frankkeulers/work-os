@@ -64,6 +64,9 @@ export interface ThreadSeed {
   decision: ScriptedDecision;
   failTriage?: number; // how many triage attempts return invalid output (CL-7)
   drafts?: DraftTemplates;
+  thread?: boolean; // a Slack thread with replies (topics), not a stretch of DM chat
+  topic?: string; // routing puts this piece in that seed's topic
+  regroupWith?: string; // on its own until Regroup merges it into that seed's topic
 }
 
 export interface ReplySeed {
@@ -84,6 +87,8 @@ export interface ItemRec extends ItemFlags<TriageDecision> {
   failTriage: number;
   drafts?: DraftTemplates;
   batch?: { at: string; threads: number; calls: number };
+  topicKey?: string; // ThreadSeed.topic
+  regroupKey?: string; // ThreadSeed.regroupWith
 }
 
 export interface TimelineEntry {

@@ -7,13 +7,14 @@ import {
   markDone,
   markNotified,
   needsNotification,
+  routeTopic,
   snooze as snoozeItem,
   toLoggedDecision,
   type EventData,
   type EventType,
   type WorkEvent,
 } from '@work-os/shared';
-import { addMins, buildDecision, makeEvent, newRec, upserted, type EventIds } from '../build';
+import { addMins, buildDecision, makeEvent, newRec, recActivity, upserted, type EventIds } from '../build';
 import { buildDraft } from '../drafts';
 import { ME } from '../me';
 import type { ItemRec, MockState, ThreadSeed } from '../types';
@@ -22,7 +23,7 @@ import { BATCH_TWELVE, SEED_THREADS, TIMELINE } from './threads';
 import { SEED_EVALS, seedUsage } from './usage';
 
 export const SEED_CLOCK = '2026-10-05T08:45:00.000Z'; // Mon 5 Oct 2026, 09:45 London
-export const STATE_VERSION = 7; // 6: events carry seq and typed payloads; 7: the log replays to the mock's state
+export const STATE_VERSION = 8; // 6: events carry seq and typed payloads; 7: the log replays to the mock's state; 8: topics
 
 export type Preset = 'default' | 'firstRun' | 'inboxZero' | 'heavy' | 'noBaseline';
 
@@ -112,10 +113,25 @@ export function buildState(preset: Preset = 'default'): MockState {
     ev('item.upserted', rec.item.lastActivityAt, upserted(rec.item, false), { itemId: rec.item.id });
   }
 
-  // Triage everything except the threads still inside the quiet window and the failed one.
+  // Topics: routing places each piece once it is quiet, the topic's first piece first.
+  const route = (rec: ItemRec, into?: ItemRec) => {
+    const at = pollAfter(rec.item.lastActivityAt, settings.schedule.workHours);
+    routeTopic(state.items, recActivity, rec.item.id, into?.item.id, 'model');
+    ev('topic.routed', at, { ...(into && { into: into.item.id }), by: 'model' }, { itemId: rec.item.id });
+  };
+  for (const rec of Object.values(state.items).sort((a, b) => a.item.lastActivityAt.localeCompare(b.item.lastActivityAt))) {
+    const into = rec.topicKey ? byKey[rec.topicKey] : undefined;
+    if (into && !into.routed) route(into);
+    if (rec.topicKey || rec.regroupKey || Object.values(byKey).some((r) => r.topicKey === rec.key || r.regroupKey === rec.key)) {
+      if (!rec.routed) route(rec, into);
+    }
+  }
+
+  // Triage everything except the threads still inside the quiet window and the failed one. A part
+  // is triaged with its topic.
   const batches: Record<string, ItemRec[]> = {};
   for (const rec of Object.values(state.items)) {
-    if (rec.key === 'q1' || rec.key === 'q2') continue;
+    if (rec.key === 'q1' || rec.key === 'q2' || rec.topicOf) continue;
     const at = pollAfter(rec.item.lastActivityAt, settings.schedule.workHours);
     if (rec.key === 'x1') {
       failTriage(rec, 2);

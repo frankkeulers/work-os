@@ -1,4 +1,4 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, seenChanges, type EarlierView } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, type EarlierView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writePromptFile, type PromptFile } from '../claude/promptFiles';
 import { SettingsValidationError } from '../config/settingsState';
@@ -36,9 +36,10 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   });
 
   // Done, reopen and snooze (FR-8.2): local only, so they work offline. Each is one fsynced event.
+  // A part of a topic stands for its topic: these act on the anchor.
   const item = (id: string) => {
     if (!d.store.projection.items[id]) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
-    return id;
+    return anchorOf(d.store.projection.items, id);
   };
   // Many at once (a channel's items, or all of Low priority): one write, skipping those already there.
   const many = (type: 'item.done' | 'item.reopened') => async (req: { body: unknown }) => {
@@ -75,6 +76,28 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const r = await d.runtime.retryTriage(id);
     if (!r.ok) throw new HttpError(r.reason, r.message);
     return reply.code(204).send();
+  });
+
+  // Topics (amendment). Ticking off one ask, splitting a piece out of its topic, and Regroup,
+  // which asks routing to merge a conversation's open topics.
+  app.post<{ Params: { id: string; askId: string } }>('/api/items/:id/asks/:askId/done', async (req, reply) => {
+    await d.store.append({ type: 'topic.askDone', itemId: item(req.params.id), data: { askId: req.params.askId } });
+    return reply.code(204).send();
+  });
+  app.post<{ Params: { id: string } }>('/api/items/:id/split', async (req, reply) => {
+    item(req.params.id);
+    if (!d.store.projection.items[req.params.id].topicOf) throw new HttpError('conflict', 'This piece is the topic itself, so it can’t be split out. Split out the other pieces instead.');
+    await d.store.append({ type: 'topic.routed', itemId: req.params.id, data: { by: 'user' } });
+    d.runtime?.wantTriage();
+    return reply.code(204).send();
+  });
+  app.post('/api/topics/regroup', async (req, reply) => {
+    const conversation = (req.body as { conversation?: unknown } | undefined)?.conversation;
+    if (typeof conversation !== 'string' || !conversation) throw new HttpError('validation', 'Send { conversation } with a Slack channel or DM ID.');
+    if (!d.runtime) throw new HttpError('unavailable', 'The runtime is not running.');
+    const r = await d.runtime.regroup(conversation);
+    if (!r.ok) throw new HttpError(r.reason, r.message);
+    return reply.headers(noStore).send({ merged: r.merged });
   });
 
   // "Correct triage" (FR-6.2): the inbox moves the item and the labelled set gains a line.
@@ -130,7 +153,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {
     const view = await itemView(d, req.params.id);
     // Opening an item counts as seeing it; logged only when it clears a flag.
-    const it = d.store.projection.items[req.params.id];
+    const it = d.store.projection.items[view.summary.id];
     if (it && seenChanges(it)) {
       await d.store.append({ type: 'item.seen', itemId: it.id, data: undefined });
     }

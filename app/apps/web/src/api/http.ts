@@ -140,6 +140,9 @@ export class HttpApi implements WorkOsApi {
   snooze = (id: string, until: string) => this.post(`${this.item(id)}/snooze`, { until });
   correctTriage = (id: string, input: CorrectionInput) => this.post<{ labelCount: number }>(`${this.item(id)}/correction`, input);
   retryTriage = (id: string) => this.post(`${this.item(id)}/retry-triage`);
+  markAskDone = (id: string, askId: string) => this.post(`${this.item(id)}/asks/${encodeURIComponent(askId)}/done`);
+  splitPiece = (pieceId: string) => this.post(`${this.item(pieceId)}/split`);
+  regroup = (conversation: string) => this.post<{ merged: number }>('/api/topics/regroup', { conversation });
 
   requestDraft = (itemId: string, type: ActionType) => this.post<Action>(`${this.item(itemId)}/actions`, { type });
   cancelDraft = (id: string) => this.post(`${this.action(id)}/cancel`);

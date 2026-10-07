@@ -79,6 +79,8 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
   return true;
 }
 
+const self = <R extends { lastActivityAt: string }>(r: R) => r;
+
 /** Applies one event to the projection, in place. Events must arrive in seq order with no gaps. */
 export function reduce(p: Projection, e: WorkEvent): Projection {
   if (e.seq !== p.lastSeq + 1) throw new SeqGapError(p.lastSeq + 1, e.seq);
@@ -125,7 +127,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       // A replayed poll carries the same revision and changes nothing (FR-2.8).
       if (grew) {
         receiveMessages(item, fromMeOnly);
-        partGrew(p.items, e.itemId, fromMeOnly);
+        partGrew(p.items, self, e.itemId, fromMeOnly);
       }
     }
     return p;
@@ -142,7 +144,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       break;
     }
     case 'topic.routed':
-      routeTopic(p.items, e.itemId, e.data.into, e.data.by);
+      routeTopic(p.items, self, e.itemId, e.data.into, e.data.by);
       break;
     case 'topic.askDone':
       markAskDone(item, e.data.askId);

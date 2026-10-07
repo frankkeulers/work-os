@@ -52,6 +52,8 @@ export interface RuntimeDeps {
   onHealthChange?: (c: HealthChange) => void;
   /** Model triage of what is due, or of `only` those items. Throws ClaudeError for health. */
   triage?: (signal: AbortSignal, only?: string[]) => Promise<TriageRun>;
+  /** Regroup (topics): routing merges a conversation's open topics. Throws ClaudeError for health. */
+  regroup?: (signal: AbortSignal, conversation: string) => Promise<{ joined: number; paused?: boolean }>;
   probe: (signal: AbortSignal) => Promise<ProbeResult>;
   checks: () => Promise<StartupCheck[]>;
   wakeTime?: () => string | undefined;
@@ -263,6 +265,12 @@ export class Runtime {
     this.triageWanted = true; // the quiet window or the budget may have changed
   }
 
+  /** Something changed that triage should look at soon (a piece split out of its topic). */
+  wantTriage() {
+    this.triageWanted = true;
+    this.maybeTriage();
+  }
+
   /** Whether the model may be asked now: awake long enough, online, and the breaker allows it. */
   claudeReady(): boolean {
     return this.canUseClaude() && this.health.state('network') !== 'offline' && this.health.ready('claude');
@@ -348,6 +356,28 @@ export class Runtime {
       return { ok: true };
     } catch (err) {
       return { ok: false, reason: 'unavailable', message: err instanceof ClaudeError ? err.message : 'Triage failed.' };
+    }
+  }
+
+  /**
+   * Regroup (topics): routing merges a conversation's open topics, then triage runs on the merged
+   * ones at once. Answers once routing is done; triage reports over SSE.
+   */
+  async regroup(conversation: string): Promise<{ ok: true; merged: number } | { ok: false; reason: 'unavailable' | 'budget'; message: string }> {
+    if (!this.d.regroup) return { ok: false, reason: 'unavailable', message: 'Topic routing is not running.' };
+    if (!this.claudeReady()) return { ok: false, reason: 'unavailable', message: this.health.get('claude').fix ?? 'Claude can’t be called right now. Try Regroup again later.' };
+    await this.triaging;
+    try {
+      const r = await this.d.regroup(this.sleepSignal, conversation);
+      if (r.paused) return { ok: false, reason: 'budget', message: 'Triage budget reached for today, so topics can’t be regrouped until tomorrow.' };
+      if (r.joined) {
+        this.triageWanted = true;
+        this.maybeTriage();
+      }
+      return { ok: true, merged: r.joined };
+    } catch (err) {
+      if (err instanceof ClaudeError) await this.reportFailure('claude', err.failure);
+      return { ok: false, reason: 'unavailable', message: err instanceof ClaudeError ? err.message : 'Regroup failed.' };
     }
   }
 

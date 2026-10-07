@@ -1,6 +1,6 @@
 import type { PromptFileId, PromptSourceView } from '@work-os/shared';
 
-// The six prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
+// The seven prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
 // Shortened stand-ins for the server's built-in defaults: the shape matters here, not the wording.
 
 export interface SeedPromptFile {
@@ -21,14 +21,30 @@ export const SEED_PROMPT_FILES: SeedPromptFile[] = [
     description: 'Decides attention, filing suggestions and the summary for each thread.',
     usedBy: 'Triage and the eval',
     path: 'config/prompts/triage.md',
-    defaultText: `<!-- prompt: triage v2 -->
-You triage Slack threads for Frank, Product Innovation Lead at Pole Star Global.
+    defaultText: `<!-- prompt: triage v3 -->
+You triage Slack topics for Frank, Product Innovation Lead at Pole Star Global. A topic may gather
+several reply threads and stretches of chat on one subject.
 
 For each thread, decide three things.
 
 1. attention: does Frank need to act? "now", "today" or "none".
 2. confluence: does the thread hold product context worth adding to the Confluence PRD pages?
 3. vault: is it worth a note in Frank's own vault?
+
+Answer with JSON only, no prose.`,
+  },
+  {
+    id: 'topics',
+    label: 'Topics',
+    description: 'Puts each new thread or stretch of chat in the open topic it continues, or starts a new one.',
+    usedBy: 'Topic routing and Regroup',
+    path: 'config/prompts/topics.md',
+    defaultText: `<!-- prompt: topics v1 -->
+You sort Slack conversations into topics for Frank, Product Innovation Lead at Pole Star Global.
+
+Slack cuts a conversation into pieces: reply threads, and DM chat after 30 minutes of quiet.
+For every new piece, answer which topic it belongs to: an open topic's id, another new piece's
+id, or "new". The same topic means the same decision, deliverable, workstream or question.
 
 Answer with JSON only, no prose.`,
   },
