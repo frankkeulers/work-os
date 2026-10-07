@@ -10,7 +10,7 @@ import { ClaudeAdapter, type QueryFn } from './adapter';
 import { API_KEY_ACCOUNT, backendEnv } from './backends';
 import { ClaudeError, ClaudeOutputError } from './errors';
 import { extractJson } from './outputs';
-import { loadPromptFile, PROMPT_FILES } from './promptFiles';
+import { loadPromptFile, PROMPT_FILES, sha1, sourceStates, withCurrentSourceHashes } from './promptFiles';
 import { relayToolCall, type Connector } from './relay';
 import { UsageLog } from './usage';
 
@@ -307,11 +307,50 @@ describe('prompt and guidance files (FR-1.1, FR-1.7)', () => {
       await mkdir(join(dir, 'config'), { recursive: true });
       await writeFile(join(dir, 'config/psg-context-builder.md'), '  \n');
       const p = await loadPromptFile(dir, 'confluence-routing');
-      expect(p.version).toMatch(/^confluence-routing v1#[0-9a-f]{8}$/);
+      expect(p.version).toMatch(/^confluence-routing v2#[0-9a-f]{8}$/);
       await writeFile(join(dir, 'config/psg-context-builder.md'), '<!-- prompt: confluence-routing v9 -->\nMine');
       expect(await loadPromptFile(dir, 'confluence-routing')).toMatchObject({ text: '<!-- prompt: confluence-routing v9 -->\nMine', version: expect.stringMatching(/^confluence-routing v9#/) });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('guidance sources (FR-1.7)', () => {
+  it('finds a synced skill and a vault note, flags one that changed, and records it as reviewed', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'workos-sources-'));
+    try {
+      const home = join(dir, 'home');
+      const vault = join(dir, 'vault');
+      await mkdir(join(home, '.claude/skills/synced/abc/psg-context-builder'), { recursive: true });
+      await mkdir(vault, { recursive: true });
+      await writeFile(join(home, '.claude/skills/synced/abc/psg-context-builder/SKILL.md'), 'Skill v1\n');
+      await writeFile(join(vault, 'llms.txt'), 'Manifest\n');
+      const text = [
+        '<!-- prompt: x v1 -->',
+        `<!-- source: psg-context-builder sha1:${sha1('Skill v1').slice(0, 12)} -->`,
+        `<!-- source: vault-llms sha1:${sha1('Old manifest').slice(0, 12)} -->`,
+        '<!-- source: vault-notes-system sha1:000000000000 -->',
+        'Body',
+      ].join('\n');
+      const env = { home, vault };
+      expect(await sourceStates(text, env)).toEqual([
+        { id: 'psg-context-builder', label: 'psg-context-builder skill', path: join(home, '.claude/skills/synced/abc/psg-context-builder/SKILL.md'), state: 'current' },
+        { id: 'vault-llms', label: 'llms.txt in the vault', path: join(vault, 'llms.txt'), state: 'changed' },
+        { id: 'vault-notes-system', label: 'Notes System note in the vault', path: undefined, state: 'missing' },
+      ]);
+      const reviewed = await withCurrentSourceHashes(text, env);
+      expect(reviewed).toContain(`<!-- source: vault-llms sha1:${sha1('Manifest').slice(0, 12)} -->`);
+      expect(reviewed).toContain('<!-- source: vault-notes-system sha1:000000000000 -->'); // missing: left as it was
+      expect((await sourceStates(reviewed, env)).map((x) => x.state)).toEqual(['current', 'current', 'missing']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('names the sources of both guidance defaults', () => {
+    const ids = (id: string) => [...PROMPT_FILES.find((f) => f.id === id)!.defaultText.matchAll(/<!-- source: (\S+) sha1:/g)].map((m) => m[1]);
+    expect(ids('confluence-routing')).toEqual(['psg-context-builder']);
+    expect(ids('vault-conventions')).toEqual(['vault-notes-system', 'vault-llms', 'obsidian-vault-reader']);
   });
 });

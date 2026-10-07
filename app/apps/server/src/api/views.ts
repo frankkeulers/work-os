@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { SourceEnv } from '../claude/promptFiles';
 import {
   budgetsOf,
   isWorkHours,
@@ -69,6 +70,8 @@ export interface ViewDeps {
   dmTitle?: (itemId: string) => string | undefined;
   /** Everyone in a DM item's conversation, from Slack. */
   members?: (item: Item, signal?: AbortSignal) => Promise<Participant[] | undefined>;
+  /** Where the guidance files' sources live, to flag a source that changed (FR-1.7). Absent in tests and fakes. */
+  promptSources?: () => SourceEnv;
   /** The messages before a DM item, read live from Slack. */
   earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
   /** The Slack channels Frank is in, as "#name", for the rule editor's channel search. */

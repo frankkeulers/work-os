@@ -2,10 +2,13 @@
 // drafting call: the psg-context-builder skill for Confluence, and the vault's own "Notes System"
 // note, tag taxonomy and llms.txt (plus obsidian-vault-reader's retrieval order) for Obsidian.
 // Like the prompts, they are written to config/ on first run and read from there on every call.
-// The skills keep moving; the header line records what each copy was taken from and when.
+// The sources keep moving. Each file's header names its sources with the hash (sha1 of the trimmed
+// text, first 12 hex) each was read at; Settings › Prompts flags a source that has changed since,
+// and "Mark reviewed" records the new hashes once the guidance has been checked against it.
 
-export const DEFAULT_CONFLUENCE_ROUTING = `<!-- prompt: confluence-routing v1 -->
-<!-- Source: psg-context-builder skill (routing rules only), 2026-10-07. -->
+export const DEFAULT_CONFLUENCE_ROUTING = `<!-- prompt: confluence-routing v2 -->
+<!-- Distilled 2026-10-07 from the psg-context-builder skill (routing rules only), for one drafting call. -->
+<!-- source: psg-context-builder sha1:93e9fcf27450 -->
 # Filing into the PSG context corpus
 
 The Confluence PRD pages are Pole Star Global's context corpus. The PSPD agent pipeline loads them
@@ -121,8 +124,11 @@ any page's Status or changelog table.
 - Never invent a figure, date, source or resource. A thin entry is better than a plausible wrong one.
 `;
 
-export const DEFAULT_VAULT_CONVENTIONS = `<!-- prompt: vault-conventions v1 -->
-<!-- Source: the vault's "Notes System — Project Instructions", "_meta/Tag Taxonomy" and llms.txt, plus the obsidian-vault-reader skill, 2026-10-07. -->
+export const DEFAULT_VAULT_CONVENTIONS = `<!-- prompt: vault-conventions v2 -->
+<!-- Distilled 2026-10-07 from the vault's Notes System note and llms.txt, plus the obsidian-vault-reader skill's retrieval order. The tag taxonomy is read live. -->
+<!-- source: vault-notes-system sha1:e2a144e5a040 -->
+<!-- source: vault-llms sha1:9c789ec5fa6d -->
+<!-- source: obsidian-vault-reader sha1:7df11180c66b -->
 # Frank's vault: how to file a note
 
 The vault is Frank's knowledge base, written for models and agents to read: concise, current truth,

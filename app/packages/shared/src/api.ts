@@ -221,6 +221,18 @@ export interface PromptFileView {
   defaultVersion: string;
   /** The text differs from the built-in default. */
   edited: boolean;
+  /** What the file was distilled from (named in its header), each compared with the source now. Empty when the server can't look. */
+  sources: PromptSourceView[];
+}
+
+/** A source a guidance file was distilled from: a skill or a vault note. */
+export interface PromptSourceView {
+  id: string;
+  label: string;
+  /** Where the server found it. */
+  path?: string;
+  /** current: as recorded in the header; changed: edited since; missing: not found. */
+  state: 'current' | 'changed' | 'missing';
 }
 
 export type StartupFailure = 'api_key' | 'slack_token' | 'claude_login';
@@ -312,6 +324,8 @@ export interface WorkOsApi {
   /** Fails as conflict when the file changed since baseVersion. */
   savePrompt(id: PromptFileId, text: string, baseVersion: string): Promise<PromptFileView>;
   resetPrompt(id: PromptFileId, baseVersion: string): Promise<PromptFileView>;
+  /** Records the sources as they are now in the file's header, once the guidance has been checked against them. */
+  markPromptReviewed(id: PromptFileId, baseVersion: string): Promise<PromptFileView>;
 
   subscribe(onNotice: (n: Notice) => void): () => void;
 }

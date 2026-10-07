@@ -1,4 +1,4 @@
-import type { PromptFileId } from '@work-os/shared';
+import type { PromptFileId, PromptSourceView } from '@work-os/shared';
 
 // The six prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
 // Shortened stand-ins for the server's built-in defaults: the shape matters here, not the wording.
@@ -10,6 +10,8 @@ export interface SeedPromptFile {
   usedBy: string;
   path: string;
   defaultText: string;
+  /** The sources as the mock reports them until the file is marked reviewed. */
+  sources?: PromptSourceView[];
 }
 
 export const SEED_PROMPT_FILES: SeedPromptFile[] = [
@@ -75,7 +77,15 @@ Answer with JSON only: {"containsPeopleObservations":true|false,"reason":"<one l
     description: 'Where notes go in the vault, frontmatter, tags and style. From the vault’s Notes System note.',
     usedBy: 'Draft vault note',
     path: 'config/vault-conventions.md',
-    defaultText: `<!-- prompt: vault-conventions v1 -->
+    sources: [
+      { id: 'vault-notes-system', label: 'Notes System note in the vault', path: "~/Documents/Obsidian/Frank's Vault/Notes System — Project Instructions.md", state: 'current' },
+      { id: 'vault-llms', label: 'llms.txt in the vault', path: "~/Documents/Obsidian/Frank's Vault/llms.txt", state: 'current' },
+      { id: 'obsidian-vault-reader', label: 'obsidian-vault-reader skill', path: '~/.claude/skills/obsidian-vault-reader/SKILL.md', state: 'current' },
+    ],
+    defaultText: `<!-- prompt: vault-conventions v2 -->
+<!-- source: vault-notes-system sha1:e2a144e5a040 -->
+<!-- source: vault-llms sha1:9c789ec5fa6d -->
+<!-- source: obsidian-vault-reader sha1:7df11180c66b -->
 # Frank's vault: how to file a note
 
 ## Finding the right note
@@ -91,7 +101,10 @@ Decisions and their reasons, facts that stay true beyond this week. No action it
     description: 'Exclusion screen, attribution and where each kind of fact goes. From psg-context-builder.',
     usedBy: 'Draft Confluence entry',
     path: 'config/psg-context-builder.md',
-    defaultText: `<!-- prompt: confluence-routing v1 -->
+    // Changed since the guidance was written, so the Prompts section shows its review flow.
+    sources: [{ id: 'psg-context-builder', label: 'psg-context-builder skill', path: '~/.claude/skills/psg-context-builder/SKILL.md', state: 'changed' }],
+    defaultText: `<!-- prompt: confluence-routing v2 -->
+<!-- source: psg-context-builder sha1:93e9fcf27450 -->
 # Filing into the PSG context corpus
 
 ## The exclusion screen (silent, no exceptions)

@@ -139,4 +139,11 @@ describe('settings', () => {
     expect(empty.status).toBe(422);
     expect(await settle(server.resetPrompt('draft-vault', saved.version))).toMatchObject({ edited: false, version: before.version });
   });
+
+  it('flags the routing guidance’s changed source until it is marked reviewed (FR-1.7)', async () => {
+    const routing = (await settle(server.getPrompts())).find((p) => p.id === 'confluence-routing')!;
+    expect(routing.sources).toMatchObject([{ id: 'psg-context-builder', state: 'changed' }]);
+    const after = await settle(server.markPromptReviewed('confluence-routing', routing.version));
+    expect(after.sources).toMatchObject([{ state: 'current' }]);
+  });
 });

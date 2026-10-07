@@ -83,7 +83,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J31 | Edit settings | In Slack, change the poll intervals and add a VIP: each saves on its own, with a toast. Remove a VIP, then click Undo in the toast. Set the work-hours interval to 0, switch to Notifications and back (the Slack nav item shows a red dot), try to leave Settings, then fix it. | Is it obvious that changes save on their own? Is Undo enough of a safety net? Is the inline error clear? | FR-1.3, FR-1.5 | |
 | J32 | Dry-run | Write targets → turn dry-run off (it asks first; the nav badge goes away), then approve a draft. Turn it back on. | Is the difference between dry-run and real writes always visible? | FR-1.6 | |
 | J33 | Rebuild state | Storage & data → Rebuild. | Is it clear that nothing is lost? | §4.3 | |
-| J41 | Edit a prompt | Prompts → Edit Vault conventions, change a line, try to leave (it asks), Save. The row shows the new version and Edited. Open it again and Reset to default. Models links each call's prompt version here. | Is it clear the change applies to the next call? Is Reset safe enough? | FR-1.7 | |
+| J41 | Edit a prompt | Prompts → Edit Vault conventions, change a line, try to leave (it asks), Save. The row shows the new version and Edited. Open it again and Reset to default. Models links each call's prompt version here. Open Confluence routing (Source changed), read the banner, Mark reviewed. | Is it clear the change applies to the next call? Is Reset safe enough? Is it clear what to do when a source changed? | FR-1.7 | |
 | J34 | Theme and scope | Switch System/Light/Dark. Switch Scope to Full and click a P3 placeholder. | Do placeholders read as "later", not "broken"? | — | |
 
 ### Failure and empty states

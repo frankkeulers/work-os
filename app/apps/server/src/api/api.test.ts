@@ -31,7 +31,7 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; earlier?: ViewDeps['earlier'] } = {}) {
+async function build(opts: { webDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources'] } = {}) {
   await initDataDir(dir, { settings: defaultSettings(dir), rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
@@ -53,6 +53,7 @@ async function build(opts: { webDir?: string; earlier?: ViewDeps['earlier'] } = 
     now: () => NOW,
     webDir: opts.webDir,
     earlier: opts.earlier,
+    promptSources: opts.promptSources,
     devOrigins: ['http://localhost:5173'],
   });
 }
@@ -307,18 +308,18 @@ describe('prompt files (FR-1.7)', () => {
     expect(list.map((p) => p.id)).toEqual(['triage', 'draft-vault', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
     const routing = list.find((p) => p.id === 'confluence-routing')!;
     expect(routing).toMatchObject({ path: 'config/psg-context-builder.md', edited: false, version: routing.defaultVersion });
-    expect(routing.text).toMatch(/^<!-- prompt: confluence-routing v1 -->/);
+    expect(routing.text).toMatch(/^<!-- prompt: confluence-routing v2 -->/);
   });
 
   it('saves against the version it was edited from, logs it, and refuses a stale version', async () => {
     const seen: WorkEvent[] = [];
     store.subscribe((es) => seen.push(...es));
     const before = (await prompts()).find((p) => p.id === 'vault-conventions')!;
-    const res = await put('/api/prompts/vault-conventions', { text: '<!-- prompt: vault-conventions v2 -->\nMine.\n\n', baseVersion: before.version });
+    const res = await put('/api/prompts/vault-conventions', { text: '<!-- prompt: vault-conventions v3 -->\nMine.\n\n', baseVersion: before.version });
     expect(res.statusCode).toBe(200);
     const saved = res.json<PromptFileView>();
-    expect(saved).toMatchObject({ text: '<!-- prompt: vault-conventions v2 -->\nMine.', edited: true, version: expect.stringMatching(/^vault-conventions v2#/) });
-    expect(await readFile(join(dir, 'config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v2 -->\nMine.\n');
+    expect(saved).toMatchObject({ text: '<!-- prompt: vault-conventions v3 -->\nMine.', edited: true, version: expect.stringMatching(/^vault-conventions v3#/) });
+    expect(await readFile(join(dir, 'config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v3 -->\nMine.\n');
     expect(seen.map((e) => [e.type, e.data])).toEqual([['prompt.changed', { id: 'vault-conventions', version: saved.version, reset: false }]]);
     expect(noticesFor(seen)).toEqual([{ topic: 'settings' }]);
 
@@ -326,11 +327,35 @@ describe('prompt files (FR-1.7)', () => {
     const stale = await put('/api/prompts/vault-conventions', { text: 'Other', baseVersion: before.version });
     expect(stale.statusCode).toBe(409);
     expect(stale.json<ApiErrorBody>().message).toMatch(/changed since you opened it/);
-    expect(await readFile(join(dir, 'config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v2 -->\nMine.\n');
+    expect(await readFile(join(dir, 'config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v3 -->\nMine.\n');
 
     const reset = await post('/api/prompts/vault-conventions/reset', { baseVersion: saved.version });
     expect(reset.json<PromptFileView>()).toMatchObject({ edited: false, version: before.defaultVersion });
     expect(seen.at(-1)?.data).toMatchObject({ reset: true });
+  });
+
+  it('flags a changed source, and Mark reviewed records it as it is now', async () => {
+    await lifecycle.stop('test');
+    const home = join(dir, 'home');
+    await mkdir(join(home, '.claude/skills/psg-context-builder'), { recursive: true });
+    await writeFile(join(home, '.claude/skills/psg-context-builder/SKILL.md'), 'A newer skill');
+    await build({ promptSources: () => ({ home, vault: join(dir, 'vault') }) });
+    const routing = (await prompts()).find((p) => p.id === 'confluence-routing')!;
+    expect(routing.sources).toMatchObject([{ id: 'psg-context-builder', state: 'changed' }]);
+    expect((await prompts()).find((p) => p.id === 'vault-conventions')!.sources.map((x) => x.state)).toEqual(['missing', 'missing', 'missing']);
+
+    const res = await post('/api/prompts/confluence-routing/reviewed', { baseVersion: routing.version });
+    expect(res.statusCode).toBe(200);
+    const saved = res.json<PromptFileView>();
+    expect(saved.sources).toMatchObject([{ state: 'current' }]);
+    expect(saved.edited).toBe(true); // the header now differs from the built-in default
+    expect(await readFile(join(dir, 'config/psg-context-builder.md'), 'utf8')).toMatch(/<!-- source: psg-context-builder sha1:[0-9a-f]{12} -->/);
+    expect((await post('/api/prompts/confluence-routing/reviewed', { baseVersion: routing.version })).statusCode).toBe(409);
+  });
+
+  it('cannot mark a file reviewed where the server has no sources (tests, fakes)', async () => {
+    const { version } = (await prompts()).find((p) => p.id === 'confluence-routing')!;
+    expect((await post('/api/prompts/confluence-routing/reviewed', { baseVersion: version })).statusCode).toBe(503);
   });
 
   it('rejects empty text, unknown files and foreign origins', async () => {

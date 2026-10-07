@@ -404,7 +404,7 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect(draftCall.options).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], cwd: vault });
     expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v2 -->/);
     // The vault conventions written on first run go with the request.
-    expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v1 -->/);
+    expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v2 -->/);
 
     // Frank edits, then approves; the outbox writes once it may.
     expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: '# Product\n\nEdited.\n' })).status).toBe(204);
@@ -514,7 +514,7 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(draftCall.options).toMatchObject({ tools: [], mcpServers: {} });
     expect(draftCall.prompt).toContain('"pageId":"1234567"');
     expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v2 -->/);
-    expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v1 -->/);
+    expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v2 -->/);
     expect(check.system).toMatch(/^<!-- prompt: people-check v1 -->/);
     expect(check.options.model).toBe('claude-haiku-4-5');
 

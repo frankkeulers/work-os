@@ -1,6 +1,6 @@
 import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, seenChanges, type EarlierView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
-import { PROMPT_FILES, promptFile, promptFileView, writePromptFile, type PromptFile } from '../claude/promptFiles';
+import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writePromptFile, type PromptFile } from '../claude/promptFiles';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
@@ -202,18 +202,19 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!f) throw new HttpError('not_found', `There is no prompt file called ${id}.`);
     return f;
   };
-  const writePrompt = async (f: PromptFile, baseVersion: string, text: string, reset: boolean) => {
+  const env = () => d.promptSources?.();
+  const writePrompt = async (f: PromptFile, baseVersion: string, text: string | ((current: string) => Promise<string>), reset: boolean) => {
     const current = await promptFileView(dataDir, f);
     if (current.version !== baseVersion) {
       throw new HttpError('conflict', `${f.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`);
     }
-    await writePromptFile(dataDir, f, text);
-    const saved = await promptFileView(dataDir, f);
+    await writePromptFile(dataDir, f, typeof text === 'string' ? text : await text(current.text));
+    const saved = await promptFileView(dataDir, f, env());
     await d.store.append({ type: 'prompt.changed', data: { id: f.id, version: saved.version, reset } });
     return saved;
   };
 
-  app.get('/api/prompts', async (_req, reply) => reply.headers(noStore).send(await Promise.all(PROMPT_FILES.map((f) => promptFileView(dataDir, f)))));
+  app.get('/api/prompts', async (_req, reply) => reply.headers(noStore).send(await Promise.all(PROMPT_FILES.map((f) => promptFileView(dataDir, f, env())))));
 
   app.put<{ Params: { id: string } }>('/api/prompts/:id', async (req, reply) => {
     const f = promptOf(req.params.id);
@@ -227,5 +228,15 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const body = PromptReset.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { baseVersion }.');
     return reply.headers(noStore).send(await writePrompt(f, body.data.baseVersion, f.defaultText, true));
+  });
+
+  // "Mark reviewed": the guidance has been checked against its changed sources; record them as they are now.
+  app.post<{ Params: { id: string } }>('/api/prompts/:id/reviewed', async (req, reply) => {
+    const f = promptOf(req.params.id);
+    const body = PromptReset.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { baseVersion }.');
+    const e = env();
+    if (!e) throw new HttpError('unavailable', 'This server can’t read the sources (tests or fakes).');
+    return reply.headers(noStore).send(await writePrompt(f, body.data.baseVersion, (text) => withCurrentSourceHashes(text, e), false));
   });
 }

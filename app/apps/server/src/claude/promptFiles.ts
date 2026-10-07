@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { PromptFileId, PromptFileView } from '@work-os/shared';
+import type { PromptFileId, PromptFileView, PromptSourceView } from '@work-os/shared';
 import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
 import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, type Prompt } from './prompts';
@@ -67,7 +67,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Where notes go in the vault, frontmatter, tags and style. From the vault’s Notes System note.',
     usedBy: 'Draft vault note',
     defaultText: DEFAULT_VAULT_CONVENTIONS,
-    previousDefaults: [],
+    previousDefaults: ['898d14c3e478bd5da0c0143ca15980cc985e38f9'], // vault-conventions v1
   },
   {
     id: 'confluence-routing',
@@ -76,7 +76,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Exclusion screen, attribution and where each kind of fact goes. From psg-context-builder.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_CONFLUENCE_ROUTING,
-    previousDefaults: [],
+    previousDefaults: ['bfd61af35ae154733721f70fa0b6bdd2080d9bcb'], // confluence-routing v1
   },
 ];
 
@@ -98,8 +98,67 @@ export function loadPromptFile(dataDir: string, id: PromptFileId): Promise<Promp
   return readPromptFile(dataDir, f);
 }
 
-/** What Settings shows for a file (FR-1.7): the text calls use now, its version, and whether it is edited. */
-export async function promptFileView(dataDir: string, f: PromptFile): Promise<PromptFileView> {
+// ---------------------------------------------------------------- sources (FR-1.7)
+
+/** Where the sources live: the home folder (for ~/.claude/skills) and the vault. */
+export interface SourceEnv {
+  home: string;
+  vault: string;
+}
+
+const exists = (p: string) =>
+  access(p).then(
+    () => p,
+    () => null,
+  );
+
+/** An installed skill: ~/.claude/skills/<name>, or a synced copy under ~/.claude/skills/synced/<id>/<name>. */
+async function skillFile(home: string, name: string): Promise<string | null> {
+  const direct = await exists(join(home, '.claude/skills', name, 'SKILL.md'));
+  if (direct) return direct;
+  const synced = join(home, '.claude/skills/synced');
+  for (const id of (await readdir(synced).catch(() => [])).sort()) {
+    const found = await exists(join(synced, id, name, 'SKILL.md'));
+    if (found) return found;
+  }
+  return null;
+}
+
+const SOURCES: Record<string, { label: string; find: (e: SourceEnv) => Promise<string | null> }> = {
+  'psg-context-builder': { label: 'psg-context-builder skill', find: (e) => skillFile(e.home, 'psg-context-builder') },
+  'obsidian-vault-reader': { label: 'obsidian-vault-reader skill', find: (e) => skillFile(e.home, 'obsidian-vault-reader') },
+  'vault-notes-system': { label: 'Notes System note in the vault', find: (e) => exists(join(e.vault, 'Notes System — Project Instructions.md')) },
+  'vault-llms': { label: 'llms.txt in the vault', find: (e) => exists(join(e.vault, 'llms.txt')) },
+};
+
+const SOURCE_RE = /^<!--\s*source:\s*(\S+)\s+sha1:([0-9a-f]{6,40})\s*-->$/gm;
+const short = (text: string) => sha1(text).slice(0, 12);
+
+/** The sources a file's header names, each compared with the file as it is now. */
+export async function sourceStates(text: string, env: SourceEnv): Promise<PromptSourceView[]> {
+  const out: PromptSourceView[] = [];
+  for (const [, id, recorded] of text.matchAll(SOURCE_RE)) {
+    const src = SOURCES[id];
+    const path = src ? await src.find(env) : null;
+    const now = path ? await readFile(path, 'utf8').then(short, () => null) : null;
+    out.push({ id, label: src?.label ?? id, path: path ?? undefined, state: now === null ? 'missing' : now.startsWith(recorded) || recorded.startsWith(now) ? 'current' : 'changed' });
+  }
+  return out;
+}
+
+/** The text with each source line's hash set to the source as it is now ("Mark reviewed"). */
+export async function withCurrentSourceHashes(text: string, env: SourceEnv): Promise<string> {
+  const now: Record<string, string> = {};
+  for (const [, id] of text.matchAll(SOURCE_RE)) {
+    const path = SOURCES[id] ? await SOURCES[id].find(env) : null;
+    const t = path ? await readFile(path, 'utf8').catch(() => null) : null;
+    if (t !== null) now[id] = short(t);
+  }
+  return text.replace(SOURCE_RE, (line: string, id: string) => (now[id] ? `<!-- source: ${id} sha1:${now[id]} -->` : line));
+}
+
+/** What Settings shows for a file (FR-1.7): the text calls use now, its version, whether it is edited, and its sources. */
+export async function promptFileView(dataDir: string, f: PromptFile, env?: SourceEnv): Promise<PromptFileView> {
   const p = await readPromptFile(dataDir, f);
   return {
     id: f.id,
@@ -111,6 +170,7 @@ export async function promptFileView(dataDir: string, f: PromptFile): Promise<Pr
     version: p.version,
     defaultVersion: promptVersion(f.defaultText.trim()),
     edited: sha1(p.text) !== sha1(f.defaultText),
+    sources: env ? await sourceStates(p.text, env) : [],
   };
 }
 

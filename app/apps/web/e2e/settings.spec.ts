@@ -122,13 +122,13 @@ test('J41 edit a prompt, save it, and reset it to the default; leaving with an u
   await open(page, 'prompts');
   await expect(page.getByRole('heading', { name: 'Prompts', level: 2 })).toBeVisible();
   const row = page.locator('[data-prompt="vault-conventions"]');
-  await expect(row).toContainText('vault-conventions v1#');
+  await expect(row).toContainText('vault-conventions v2#');
   await page.getByRole('button', { name: 'Edit Vault conventions' }).click();
 
   const text = page.getByLabel('Vault conventions text');
-  await expect(text).toHaveValue(/^<!-- prompt: vault-conventions v1 -->/);
+  await expect(text).toHaveValue(/^<!-- prompt: vault-conventions v2 -->/);
   await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled(); // nothing changed yet
-  await text.fill('<!-- prompt: vault-conventions v2 -->\nFile meetings under Work/Meetings.');
+  await text.fill('<!-- prompt: vault-conventions v3 -->\nFile meetings under Work/Meetings.');
 
   // An unsaved edit holds the page.
   await sectionNav(page).getByRole('link', { name: 'Models' }).click();
@@ -139,7 +139,7 @@ test('J41 edit a prompt, save it, and reset it to the default; leaving with an u
 
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Vault conventions saved' })).toBeVisible();
-  await expect(row).toContainText('vault-conventions v2#');
+  await expect(row).toContainText('vault-conventions v3#');
   await expect(page.getByRole('main').getByText('Edited', { exact: true })).toHaveCount(1);
 
   // Cancel drops an edit.
@@ -147,17 +147,29 @@ test('J41 edit a prompt, save it, and reset it to the default; leaving with an u
   await page.getByLabel('Vault conventions text').fill('Throwaway');
   await page.getByRole('button', { name: 'Cancel' }).click();
   await page.reload();
-  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v3#');
 
   // Reset asks first, then the default is back.
   await page.getByRole('button', { name: 'Edit Vault conventions' }).click();
   await page.getByRole('button', { name: 'Reset to default' }).click();
   await page.getByRole('dialog', { name: 'Reset Vault conventions?' }).getByRole('button', { name: 'Reset to default' }).click();
-  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v1#');
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
 });
 
 test('the Models section shows each call’s prompt version and links to Prompts', async ({ page }) => {
   await open(page, 'models');
   await page.getByRole('link', { name: /^draft-vault v2#/ }).click();
   await expect(page).toHaveURL(/\/settings\/prompts$/);
+});
+
+test('a guidance file whose source changed says so until it is marked reviewed (FR-1.7)', async ({ page }) => {
+  await open(page, 'prompts');
+  await expect(page.getByRole('main').getByText('Source changed')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Edit Confluence routing' }).click();
+  await expect(page.getByTestId('prompt-sources')).toContainText('The psg-context-builder skill changed since this was written');
+  await page.getByRole('button', { name: 'Mark reviewed' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Confluence routing marked reviewed' })).toBeVisible();
+  await expect(page.getByTestId('prompt-sources')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('main').getByText('Source changed')).toHaveCount(0);
 });

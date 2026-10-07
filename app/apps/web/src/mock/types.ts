@@ -117,6 +117,8 @@ export interface MockState {
   ruleHits: Record<string, number>;
   /** Prompt files Frank has saved in Settings › Prompts; absent ones serve the seed default. */
   prompts?: Partial<Record<PromptFileId, string>>;
+  /** Prompt files marked reviewed: their sources read as current. */
+  reviewedPrompts?: PromptFileId[];
   savedAt: string;
   checkedAt: string;
   labelCount: number;

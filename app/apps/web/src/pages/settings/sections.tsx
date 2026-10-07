@@ -507,6 +507,17 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
       failed(e);
     }
   };
+  const markReviewed = async (f: PromptFileView) => {
+    try {
+      const saved = await api.markPromptReviewed(f.id, f.version);
+      setEdit({ id: f.id, text: saved.text, baseVersion: saved.version });
+      q.reload();
+      toast(`${f.label} marked reviewed`, { tone: 'success', description: 'Its sources are recorded as they are now.' });
+    } catch (e) {
+      q.reload();
+      errorToast(e);
+    }
+  };
   const reset = (f: PromptFileView) =>
     confirm({
       title: `Reset ${f.label}?`,
@@ -547,6 +558,31 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
             <strong>This file changed since you opened it</strong> (now {edit.conflict.version}). Load the new version to edit it; your changes here are dropped.
           </Banner>
         )}
+        {f.sources.some((x) => x.state !== 'current') && (
+          <Banner
+            tone="warn"
+            icon="alert"
+            action={
+              f.sources.some((x) => x.state === 'changed') && (
+                <Button size="sm" disabled={dirty} onClick={() => void markReviewed(f)}>
+                  Mark reviewed
+                </Button>
+              )
+            }
+          >
+            <span data-testid="prompt-sources">
+              {f.sources
+                .filter((x) => x.state !== 'current')
+                .map((x) => (
+                  <span key={x.id} className="block">
+                    <strong>{x.state === 'changed' ? `The ${x.label} changed` : `The ${x.label} wasn’t found`}</strong> since this was written
+                    {x.path && <span className="font-mono text-xs"> · {x.path}</span>}.
+                  </span>
+                ))}
+              {f.sources.some((x) => x.state === 'changed') && <>Check this guidance against it and edit what’s out of date, then mark it reviewed.</>}
+            </span>
+          </Banner>
+        )}
         <textarea
           aria-label={`${f.label} text`}
           spellCheck={false}
@@ -582,6 +618,7 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
           <span className="inline-flex items-center gap-2">
             {f.label}
             {f.edited && <Chip tone="accent">Edited</Chip>}
+            {f.sources.some((x) => x.state === 'changed') && <Chip tone="warn">Source changed</Chip>}
           </span>
         }
         help={

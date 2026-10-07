@@ -1062,8 +1062,16 @@ export class MockServer implements WorkOsApi, MockControls {
     const f = SEED_PROMPT_FILES.find((p) => p.id === id);
     if (!f) throw new ApiError('not_found', `There is no prompt file called ${id}.`);
     const text = (this.s.prompts?.[id] ?? '').trim() || f.defaultText.trim();
-    const { defaultText, ...meta } = f;
-    return { ...meta, text, version: promptVersion(text), defaultVersion: promptVersion(defaultText.trim()), edited: text !== defaultText.trim() };
+    const { defaultText, sources = [], ...meta } = f;
+    const reviewed = this.s.reviewedPrompts?.includes(id);
+    return {
+      ...meta,
+      text,
+      version: promptVersion(text),
+      defaultVersion: promptVersion(defaultText.trim()),
+      edited: text !== defaultText.trim(),
+      sources: sources.map((x) => ({ ...x, state: reviewed && x.state === 'changed' ? 'current' : x.state })),
+    };
   }
 
   async getPrompts(): Promise<PromptFileView[]> {
@@ -1085,6 +1093,17 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(COMMAND_MS);
     if (!text.trim()) throw new ApiError('validation', 'Send { text, baseVersion } with some text.', [{ path: 'text', message: 'The file can’t be empty' }]);
     return this.writePrompt(id, baseVersion, text, false);
+  }
+
+  async markPromptReviewed(id: PromptFileId, baseVersion: string) {
+    await this.gate(COMMAND_MS);
+    const current = this.promptView(id);
+    if (current.version !== baseVersion) throw new ApiError('conflict', `${current.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`);
+    // The real server rewrites the source hashes in the header; the mock only remembers the review.
+    this.s.reviewedPrompts = [...(this.s.reviewedPrompts ?? []), id];
+    this.event('prompt.changed', { id, version: current.version, reset: false });
+    this.emit({ topic: 'settings' });
+    return this.promptView(id);
   }
 
   async resetPrompt(id: PromptFileId, baseVersion: string) {

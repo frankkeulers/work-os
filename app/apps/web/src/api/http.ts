@@ -154,6 +154,7 @@ export class HttpApi implements WorkOsApi {
   getPrompts = () => this.get<PromptFileView[]>('/api/prompts');
   savePrompt = (id: PromptFileId, text: string, baseVersion: string) => this.request<PromptFileView>('PUT', `/api/prompts/${id}`, { text, baseVersion });
   resetPrompt = (id: PromptFileId, baseVersion: string) => this.post<PromptFileView>(`/api/prompts/${id}/reset`, { baseVersion });
+  markPromptReviewed = (id: PromptFileId, baseVersion: string) => this.post<PromptFileView>(`/api/prompts/${id}/reviewed`, { baseVersion });
 
   // ---------------------------------------------------------------- notices
 
