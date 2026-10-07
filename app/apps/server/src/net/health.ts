@@ -14,7 +14,7 @@ const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal' | 
     rate_limited: 'Slack asked us to wait. Polling resumes after Retry-After.',
   },
   claude: { auth_failed: 'Run `claude login` in Terminal, then Check again.', rate_limited: 'The Claude usage limit was reached. Triage resumes when it resets.' },
-  confluence: { auth_failed: 'Confluence rejected the token. Update it in the Keychain.' },
+  confluence: { auth_failed: 'Create a classic API token at id.atlassian.com and store it as email:token (Keychain account confluence-api-token), then choose Check again.' },
   keychain: { degraded: 'Unlock the login Keychain, then Check again.', auth_failed: 'Unlock the login Keychain, then Check again.' },
   storage: { degraded: 'The data disk is full or read-only. Free some space; commands are refused until then.' },
   wisprDb: { degraded: 'Wispr Flow changed its database. Work OS stopped reading it until the reader is updated.' },
