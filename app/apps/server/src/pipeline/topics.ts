@@ -1,4 +1,4 @@
-import { anchorOf, conversationOf, topicPieces, type EventDraft, type Item, type ItemState, type Me, type Projection, type Settings } from '@work-os/shared';
+import { anchorOf, conversationOf, topicPieces, type EarlierView, type EventDraft, type Item, type ItemState, type Me, type Projection, type Settings } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -7,7 +7,7 @@ import type { Logger } from '../log';
 import { DEADLINES } from '../net/http';
 import type { ItemFiles, StoredItem } from '../store/items';
 import type { Store } from '../store/store';
-import { estimateTokens, packBatches, threadForTriage, threadTokens, type TriageMessage, type TriageThread } from './truncate';
+import { estimateTokens, packBatches, threadForTriage, threadTokens, type TopicView, type TriageMessage, type TriageThread } from './truncate';
 
 // Topics (amendment). Ingestion cuts a conversation into pieces (a Slack thread, a DM window, a
 // channel post); routing puts each new piece in the open topic it continues, or starts a new one,
@@ -85,19 +85,23 @@ export async function readTopic(p: Projection, items: ItemFiles, id: string): Pr
 
 /**
  * One item holding a whole topic: every piece's messages in time order, under the anchor's ID and
- * revision. `inThread` names the messages that came from a Slack thread.
+ * revision. `inThread` names the messages that came from a Slack thread. `ends(n)` names each
+ * piece's first message and its last n: what triage keeps of a topic, so an ask in an earlier piece
+ * isn't trimmed away by the later ones.
  */
-export function topicItem(anchor: Item, parts: Item[]): { item: Item; inThread: Set<string> } {
+export function topicItem(anchor: Item, parts: Item[]): { item: Item; inThread: Set<string>; ends: (n: number) => Set<string> } {
   const inThread = new Set<string>();
   const pieces = [anchor, ...parts];
   for (const piece of pieces) if (piece.thread) for (const m of piece.messages) inThread.add(m.id);
-  if (!parts.length) return { item: anchor, inThread };
+  const ends = (n: number) => new Set(parts.length ? pieces.flatMap((piece) => [piece.messages[0], ...piece.messages.slice(-n)].filter((m) => !!m).map((m) => m.id)) : []);
+  if (!parts.length) return { item: anchor, inThread, ends };
   const byId = new Map(pieces.flatMap((piece) => piece.messages.map((m): [string, Item['messages'][number]] => [m.id, m])));
   const messages = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id.localeCompare(b.id));
   const participants = [...new Map(pieces.flatMap((piece) => piece.participants.map((x): [string, typeof x] => [x.id, x]))).values()];
   const mentioned = [...new Map(pieces.flatMap((piece) => (piece.mentioned ?? []).map((x): [string, typeof x] => [x.id, x]))).values()];
   return {
     inThread,
+    ends,
     item: {
       ...anchor,
       participants,
@@ -107,6 +111,22 @@ export function topicItem(anchor: Item, parts: Item[]): { item: Item; inThread: 
       lastActivityAt: pieces.map((piece) => piece.lastActivityAt).sort().at(-1)!,
     },
   };
+}
+
+/** What triage sees of a topic, and the content it was built from. Undefined when the anchor's file is gone. */
+export async function topicForTriage(
+  p: Projection,
+  items: ItemFiles,
+  id: string,
+  me: Me,
+  keepLast: number,
+  earlier?: EarlierView,
+): Promise<{ anchor: StoredItem; item: Item; view: TriageThread } | undefined> {
+  const topic = await readTopic(p, items, id);
+  if (!topic) return undefined;
+  const { item, inThread, ends } = topicItem(topic.anchor.item, topic.parts);
+  const view: TopicView = { keep: ends(keepLast), inThread };
+  return { anchor: topic.anchor, item, view: threadForTriage(item, me, keepLast, earlier, view) };
 }
 
 // ---------------------------------------------------------------- routing
@@ -238,10 +258,8 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
     }
     const views: TriageThread[] = [];
     for (const it of pieces) {
-      const topic = await readTopic(p, d.items, it.id);
-      if (!topic) continue;
-      const { item, inThread } = topicItem(topic.anchor.item, topic.parts);
-      views.push(threadForTriage(item, me, regroup ? CANDIDATE_RECENT_MESSAGES : t.keepLastMessages, undefined, inThread));
+      const topic = await topicForTriage(p, d.items, it.id, me, regroup ? CANDIDATE_RECENT_MESSAGES : t.keepLastMessages);
+      if (topic) views.push(topic.view);
     }
     const topics: Candidate[] = [];
     for (const it of candidates) {

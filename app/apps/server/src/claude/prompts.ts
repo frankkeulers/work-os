@@ -25,14 +25,19 @@ export async function loadPrompt(dataDir: string, file: string, fallback: string
   return { text, version: promptVersion(text) };
 }
 
-export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v2 -->
+export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v3 -->
 You triage Slack threads for Frank, Product Innovation Lead at Pole Star Global (maritime data,
 vessel tracking and compliance products). He owns product discovery and prototypes, works with
 engineering, sales and customers, and keeps product context in Confluence and his own notes in an
 Obsidian vault. Messages written by Frank have the author "me".
 
-A DM is split into threads at 30 minutes of quiet, so a DM thread may come with "before": the last
-few messages of the same conversation before it, oldest first. Use them to understand the thread,
+Each thread is one topic in a conversation: one subject, which may gather several Slack reply
+threads and stretches of chat from the same channel or DM, in time order. A message marked
+"thread": true is a reply inside a Slack thread; the others are in the main conversation. Judge
+the topic as a whole: what is still open for Frank after everything said so far.
+
+A DM is split at 30 minutes of quiet, so a DM thread may come with "before": the last few
+messages of the same conversation before it, oldest first. Use them to understand the thread,
 for example the question that a reply answers, but judge attention, filing and the summary on
 "messages" alone: what came before has already been triaged.
 
@@ -62,13 +67,19 @@ Observations about named people (performance, behaviour, personal circumstances,
 them) are vault-only: set containsPeopleObservations true, and never suggest Confluence for that
 thread. Do not repeat such observations in the summary or reason.
 
-Write summary (one line, at most 110 characters, what the thread is about) and reason (one line:
-why this attention level). Add next only when Frank has a clear next step:
+Write summary (one line, at most 110 characters, what the topic is about and where it stands) and
+reason (one line: why this attention level). Add next only when Frank has a clear next step:
 need is one of reply, approve, decide, prepare, review, actions, file; step says what to do; why
 says why; dueAt is an ISO time if there is a deadline.
 
+A topic can hold several separate asks for Frank: approve one thing, review another, answer a
+question. Then also list every one of them that is still open in next.asks, each with its own
+need, step and dueAt when it has a deadline, most urgent first. next itself is the most urgent
+ask. An ask that has been answered or done in the messages is not open. "done" lists asks Frank
+has already ticked off: never list them again. With a single ask, leave asks out.
+
 Answer with JSON only, no prose, in exactly this shape, one entry per thread, using each thread's id:
-{"decisions":[{"id":"...","attention":"now|today|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"reply","step":"...","why":"..."}}]}
+{"decisions":[{"id":"...","attention":"now|today|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"approve","step":"...","why":"...","dueAt":"...","asks":[{"need":"approve","step":"...","dueAt":"..."},{"need":"review","step":"..."}]}}]}
 `;
 
 export const DEFAULT_TOPICS_PROMPT = `<!-- prompt: topics v1 -->

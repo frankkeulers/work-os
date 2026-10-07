@@ -1,4 +1,4 @@
-import { Attention, NextStep, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type TriageDecision } from '@work-os/shared';
+import { Attention, NextStep, askId, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type TriageDecision } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -9,8 +9,8 @@ import type { ItemFiles } from '../store/items';
 import type { Store } from '../store/store';
 import { triageQueue } from './eligibility';
 import { ruleVerdict } from './rules';
-import { routeTopics } from './topics';
-import { estimateTokens, packBatches, threadForTriage, threadTokens, type TriageThread } from './truncate';
+import { routeTopics, topicForTriage } from './topics';
+import { estimateTokens, packBatches, threadTokens, type TriageThread } from './truncate';
 
 // Batched model triage (FR-5.1–5.5, §5.3, CL-6, CL-7). Quiet pending threads go to the model in as
 // few calls as the limits allow; nothing eligible means no call. The budget is checked before
@@ -93,8 +93,9 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
 
   // What the model sees of each thread. An item whose file is gone can't be triaged: it fails
   // once, visibly, instead of being retried on every tick.
+  // A topic is triaged through its anchor, over all its pieces.
   const me = d.me();
-  const threads: { item: Item; thread: TriageThread }[] = [];
+  const threads: { item: Item; thread: TriageThread; topicVersion: number; asksDone: string[] }[] = [];
   const missing: EventDraft[] = [];
   for (const it of due) {
     const stored = await d.items.read(it.source, it.id);
@@ -111,7 +112,12 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         return undefined;
       });
     }
-    threads.push({ item: stored.item, thread: threadForTriage(stored.item, me, t.keepLastMessages, earlier) });
+    const topic = await topicForTriage(d.store.projection, d.items, it.id, me, t.keepLastMessages, earlier);
+    if (!topic) continue;
+    const asksDone = it.asksDone ?? [];
+    const done = (stored.text?.next?.asks ?? []).filter((a) => asksDone.includes(askId(a.step))).map((a) => a.step);
+    if (done.length) topic.view.done = done;
+    threads.push({ item: stored.item, thread: topic.view, topicVersion: it.topicVersion, asksDone });
   }
   if (missing.length) {
     await d.store.append(...missing);
@@ -159,7 +165,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
 
     const byId = new Map(answer.decisions.map((a) => [a.id, a]));
     const events: EventDraft[] = [];
-    for (const { item } of batch) {
+    for (const { item, topicVersion, asksDone } of batch) {
       const a = byId.get(item.id);
       if (!a) {
         events.push({ type: 'triage.failed', itemId: item.id, data: { revision: item.revision, attempts: 1, reason: 'missing from the answer' } });
@@ -174,16 +180,19 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
       const confluence = a.containsPeopleObservations ? { suggested: false } : a.confluence;
       // To file needs a destination: the model's, or the vault when it suggested neither.
       const vault = toFile && !confluence.suggested && !a.vault.suggested ? { suggested: true } : a.vault;
+      // An ask Frank ticked off stays off, even if the model lists it again.
+      const next = a.next?.asks ? { ...a.next, asks: a.next.asks.filter((x) => !asksDone.includes(askId(x.step))) } : a.next;
       const decision: TriageDecision = {
         itemId: item.id,
         itemRevision: item.revision,
+        topicVersion,
         attention: toFile ? 'none' : atLeast(a.attention, floor),
         confluence,
         vault,
         containsPeopleObservations: a.containsPeopleObservations,
         summary: a.summary,
         reason: a.reason,
-        ...(a.next && { next: a.next }),
+        ...(next && { next }),
         decidedBy: 'model',
         ...((floor || toFile) && verdict.kind === 'model' && verdict.rule && { ruleId: verdict.rule.id }),
         model: settings.models.triage,
@@ -191,10 +200,12 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         batchId,
         decidedAt: d.now().toISOString(),
       };
+      // The thread moved on during the call, or the topic's parts changed: the new content waits its turn.
+      const current = () => d.store.projection.items[item.id]?.topicVersion === topicVersion;
       const saved = await d.items.update(item.source, item.id, (stored) =>
-        stored && stored.item.revision === item.revision ? { ...stored, text: { summary: a.summary, reason: a.reason, ...(a.next && { next: a.next }) } } : undefined,
+        stored && stored.item.revision === item.revision && current() ? { ...stored, text: { summary: a.summary, reason: a.reason, ...(next && { next }) } } : undefined,
       );
-      if (!saved) continue; // the thread moved on during the call; its new revision waits its turn
+      if (!saved) continue;
       events.push({ type: 'triage.decided', itemId: item.id, data: { decision: toLoggedDecision(decision) } });
       run.triaged++;
     }

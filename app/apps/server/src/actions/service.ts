@@ -20,6 +20,7 @@ import { crashPoint } from '../runtime/crash';
 import { ConfluenceError, type ConfluenceApi } from './confluenceApi';
 import { draftConfluenceEntry } from './confluenceDrafter';
 import { marker, planConfluenceWrite } from './confluenceExecutor';
+import { readTopic, topicItem } from '../pipeline/topics';
 import { DraftError } from './errors';
 import { draftVaultNote, vaultExists } from './vaultDrafter';
 import { NoteExistsError, planVaultWrite, writeVaultFile, type VaultTargets } from './vaultExecutor';
@@ -352,8 +353,9 @@ export class ActionService {
       });
     let stored = await this.d.drafts.read(a.id);
     if (!stored?.draft) {
-      const it = this.d.store.projection.items[a.itemId];
-      const content = it && (await this.d.items.read(it.source, it.id));
+      // A topic is drafted from all its pieces.
+      const topic = await readTopic(this.d.store.projection, this.d.items, a.itemId);
+      const content = topic && { item: topicItem(topic.anchor.item, topic.parts).item };
       if (!content) return this.fail(a, 'model_error', 'The thread’s content is no longer available, so it can’t be drafted.');
       try {
         this.stage(a.id, 1);

@@ -10,7 +10,10 @@ import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { initDataDir } from '../config/dataDir';
 import { ItemFiles } from '../store/items';
 import { Store } from '../store/store';
+import { askId } from '@work-os/shared';
 import { resolveAssignments, routeTopics, topicItem, type TopicsAnswer, type TopicsDeps } from './topics';
+import { runTriage, type TriageAnswer } from './triage';
+import type { TriageThread } from './truncate';
 
 const NOW = new Date('2026-10-06T12:00:00.000Z');
 const minsAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOString();
@@ -198,5 +201,106 @@ describe('routeTopics', () => {
     expect(calls[0].prompt).toMatch(/Group these open topics/);
     expect(p()[pid(300)]).toMatchObject({ parts: [pid(100)], triageState: 'pending', newReplies: false });
     expect(p()[pid(200)].topicOf).toBeUndefined();
+  });
+});
+
+describe('triage per topic', () => {
+  let dir: string;
+  let store: Store;
+  let items: ItemFiles;
+  let seen: TriageThread[][];
+  let reply: (threads: TriageThread[]) => TriageAnswer;
+
+  const claude = {
+    structured: async (spec: RunSpec) => {
+      if (spec.purpose === 'routing') return { value: topicsFor(JSON.parse(/<conversations>\n([\s\S]*)\n<\/conversations>/.exec(spec.prompt)![1])), attempts: 1, usage: [{}] };
+      const threads = JSON.parse(/<threads>\n([\s\S]*)\n<\/threads>/.exec(spec.prompt)![1]) as TriageThread[];
+      seen.push(threads);
+      return { value: reply(threads), attempts: 1, usage: [{}] };
+    },
+  } as unknown as ClaudeAdapter;
+
+  const decision = (id: string, asks: { need: 'approve' | 'review' | 'reply'; step: string }[]) => ({
+    id,
+    attention: 'today' as const,
+    confluence: { suggested: false },
+    vault: { suggested: false },
+    containsPeopleObservations: false,
+    summary: 'Pre-publish branch workflow',
+    reason: 'Asks wait on Frank',
+    next: { need: asks[0].need, step: asks[0].step, why: 'Team waiting', asks },
+  });
+
+  async function add(it: Item) {
+    // As a poll does: new content, the decision's text kept.
+    await items.update(it.source, it.id, (stored) => ({ item: it, ...(stored?.text && { text: stored.text }), schemaVersion: 1 as const }));
+    await store.append({
+      type: 'item.upserted',
+      itemId: it.id,
+      data: { source: it.source, kind: it.kind, title: it.title, permalink: it.permalink, participants: it.participants, lastActivityAt: it.lastActivityAt, revision: it.revision, messageCount: it.messageCount, fromMeOnly: false },
+    });
+  }
+  const triage = () => {
+    const settings = defaultSettings(dir);
+    return runTriage(
+      {
+        store,
+        items,
+        claude,
+        now: () => NOW,
+        config: () => ({ settings, rules: [] }),
+        me: () => ({ id: 'UFRANK' }),
+        prompt: async () => ({ text: 'triage', version: 'v3' }),
+        topicsPrompt: async () => ({ text: 'topics', version: 'v1' }),
+        budgetHit: () => false,
+      },
+      new AbortController().signal,
+    );
+  };
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'workos-topic-triage-'));
+    await initDataDir(dir, { settings: defaultSettings(dir), rules: DEFAULT_RULES });
+    ({ store } = await Store.open({ dataDir: dir, now: () => NOW }));
+    items = new ItemFiles(join(dir, 'items'));
+    seen = [];
+    reply = (threads) => ({ decisions: threads.map((t) => decision(t.id, [{ need: 'approve', step: 'Approve main branch protection' }])) });
+  });
+  afterEach(async () => {
+    await store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('routes, then triages a topic once over every piece, keeping each piece’s first and latest messages', async () => {
+    const long = (n: number, tag: string) => Array.from({ length: n }, (_, i) => `${tag} message ${i}`);
+    await add(piece(300, ['PR 63 adds GOVERNANCE-RULES.md', ...long(6, 'early')]));
+    await add({ ...piece(200, ['PR 63: can you approve the security scheme fix?', ...long(6, 'middle')]), thread: true });
+    await add(piece(100, ['PR 63 is merged', ...long(6, 'late')]));
+    const run = await triage();
+    expect(run).toMatchObject({ triaged: 1, failed: 0 });
+    expect(seen).toHaveLength(1);
+    const [t] = seen[0];
+    expect(t.id).toBe(pid(300));
+    const texts = t.messages.map((m) => m.text);
+    expect(texts).toContain('PR 63: can you approve the security scheme fix?'); // a middle piece's first message
+    expect(texts).toContain('middle message 5'); // and its latest
+    expect(texts).not.toContain('middle message 1');
+    expect(t.messages.find((m) => m.text.startsWith('PR 63: can'))?.thread).toBe(true);
+    expect(t.messages.find((m) => m.text === 'PR 63 is merged')?.thread).toBeUndefined();
+
+    const anchor = store.projection.items[pid(300)];
+    expect(anchor).toMatchObject({ triageState: 'triaged', parts: [pid(200), pid(100)], decision: { topicVersion: 2 } });
+    expect((await items.read('slack', pid(300)))?.text?.next?.asks).toEqual([{ need: 'approve', step: 'Approve main branch protection' }]);
+  });
+
+  it('passes ticked asks as done, and keeps them off if the model lists them again', async () => {
+    await add(piece(300, ['PR 63 rules']));
+    await triage();
+    await store.append({ type: 'topic.askDone', itemId: pid(300), data: { askId: askId('Approve main branch protection') } });
+    await add({ ...piece(300, ['PR 63 rules', 'and one more thing']), revision: 2 });
+    reply = (threads) => ({ decisions: threads.map((t) => decision(t.id, [{ need: 'approve', step: 'Approve main branch protection' }, { need: 'review', step: 'Review the timestamp_end change' }])) });
+    await triage();
+    expect(seen[1][0].done).toEqual(['Approve main branch protection']);
+    expect((await items.read('slack', pid(300)))?.text?.next?.asks).toEqual([{ need: 'review', step: 'Review the timestamp_end change' }]);
   });
 });

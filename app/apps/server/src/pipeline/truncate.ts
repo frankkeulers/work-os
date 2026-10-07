@@ -27,6 +27,8 @@ export interface TriageThread {
   omitted: number;
   /** A DM's last few messages before this item, for context only (oldest first). */
   before?: TriageMessage[];
+  /** A topic's asks Frank has ticked off: not to be listed again (topics). */
+  done?: string[];
 }
 
 /** How much of a DM's earlier conversation triage sees: enough for the question a reply answers. */
@@ -35,15 +37,21 @@ export const BEFORE_MAX_CHARS = 500;
 
 const cut = (text: string) => (text.length > MESSAGE_MAX_CHARS ? `${text.slice(0, MESSAGE_MAX_CHARS - 1)}…` : text);
 
-/** `inThread`: the messages of a topic that came from a Slack thread (topics.ts), marked when the topic mixes thread and chat. */
-export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: EarlierView, inThread?: Set<string>): TriageThread {
+/** A topic's extras (topics.ts): messages kept whatever their place, and those from a Slack thread. */
+export interface TopicView {
+  keep: Set<string>;
+  inThread: Set<string>;
+}
+
+export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: EarlierView, topic?: TopicView): TriageThread {
   const msgs = item.messages;
   const keep = new Set<number>();
   if (msgs.length) keep.add(0);
   for (let i = Math.max(0, msgs.length - keepLast); i < msgs.length; i++) keep.add(i);
   msgs.forEach((m, i) => {
-    if (mentionsMe(m.text, me)) keep.add(i);
+    if (mentionsMe(m.text, me) || topic?.keep.has(m.id)) keep.add(i);
   });
+  const inThread = topic?.inThread;
   const names = new Map(item.participants.map((p) => [p.id, p.name]));
   // Thread replies are marked only in a topic that also has chat outside the thread.
   const mixed = !!inThread?.size && inThread.size < msgs.length;
