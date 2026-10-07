@@ -281,6 +281,8 @@ export interface WorkOsApi {
   getItem(id: string): Promise<ItemView>;
   /** The conversation before a DM item (empty for threads, or when the source can't say). */
   getEarlier(id: string): Promise<EarlierView>;
+  /** Slack channel names ("#name") for the rule editor's search. */
+  getChannels(): Promise<string[]>;
   getUsage(): Promise<UsageView>;
   getEvalReports(): Promise<EvalReport[]>;
   getSettings(): Promise<SettingsView>;

@@ -144,6 +144,20 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.headers(noStore).send(view);
   });
 
+  // Channel names for the rule editor's search: Slack's list when it answers, plus the channels
+  // already in the inbox and settings, so the search still helps while Slack is unreachable.
+  app.get('/api/channels', async (_req, reply) => {
+    const live = await d.channels?.().catch(() => []);
+    const slack = d.settings.editable.settings.slack;
+    const known = Object.values(d.store.projection.items)
+      .filter((i) => i.source === 'slack' && i.kind !== 'dm')
+      .map((i) => i.title);
+    const all = [...(live ?? []), ...known, ...slack.includeChannels, ...slack.excludeChannels, ...slack.customerChannels, ...(slack.appChannels ?? [])]
+      .map((c) => (c.startsWith('#') ? c : `#${c}`));
+    const names: string[] = [...new Set(all)].sort((a, b) => a.localeCompare(b));
+    return reply.headers(noStore).send(names);
+  });
+
   app.get('/api/usage', async (_req, reply) => reply.headers(noStore).send(usageView(d)));
 
   app.get('/api/evals', async (_req, reply) => reply.headers(noStore).send((await d.evals?.list()) ?? []));

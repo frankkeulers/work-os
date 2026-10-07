@@ -238,6 +238,36 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(retry.body.code).toBe('budget');
   });
 
+  it('sends a File rule’s threads to the model, then to File with attention None and a destination', async () => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    const rules = [
+      { id: 'product-signals', enabled: true, conditions: [{ type: 'channel_in', values: ['#product'] }], outcome: { type: 'file' } },
+      { id: 'dms-to-file', enabled: true, conditions: [{ type: 'is_dm' }], outcome: { type: 'file' } },
+      ...view.rules,
+    ];
+    expect((await call('PUT', '/api/settings', { settings: view.settings, rules })).status).toBe(200);
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: '@Frank one more thing?' });
+    slack.post('D01DANA', { ts: isoToTs(START + 1 * MIN), user: 'U02DANA', text: 'And another' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    expect(claude.calls).toHaveLength(2);
+    // The mention would make it Today; the File rule wins and keeps the model's vault suggestion.
+    expect(await lanes()).toEqual({ '#product': 'file', 'Dana Lee': 'file' });
+    const items = (await inbox()).items;
+    expect(items.find((i) => i.id === PROD)).toMatchObject({ triage: { attention: 'none', vault: true, confluence: false } });
+    // The model suggested no filing for the DM, so the vault is suggested for it.
+    expect(items.find((i) => i.title === 'Dana Lee')).toMatchObject({ triage: { attention: 'none', vault: true, confluence: false } });
+  });
+
+  it('lists channel names for the rule editor, from Slack and the inbox', async () => {
+    slack.channel({ id: 'C02SIG', name: 'product-signals' });
+    const r = await call<string[]>('GET', '/api/channels');
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual(expect.arrayContaining(['#product', '#product-signals']));
+    expect(r.body.some((c) => !c.startsWith('#'))).toBe(false);
+  });
+
   it('marks a batch failed after two bad answers, and "Try again" triages it (CL-7)', async () => {
     slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'Updated the draft' });
     claude.nextTexts.push('not json', '{"decisions":[{"id":"x"}]}');

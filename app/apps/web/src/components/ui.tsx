@@ -360,7 +360,8 @@ export function Dialog({ title, children, onClose, footer, width = 560 }: { titl
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      // An open suggestion list (ChannelPicker) takes the first Escape for itself.
+      if (e.key === 'Escape' && !(e.target as HTMLElement | null)?.closest?.('[role="combobox"][aria-expanded="true"]')) {
         e.stopPropagation();
         onClose();
       }

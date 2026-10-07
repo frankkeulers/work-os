@@ -63,6 +63,8 @@ describe('rule verdicts (FR-4.2, FR-4.3)', () => {
     expect(ruleVerdict(thread([msg(1)], { title: '#random' }), DEFAULT_RULES, settings, me)).toMatchObject({ kind: 'drop', rule: { id: 'exclude-channels' } });
     expect(ruleVerdict(thread([msg(1, 'Can @Frank look?')]), DEFAULT_RULES, settings, me)).toMatchObject({ kind: 'model', min: 'today', rule: { id: 'mention-me' } });
     expect(ruleVerdict(thread([msg(1)]), DEFAULT_RULES, settings, me)).toEqual({ kind: 'model' });
+    const toFile = [{ id: 'signals', enabled: true, conditions: [{ type: 'channel_in' as const, values: ['#product'] }], outcome: { type: 'file' as const } }];
+    expect(ruleVerdict(thread([msg(1)]), toFile, settings, me)).toMatchObject({ kind: 'model', file: true, rule: { id: 'signals' } });
   });
 
   it('builds "me" from the source identity, escaping the name', () => {

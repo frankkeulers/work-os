@@ -204,6 +204,9 @@ export const RuleOutcome = z.discriminatedUnion('type', [
   z.object({ type: z.literal('today') }),
   z.object({ type: z.literal('drop') }),
   z.object({ type: z.literal('model'), min: z.enum(['today', 'now']).optional() }),
+  // To file: the model still reads the thread (summary, where to file it), but attention is
+  // None and at least one filing destination is suggested, so the item lands in To file.
+  z.object({ type: z.literal('file') }),
 ]);
 export type RuleOutcome = z.infer<typeof RuleOutcome>;
 

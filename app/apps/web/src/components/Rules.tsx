@@ -3,6 +3,7 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Rule as RuleSchema, isValidRegex, type NamedList, type Rule, type RuleCondition, type RuleOutcome } from '@work-os/shared';
+import { ChannelPicker } from './ChannelPicker';
 import { DragIcon, Icon } from './icons';
 import { Button, ConfirmDialog, Dialog, Field, IconButton, Segmented, Switch, cx, inputBase, inputClass } from './ui';
 
@@ -32,6 +33,7 @@ export function conditionText(c: RuleCondition): string {
 
 export function outcomeText(o: RuleOutcome): string {
   if (o.type === 'model') return o.min ? `Model, at least ${o.min === 'now' ? 'Now' : 'Today'}` : 'Model';
+  if (o.type === 'file') return 'File';
   return o.type === 'now' ? 'Now' : o.type === 'today' ? 'Today' : 'Drop';
 }
 
@@ -40,6 +42,7 @@ const OUTCOME_CLS: Record<RuleOutcome['type'], string> = {
   today: 'bg-accent-wash-3 text-accent-ink',
   model: 'bg-accent-wash text-accent-ink',
   drop: 'bg-line-soft text-ink-2',
+  file: 'bg-teal-wash text-teal-ink',
 };
 
 // ---------- List ----------
@@ -222,25 +225,27 @@ function ConditionEditor({ c, onChange, onRemove, error, canRemove, index }: { c
                 ))}
               </select>
             </label>
-            <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs font-medium text-ink-2">
-              {c.list ? 'Also these (comma-separated)' : 'Values (comma-separated)'}
-              <input
-                className={inputClass}
-                aria-invalid={!!error}
-                value={c.values.join(', ')}
-                placeholder={c.type === 'sender_in' ? 'Name, Name' : '#channel, #channel'}
-                onChange={(e) =>
-                  onChange({
-                    ...c,
-                    values: e.target.value
-                      .split(',')
-                      .map((v) => v.trim())
-                      .filter((v, i, a) => v || i === a.length - 1),
-                  })
-                }
-                onBlur={() => onChange({ ...c, values: c.values.filter(Boolean) })}
-              />
-            </label>
+            {c.type === 'sender_in' && (
+              <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs font-medium text-ink-2">
+                {c.list ? 'Also these (comma-separated)' : 'Values (comma-separated)'}
+                <input
+                  className={inputClass}
+                  aria-invalid={!!error}
+                  value={c.values.join(', ')}
+                  placeholder="Name, Name"
+                  onChange={(e) =>
+                    onChange({
+                      ...c,
+                      values: e.target.value
+                        .split(',')
+                        .map((v) => v.trim())
+                        .filter((v, i, a) => v || i === a.length - 1),
+                    })
+                  }
+                  onBlur={() => onChange({ ...c, values: c.values.filter(Boolean) })}
+                />
+              </label>
+            )}
           </>
         )}
         {c.type === 'keyword' && (
@@ -252,6 +257,14 @@ function ConditionEditor({ c, onChange, onRemove, error, canRemove, index }: { c
         <span className="flex-1" />
         {canRemove && <IconButton label="Remove condition" icon="x" onClick={onRemove} />}
       </div>
+      {c.type === 'channel_in' && (
+        // Its own full-width line, for room to search and hold several chips. A div, not a label:
+        // a label would pass clicks on its text to the first chip's remove button.
+        <div className="flex flex-col gap-1 text-xs font-medium text-ink-2">
+          {c.list ? 'Also these channels' : 'Channels'}
+          <ChannelPicker label={c.list ? 'Also these channels' : 'Channels'} values={c.values} invalid={!!error} onChange={(values) => onChange({ ...c, values })} />
+        </div>
+      )}
       {error ? (
         <span className="text-xs text-red-fg">{error}</span>
       ) : c.type === 'keyword' && c.pattern && isValidRegex(c.pattern) ? (
@@ -261,7 +274,7 @@ function ConditionEditor({ c, onChange, onRemove, error, canRemove, index }: { c
   );
 }
 
-type OutcomeKey = 'now' | 'today' | 'model' | 'drop';
+type OutcomeKey = RuleOutcome['type'];
 
 function RuleDialog({
   initial,
@@ -350,6 +363,7 @@ function RuleDialog({
                   { value: 'now', label: 'Now' },
                   { value: 'today', label: 'Today' },
                   { value: 'model', label: 'Ask the model' },
+                  { value: 'file', label: 'File' },
                   { value: 'drop', label: 'Drop' },
                 ]}
               />
@@ -369,7 +383,9 @@ function RuleDialog({
                 ? 'Dropped threads are never stored or triaged.'
                 : rule.outcome.type === 'model'
                   ? 'The thread still goes to batched model triage; the result is raised to the minimum if lower.'
-                  : 'A fixed outcome skips the model call entirely.'}
+                  : rule.outcome.type === 'file'
+                    ? 'The model still summarises the thread and suggests where to file it (the vault if it suggests nowhere), then it goes to File for review. Put rules for mentions and VIPs above this one, or they won’t reach Now or Today.'
+                    : 'A fixed outcome skips the model call entirely.'}
             </span>
           </div>
         </div>

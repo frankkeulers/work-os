@@ -362,6 +362,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     now,
     meId: () => runtime.identity('slack'),
     earlier: (item, signal) => earlier.forItem(item, signal),
+    channels: async (signal) => [...(await slackDirectory.conversations(signal)).values()].filter((c) => !c.is_im && !c.is_mpim && c.name).map((c) => `#${c.name}`),
     slackTeamId: () => slackDirectory.identityKnown?.team_id,
     dmTitle: (itemId) => {
       const channel = itemId.split(':')[1];

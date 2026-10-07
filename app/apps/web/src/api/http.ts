@@ -127,6 +127,7 @@ export class HttpApi implements WorkOsApi {
   };
   getItem = (id: string) => this.get<ItemView>(this.item(id));
   getEarlier = (id: string) => this.get<EarlierView>(`${this.item(id)}/earlier`);
+  getChannels = () => this.get<string[]>('/api/channels');
   getUsage = () => this.get<UsageView>('/api/usage');
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');
   getSettings = () => this.get<SettingsView>('/api/settings');

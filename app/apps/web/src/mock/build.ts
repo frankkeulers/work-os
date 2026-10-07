@@ -71,7 +71,7 @@ export const atLeast = (a: Attention, min?: Attention): Attention => (min && RAN
 export function buildDecision(
   rec: ItemRec,
   at: string,
-  by: { kind: 'rule'; ruleId: string; attention: Attention } | { kind: 'model'; batchId: string; ruleId?: string; min?: Attention; model: string },
+  by: { kind: 'rule'; ruleId: string; attention: Attention } | { kind: 'model'; batchId: string; ruleId?: string; min?: Attention; file?: boolean; model: string },
   script: ScriptedDecision = rec.script,
 ): TriageDecision {
   const base = {
@@ -93,12 +93,15 @@ export function buildDecision(
       ruleId: by.ruleId,
     };
   }
+  // Confluence is never suggested for people observations (NF-2).
+  const confluence = script.confluence && !script.people ? { suggested: true, targetHint: script.confluence } : { suggested: false };
+  // A To file rule: attention None, and the vault when the model suggested no destination.
+  const vault = script.vault ? { suggested: true, targetHint: script.vault } : { suggested: !!by.file && !confluence.suggested };
   return {
     ...base,
-    attention: atLeast(script.attention, by.min),
-    // Confluence is never suggested for people observations (NF-2).
-    confluence: script.confluence && !script.people ? { suggested: true, targetHint: script.confluence } : { suggested: false },
-    vault: script.vault ? { suggested: true, targetHint: script.vault } : { suggested: false },
+    attention: by.file ? 'none' : atLeast(script.attention, by.min),
+    confluence,
+    vault,
     reason: script.reason,
     next: script.next,
     decidedBy: 'model',

@@ -5,11 +5,13 @@ import { firstMatchingRule, type Item, type LoggedDecision, type Me, type Rule, 
 //   drop        a new thread is never stored (FR-2.10); one already stored is left alone
 //   now, today  decided at once, without the model and without waiting for the quiet window
 //   model       wait for the quiet window, then the model; `min` is a floor on its answer (M2 step 15)
+//   file        the model too, for the summary and where to file it, then To file: attention None
+//               and at least one filing destination suggested
 
 export type RuleVerdict =
   | { kind: 'drop'; rule: Rule }
   | { kind: 'fixed'; rule: Rule; attention: 'now' | 'today' }
-  | { kind: 'model'; rule?: Rule; min?: 'today' | 'now' };
+  | { kind: 'model'; rule?: Rule; min?: 'today' | 'now'; file?: true };
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -25,6 +27,7 @@ export function ruleVerdict(item: Item, rules: Rule[], settings: Settings, me: M
   const o = rule.outcome;
   if (o.type === 'drop') return { kind: 'drop', rule };
   if (o.type === 'now' || o.type === 'today') return { kind: 'fixed', rule, attention: o.type };
+  if (o.type === 'file') return { kind: 'model', rule, file: true };
   return { kind: 'model', rule, ...(o.min && { min: o.min }) };
 }
 

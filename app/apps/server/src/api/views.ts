@@ -71,6 +71,8 @@ export interface ViewDeps {
   members?: (item: Item, signal?: AbortSignal) => Promise<Participant[] | undefined>;
   /** The messages before a DM item, read live from Slack. */
   earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
+  /** The Slack channels Frank is in, as "#name", for the rule editor's channel search. */
+  channels?: (signal?: AbortSignal) => Promise<string[]>;
   /** Drafts, approvals and the outbox (FR-9.x, FR-14.5). */
   actions?: ActionService;
 }

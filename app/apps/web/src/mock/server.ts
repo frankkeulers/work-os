@@ -367,6 +367,7 @@ export class MockServer implements WorkOsApi, MockControls {
             batchId,
             ruleId: rule?.id,
             min: rule?.outcome.type === 'model' ? rule.outcome.min : undefined,
+            file: rule?.outcome.type === 'file',
             model: this.s.settings.models.triage,
           }),
         );
@@ -510,6 +511,13 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(QUERY_MS);
     this.rec(id);
     return { messages: [], people: [] }; // the seed has no conversation before its items
+  }
+
+  async getChannels(): Promise<string[]> {
+    await this.gate(QUERY_MS);
+    const sl = this.s.settings.slack;
+    const fromItems = Object.values(this.s.items).filter((r) => r.item.kind !== 'dm').map((r) => r.item.title);
+    return [...new Set([...fromItems, ...sl.includeChannels, ...sl.excludeChannels, ...sl.customerChannels, ...(sl.appChannels ?? [])])].sort((a, b) => a.localeCompare(b));
   }
 
   async getItem(id: string): Promise<ItemView> {

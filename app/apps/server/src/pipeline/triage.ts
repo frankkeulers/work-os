@@ -161,22 +161,26 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         run.failed++;
         continue;
       }
-      // A rule that sends to the model may set a floor (FR-4.3).
+      // A rule that sends to the model may set a floor (FR-4.3), or send the thread to To file.
       const verdict = ruleVerdict(item, rules, settings, me);
       const floor = verdict.kind === 'model' ? verdict.min : undefined;
+      const toFile = verdict.kind === 'model' && verdict.file;
+      // Never Confluence for observations about people (NF-2, FR-10.1).
+      const confluence = a.containsPeopleObservations ? { suggested: false } : a.confluence;
+      // To file needs a destination: the model's, or the vault when it suggested neither.
+      const vault = toFile && !confluence.suggested && !a.vault.suggested ? { suggested: true } : a.vault;
       const decision: TriageDecision = {
         itemId: item.id,
         itemRevision: item.revision,
-        attention: atLeast(a.attention, floor),
-        // Never Confluence for observations about people (NF-2, FR-10.1).
-        confluence: a.containsPeopleObservations ? { suggested: false } : a.confluence,
-        vault: a.vault,
+        attention: toFile ? 'none' : atLeast(a.attention, floor),
+        confluence,
+        vault,
         containsPeopleObservations: a.containsPeopleObservations,
         summary: a.summary,
         reason: a.reason,
         ...(a.next && { next: a.next }),
         decidedBy: 'model',
-        ...(floor && verdict.kind === 'model' && verdict.rule && { ruleId: verdict.rule.id }),
+        ...((floor || toFile) && verdict.kind === 'model' && verdict.rule && { ruleId: verdict.rule.id }),
         model: settings.models.triage,
         promptVersion: prompt.version,
         batchId,
