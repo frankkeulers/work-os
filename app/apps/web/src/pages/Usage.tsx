@@ -323,6 +323,23 @@ function useEvalFinishedToast(u: UsageView | undefined) {
   }, [u, navigate]);
 }
 
+/** The 64px top bar, like the Inbox and Settings, fixed above the scrolling page body. */
+function UsageFrame({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="shrink-0 border-b border-line bg-surface">
+        <div className="mx-auto flex h-16 max-w-[1360px] items-center gap-3 px-8">
+          <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Usage &amp; health</h1>
+          <MvpTag>MVP · E7, E12</MvpTag>
+        </div>
+      </header>
+      <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function UsagePage() {
   const q = useApiQuery(() => api.getUsage(), onTopics('usage', 'evals', 'inbox'), []);
   const u = q.data;
@@ -331,52 +348,53 @@ export function UsagePage() {
   useEffect(() => {
     document.title = 'Usage & health · Work OS';
   }, []);
-  if (!u) return <div className="p-8 text-muted">{q.error ? 'Could not load usage.' : 'Loading…'}</div>;
+  if (!u)
+    return (
+      <UsageFrame>
+        <div className="mx-auto max-w-[1360px] p-8 text-muted">{q.error ? 'Could not load usage.' : 'Loading…'}</div>
+      </UsageFrame>
+    );
 
   const t = u.today;
   const b = u.budgets;
   const noBaseline = b.baseline === null;
   return (
-    <div className="mx-auto flex max-w-[1360px] flex-col gap-5 px-8 pb-12 pt-6">
-      <header className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-[1_1_300px] flex-col gap-1">
-          <h1 className="m-0 text-[26px] font-semibold tracking-[-0.015em]">Usage &amp; health</h1>
-          <div className="font-mono text-xs text-muted">
-            Claude subscription via Agent SDK · no API key · {noBaseline ? 'baseline not measured yet (P0-3)' : `baseline ${fmtMoney(b.baseline!)}/day from Phase 0 (P0-3)`}
-          </div>
+    <UsageFrame>
+      <div className="mx-auto flex max-w-[1360px] flex-col gap-5 px-8 pb-12 pt-6">
+        <div className="font-mono text-xs text-muted">
+          Claude subscription via Agent SDK · no API key · {noBaseline ? 'baseline not measured yet (P0-3)' : `baseline ${fmtMoney(b.baseline!)}/day from Phase 0 (P0-3)`}
         </div>
-        <MvpTag>MVP · E7, E12</MvpTag>
-      </header>
-      <HealthBanner />
-      {noBaseline && (
-        <Banner tone="info" icon="info" action={<Link to="/settings/budgets" className="text-[13px] font-medium">Budgets</Link>}>
-          <strong>Baseline not measured yet.</strong> Percentages appear once Phase 0 records the average daily usage of your current scheduled tasks (P0-3). Until then, usage shows as cost-equivalent only.
-        </Banner>
-      )}
-      <section aria-label="Today" className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
-        {noBaseline ? (
-          <Kpi label="Cost-equivalent today" value={fmtMoney(t.costEquivalent)} of={fmtMoney(b.cost.limit)} bar={<Bar pct={pctOf(b.cost)} colour={barColour(b.cost)} />} note="S3 needs a baseline: not measured yet" />
-        ) : (
-          <Kpi
-            label="Cost-equivalent vs baseline"
-            value={`${t.pctOfBaseline}%`}
-            bar={<Bar pct={Math.min(100, t.pctOfBaseline ?? 0)} colour={(t.pctOfBaseline ?? 0) > 100 ? 'var(--red)' : (t.pctOfBaseline ?? 0) >= 80 ? 'var(--amber)' : 'var(--green)'} />}
-            note={`${fmtMoney(t.costEquivalent)} today · S3 target ≤ 100% incl. remaining scheduled tasks`}
-          />
+        <HealthBanner />
+        {noBaseline && (
+          <Banner tone="info" icon="info" action={<Link to="/settings/budgets" className="text-[13px] font-medium">Budgets</Link>}>
+            <strong>Baseline not measured yet.</strong> Percentages appear once Phase 0 records the average daily usage of your current scheduled tasks (P0-3). Until then, usage shows as cost-equivalent only.
+          </Banner>
         )}
-        <Kpi label="Triage calls" value={t.triageCalls} of={String(b.triage.limit)} bar={<Bar pct={pctOf(b.triage)} colour={barColour(b.triage)} />} note={`${t.threadsTriaged} threads · ${t.pollsSkipped} polls skipped (nothing eligible)`} />
-        <Kpi label="Drafts" value={t.draftsVault + t.draftsConfluence} of={String(b.drafts.limit)} bar={<Bar pct={pctOf(b.drafts)} colour={barColour(b.drafts)} />} note={`${t.draftsVault} vault · ${t.draftsConfluence} Confluence`} />
-        <Kpi label="Tokens today" value={fmtTokens(t.tokens.total)} note={`in ${fmtTokens(t.tokens.input)} · out ${fmtTokens(t.tokens.output)} · cache ${fmtTokens(t.tokens.cache)}`} />
-      </section>
-      <div className="flex flex-wrap items-start gap-4">
-        <Days u={u} />
-        <Budgets u={u} />
+        <section aria-label="Today" className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+          {noBaseline ? (
+            <Kpi label="Cost-equivalent today" value={fmtMoney(t.costEquivalent)} of={fmtMoney(b.cost.limit)} bar={<Bar pct={pctOf(b.cost)} colour={barColour(b.cost)} />} note="S3 needs a baseline: not measured yet" />
+          ) : (
+            <Kpi
+              label="Cost-equivalent vs baseline"
+              value={`${t.pctOfBaseline}%`}
+              bar={<Bar pct={Math.min(100, t.pctOfBaseline ?? 0)} colour={(t.pctOfBaseline ?? 0) > 100 ? 'var(--red)' : (t.pctOfBaseline ?? 0) >= 80 ? 'var(--amber)' : 'var(--green)'} />}
+              note={`${fmtMoney(t.costEquivalent)} today · S3 target ≤ 100% incl. remaining scheduled tasks`}
+            />
+          )}
+          <Kpi label="Triage calls" value={t.triageCalls} of={String(b.triage.limit)} bar={<Bar pct={pctOf(b.triage)} colour={barColour(b.triage)} />} note={`${t.threadsTriaged} threads · ${t.pollsSkipped} polls skipped (nothing eligible)`} />
+          <Kpi label="Drafts" value={t.draftsVault + t.draftsConfluence} of={String(b.drafts.limit)} bar={<Bar pct={pctOf(b.drafts)} colour={barColour(b.drafts)} />} note={`${t.draftsVault} vault · ${t.draftsConfluence} Confluence`} />
+          <Kpi label="Tokens today" value={fmtTokens(t.tokens.total)} note={`in ${fmtTokens(t.tokens.input)} · out ${fmtTokens(t.tokens.output)} · cache ${fmtTokens(t.tokens.cache)}`} />
+        </section>
+        <div className="flex flex-wrap items-start gap-4">
+          <Days u={u} />
+          <Budgets u={u} />
+        </div>
+        <div className="flex flex-wrap items-start gap-4">
+          <ByPurpose u={u} />
+          <SourceHealth u={u} />
+        </div>
+        <Criteria u={u} />
       </div>
-      <div className="flex flex-wrap items-start gap-4">
-        <ByPurpose u={u} />
-        <SourceHealth u={u} />
-      </div>
-      <Criteria u={u} />
-    </div>
+    </UsageFrame>
   );
 }

@@ -48,10 +48,58 @@ test('only the page content scrolls: the sidebar and top bars stay put', async (
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   expect((await nav.boundingBox())!.y).toBe(0);
 
-  // A page without one scrolls whole, inside main; the sidebar stays.
+  // Usage has one too.
   await page.goto('/usage');
+  await scrollBy('[data-page-scroll]');
+  await expect(page.getByRole('heading', { name: 'Usage & health', level: 1 })).toBeInViewport();
+  expect((await nav.boundingBox())!.y).toBe(0);
+
+  // A page without one (the eval report) scrolls whole, inside main; the sidebar stays.
+  await page.getByRole('link', { name: 'View report' }).click();
+  await expect(page.getByRole('heading', { name: 'Eval report', level: 1 })).toBeVisible();
   await scrollBy('main');
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   expect((await nav.boundingBox())!.y).toBe(0);
   await expect(nav.getByRole('link', { name: /Inbox/ })).toBeInViewport();
 });
+
+test('the account menu: theme and scope, and a profile picture from Settings', async ({ page }) => {
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const account = nav.getByRole('button', { name: 'Account' });
+  // Until a picture is set, the avatar is a person icon. The button shows the scope.
+  await expect(account.locator('[data-avatar="icon"]')).toBeVisible();
+  await expect(account).toContainText('MVP');
+
+  await account.click();
+  const menu = page.getByRole('dialog', { name: 'Account' });
+  await menu.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Dark' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await menu.getByRole('group', { name: 'Theme' }).getByRole('button', { name: 'Light' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await menu.getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
+  await expect(account).toContainText('Full');
+
+  // The picture is set in Settings › Appearance.
+  await menu.getByRole('link', { name: 'Profile picture and appearance' }).click();
+  await expect(page).toHaveURL(/\/settings\/appearance$/);
+  await expect(menu).toHaveCount(0);
+  await page.getByLabel('Profile picture file').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: Buffer.from(PNG_2x1, 'base64') });
+  await expect(page.getByText('Profile picture updated.')).toBeVisible();
+  const picture = account.locator('img[data-avatar="picture"]');
+  await expect(picture).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
+  // It's kept in this browser across reloads.
+  await page.reload();
+  await expect(picture).toBeVisible();
+
+  // A file that isn't a picture is refused, and the picture stays.
+  await page.getByLabel('Profile picture file').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
+  await expect(page.getByText('That file isn’t an image.', { exact: false })).toBeVisible();
+  await expect(picture).toBeVisible();
+
+  await page.getByRole('button', { name: 'Remove' }).click();
+  await expect(account.locator('[data-avatar="icon"]')).toBeVisible();
+});
+
+/** A 2×1 PNG (red, blue): wider than tall, so the square crop is exercised. */
+const PNG_2x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAADUlEQVR4nGP4zwAE/wEHAAH/4iOeWQAAAABJRU5ErkJggg==';
