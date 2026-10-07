@@ -9,8 +9,10 @@ import type {
   FailureReason,
   Item,
   ItemKind,
+  Message,
   ModelId,
   NextStep,
+  Participant,
   Rule,
   SourceId,
   Settings,
@@ -135,6 +137,12 @@ export interface ItemView {
   meId: string; // the signed-in Slack user, shown as "You"
 }
 
+/** The messages just before a DM item, read live from the source and never stored. Oldest first. */
+export interface EarlierView {
+  messages: Message[];
+  people: Participant[]; // names for their authors and mentions
+}
+
 export interface UsageRow {
   purpose: UsagePurpose;
   model: ModelId;
@@ -249,6 +257,8 @@ export interface WorkOsApi {
   recheck(): Promise<void>;
   getInbox(): Promise<InboxView>;
   getItem(id: string): Promise<ItemView>;
+  /** The conversation before a DM item (empty for threads, or when the source can't say). */
+  getEarlier(id: string): Promise<EarlierView>;
   getUsage(): Promise<UsageView>;
   getEvalReports(): Promise<EvalReport[]>;
   getSettings(): Promise<SettingsView>;

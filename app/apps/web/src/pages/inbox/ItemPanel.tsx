@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { ActionType } from '@work-os/shared';
+import type { ActionType, Message } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
 import { CorrectForm, ItemMarkers, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
 import { Icon, MoreIcon } from '../../components/icons';
+import { useEarlier } from '../../components/Earlier';
 import { MessageText } from '../../components/SlackText';
 import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
@@ -152,8 +153,10 @@ function ActionItems({ items }: { items: string[] }) {
 function Messages({ view }: { view: ItemView }) {
   const now = useNow(60_000);
   const [all, setAll] = useState(false);
+  const [allEarlier, setAllEarlier] = useState(false);
   const { item, meId } = view;
-  const name = (id: string) => (id === meId ? 'You' : (item.participants.find((p) => p.id === id)?.name ?? id));
+  const earlier = useEarlier(item);
+  const name = (id: string) => (id === meId ? 'You' : ([...item.participants, ...(earlier?.state === 'ready' ? earlier.view.people : [])].find((p) => p.id === id)?.name ?? id));
   const title = item.kind === 'email' ? 'Email' : item.kind === 'meeting' ? 'From the transcript' : item.kind === 'dm' || item.kind === 'chat' ? (item.messages.length === 1 ? 'Message' : 'Messages') : 'Latest in the thread';
   if (item.contentExpired)
     return (
@@ -167,6 +170,17 @@ function Messages({ view }: { view: ItemView }) {
       </Section>
     );
   const shown = all ? item.messages : item.messages.slice(-3);
+  const before = earlier?.state === 'ready' ? earlier.view.messages : [];
+  const shownBefore = allEarlier ? before : before.slice(-3);
+  const people = earlier?.state === 'ready' ? earlier.view.people : [];
+  const row = (m: Message, muted: boolean) => (
+    <div key={m.id} className={cx('flex flex-col gap-0.5 border-t border-line-soft-2 py-2.5 first-of-type:mt-1', muted && 'opacity-75')}>
+      <span className="text-xs">
+        <strong className="font-semibold">{name(m.authorId)}</strong> <span className="font-mono text-[11px] text-muted">{fmtWhen(m.ts, now)}</span>
+      </span>
+      <MessageText item={item} meId={meId} people={people} text={m.text} className={cx('text-[13px] leading-normal', muted ? 'text-ink-2' : 'text-ink-strong')} />
+    </div>
+  );
   const more = item.messageCount - item.messages.length;
   return (
     <Section
@@ -187,14 +201,21 @@ function Messages({ view }: { view: ItemView }) {
         ))
       }
     >
-      {shown.map((m) => (
-        <div key={m.id} className="flex flex-col gap-0.5 border-t border-line-soft-2 py-2.5 first-of-type:mt-1">
-          <span className="text-xs">
-            <strong className="font-semibold">{name(m.authorId)}</strong> <span className="font-mono text-[11px] text-muted">{fmtWhen(m.ts, now)}</span>
-          </span>
-          <MessageText item={item} meId={meId} text={m.text} className="text-[13px] leading-normal text-ink-strong" />
+      {earlier?.state === 'loading' && <div className="mt-1 py-2 text-xs text-muted">Loading earlier messages…</div>}
+      {earlier?.state === 'failed' && <div className="mt-1 py-2 text-xs text-muted">Couldn’t load the earlier messages from {SOURCE_NAME[item.source]}.</div>}
+      {before.length > 0 && (
+        <div className="mt-1 flex items-baseline gap-2 py-1.5">
+          <span className="flex-1 font-mono text-[11px] text-muted">Earlier in the conversation</span>
+          {before.length > shownBefore.length && (
+            <button type="button" className="min-h-7 rounded-lg px-2 text-xs font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={() => setAllEarlier(true)}>
+              Show {before.length - shownBefore.length} more
+            </button>
+          )}
         </div>
-      ))}
+      )}
+      {shownBefore.map((m) => row(m, true))}
+      {before.length > 0 && <div className="pt-3 pb-1.5 font-mono text-[11px] text-muted">This item</div>}
+      {shown.map((m) => row(m, false))}
     </Section>
   );
 }

@@ -36,6 +36,7 @@ import {
   type HealthView,
   type InboxView,
   type ItemSummary,
+  type EarlierView,
   type ItemView,
   type Notice,
   type Rule,
@@ -500,6 +501,12 @@ export class MockServer implements WorkOsApi, MockControls {
       cursor: src.cursor,
       message: messages[src.status],
     };
+  }
+
+  async getEarlier(id: string): Promise<EarlierView> {
+    await this.gate(QUERY_MS);
+    this.rec(id);
+    return { messages: [], people: [] }; // the seed has no conversation before its items
   }
 
   async getItem(id: string): Promise<ItemView> {

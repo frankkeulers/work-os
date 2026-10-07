@@ -30,6 +30,7 @@ import { buildSources, type AdapterFactory } from './sources/registry';
 import { slackFactory } from './sources/slack/adapter';
 import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
+import { EarlierMessages } from './sources/slack/earlier';
 import { createServer, type WorkOsServer } from './server';
 import { budgetsOf, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
@@ -197,6 +198,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // One Slack client and directory for the life of the process: the adapter is rebuilt when
   // settings change, but the token, Frank's identity and names stay cached.
   const slackDirectory = new SlackDirectory(new SlackApi(secrets, deps.fetch ?? fetch));
+  const earlier = new EarlierMessages(slackDirectory);
   const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger) };
   // Claude (M2): one adapter for the process; triage reads the prompt file on every run.
   const claude = new ClaudeAdapter({
@@ -336,6 +338,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     tokenPersisted: persisted,
     now,
     meId: () => runtime.identity('slack'),
+    earlier: (item, signal) => earlier.forItem(item, signal),
     usage: () => usage.records(),
     labels,
     correct,

@@ -2,7 +2,7 @@ import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, EventData, EventDraft, InboxView, Item, ItemView, SettingsView, WorkEvent } from '@work-os/shared';
+import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, SettingsView, WorkEvent } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDataDir, paths } from '../config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
@@ -17,6 +17,7 @@ import { ItemFiles, fileNameFor } from '../store/items';
 import { Store } from '../store/store';
 import { bearerMatches, hostAllowed, loadApiToken, tokenAccount } from './auth';
 import { NoticeHub, noticesFor } from './sse';
+import type { ViewDeps } from './views';
 
 const TOKEN = 'test-token-0123456789abcdefghijklmnopqrstuvwxyz';
 const auth = { authorization: `Bearer ${TOKEN}` };
@@ -30,7 +31,7 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string } = {}) {
+async function build(opts: { webDir?: string; earlier?: ViewDeps['earlier'] } = {}) {
   await initDataDir(dir, { settings: defaultSettings(dir), rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
@@ -51,6 +52,7 @@ async function build(opts: { webDir?: string } = {}) {
     tokenPersisted: true,
     now: () => NOW,
     webDir: opts.webDir,
+    earlier: opts.earlier,
     devOrigins: ['http://localhost:5173'],
   });
 }
@@ -215,6 +217,21 @@ describe('views', () => {
     const expired = (await get(`/api/items/${encodeURIComponent(ITEM)}`)).json<ItemView>();
     expect(expired.item).toMatchObject({ contentExpired: true, messages: [], permalink: storedItem().permalink });
     expect((await get('/api/items/slack%3Anope')).statusCode).toBe(404);
+  });
+
+  it('reads the messages before an item from the source, and none without one', async () => {
+    await store.append(upsert());
+    await items.write({ item: storedItem(), schemaVersion: 1 });
+    const url = `/api/items/${encodeURIComponent(ITEM)}/earlier`;
+    expect((await get(url)).json<EarlierView>()).toEqual({ messages: [], people: [] });
+    await lifecycle.stop('test');
+
+    const earlier: EarlierView = { messages: [{ id: '1', authorId: 'U1', ts: NOW.toISOString(), text: 'The question' }], people: [{ id: 'U1', name: 'Dana Lee' }] };
+    let asked: string | undefined;
+    await build({ earlier: async (item) => ((asked = item.id), earlier) });
+    expect((await get(url)).json<EarlierView>()).toEqual(earlier);
+    expect(asked).toBe(ITEM);
+    expect((await get('/api/items/slack%3Anope/earlier')).statusCode).toBe(404);
   });
 
   it('logs item.seen when opening clears a flag, and only then', async () => {

@@ -11,6 +11,7 @@ import {
   type Criterion,
   type EvalReport,
   type DependencyHealth,
+  type EarlierView,
   type HealthView,
   type InboxView,
   type Item,
@@ -58,6 +59,8 @@ export interface ViewDeps {
   correct?: (id: string, input: CorrectionInput) => Promise<{ labelCount: number }>;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */
   evals?: Evals;
+  /** The messages before a DM item, read live from Slack. */
+  earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
   /** Drafts, approvals and the outbox (FR-9.x, FR-14.5). */
   actions?: ActionService;
 }

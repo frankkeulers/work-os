@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { tomorrowAt9, type Attention, type SourceId } from '@work-os/shared';
-import { api, type ItemSummary } from '../api';
+import { API_MODE, api, type ItemSummary } from '../api';
 import { fmtDayDate, fmtTime } from '../lib/format';
 import { SOURCE_NAME } from '../lib/next';
 import { errorToast, toast } from '../store/toasts';
@@ -14,7 +14,13 @@ export const itemPath = (id: string, q = '') => `/item/${encodeURIComponent(id)}
 const KIND_LABEL: Record<ItemSummary['kind'], string> = { thread: 'Thread', dm: 'DM', email: 'Email', meeting: 'Meeting', chat: 'Chat' };
 export const kindLabel = (k: ItemSummary['kind']) => KIND_LABEL[k];
 
+/** Opens the item's permalink in a new tab, which hands over to the desktop app when it is installed (FR-8.2). */
 export function openInSource(item: { permalink: string; title: string; source: SourceId }) {
+  if (API_MODE === 'http') {
+    window.open(item.permalink, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  // The mock's permalinks lead nowhere.
   const app = SOURCE_NAME[item.source];
   toast(`Opens ${item.title} in ${app}. The prototype doesn’t launch ${app}.`, {
     action: {

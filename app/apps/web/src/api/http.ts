@@ -1,4 +1,4 @@
-import type { Action, ActionType, ApiErrorBody, CorrectionInput, EvalReport, HealthView, InboxView, ItemView, Notice, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, ApiErrorBody, CorrectionInput, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -126,6 +126,7 @@ export class HttpApi implements WorkOsApi {
     return view;
   };
   getItem = (id: string) => this.get<ItemView>(this.item(id));
+  getEarlier = (id: string) => this.get<EarlierView>(`${this.item(id)}/earlier`);
   getUsage = () => this.get<UsageView>('/api/usage');
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');
   getSettings = () => this.get<SettingsView>('/api/settings');

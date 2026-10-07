@@ -1,4 +1,4 @@
-import { CorrectionBody, DraftEdit, DraftRequest, SettingsSave, SnoozeInput, seenChanges } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, SettingsSave, SnoozeInput, seenChanges, type EarlierView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
@@ -123,6 +123,13 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (it && seenChanges(it)) {
       await d.store.append({ type: 'item.seen', itemId: it.id, data: undefined });
     }
+    return reply.headers(noStore).send(view);
+  });
+
+  app.get<{ Params: { id: string } }>('/api/items/:id/earlier', async (req, reply) => {
+    const stored = d.store.projection.items[req.params.id] && (await d.items.read(d.store.projection.items[req.params.id].source, req.params.id));
+    if (!stored) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
+    const view: EarlierView = d.earlier ? await d.earlier(stored.item) : { messages: [], people: [] };
     return reply.headers(noStore).send(view);
   });
 

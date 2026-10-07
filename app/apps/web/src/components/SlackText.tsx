@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import type { Item } from '@work-os/shared';
+import type { Item, Participant } from '@work-os/shared';
 import { parseMrkdwn, type Inline } from '../lib/mrkdwn';
 import { cx } from './ui';
 
@@ -71,8 +71,8 @@ export function SlackText({ text, meId, name, className }: { text: string; meId?
 }
 
 /** A message's text: Slack's formatted, other sources' as written. */
-export function MessageText({ item, meId, text, className }: { item: Item; meId?: string; text: string; className?: string }) {
+export function MessageText({ item, meId, text, people = [], className }: { item: Item; meId?: string; text: string; people?: Participant[]; className?: string }) {
   if (item.source !== 'slack') return <div className={className}>{text}</div>;
-  const name = (id: string) => [...item.participants, ...(item.mentioned ?? [])].find((p) => p.id === id)?.name ?? (id === meId ? 'you' : undefined);
+  const name = (id: string) => [...item.participants, ...(item.mentioned ?? []), ...people].find((p) => p.id === id)?.name ?? (id === meId ? 'you' : undefined);
   return <SlackText text={text} meId={meId} name={name} className={className} />;
 }

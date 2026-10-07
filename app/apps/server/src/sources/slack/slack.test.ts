@@ -6,6 +6,7 @@ import { SourceError } from '../errors';
 import { mapLimit } from '../limit';
 import { SlackAdapter } from './adapter';
 import { SlackApi } from './api';
+import { EarlierMessages } from './earlier';
 import { FakeSlack } from './fakeSlack';
 import { buildItem, channelListed, cmpTs, mentionedIds, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
 
@@ -208,6 +209,25 @@ describe('Slack adapter, search mode (FR-2.3)', () => {
     expect(slack.count('conversations.replies')).toBe(10); // these 9, and #product's thread with its reply at 30 min ago
 
     expect(slack.maxInFlight).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('Earlier messages before a DM item', () => {
+  it('reads the conversation before the item from Slack, with names, and caches it', async () => {
+    workspace();
+    slack.post('D01MATT', { ts: ts(180), user: 'U04MATT', text: 'cc <@U02DANA>' });
+    const a = adapter();
+    const items = byId((await a.fetchSince(undefined, ctx())).items);
+    const dm = items[`slack:D01MATT:${ts(50)}`];
+    const earlier = new EarlierMessages(a.directory);
+    const v = await earlier.forItem(dm);
+    expect(v.messages.map((m) => m.text)).toEqual(['Morning', 'Morning Matt', 'cc <@U02DANA>']);
+    expect(v.people).toEqual(expect.arrayContaining([{ id: 'U04MATT', name: 'Matt M.' }, { id: 'U02DANA', name: 'Dana Lee' }]));
+    const calls = slack.count('conversations.history');
+    await earlier.forItem(dm);
+    expect(slack.count('conversations.history')).toBe(calls);
+    // Threads are fetched whole already: nothing before them.
+    expect(await earlier.forItem(items[`slack:C01PROD:${ts(20)}`])).toEqual({ messages: [], people: [] });
   });
 });
 
