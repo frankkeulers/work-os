@@ -57,11 +57,15 @@ export function fakeWorld(now: Date) {
     .post('C02LAUNCH', { ts: at(40), user: 'U03SAM', text: 'Launch checklist is green apart from the data-licensing wording.' })
     .post('D01MATT', { ts: at(25), user: 'U04MATT', text: 'Morning Frank. Go/no-go on MVI V2 before Thursday?' });
 
-  const confluence = new FakeConfluence().page(
-    FAKE_CONFLUENCE_PAGE.id,
-    FAKE_CONFLUENCE_PAGE.title,
-    '<h1>MVI V2</h1><p>Product requirements.</p><h2>Decisions</h2><ul><li>Bulk export ships first.</li></ul><h2>Open questions</h2><p>Pricing tiers.</p>',
-  );
+  const confluence = new FakeConfluence(FAKE_CONFLUENCE_PAGE.spaceKey)
+    .page(FAKE_CONFLUENCE_PAGE.root.id, FAKE_CONFLUENCE_PAGE.root.title, '<p>Index of the MVI context pages.</p>')
+    .page(
+      FAKE_CONFLUENCE_PAGE.id,
+      FAKE_CONFLUENCE_PAGE.title,
+      '<h1>MVI V2</h1><p>Product requirements.</p><h2>Decisions</h2><ul><li>Bulk export ships first.</li></ul><h2>Open questions</h2><p>Pricing tiers.</p>',
+      7,
+      { parent: FAKE_CONFLUENCE_PAGE.root.id },
+    );
   const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token, [tokenAccount('dev')]: FAKE_API_TOKEN, [CONFLUENCE_TOKEN_ACCOUNT]: FAKE_CONFLUENCE_CREDS });
   const directory = new SlackDirectory(new SlackApi(secrets, slack.fetch));
   // FileVault on, Power Nap off: the checks pass, so the UI starts in normal mode.
@@ -92,8 +96,8 @@ export async function fakeAnchor(dataDir: string, now: Date): Promise<Date> {
   }
 }
 
-/** The one allow-listed page in a `--fakes` run, on a made-up site. */
-export const FAKE_CONFLUENCE_PAGE = { id: '1234567', title: 'MVI V2 PRD', siteUrl: 'https://fake-workos.atlassian.net', spaceKey: 'MVI' };
+/** The one page in scope in a `--fakes` run, under its root on a made-up site. */
+export const FAKE_CONFLUENCE_PAGE = { id: '1234567', title: 'MVI V2 PRD', siteUrl: 'https://fake-workos.atlassian.net', spaceKey: 'MVI', root: { id: '1100000', title: 'MVI Context' } };
 
 /** A made-up vault inside the temp data directory, so `--fakes` never reads or writes the real one. */
 export async function seedFakeVault(dir: string) {

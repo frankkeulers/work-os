@@ -1,6 +1,6 @@
 import { useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { ModelId, PromptFileId, Rule, Settings } from '@work-os/shared';
+import type { CataloguePageView, ConfluenceCatalogueView, ConfluencePage, ModelId, PromptFileId, Rule, Settings } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
 import { Icon } from '../../components/icons';
@@ -8,6 +8,7 @@ import { RulesList, newRuleEdit, type RuleEdit } from '../../components/Rules';
 import { Banner, Button, Chip, IconButton, Segmented, Spinner, Switch, cx, inputBase, inputClass } from '../../components/ui';
 import { onTopics, useApiQuery } from '../../hooks/useApiQuery';
 import { fmtMoney, fmtTime } from '../../lib/format';
+import { confluencePageUrl } from '../../lib/links';
 import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { FutureRow, Group, Meter, NumInput, Row, SectionHeader } from './parts';
@@ -208,16 +209,6 @@ function NotificationsSection({ s, full, set, type, flush, err }: Ctx) {
 // ---------- Write targets ----------
 
 function WritingSection({ s, view, full, set, type, flush, err, confirm }: Ctx) {
-  const [adding, setAdding] = useState<{ title: string; ref: string; error?: string } | null>(null);
-  const addPage = () => {
-    if (!adding) return;
-    const m = /pages\/(\d+)/.exec(adding.ref) ?? /^\s*(\d+)\s*$/.exec(adding.ref);
-    if (!adding.title.trim()) return setAdding({ ...adding, error: 'Give the page a title, e.g. Space › Page' });
-    if (!m) return setAdding({ ...adding, error: 'Paste a page URL or a numeric page ID' });
-    if (s.confluence.pages.some((p) => p.id === m[1])) return setAdding({ ...adding, error: 'That page is already on the allow-list' });
-    set((x) => x.confluence.pages.push({ title: adding.title.trim(), id: m[1] }));
-    setAdding(null);
-  };
   return (
     <>
       <SectionHeader title="Write targets" description="Where approved actions can write. The executor checks all of this again at write time, whatever the draft says." />
@@ -236,7 +227,7 @@ function WritingSection({ s, view, full, set, type, flush, err, confirm }: Ctx) 
                 ? set((x) => (x.dryRun = true))
                 : confirm({
                     title: 'Turn dry-run off?',
-                    body: 'From now on, approved actions write to your real Obsidian vault and to the allow-listed Confluence pages. Keep dry-run on while testing (FR-1.6).',
+                    body: 'From now on, approved actions write to your real Obsidian vault and to the Confluence pages in scope. Keep dry-run on while testing (FR-1.6).',
                     label: 'Turn off dry-run',
                     danger: true,
                     run: () => set((x) => (x.dryRun = false)),
@@ -258,57 +249,47 @@ function WritingSection({ s, view, full, set, type, flush, err, confirm }: Ctx) 
         </Row>
       </Group>
       <Group
-        title="Confluence allow-list"
+        title="Confluence"
         aside={
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-            <Icon name="lock" size={12} /> <span className="font-mono">{s.confluence.siteUrl.replace(/^https:\/\//, '')}</span> · Space <span className="font-mono">{s.confluence.spaceKey}</span> · API token in Keychain
+            <Icon name="lock" size={12} /> API token in Keychain
           </span>
         }
       >
-        <p className="m-0 pt-3 text-[13px] text-muted">Entries can only go to these pages. Drafts for any other page are refused (FR-10.6).</p>
-        <div className="flex flex-col pt-1" aria-label="Allow-listed pages">
-          {s.confluence.pages.map((p, i) => (
-            <div key={`${p.id}-${i}`} className="flex flex-wrap items-center gap-3 border-b border-line-soft py-2.5">
-              <Icon name="confluence" size={15} className="text-muted" />
-              <span className="flex-1 text-sm">{p.title}</span>
-              <span className={cx('font-mono text-xs', err(`confluence.pages.${i}.id`) ? 'text-red-fg' : 'text-muted')}>{p.id}</span>
-              <IconButton label={`Remove ${p.title}`} icon="x" size={32} onClick={() => set((x) => x.confluence.pages.splice(i, 1))} />
-              {err(`confluence.pages.${i}.id`) && <span className="w-full text-xs text-red-fg">{err(`confluence.pages.${i}.id`)}</span>}
-            </div>
-          ))}
-          {s.confluence.pages.length === 0 && <div className="border-b border-line-soft py-3 text-[13px] text-muted">No pages, so every Confluence draft will be refused.</div>}
-        </div>
-        {adding ? (
-          <form
-            className="mt-3 flex flex-col gap-3 rounded-lg border border-line p-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              addPage();
-            }}
-          >
-            <div className="flex flex-wrap gap-3">
-              <label className="flex flex-[1_1_180px] flex-col gap-1.5 text-[13px] font-medium">
-                Title
-                <input className={inputClass} placeholder="Space › Page" value={adding.title} onChange={(e) => setAdding({ ...adding, title: e.target.value, error: undefined })} />
-              </label>
-              <label className="flex flex-[1_1_240px] flex-col gap-1.5 text-[13px] font-medium">
-                Page ID or URL
-                <input className={cx(inputClass, 'font-mono text-[13px]')} placeholder="48213377 or https://…/pages/48213377/…" value={adding.ref} onChange={(e) => setAdding({ ...adding, ref: e.target.value, error: undefined })} />
-              </label>
-            </div>
-            {adding.error && <span className="text-xs text-red-fg">{adding.error}</span>}
-            <div className="flex gap-2">
-              <Button type="submit" variant="solid">
-                Add page
-              </Button>
-              <Button onClick={() => setAdding(null)}>Cancel</Button>
-            </div>
-          </form>
-        ) : (
-          <Button variant="ghost" className="mt-2 self-start text-accent" icon="plus" onClick={() => setAdding({ title: '', ref: '' })}>
-            Add page by ID or URL
-          </Button>
-        )}
+        <Row label="Site" htmlFor="confluence-site" help="Your Atlassian site. Pages are read and written here, and linked from drafts." error={err('confluence.siteUrl')}>
+          <input id="confluence-site" className={cx(inputBase, 'w-[280px] font-mono text-[13px]')} aria-invalid={!!err('confluence.siteUrl')} value={s.confluence.siteUrl} onBlur={flush} onChange={(e) => type((x) => (x.confluence.siteUrl = e.target.value))} />
+        </Row>
+        <Row label="Space key" htmlFor="confluence-space" help="The space the rules below search." error={err('confluence.spaceKey')}>
+          <input id="confluence-space" className={cx(inputBase, 'w-[120px] font-mono text-[13px]')} aria-invalid={!!err('confluence.spaceKey')} value={s.confluence.spaceKey} onBlur={flush} onChange={(e) => type((x) => (x.confluence.spaceKey = e.target.value))} />
+        </Row>
+      </Group>
+      <Group title="Confluence scope">
+        <p className="m-0 pt-3 text-[13px] leading-normal text-muted">
+          Each draft searches Confluence for the pages these rules find, so a page added to the tree is offered without changing anything here. Before every write, the executor checks again that the page is still in scope (FR-10.6).
+        </p>
+        <PageList
+          label="Root pages"
+          help="Each page and everything below it. Index pages are offered as hubs; entries go to their children."
+          pages={s.confluence.roots}
+          field="roots"
+          set={set}
+          err={err}
+          empty="No root pages."
+        />
+        <Row stacked label="Labels" help="Pages in the space with any of these labels, wherever they sit.">
+          <LabelList labels={s.confluence.labels} onChange={(v) => set((x) => (x.confluence.labels = v))} err={err} />
+        </Row>
+        <PageList
+          label="Excluded pages"
+          help="Never offered or written, with everything below them. Wins over the rules above."
+          pages={s.confluence.exclude}
+          field="exclude"
+          set={set}
+          err={err}
+          empty="Nothing excluded."
+        />
+        <PageList label="Single pages" help="Extra pages on their own, without the pages below them." pages={s.confluence.pages} field="pages" set={set} err={err} empty="No single pages." />
+        <CataloguePreview s={s} />
       </Group>
       {full && (
         <Group title="More actions">
@@ -324,6 +305,200 @@ function WritingSection({ s, view, full, set, type, flush, err, confirm }: Ctx) 
         </Group>
       )}
     </>
+  );
+}
+
+type PageField = 'roots' | 'exclude' | 'pages';
+
+/** A list of Confluence pages with an add form (by ID or URL), for one of the scope rules. */
+function PageList({ label, help, pages, field, set, err, empty }: { label: string; help: string; pages: ConfluencePage[]; field: PageField; set: Ctx['set']; err: Ctx['err']; empty: string }) {
+  const [adding, setAdding] = useState<{ title: string; ref: string; error?: string } | null>(null);
+  const add = () => {
+    if (!adding) return;
+    const m = /pages\/(\d+)/.exec(adding.ref) ?? /^\s*(\d+)\s*$/.exec(adding.ref);
+    if (!adding.title.trim()) return setAdding({ ...adding, error: 'Give the page a title, e.g. DP - Pricing' });
+    if (!m) return setAdding({ ...adding, error: 'Paste a page URL or a numeric page ID' });
+    if (pages.some((p) => p.id === m[1])) return setAdding({ ...adding, error: `That page is already in ${label.toLowerCase()}` });
+    set((x) => x.confluence[field].push({ title: adding.title.trim(), id: m[1] }));
+    setAdding(null);
+  };
+  const singular = label.replace(/s$/, '').toLowerCase();
+  return (
+    <Row stacked label={label} help={help}>
+      <div className="flex flex-col" aria-label={label}>
+        {pages.map((p, i) => (
+          <div key={`${p.id}-${i}`} className="flex flex-wrap items-center gap-3 border-b border-line-soft py-2">
+            <Icon name="confluence" size={15} className="text-muted" />
+            <span className="flex-1 text-sm">{p.title}</span>
+            <span className={cx('font-mono text-xs', err(`confluence.${field}.${i}.id`) ? 'text-red-fg' : 'text-muted')}>{p.id}</span>
+            <IconButton label={`Remove ${p.title} from ${label.toLowerCase()}`} icon="x" size={32} onClick={() => set((x) => x.confluence[field].splice(i, 1))} />
+            {err(`confluence.${field}.${i}.id`) && <span className="w-full text-xs text-red-fg">{err(`confluence.${field}.${i}.id`)}</span>}
+          </div>
+        ))}
+        {pages.length === 0 && <div className="border-b border-line-soft py-2.5 text-[13px] text-muted">{empty}</div>}
+      </div>
+      {adding ? (
+        <form
+          className="flex flex-col gap-3 rounded-lg border border-line p-4"
+          aria-label={`Add ${singular}`}
+          onSubmit={(e) => {
+            e.preventDefault();
+            add();
+          }}
+        >
+          <div className="flex flex-wrap gap-3">
+            <label className="flex flex-[1_1_180px] flex-col gap-1.5 text-[13px] font-medium">
+              Title
+              <input className={inputClass} placeholder="DP - Pricing" value={adding.title} onChange={(e) => setAdding({ ...adding, title: e.target.value, error: undefined })} />
+            </label>
+            <label className="flex flex-[1_1_240px] flex-col gap-1.5 text-[13px] font-medium">
+              Page ID or URL
+              <input className={cx(inputClass, 'font-mono text-[13px]')} placeholder="3031007299 or https://…/pages/3031007299/…" value={adding.ref} onChange={(e) => setAdding({ ...adding, ref: e.target.value, error: undefined })} />
+            </label>
+          </div>
+          {adding.error && <span className="text-xs text-red-fg">{adding.error}</span>}
+          <div className="flex gap-2">
+            <Button type="submit" variant="solid">
+              Add
+            </Button>
+            <Button onClick={() => setAdding(null)}>Cancel</Button>
+          </div>
+        </form>
+      ) : (
+        <Button variant="ghost" className="self-start text-accent" icon="plus" onClick={() => setAdding({ title: '', ref: '' })}>
+          Add {singular} by ID or URL
+        </Button>
+      )}
+    </Row>
+  );
+}
+
+function LabelList({ labels, onChange, err }: { labels: string[]; onChange: (v: string[]) => void; err: Ctx['err'] }) {
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState<string>();
+  const add = () => {
+    const l = draft.trim().toLowerCase();
+    if (!l) return;
+    if (!/^[a-z0-9][a-z0-9_-]*$/.test(l)) return setError('Labels are lower case, without spaces');
+    if (labels.includes(l)) return setError('That label is already listed');
+    onChange([...labels, l]);
+    setDraft('');
+  };
+  const listError = labels.map((_, i) => err(`confluence.labels.${i}`)).find(Boolean);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1.5" aria-label="Labels">
+        {labels.map((l) => (
+          <span key={l} className="inline-flex items-center gap-1 rounded-full bg-bg py-0.5 pl-2.5 pr-1 font-mono text-xs text-ink-2">
+            {l}
+            <IconButton label={`Remove label ${l}`} icon="x" size={24} onClick={() => onChange(labels.filter((x) => x !== l))} />
+          </span>
+        ))}
+        {labels.length === 0 && <span className="text-[13px] text-muted">No labels.</span>}
+      </div>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add();
+        }}
+      >
+        <input
+          aria-label="New label"
+          className={cx(inputBase, 'w-[240px] font-mono text-[13px]')}
+          placeholder="psg-shared-glossary"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(undefined);
+          }}
+        />
+        <Button type="submit" disabled={!draft.trim()}>
+          Add label
+        </Button>
+      </form>
+      {(error ?? listError) && <span className="text-xs text-red-fg">{error ?? listError}</span>}
+    </div>
+  );
+}
+
+/** "Preview catalogue": every page in scope now, grouped by root, as a draft would see them. */
+function CataloguePreview({ s }: { s: Settings }) {
+  const [state, setState] = useState<{ loading: boolean; data?: ConfluenceCatalogueView; error?: string }>({ loading: false });
+  const load = async () => {
+    setState({ loading: true });
+    try {
+      setState({ loading: false, data: await api.getConfluenceCatalogue() });
+    } catch (e) {
+      setState({ loading: false, error: isApiError(e) ? e.message : 'The catalogue could not be read.' });
+    }
+  };
+  const groups = new Map<string, CataloguePageView[]>();
+  for (const p of state.data?.pages ?? []) {
+    const key = p.rootId ?? '';
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  const rootTitle = (id: string) => s.confluence.roots.find((r) => r.id === id)?.title ?? id;
+  const ordered = [...s.confluence.roots.map((r) => r.id).filter((id) => groups.has(id)), ...(groups.has('') ? [''] : [])];
+  return (
+    <Row
+      stacked
+      label="Preview"
+      help={
+        state.data ? (
+          <span>
+            <strong className="font-semibold text-ink">{state.data.pages.length} pages in scope</strong>
+            {state.data.truncated && ' (the search stopped at its limit, so there may be more)'}, read from Confluence now. Settings save as you change them, so this is what the next draft sees.
+          </span>
+        ) : (
+          'Reads the catalogue from Confluence now, as the next draft will.'
+        )
+      }
+    >
+      <Button className="self-start" icon="search" disabled={state.loading} onClick={load}>
+        {state.loading ? (
+          <>
+            <Spinner size={12} /> Reading Confluence…
+          </>
+        ) : state.data ? (
+          'Read again'
+        ) : (
+          'Preview catalogue'
+        )}
+      </Button>
+      {state.error && (
+        <Banner tone="bad" icon="alert">
+          {state.error}
+        </Banner>
+      )}
+      {state.data && (
+        <div className="flex max-h-[420px] flex-col overflow-y-auto rounded-lg border border-line" aria-label="Pages in scope">
+          {ordered.map((key) => (
+            <div key={key || 'other'} className="flex flex-col">
+              <div className="sticky top-0 border-b border-line-soft bg-surface px-3 py-2 text-xs font-semibold text-ink-2">
+                {key ? rootTitle(key) : 'By label or single page'} <span className="font-normal text-muted">· {groups.get(key)!.length}</span>
+              </div>
+              {groups.get(key)!.map((p) => (
+                <a
+                  key={p.id}
+                  href={confluencePageUrl(s.confluence.siteUrl, s.confluence.spaceKey, p.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-line-soft px-3 py-1.5 text-[13px] !text-ink no-underline last:border-b-0 hover:bg-bg"
+                  data-page={p.id}
+                >
+                  <span className="min-w-0 flex-1 truncate" title={p.path}>
+                    {p.path}
+                  </span>
+                  {p.hub && <Chip>index</Chip>}
+                </a>
+              ))}
+            </div>
+          ))}
+          {state.data.pages.length === 0 && <div className="px-3 py-3 text-[13px] text-muted">No pages match. Check the space key, root pages and labels.</div>}
+        </div>
+      )}
+    </Row>
   );
 }
 
@@ -391,7 +566,7 @@ function ModelsSection({ s, full, set, type, flush, err, confirm }: Ctx) {
           [
             ['Triage', 'One batched call per poll. No tools, no MCP.', 'triage', 'triage'],
             ['Vault drafts', 'One call per click, with read-only vault access.', 'draftVault', 'draft-vault'],
-            ['Confluence drafts', 'One call per click, reading allow-listed pages only.', 'draftConfluence', 'draft-confluence'],
+            ['Confluence drafts', 'Two calls per click: pick the page from the live catalogue, then draft. Pages in scope only.', 'draftConfluence', 'draft-confluence'],
           ] as const
         ).map(([purpose, shape, key, prompt]) => (
           <Row

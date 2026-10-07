@@ -140,14 +140,36 @@ Answer with JSON only, no prose, in one of these shapes:
 in the note, copied exactly, and "content" is only the new block.
 `;
 
-export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v2 -->
+export const DEFAULT_PICK_CONFLUENCE_PROMPT = `<!-- prompt: pick-confluence v1 -->
+You choose where a Slack thread belongs in Pole Star Global's Confluence context corpus, for Frank,
+Product Innovation Lead. The corpus is read by the PSPD pipeline and the Product Knowledge Desk.
+Messages written by Frank have the author "me".
+
+The catalogue below lists every page that may be written to, read live from Confluence: its id,
+its path (ancestors, then the page title), its psg-* labels, and "hub" when other pages sit under
+it. Only these pages exist for you. Follow the routing guidance: run the exclusion screen first,
+then decide the business unit and the kind of fact, and find the page the routing table names.
+
+Choose one to three candidate pages, best first. Prefer the specific child page over a hub: a hub
+is an index of its children. Add a second or third candidate only when the right home is genuinely
+unclear, for example between two business units.
+
+Answer with JSON only, no prose, in one of these shapes:
+{"candidates":[{"pageId":"<an id from the catalogue>","why":"<one line>"}]}
+{"noFit":true,"reason":"<one line: why nothing should be filed>","suggestedHome":"<the page or business unit it belongs in, if you know>"}
+Use the second shape when nothing fileable survives the exclusion screen, the thread is not
+context, or the right home is not in the catalogue.
+`;
+
+export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v3 -->
 You draft an entry for one of Pole Star Global's Confluence context pages from a Slack thread, for
 Frank, Product Innovation Lead. The pages are the context corpus that the PSPD pipeline and the
 Product Knowledge Desk read. Messages written by Frank have the author "me".
 
-Follow the routing guidance below: the exclusion screen, the attribution ladder, provenance tiers,
-how to choose the business unit, and where each kind of fact goes. Choose the page and section from
-the allow-listed pages below only, and use each page's outline to avoid repeating what is there.
+The pages below were picked from the live catalogue as the likely homes for this thread, best
+first. Follow the routing guidance below: the exclusion screen, the attribution ladder, provenance
+tiers, how to choose the business unit, and where each kind of fact goes. Choose the page and
+section from these pages only, and use each page's outline to avoid repeating what is there.
 
 Write a short entry: what was decided or learnt, why, and what follows from it, ending with its
 tier, date and a link back to the Slack thread (its permalink). Never include observations about
@@ -157,9 +179,9 @@ Write in British English, in Markdown: paragraphs, bullet lists, **bold**, links
 HTML. Code turns it into the page's format.
 
 Answer with JSON only, no prose, in one of these shapes:
-{"pageId":"<an allow-listed page id>","section":"<a heading from that page's outline, copied exactly>","title":"<a short entry title>","content":"<the entry in Markdown>"}
+{"pageId":"<one of the page ids below>","section":"<a heading from that page's outline, copied exactly>","title":"<a short entry title>","content":"<the entry in Markdown>"}
 {"noFit":true,"reason":"<one line: why nothing should be filed here>","suggestedHome":"<the right page, if you know it>"}
-Use the second shape when the right home is not allow-listed, nothing fileable survives the
+Use the second shape when none of these pages is the right home, nothing fileable survives the
 exclusion screen, or the thread is not context.
 `;
 

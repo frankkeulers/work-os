@@ -1,11 +1,13 @@
 import type { ConfluenceDraft } from '@work-os/shared';
 import type { ConfluenceApi, Page } from './confluenceApi';
+import { inScope, type ConfluenceScope } from './confluenceCatalogue';
 import { entryStorage } from './markdown';
 import { headings, insertIntoSection } from './storage';
 
 // The Confluence executor (FR-10.5, FR-10.6, FR-14.5, NF-5): code, never a model, applies an
-// approved entry. Before every attempt it checks the allow-list as it is now, then re-reads the
-// page:
+// approved entry. Before every attempt it asks Confluence whether the page is in scope as the
+// settings and the tree are now (a live CQL query; a failed query is a failed attempt, never a
+// yes), then re-reads the page:
 //   - the drafted version: write version + 1, marked "Work OS <actionId>";
 //   - version + 1 with that marker: an earlier attempt already wrote it, so it is done;
 //   - anything else: someone edited the page, so re-draft rather than overwrite.
@@ -19,8 +21,8 @@ export type ConfluencePlan =
   | { kind: 'conflict'; message: string }
   | { kind: 'refused'; message: string };
 
-export async function planConfluenceWrite(api: ConfluenceApi, allowedPageIds: string[], actionId: string, d: ConfluenceDraft, signal?: AbortSignal): Promise<ConfluencePlan> {
-  if (!allowedPageIds.includes(d.pageId)) return { kind: 'refused', message: `Page ${d.pageId} (${d.pageTitle}) is not on the Confluence allow-list. The executor refused the write.` };
+export async function planConfluenceWrite(api: ConfluenceApi, scope: ConfluenceScope, actionId: string, d: ConfluenceDraft, signal?: AbortSignal): Promise<ConfluencePlan> {
+  if (!(await inScope(api, scope, d.pageId, signal))) return { kind: 'refused', message: `Page ${d.pageId} (${d.pageTitle}) is not in the Confluence scope. The executor refused the write.` };
   let page: Page;
   try {
     page = await api.getPage(d.pageId, signal);

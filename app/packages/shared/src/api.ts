@@ -133,7 +133,8 @@ export interface ItemView {
   drafts: Record<string, Draft>; // by action id
   progress: Record<string, DraftProgress>; // by action id, while drafting
   results: Record<string, string>; // by action id, outcome message after execution or failure
-  allowListedPageIds: string[];
+  /** Pages excluded from the Confluence scope: a draft for one of them, or below one, will be refused. */
+  excludedPageIds: string[];
   dryRun: boolean;
   dataDir: string;
   /** Where approved actions write, for links to the Confluence page and the Obsidian note. */
@@ -247,6 +248,26 @@ export interface PromptFileView {
 }
 
 /** A source a guidance file was distilled from: a skill or a vault note. */
+/** One page in the live Confluence catalogue (amendment: live catalogue, FR-10.2). */
+export interface CataloguePageView {
+  id: string;
+  title: string;
+  /** Ancestor titles below the space home, then the page's own. */
+  path: string;
+  /** The scope root it sits under, if any. */
+  rootId?: string;
+  labels: string[];
+  /** Other pages sit under it: an index, so entries go to its children. */
+  hub: boolean;
+}
+
+/** Every page in the Confluence scope, read live for Settings' preview. */
+export interface ConfluenceCatalogueView {
+  pages: CataloguePageView[];
+  /** The search stopped at its limit, so there may be more. */
+  truncated: boolean;
+}
+
 export interface PromptSourceView {
   id: string;
   label: string;
@@ -318,6 +339,8 @@ export interface WorkOsApi {
   getChannels(): Promise<string[]>;
   /** People in the Slack workspace, for the VIP search. */
   getPeople(): Promise<PersonOption[]>;
+  /** Every page in the Confluence scope as the saved settings define it, read live. */
+  getConfluenceCatalogue(): Promise<ConfluenceCatalogueView>;
   getUsage(): Promise<UsageView>;
   getEvalReports(): Promise<EvalReport[]>;
   getSettings(): Promise<SettingsView>;

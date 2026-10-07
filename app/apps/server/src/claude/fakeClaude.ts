@@ -7,8 +7,9 @@ import type { QueryFn } from './adapter';
 //   none   anything else
 // Confluence for launch, licensing and pricing talk; the vault for release notes and ideas.
 // Routing joins pieces that name the same PR or ticket (topicsFor).
-// A vault draft request gets a new note under Inbox/, named after the thread. A Confluence draft
-// goes to the first page's first section; the people check flags words about how someone works.
+// A vault draft request gets a new note under Inbox/, named after the thread. The Confluence page
+// picker takes the first page in the catalogue that isn't a hub, and the draft goes to that page's
+// first section; the people check flags words about how someone works.
 
 export interface FakeClaude {
   query: QueryFn;
@@ -78,7 +79,18 @@ export function vaultNoteFor(prompt: string) {
   return { kind: 'new', path: `Inbox/${name}.md`, content: `---\ntags: [slack]\n---\n# ${name}\n\n${first}\n\n[Slack thread](${t.permalink ?? ''})\n` };
 }
 
-/** An entry for the first allow-listed page in a Confluence draft request. */
+/** The first page that isn't a hub, in a Confluence page-picker request. */
+export function confluencePickFor(prompt: string) {
+  const lines = /<confluence-catalogue>\n([\s\S]*?)\n?<\/confluence-catalogue>/.exec(prompt)?.[1] ?? '';
+  const pages = lines
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { id: string; hub?: boolean });
+  const page = pages.find((p) => !p.hub) ?? pages[0];
+  return page ? { candidates: [{ pageId: page.id, why: 'The first page that is not an index.' }] } : { noFit: true, reason: 'The catalogue is empty.' };
+}
+
+/** An entry for the first page offered in a Confluence draft request. */
 export function confluenceEntryFor(prompt: string) {
   const pages = JSON.parse(/<confluence-pages>\n([\s\S]*?)\n<\/confluence-pages>/.exec(prompt)?.[1] ?? '[]') as { pageId: string; sections: { level: number; heading: string }[] }[];
   const t = JSON.parse(/<thread>\n([\s\S]*?)\n<\/thread>/.exec(prompt)?.[1] ?? '{}') as { title?: string; permalink?: string; messages?: { text: string }[] };
@@ -108,7 +120,9 @@ export function fakeClaude(): FakeClaude {
           ? topicsFor(JSON.parse(convs[1]) as Conversation[])
           : prompt.includes('<vault-conventions>')
           ? vaultNoteFor(prompt)
-          : prompt.includes('<confluence-pages>')
+          : prompt.includes('<confluence-catalogue>')
+            ? confluencePickFor(prompt)
+            : prompt.includes('<confluence-pages>')
             ? confluenceEntryFor(prompt)
             : prompt.startsWith('<entry>')
               ? { containsPeopleObservations: PEOPLE_RE.test(prompt), reason: PEOPLE_RE.test(prompt) ? 'Describes how a named person works.' : 'Facts only.' }

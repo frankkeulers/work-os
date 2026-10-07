@@ -34,6 +34,7 @@ import {
 } from '@work-os/shared';
 import type { RuntimeConfig } from '../config/env';
 import type { SettingsState } from '../config/settingsState';
+import type { CatalogueEntry } from '../actions/confluenceCatalogue';
 import type { ActionService } from '../actions/service';
 import type { Evals } from '../pipeline/eval';
 import { readTopic } from '../pipeline/topics';
@@ -85,6 +86,8 @@ export interface ViewDeps {
   people?: (signal?: AbortSignal) => Promise<PersonOption[]>;
   /** Drafts, approvals and the outbox (FR-9.x, FR-14.5). */
   actions?: ActionService;
+  /** The pages in the Confluence scope, read live (FR-10.2). */
+  catalogue?: (signal?: AbortSignal) => Promise<CatalogueEntry[]>;
 }
 
 /**
@@ -300,7 +303,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
     drafts: acts.drafts,
     progress: acts.progress,
     results: acts.results,
-    allowListedPageIds: s.confluence.pages.map((p) => p.id),
+    excludedPageIds: s.confluence.exclude.map((p) => p.id),
     dryRun: d.settings.settings?.dryRun ?? true,
     dataDir: d.config.dataDir,
     targets: { confluenceSite: s.confluence.siteUrl, spaceKey: s.confluence.spaceKey, vaultPath: s.vaultPath },

@@ -303,12 +303,12 @@ describe('prompt files (FR-1.7)', () => {
   const post = (url: string, payload: unknown, headers: Record<string, string> = auth) => server.app.inject({ method: 'POST', url, headers, payload: payload as object });
   const prompts = async () => (await get('/api/prompts')).json<PromptFileView[]>();
 
-  it('lists the seven files, serving the built-in default when a file is missing', async () => {
+  it('lists the eight files, serving the built-in default when a file is missing', async () => {
     const list = await prompts();
-    expect(list.map((p) => p.id)).toEqual(['triage', 'topics', 'draft-vault', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+    expect(list.map((p) => p.id)).toEqual(['triage', 'topics', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
     const routing = list.find((p) => p.id === 'confluence-routing')!;
     expect(routing).toMatchObject({ path: 'config/psg-context-builder.md', edited: false, version: routing.defaultVersion });
-    expect(routing.text).toMatch(/^<!-- prompt: confluence-routing v2 -->/);
+    expect(routing.text).toMatch(/^<!-- prompt: confluence-routing v3 -->/);
   });
 
   it('saves against the version it was edited from, logs it, and refuses a stale version', async () => {

@@ -38,6 +38,7 @@ import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
 import { loadPromptFile, PROMPT_FILES } from './claude/promptFiles';
 import { ConfluenceApi } from './actions/confluenceApi';
+import { buildCatalogue } from './actions/confluenceCatalogue';
 import { noConfluence } from './actions/fakeConfluence';
 import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
@@ -146,7 +147,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     defaults.vaultPath = join(config.dataDir, 'fake-vault');
     await fakes.seedFakeVault(defaults.vaultPath);
     const page = fakes.FAKE_CONFLUENCE_PAGE;
-    defaults.confluence = { siteUrl: page.siteUrl, spaceKey: page.spaceKey, pages: [{ id: page.id, title: page.title }] };
+    defaults.confluence = { siteUrl: page.siteUrl, spaceKey: page.spaceKey, roots: [page.root], labels: [], exclude: [], pages: [] };
   }
   const init = await initDataDir(config.dataDir, { settings: defaults, rules: DEFAULT_RULES, files: PROMPT_FILES.map((f) => ({ file: f.file, text: f.defaultText, previous: f.previousDefaults })) });
   const { logger, flush } = createLogger({ dir: paths(config.dataDir).logs, echo: deps.echoLogs, now, base: { instance: config.instance } });
@@ -276,6 +277,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Actions (M3): drafted when Claude may be called, written by the outbox after approval.
   let publish: (n: Notice) => void = () => undefined; // the SSE hub, once the server exists
   const drafts = new DraftStore(join(config.dataDir, 'drafts'));
+  // Belt and braces, as for Claude: a test without a fake Confluence fails instead of calling one.
+  const confluenceApi = new ConfluenceApi(secrets, () => settings.editable.settings.confluence.siteUrl, deps.confluenceFetch ?? (process.env.VITEST ? noConfluence : fetch));
   const actions = new ActionService({
     store,
     items,
@@ -300,8 +303,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       if (runtime.health.state(dep) !== 'ok') runtime.health.ok(dep);
     },
     online: () => runtime.health.state('network') !== 'offline',
-    // Belt and braces, as for Claude: a test without a fake Confluence fails instead of calling one.
-    confluence: new ConfluenceApi(secrets, () => settings.editable.settings.confluence.siteUrl, deps.confluenceFetch ?? (process.env.VITEST ? noConfluence : fetch)),
+    confluence: confluenceApi,
     prompt: (id) => loadPromptFile(config.dataDir, id),
     // Filing guidance: config/vault-conventions.md and config/psg-context-builder.md, or their defaults.
     routing: async () => (await loadPromptFile(config.dataDir, 'confluence-routing')).text,
@@ -369,6 +371,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // Where the guidance files' sources live (FR-1.7); never the real home folder in tests or fakes.
     promptSources: deps.fakes || process.env.VITEST ? undefined : () => ({ home: homedir(), vault: actions.vaultRoot() }),
     people: (signal) => slackDirectory.listPeople(signal),
+    catalogue: (signal) => buildCatalogue(confluenceApi, settings.editable.settings.confluence, signal),
     channels: async (signal) => [...(await slackDirectory.conversations(signal)).values()].filter((c) => !c.is_im && !c.is_mpim && c.name).map((c) => `#${c.name}`),
     slackTeamId: () => slackDirectory.identityKnown?.team_id,
     dmTitle: (itemId) => {

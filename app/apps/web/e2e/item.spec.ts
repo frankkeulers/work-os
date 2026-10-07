@@ -27,7 +27,7 @@ test('J10 Confluence happy path: approve, write to sandbox, mark done and next',
   await expect(panel(page).getByRole('tab', { name: /Confluence entry/ })).toHaveAttribute('aria-selected', 'true');
   // The safety checks fold into one line; their detail opens on demand.
   await panel(page).getByRole('button', { name: 'Checks passed' }).click();
-  await expect(panel(page).getByText('Page on allow-list')).toBeVisible();
+  await expect(panel(page).getByText('Page in scope')).toBeVisible();
   await expect(panel(page).getByText(/Drafted by sonnet-5\.5/)).toBeVisible();
   const url = page.url();
   await panel(page).getByRole('button', { name: 'Approve and write to sandbox' }).click();

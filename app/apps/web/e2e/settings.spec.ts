@@ -209,3 +209,58 @@ test('VIPs are picked from a search of people', async ({ page }) => {
   await page.reload();
   await expect(page.getByRole('button', { name: 'Remove Meridia PM' })).toBeVisible();
 });
+
+test('J42 the Confluence scope: preview the live catalogue, add a root page, exclude a subtree', async ({ page }) => {
+  await open(page, 'writing');
+  await expect(page.getByRole('heading', { name: 'Confluence scope' })).toBeVisible();
+  await expect(page.getByLabel('Site')).toHaveValue('https://pole-star.atlassian.net');
+  const roots = page.getByLabel('Root pages', { exact: true });
+  await expect(roots).toContainText('Data Products (DP)');
+
+  // The preview reads the catalogue as the next draft would: roots and below, labelled pages.
+  await page.getByRole('button', { name: 'Preview catalogue' }).click();
+  const list = page.getByLabel('Pages in scope');
+  await expect(page.getByText(/^\d+ pages in scope$/)).toBeVisible();
+  await expect(list.locator('[data-page="31000051"]')).toContainText('Shared › Data Assets & Licensing'); // by label
+  await expect(list.locator('[data-page="31000001"]')).toContainText('index');
+  await expect(list.locator('[data-page="31000052"]')).toHaveCount(0);
+  await list.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(APP, 'screenshots/settings-confluence-scope-light.png') });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await page.screenshot({ path: join(APP, 'screenshots/settings-confluence-scope-dark.png'), animations: 'disabled' }); // fast-forward the colour transitions
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+
+  // A new root, by URL: its pages join the catalogue.
+  await page.getByRole('button', { name: 'Add root page by ID or URL' }).click();
+  const form = page.getByRole('form', { name: 'Add root page' });
+  await form.getByLabel('Title').fill('Shared');
+  await form.getByLabel('Page ID or URL').fill('https://pole-star.atlassian.net/wiki/spaces/PRD/pages/31000005/Shared');
+  await form.getByRole('button', { name: 'Add' }).click();
+  await expect(roots).toContainText('31000005');
+  await expect(saved(page)).toBeVisible();
+  await page.getByRole('button', { name: 'Read again' }).click();
+  await expect(list.locator('[data-page="31000052"]')).toBeVisible();
+
+  // Excluding a page takes everything below it out.
+  await page.getByRole('button', { name: 'Add excluded page by ID or URL' }).click();
+  const ex = page.getByRole('form', { name: 'Add excluded page' });
+  await ex.getByLabel('Title').fill('Competitor Profiles');
+  await ex.getByLabel('Page ID or URL').fill('31000004');
+  await ex.getByRole('button', { name: 'Add' }).click();
+  await expect(saved(page)).toBeVisible();
+  await page.getByRole('button', { name: 'Read again' }).click();
+  await expect(list.locator('[data-page="31000041"]')).toHaveCount(0);
+
+  // Labels: a bad one is held back, a good one is saved.
+  await page.getByLabel('New label').fill('Bad Label');
+  await page.getByRole('button', { name: 'Add label' }).click();
+  await expect(page.getByText('Labels are lower case, without spaces')).toBeVisible();
+  await page.getByLabel('New label').fill('psg-shared-glossary');
+  await page.getByRole('button', { name: 'Add label' }).click();
+  await expect(page.getByRole('button', { name: 'Remove label psg-shared-glossary' })).toBeVisible();
+  await expect(page.getByTestId('saved-note')).not.toContainText('Saving');
+  await expect(page.getByTestId('saved-note')).not.toContainText('not saved');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Remove label psg-shared-glossary' })).toBeVisible();
+  await expect(page.getByLabel('Excluded pages', { exact: true })).toContainText('Competitor Profiles');
+});

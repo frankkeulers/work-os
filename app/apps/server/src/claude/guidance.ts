@@ -6,7 +6,7 @@
 // text, first 12 hex) each was read at; Settings › Prompts flags a source that has changed since,
 // and "Mark reviewed" records the new hashes once the guidance has been checked against it.
 
-export const DEFAULT_CONFLUENCE_ROUTING = `<!-- prompt: confluence-routing v2 -->
+export const DEFAULT_CONFLUENCE_ROUTING = `<!-- prompt: confluence-routing v3 -->
 <!-- Distilled 2026-10-07 from the psg-context-builder skill (routing rules only), for one drafting call. -->
 <!-- source: psg-context-builder sha1:93e9fcf27450 -->
 # Filing into the PSG context corpus
@@ -17,11 +17,12 @@ leadership from them. Write for those readers: atomic, self-contained facts that
 page with no memory of the Slack thread.
 
 ## What you can do here
-- You see only the allow-listed pages listed with this request, as outlines. No other page exists
-  for you, and you cannot search.
+- You see the pages in scope, read live from Confluence: first as a catalogue (path, labels, "hub"
+  when other pages sit under it) to pick from, then the chosen pages as outlines. No other page
+  exists for you, and you cannot search.
 - You file one entry under one existing section. You cannot edit text already on the page, add
   labels or create pages.
-- Answer "noFit" instead of forcing an entry when: the right home is not on the allow-list; nothing
+- Answer "noFit" instead of forcing an entry when: the right home is not in the catalogue; nothing
   fileable survives the exclusion screen; or the thread is not context at all (see "Not context").
   Name the right home in suggestedHome when you know it, for example "DP - Pricing".
 
@@ -105,7 +106,9 @@ unverified. A Slack thread is normally B; a Gong call summary is B; trade press 
   hold resources, never contacts.
 - Current Pipeline pages can hold live deal data. Keep anything you add aggregate: no deal values,
   account names or close dates.
-- An index holds no detail. File to the child; if no child fits, answer noFit.
+- An index holds no detail: a business unit's root page, a split product hub, Glossary & Taxonomy
+  and UX Principles. File to the child; if no child fits, answer noFit. The Competitor Profiles
+  hub's scan card is the one exception above.
 
 ## Not context
 - A product idea or feature request → Jira Product Discovery (PSPD), not the corpus: noFit.

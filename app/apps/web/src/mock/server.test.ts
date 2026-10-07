@@ -102,12 +102,29 @@ describe('draft and approval outcomes', () => {
     expect(confs[0].status).toBe('drafting');
   });
 
-  it('refuses a page outside the allow-list at write time (FR-10.6)', async () => {
+  it('refuses a page excluded from the scope at write time (FR-10.6)', async () => {
     const actionId = await draft('f2', 'confluence_entry');
+    const before = await view('f2');
+    expect(before.excludedPageIds).toContain('31000007'); // Product org, above the drafted page
     await settle(server.approveAction(actionId), 3000);
     const a = (await view('f2')).actions.find((x) => x.id === actionId)!;
     expect(a.status).toBe('failed');
     expect(a.failureReason).toBe('allow_list');
+  });
+
+  it('lists the catalogue the scope rules find: roots and below, labels, minus excluded subtrees', async () => {
+    const cat = await settle(server.getConfluenceCatalogue());
+    const ids = cat.pages.map((p) => p.id);
+    expect(ids).toContain('31000001'); // a root, as a hub
+    expect(cat.pages.find((p) => p.id === '31000001')).toMatchObject({ hub: true, rootId: '31000001' });
+    expect(ids).toContain('31000041'); // below the Competitor Profiles root
+    expect(ids).toContain('31000051'); // by label, under no root
+    expect(ids).not.toContain('31000061'); // under the excluded Archive
+    expect(ids).not.toContain('48213377'); // under the excluded Product org
+    expect(ids).not.toContain('31000052'); // no root, no label
+    const settings = (await settle(server.getSettings())).settings;
+    await settle(server.saveSettings({ ...settings, confluence: { ...settings.confluence, exclude: [] } }, (await settle(server.getSettings())).rules));
+    expect((await settle(server.getConfluenceCatalogue())).pages.map((p) => p.id)).toContain('48213377');
   });
 
   it('blocks a Confluence draft that fails the people check (FR-10.4)', async () => {

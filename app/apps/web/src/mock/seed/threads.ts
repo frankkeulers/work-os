@@ -297,7 +297,7 @@ export const SEED_THREADS: ThreadSeed[] = [
       next: { need: 'file', step: 'Draft the Confluence entry', why: 'Planning context for Product org › Roadmap process.' },
     },
     drafts: {
-      // Not on the Confluence allow-list: approving exercises FR-10.6.
+      // Under the excluded Product org pages: the panel warns, and approving exercises FR-10.6.
       confluence: {
         pageId: '48213377',
         pageTitle: 'Product org › Roadmap process',

@@ -121,7 +121,7 @@ export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', '
 export type FailureReason = z.infer<typeof FailureReason>;
 
 /** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
-export const PromptFileId = z.enum(['triage', 'topics', 'draft-vault', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export const PromptFileId = z.enum(['triage', 'topics', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
 export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
@@ -171,6 +171,8 @@ export const ConfluenceDraft = DraftMeta.extend({
   kind: z.literal('confluence'),
   pageId: z.string().min(1),
   pageTitle: z.string().min(1),
+  /** The page's ancestors when it was picked from the catalogue (amendment: live catalogue). */
+  ancestorIds: z.array(z.string()).optional(),
   section: z.string().min(1),
   baseVersion: z.number().int().positive(),
   title: z.string().min(1),
@@ -265,6 +267,31 @@ export const ConfluencePage = z.object({
 });
 export type ConfluencePage = z.infer<typeof ConfluencePage>;
 
+export const ConfluenceLabel = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,254}$/, 'Labels are lower case, without spaces');
+
+/** The PSG context tree in the PRD space, from the psg-context-builder skill (FR-10.2). */
+export const CONFLUENCE_SCOPE_DEFAULTS: { roots: ConfluencePage[]; labels: string[]; exclude: ConfluencePage[] } = {
+  roots: [
+    { id: '3031007299', title: 'Data Products (DP)' },
+    { id: '3031138405', title: 'Safety & Operations (S&O)' },
+    { id: '3031007314', title: 'Maritime Risk & Compliance (MR&C)' },
+    { id: '3031236721', title: 'Global Government Services (GGS)' },
+    { id: '3463184414', title: 'Insurance (INS)' },
+    { id: '3462955031', title: 'Defence (DEF)' },
+    { id: '3463184434', title: 'Organisation-wide (ORG)' },
+    { id: '3032186889', title: 'UX Principles' },
+    { id: '3261104200', title: 'Competitor Profiles' },
+    { id: '3260940434', title: 'Glossary & Taxonomy' },
+    { id: '3187900417', title: 'Company Strategic & Commercial Context' },
+  ],
+  labels: ['psg-shared-competitors', 'psg-shared-strategy', 'psg-shared-glossary', 'psg-shared-data-assets', 'psg-shared-resources', 'psg-shared-ux'],
+  exclude: [
+    { id: '3215425626', title: 'Never-write page (psg-context-builder)' },
+    { id: '3032842242', title: 'Meridia Context (index)' },
+    { id: '3157229580', title: 'Archive' },
+  ],
+};
+
 export const Settings = z.object({
   dataDir: z.string().min(1),
   slack: z.object({
@@ -304,7 +331,13 @@ export const Settings = z.object({
   vaultPath: z.string().min(1, 'Enter the vault path'),
   confluence: z.object({
     siteUrl: z.url({ protocol: /^https$/, error: 'Enter the https:// address of your Confluence site' }), // amendment: links to pages
-    spaceKey: z.string().min(1),
+    spaceKey: z.string().regex(/^[A-Za-z0-9~][A-Za-z0-9_~-]*$/, 'Enter a space key, e.g. PRD'),
+    // Amendment (live catalogue): every page below a root, or with one of the labels, is in
+    // scope, minus the excluded pages and everything under them; `pages` adds single pages.
+    // Missing in older files: filled with the PSG defaults.
+    roots: z.array(ConfluencePage).default(CONFLUENCE_SCOPE_DEFAULTS.roots),
+    labels: z.array(ConfluenceLabel).default(CONFLUENCE_SCOPE_DEFAULTS.labels),
+    exclude: z.array(ConfluencePage).default(CONFLUENCE_SCOPE_DEFAULTS.exclude),
     pages: z.array(ConfluencePage),
   }),
   notifications: z.object({
@@ -336,7 +369,7 @@ export function sourceSchedule(settings: Pick<Settings, 'schedule' | 'sources'>,
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------
 
-export const UsagePurpose = z.enum(['triage', 'draft_vault', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing']); // fetch: connector relay (CL-9); routing: topics
+export const UsagePurpose = z.enum(['triage', 'draft_vault', 'confluence_pick', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing']); // fetch: connector relay (CL-9); routing: topics; confluence_pick: the page picker before a Confluence draft
 export type UsagePurpose = z.infer<typeof UsagePurpose>;
 
 export const UsageRecord = z.object({

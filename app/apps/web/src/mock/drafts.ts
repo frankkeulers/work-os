@@ -1,10 +1,12 @@
 import type { ActionType, Draft, Settings } from '@work-os/shared';
 import type { ItemRec } from './types';
+import { ancestorIdsOf, mockCatalogue } from './seed/catalogue';
 import { PEOPLE } from './seed/people';
 
 // Simulated Sonnet drafts (FR-9.1, FR-10.2). Scripted templates where the seed has them,
 // otherwise a plausible draft built from the thread.
 
+// Under the excluded Product org pages, so the executor refuses it (FR-10.6).
 const OFF_LIST_PAGE = { pageId: '48213377', pageTitle: 'Product org › Roadmap process' };
 
 const slug = (s: string) =>
@@ -40,7 +42,7 @@ export function buildDraft(
   const tokens = stableNumber(rec.item.id + type + opts.attempt, type === 'vault_note' ? 26000 : 15000, type === 'vault_note' ? 36000 : 21000);
   const meta = {
     model: type === 'vault_note' ? settings.models.draftVault : settings.models.draftConfluence,
-    promptVersion: type === 'vault_note' ? 'draft-vault v2' : 'draft-confluence v2',
+    promptVersion: type === 'vault_note' ? 'draft-vault v2' : 'draft-confluence v3',
     durationMs: stableNumber(rec.item.id + opts.attempt, 31000, 52000),
     tokens,
     edited: false,
@@ -73,17 +75,20 @@ export function buildDraft(
 
   const t = rec.drafts?.confluence;
   const hint = rec.decision?.confluence.targetHint ?? rec.script.confluence;
-  const allow = settings.confluence.pages;
+  // The picker: the page the triage hint names if it is in the catalogue, else the first page
+  // that isn't a hub.
   let page = t ? { pageId: t.pageId, pageTitle: t.pageTitle } : undefined;
   if (!page) {
-    const listed = allow.find((p) => p.title === hint);
-    page = listed ? { pageId: listed.id, pageTitle: listed.title } : hint ? { ...OFF_LIST_PAGE, pageTitle: hint } : { pageId: allow[0]?.id ?? '39004512', pageTitle: allow[0]?.title ?? 'Insights APIs › Decisions' };
+    const catalogue = mockCatalogue(settings.confluence);
+    const picked = catalogue.find((p) => p.title === hint) ?? catalogue.find((p) => !p.hub);
+    page = picked ? { pageId: picked.id, pageTitle: picked.title } : { pageId: '39004512', pageTitle: 'Insights APIs › Decisions' };
   }
   if (opts.forceOffList) page = OFF_LIST_PAGE;
   return {
     ...meta,
     kind: 'confluence',
     ...page,
+    ancestorIds: ancestorIdsOf(page.pageId),
     section: t?.section ?? 'Decisions',
     baseVersion: (t?.baseVersion ?? stableNumber(page.pageId, 6, 40)) + (opts.attempt > 1 ? 2 : 0),
     title: t?.title ?? `${longDate(clock)} · ${slug(summary)}`,

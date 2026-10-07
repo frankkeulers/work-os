@@ -1,7 +1,7 @@
-import type { Rule, Settings } from '@work-os/shared';
+import { CONFLUENCE_SCOPE_DEFAULTS, type Rule, type Settings } from '@work-os/shared';
 
-// First-run settings (FR-1.1). Safe by default: dry-run on, an empty Confluence allow-list (so
-// nothing can be written there) and placeholders Frank replaces on the Settings page.
+// First-run settings (FR-1.1). Safe by default: dry-run on, so nothing is written to Confluence or
+// the real vault until Frank turns it off. Confluence points at the PSG context tree in PRD.
 
 export function defaultSettings(dataDir: string): Settings {
   return {
@@ -15,7 +15,7 @@ export function defaultSettings(dataDir: string): Settings {
     baselineCostPerDay: null,
     retentionDays: 30,
     vaultPath: '~/Obsidian',
-    confluence: { siteUrl: 'https://example.atlassian.net', spaceKey: 'CHANGE-ME', pages: [] },
+    confluence: { siteUrl: 'https://pole-star.atlassian.net', spaceKey: 'PRD', ...CONFLUENCE_SCOPE_DEFAULTS, pages: [] },
     notifications: { enabled: true, quietHours: '19:00–08:00' },
     dryRun: true,
     schemaVersion: 1,

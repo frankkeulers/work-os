@@ -3,13 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { memoryKeychain, CONFLUENCE_TOKEN_ACCOUNT } from '../config/keychain';
 import { ConfluenceApi, ConfluenceError } from './confluenceApi';
 import { marker, planConfluenceWrite } from './confluenceExecutor';
-import { FAKE_CONFLUENCE_CREDS, FakeConfluence } from './fakeConfluence';
+import { buildCatalogue, inScope, scopeCql, type ConfluenceScope } from './confluenceCatalogue';
+import { FAKE_CONFLUENCE_CREDS, FakeConfluence, parseCql } from './fakeConfluence';
 import { entryStorage, inline, markdownToStorage } from './markdown';
 import { headings, insertIntoSection, outline, textOf } from './storage';
 
 // Confluence filing against a fake Confluence (FR-10.3, FR-10.5, FR-10.6, FR-14.5). Never the real site.
 
 const PAGE = '<h1>MVI V2</h1><p>Requirements.</p><h2>Decisions</h2><ul><li>Bulk export first.</li></ul><h3>Detail</h3><p>x</p><h2>Open questions</h2><p>Pricing &amp; tiers.</p>';
+const SCOPE: ConfluenceScope = { siteUrl: 'https://fake.atlassian.net', spaceKey: 'MVI', roots: [{ id: '1100000', title: 'MVI Context' }], labels: [], exclude: [], pages: [] };
+const tree = (fc = new FakeConfluence()) => fc.page('1100000', 'MVI Context', '<p>Index</p>').page('1234567', 'MVI V2 PRD', PAGE, 7, { parent: '1100000' });
 const api = (fc: FakeConfluence, creds = FAKE_CONFLUENCE_CREDS) => new ConfluenceApi(memoryKeychain({ [CONFLUENCE_TOKEN_ACCOUNT]: creds }), () => 'https://fake.atlassian.net/', fc.fetch);
 const draft = (over: Partial<ConfluenceDraft> = {}): ConfluenceDraft => ({
   kind: 'confluence',
@@ -53,29 +56,44 @@ describe('markdown to storage', () => {
 
 describe('executor reconciliation (FR-10.5, FR-14.5)', () => {
   it('writes version + 1 when the page is as drafted, then recognises its own write by the marker', async () => {
-    const fc = new FakeConfluence().page('1234567', 'MVI V2 PRD', PAGE, 7);
-    const plan = await planConfluenceWrite(api(fc), ['1234567'], 'act-1', draft());
+    const fc = tree();
+    const plan = await planConfluenceWrite(api(fc), SCOPE, 'act-1', draft());
     if (plan.kind !== 'write') throw new Error(plan.kind);
     expect(plan.version).toBe(8);
     expect(plan.storage).toContain('<h3>Licence wording</h3><p>Agreed with <strong>legal</strong>.</p><ul><li>Use the 2026 wording</li></ul><h2>Open questions</h2>');
     await api(fc).updatePage({ id: '1234567', title: plan.page.title, storage: plan.storage, version: plan.version, message: marker('act-1') });
     // A crash after the save and before action.executed: the retry sees its own marker.
-    expect(await planConfluenceWrite(api(fc), ['1234567'], 'act-1', draft())).toMatchObject({ kind: 'already', version: 8 });
+    expect(await planConfluenceWrite(api(fc), SCOPE, 'act-1', draft())).toMatchObject({ kind: 'already', version: 8 });
     // Another action drafted from v7 now conflicts.
-    expect(await planConfluenceWrite(api(fc), ['1234567'], 'act-2', draft())).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/v7 → v8/) });
+    expect(await planConfluenceWrite(api(fc), SCOPE, 'act-2', draft())).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/v7 → v8/) });
   });
 
-  it('re-drafts when someone else edited the page, refuses pages off the allow-list, and handles a deleted page', async () => {
-    const fc = new FakeConfluence().page('1234567', 'MVI V2 PRD', PAGE, 7);
+  it('re-drafts when someone else edited the page, refuses pages out of scope, and handles a deleted page', async () => {
+    const fc = tree();
     fc.edit('1234567', PAGE.replace('Requirements', 'Updated requirements'));
-    expect(await planConfluenceWrite(api(fc), ['1234567'], 'act-1', draft())).toMatchObject({ kind: 'conflict' });
-    expect(await planConfluenceWrite(api(fc), ['7654321'], 'act-1', draft())).toMatchObject({ kind: 'refused', message: expect.stringMatching(/not on the Confluence allow-list/) });
+    expect(await planConfluenceWrite(api(fc), SCOPE, 'act-1', draft())).toMatchObject({ kind: 'conflict' });
+    const excluded = { ...SCOPE, exclude: [{ id: '1234567', title: 'MVI V2 PRD' }] };
+    expect(await planConfluenceWrite(api(fc), excluded, 'act-1', draft())).toMatchObject({ kind: 'refused', message: expect.stringMatching(/not in the Confluence scope/) });
     expect(fc.calls).toHaveLength(1); // refused before reading anything
-    expect(await planConfluenceWrite(api(fc), ['9999999'], 'act-1', draft({ pageId: '9999999' }))).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/no longer exists/) });
+    // In scope when the search ran, gone by the time the page is read.
+    fc.page('1300000', 'Gone soon', PAGE, 3, { parent: '1100000' });
+    const real = fc.fetch;
+    fc.fetch = async (url, init) => {
+      if (url.includes('/api/v2/pages/1300000')) fc.pages.delete('1300000');
+      return real(url, init);
+    };
+    expect(await planConfluenceWrite(api(fc), SCOPE, 'act-1', draft({ pageId: '1300000' }))).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/no longer exists/) });
+  });
+
+  it('never treats a failed scope check as in scope', async () => {
+    const fc = tree();
+    fc.failNext.push(503);
+    await expect(planConfluenceWrite(api(fc), SCOPE, 'act-1', draft())).rejects.toMatchObject({ failure: { state: 'degraded' } });
+    expect(fc.calls).toHaveLength(0);
   });
 
   it('classifies failures: a 409 race, bad credentials, a dropped connection', async () => {
-    const fc = new FakeConfluence().page('1234567', 'MVI V2 PRD', PAGE, 7);
+    const fc = tree();
     const err = (p: Promise<unknown>) =>
       p.then(
         () => undefined,
@@ -87,5 +105,85 @@ describe('executor reconciliation (FR-10.5, FR-14.5)', () => {
     expect((await err(api(fc, 'no-colon').getPage('1234567')))?.failure).toMatchObject({ state: 'auth_failed', reason: 'token_missing' });
     fc.dropNext = true;
     expect((await err(api(fc).getPage('1234567')))?.failure).toMatchObject({ needsProbe: true });
+  });
+});
+
+describe('the live catalogue (FR-10.2)', () => {
+  // A small PSG-like tree: two BU roots with pages, an index with children, a labelled shared page
+  // elsewhere in the space, an archive and a page nobody asked for.
+  const psg = () =>
+    new FakeConfluence('PRD')
+      .page('10', 'Data Products', '<p>i</p>')
+      .page('11', 'DP - Pricing', PAGE, 1, { parent: '10', labels: ['psg-context', 'psg-bu-dp'] })
+      .page('12', 'Meridia Context', '<p>router</p>', 1, { parent: '10' })
+      .page('13', 'Meridia — Fleets', PAGE, 1, { parent: '12' })
+      .page('14', 'Archive', '<p>a</p>', 1, { parent: '10' })
+      .page('15', 'Old pricing', PAGE, 1, { parent: '14' })
+      .page('20', 'Defence', '<p>i</p>')
+      .page('21', 'DEF - Pricing', PAGE, 1, { parent: '20' })
+      .page('30', 'Shared', '<p>s</p>')
+      .page('31', 'Data Assets & Licensing', PAGE, 1, { parent: '30', labels: ['psg-shared-data-assets'] })
+      .page('40', 'Team offsite notes', PAGE);
+  const scope: ConfluenceScope = {
+    siteUrl: 'https://fake.atlassian.net',
+    spaceKey: 'PRD',
+    roots: [
+      { id: '10', title: 'DP' },
+      { id: '20', title: 'DEF' },
+    ],
+    labels: ['psg-shared-data-assets'],
+    exclude: [{ id: '14', title: 'Archive' }],
+    pages: [],
+  };
+
+  it('writes the CQL the skill uses, and nothing when nothing is configured', () => {
+    expect(scopeCql(scope)).toBe(
+      'space = "PRD" AND type = page AND (id in (10,20) OR ancestor in (10,20) OR label in ("psg-shared-data-assets")) AND id not in (14) AND ancestor not in (14)',
+    );
+    expect(scopeCql({ ...scope, roots: [], labels: [], pages: [{ id: '99', title: 'x' }], exclude: [] })).toBe('space = "PRD" AND type = page AND (id in (99))');
+    expect(scopeCql({ ...scope, roots: [], labels: [] })).toBeNull();
+    expect(scopeCql({ ...scope, spaceKey: 'A"B' })).toMatch(/^space = "A\\"B"/);
+  });
+
+  it('lists every root, page below a root and labelled page, minus the excluded subtree, with paths and hubs', async () => {
+    const cat = await buildCatalogue(api(psg()), scope);
+    expect(cat.map((c) => [c.id, c.path, c.hub, c.rootId ?? '-'])).toEqual([
+      ['10', 'Data Products', true, '10'],
+      ['11', 'Data Products › DP - Pricing', false, '10'],
+      ['12', 'Data Products › Meridia Context', true, '10'],
+      ['13', 'Data Products › Meridia Context › Meridia — Fleets', false, '10'],
+      ['20', 'Defence', true, '20'],
+      ['21', 'Defence › DEF - Pricing', false, '20'],
+      ['31', 'Shared › Data Assets & Licensing', false, '-'],
+    ]);
+    expect(cat.find((c) => c.id === '11')).toMatchObject({ labels: ['psg-bu-dp', 'psg-context'], ancestorIds: ['10'] });
+  });
+
+  it('follows the search’s result pages', async () => {
+    const fc = psg();
+    fc.pageSize = 2;
+    expect(await buildCatalogue(api(fc), scope)).toHaveLength(7);
+  });
+
+  it('checks one page against the scope as it is now', async () => {
+    const fc = psg();
+    expect(await inScope(api(fc), scope, '13')).toBe(true);
+    expect(await inScope(api(fc), scope, '15')).toBe(false); // under the archive
+    expect(await inScope(api(fc), scope, '40')).toBe(false); // not under a root, no label
+    expect(await inScope(api(fc), scope, '1 OR 1=1')).toBe(false); // never reaches CQL
+    expect(await inScope(api(fc), { ...scope, exclude: [{ id: '12', title: 'Meridia Context' }] }, '13')).toBe(false);
+  });
+
+  it('says so when Confluence answers as an anonymous user, instead of reporting an empty catalogue', async () => {
+    const fc = psg();
+    fc.anonymous = true;
+    await expect(buildCatalogue(api(fc), scope)).rejects.toMatchObject({ failure: { state: 'auth_failed', reason: 'token_rejected' } });
+  });
+
+  it('parses the CQL it needs, and rejects what it does not know', () => {
+    const ctx = { id: '5', page: { title: '', version: 1, message: '', storage: '', labels: ['a'] }, space: 'PRD', ancestors: [{ id: '1' }] };
+    expect(parseCql('space = "PRD" AND (label = a OR id = 9) AND NOT ancestor in (2,3)')(ctx)).toBe(true);
+    expect(parseCql('id != 5 OR label not in ("a")')(ctx)).toBe(false);
+    expect(() => parseCql('title ~ "x"')).toThrow(/unknown/);
   });
 });

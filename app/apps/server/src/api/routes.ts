@@ -1,5 +1,7 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, type EarlierView, type PersonOption } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, type ConfluenceCatalogueView, type EarlierView, type PersonOption } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
+import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
+import type { CatalogueEntry } from '../actions/confluenceCatalogue';
 import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writePromptFile, type PromptFile } from '../claude/promptFiles';
 import { SettingsValidationError } from '../config/settingsState';
 import type { Lifecycle } from '../runtime/lifecycle';
@@ -196,6 +198,23 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     for (const p of [...live, ...known, ...vips]) if (!byName.has(p.name.toLowerCase())) byName.set(p.name.toLowerCase(), p);
     const people = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
     return reply.headers(noStore).send(people);
+  });
+
+  // The live Confluence catalogue, for Settings' preview: every page the drafter could pick now.
+  app.get('/api/confluence/catalogue', async (_req, reply) => {
+    if (!d.catalogue) throw new HttpError('unavailable', 'Confluence is not available.');
+    let pages: CatalogueEntry[];
+    try {
+      pages = await d.catalogue();
+    } catch (err) {
+      if (err instanceof ConfluenceError) throw new HttpError('unavailable', `Couldn’t read the catalogue: ${err.message}`);
+      throw err;
+    }
+    const view: ConfluenceCatalogueView = {
+      pages: pages.map(({ id, title, path, rootId, labels, hub }) => ({ id, title, path, ...(rootId && { rootId }), labels, hub })),
+      truncated: pages.length >= SEARCH_MAX,
+    };
+    return reply.headers(noStore).send(view);
   });
 
   app.get('/api/usage', async (_req, reply) => reply.headers(noStore).send(usageView(d)));

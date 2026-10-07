@@ -14,6 +14,7 @@ import { errorToast, toast } from '../store/toasts';
 export const PURPOSE_LABEL: Record<UsagePurpose, string> = {
   triage: 'Triage',
   draft_vault: 'Draft vault note',
+  confluence_pick: 'Pick Confluence page',
   draft_confluence: 'Draft Confluence entry',
   people_check: 'People check',
   eval: 'Eval run',

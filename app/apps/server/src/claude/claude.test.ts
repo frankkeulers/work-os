@@ -307,7 +307,7 @@ describe('prompt and guidance files (FR-1.1, FR-1.7)', () => {
       await mkdir(join(dir, 'config'), { recursive: true });
       await writeFile(join(dir, 'config/psg-context-builder.md'), '  \n');
       const p = await loadPromptFile(dir, 'confluence-routing');
-      expect(p.version).toMatch(/^confluence-routing v2#[0-9a-f]{8}$/);
+      expect(p.version).toMatch(/^confluence-routing v3#[0-9a-f]{8}$/);
       await writeFile(join(dir, 'config/psg-context-builder.md'), '<!-- prompt: confluence-routing v9 -->\nMine');
       expect(await loadPromptFile(dir, 'confluence-routing')).toMatchObject({ text: '<!-- prompt: confluence-routing v9 -->\nMine', version: expect.stringMatching(/^confluence-routing v9#/) });
     } finally {

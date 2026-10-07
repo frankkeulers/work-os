@@ -61,7 +61,9 @@ beforeEach(async () => {
     .post('C01PROD', { ts: P, user: 'U02DANA', text: 'Release notes draft is up' })
     .post('C01PROD', { ts: isoToTs(START - 40 * MIN), thread_ts: P, user: 'U02DANA', text: '@Frank can you check the ETA wording?' })
     .post('D01DANA', { ts: isoToTs(START - 20 * MIN), user: 'U02DANA', text: 'Quick one before standup' });
-  confluence = new FakeConfluence().page('1234567', 'MVI V2 PRD', '<h1>MVI V2</h1><h2>Decisions</h2><ul><li>Bulk export first.</li></ul><h2>Open questions</h2><p>Pricing.</p>', 7);
+  confluence = new FakeConfluence()
+    .page('1100000', 'MVI Context', '<p>Index of the MVI pages.</p>')
+    .page('1234567', 'MVI V2 PRD', '<h1>MVI V2</h1><h2>Decisions</h2><ul><li>Bulk export first.</li></ul><h2>Open questions</h2><p>Pricing.</p>', 7, { parent: '1100000' });
   const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token, [CONFLUENCE_TOKEN_ACCOUNT]: FAKE_CONFLUENCE_CREDS });
   claude = fakeClaude();
   const directory = new SlackDirectory(new SlackApi(secrets, slack.fetch));
@@ -516,7 +518,10 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect((await item()).actions[0]).toMatchObject({ id: ok.body.id, status: 'failed', failureReason: 'draft_missing' });
   });
 
-  it('refuses Confluence with no allow-listed pages, and a vault that is not there', async () => {
+  it('refuses Confluence with nothing in scope, and a vault that is not there', async () => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    const confluence = { ...view.settings.confluence, roots: [], labels: [], pages: [] };
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, confluence }, rules: view.rules })).status).toBe(200);
     expect((await request('confluence_entry')).status).toBe(409);
     const r = await request();
     expect(r.status).toBe(503);
@@ -552,6 +557,10 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
   });
 });
 
+// The fake tree: the MVI Context index, with the MVI V2 PRD below it.
+const PICK = JSON.stringify({ candidates: [{ pageId: '1234567', why: 'The PRD.' }] });
+const SCOPE = { siteUrl: 'https://fake.atlassian.net', spaceKey: 'MVI', roots: [{ id: '1100000', title: 'MVI Context' }], labels: [], exclude: [], pages: [] };
+
 describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
   const PROD = `slack:C01PROD:${P}`;
   const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;
@@ -568,22 +577,30 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
 
   beforeEach(async () => {
     const view = (await call<SettingsView>('GET', '/api/settings')).body;
-    const settings = { ...view.settings, confluence: { siteUrl: 'https://fake.atlassian.net', spaceKey: 'MVI', pages: [{ id: '1234567', title: 'MVI V2 PRD' }] } };
+    const settings = { ...view.settings, confluence: SCOPE };
     expect((await call('PUT', '/api/settings', { settings, rules: view.rules })).status).toBe(200);
   });
 
-  it('drafts from the allow-listed pages, checks for people, and in dry-run only logs the write', async () => {
+  it('picks a page from the live catalogue, drafts against it, checks for people, and in dry-run only logs the write', async () => {
     const r = await request();
     expect(r.status).toBe(201);
     let v = await item();
     expect(v.actions[0]).toMatchObject({ status: 'ready', target: { pageId: '1234567', baseVersion: 7 } });
     expect(v.drafts[r.body.id]).toMatchObject({ kind: 'confluence', pageTitle: 'MVI V2 PRD', section: 'Decisions', baseVersion: 7, title: '#product update' });
-    // The draft call had no tools and saw only the allow-listed page; then a Haiku people check.
-    const [draftCall, check] = claude.calls.slice(-2);
+    expect(v.drafts[r.body.id]).toMatchObject({ ancestorIds: ['1100000'] });
+    // The picker saw the catalogue (the index marked as a hub), the draft call only the picked page;
+    // neither had tools. Then a Haiku people check.
+    const [pickCall, draftCall, check] = claude.calls.slice(-3);
+    expect(confluence.searches[0]).toBe('space = "MVI" AND type = page AND (id in (1100000) OR ancestor in (1100000))');
+    expect(pickCall.options).toMatchObject({ tools: [], mcpServers: {} });
+    expect(pickCall.system).toMatch(/^<!-- prompt: pick-confluence v1 -->/);
+    expect(pickCall.prompt).toContain('<confluence-catalogue>\n{"id":"1100000","path":"MVI Context","hub":true}\n{"id":"1234567","path":"MVI Context › MVI V2 PRD"}\n</confluence-catalogue>');
+    expect(pickCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
     expect(draftCall.options).toMatchObject({ tools: [], mcpServers: {} });
     expect(draftCall.prompt).toContain('"pageId":"1234567"');
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v2 -->/);
-    expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v2 -->/);
+    expect(draftCall.prompt).not.toContain('"pageId":"1100000"');
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v3 -->/);
+    expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
     expect(check.system).toMatch(/^<!-- prompt: people-check v1 -->/);
     expect(check.options.model).toBe('claude-haiku-4-5');
 
@@ -598,17 +615,46 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
   });
 
   it('blocks a draft the people check flags, and refuses items with people observations (FR-10.1, FR-10.4)', async () => {
-    claude.nextTexts.push(JSON.stringify({ pageId: '1234567', section: 'Decisions', title: 'Release', content: 'Dana has been unreliable on reviews.' }));
+    claude.nextTexts.push(PICK, JSON.stringify({ pageId: '1234567', section: 'Decisions', title: 'Release', content: 'Dana has been unreliable on reviews.' }));
     const r = await request();
     expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'people_check', error: expect.stringMatching(/people check found/) });
   });
 
-  it('fails as no_fit, without a people check, when the model finds no allow-listed home', async () => {
+  it('fails as no_fit, without reading pages or a people check, when the picker finds no home in the catalogue', async () => {
     const before = claude.calls.length;
-    claude.nextTexts.push(JSON.stringify({ noFit: true, reason: 'The thread is about DP pricing, which is not on the allow-list.', suggestedHome: 'DP - Pricing' }));
+    claude.nextTexts.push(JSON.stringify({ noFit: true, reason: 'The thread is about DP pricing, which is not in the catalogue.', suggestedHome: 'DP - Pricing' }));
     const r = await request();
-    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'no_fit', error: expect.stringMatching(/^The thread is about DP pricing, which is not on the allow-list. Suggested home: DP - Pricing./) });
-    expect(claude.calls.length - before).toBe(1); // the draft call only
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'no_fit', error: expect.stringMatching(/^The thread is about DP pricing, which is not in the catalogue. Suggested home: DP - Pricing./) });
+    expect(claude.calls.length - before).toBe(1); // the pick only
+    expect(confluence.calls).toHaveLength(0); // no page read
+  });
+
+  it('fails as no_fit when the draft call declines the picked pages', async () => {
+    claude.nextTexts.push(PICK, JSON.stringify({ noFit: true, reason: 'The PRD is about one build, not context.' }));
+    const r = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'no_fit', error: expect.stringMatching(/^The PRD is about one build/) });
+  });
+
+  it('drops picks outside the catalogue, and fails as allow_list when none is left', async () => {
+    claude.nextTexts.push(JSON.stringify({ candidates: [{ pageId: '7654321' }] }));
+    const r = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'allow_list', error: expect.stringMatching(/not in the Confluence scope/) });
+    expect(confluence.calls).toHaveLength(0);
+  });
+
+  it('offers a page added to the tree since the last draft, with no settings change', async () => {
+    confluence.page('1300000', 'MVI V3 PRD', '<h1>MVI V3</h1><h2>Scope</h2><p>Next.</p>', 2, { parent: '1100000' });
+    claude.nextTexts.push(JSON.stringify({ candidates: [{ pageId: '1300000' }] }));
+    const r = await request();
+    expect((await item()).drafts[r.body.id]).toMatchObject({ pageId: '1300000', pageTitle: 'MVI V3 PRD', section: 'Scope', baseVersion: 2 });
+  });
+
+  it('refuses a draft when nothing is in scope, before any call', async () => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    await call('PUT', '/api/settings', { settings: { ...view.settings, confluence: { ...SCOPE, roots: [] } }, rules: view.rules });
+    const r = await request();
+    expect(r.status).toBe(409);
+    expect(r.body.message).toMatch(/Nothing is in the Confluence scope/);
   });
 
   it('re-drafts instead of writing when the page was edited after drafting', async () => {
@@ -620,13 +666,26 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(v.actions[0]).toMatchObject({ supersedes: r.body.id, status: 'ready', target: { baseVersion: 8 } });
   });
 
-  it('refuses at write time a page taken off the allow-list after drafting (FR-10.6)', async () => {
-    const r = await request();
+  it('refuses at write time a page excluded after drafting, or no longer under a root (FR-10.6)', async () => {
     const view = (await call<SettingsView>('GET', '/api/settings')).body;
-    await call('PUT', '/api/settings', { settings: { ...view.settings, confluence: { ...view.settings.confluence, pages: [{ id: '7654321', title: 'Other' }] } }, rules: view.rules });
-    await approve(r.body.id);
-    expect((await item()).actions[0]).toMatchObject({ status: 'failed', failureReason: 'allow_list' });
+    for (const confluenceNow of [
+      { ...SCOPE, exclude: [{ id: '1100000', title: 'MVI Context' }] }, // excluded with everything under it
+      { ...SCOPE, roots: [{ id: '1999999', title: 'Elsewhere' }] },
+    ]) {
+      await call('PUT', '/api/settings', { settings: { ...view.settings, confluence: SCOPE }, rules: view.rules });
+      const r = await request();
+      await call('PUT', '/api/settings', { settings: { ...view.settings, confluence: confluenceNow }, rules: view.rules });
+      await approve(r.body.id);
+      expect((await item()).actions.find((a) => a.id === r.body.id)).toMatchObject({ status: 'failed', failureReason: 'allow_list', error: expect.stringMatching(/not in the Confluence scope/) });
+      await call('POST', `/api/actions/${r.body.id}/discard`);
+    }
     expect(confluence.calls.filter((c) => c.method === 'PUT')).toHaveLength(0);
+  });
+
+  it('shows the excluded pages in the item view, for the panel’s warning', async () => {
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    await call('PUT', '/api/settings', { settings: { ...view.settings, confluence: { ...SCOPE, exclude: [{ id: '1300000', title: 'X' }] } }, rules: view.rules });
+    expect((await item()).excludedPageIds).toEqual(['1300000']);
   });
 
   it('waits for Confluence when it fails to draft, and drafts once it is back', async () => {
@@ -666,7 +725,7 @@ describe('Confluence writes outside dry-run (FR-10.5, FR-14.5, NF-5)', () => {
   });
   beforeEach(async () => {
     const view = (await call<SettingsView>('GET', '/api/settings')).body;
-    const settings = { ...view.settings, dryRun: false, confluence: { siteUrl: 'https://fake.atlassian.net', spaceKey: 'MVI', pages: [{ id: '1234567', title: 'MVI V2 PRD' }] } };
+    const settings = { ...view.settings, dryRun: false, confluence: SCOPE };
     expect((await call('PUT', '/api/settings', { settings, rules: view.rules })).status).toBe(200);
   });
 
@@ -701,7 +760,7 @@ describe('Confluence writes outside dry-run (FR-10.5, FR-14.5, NF-5)', () => {
 
   it('re-reads after losing a save race (409) and writes on the next attempt', async () => {
     const id = await drafted();
-    confluence.failNext.push(0, 409); // the GET passes, the PUT loses
+    confluence.failNext.push(0, 0, 409); // the scope search and the GET pass, the PUT loses
     await approve(id);
     expect((await item()).actions[0].status).toBe('executing');
     for (let i = 0; i < 12; i++) await tick();

@@ -3,8 +3,9 @@ import { classifyError, classifyResponse, type Failure } from '../net/classify';
 import { DEADLINES, deadline } from '../net/http';
 import type { FetchFn } from '../net/probe';
 
-// Confluence Cloud REST API v2, the two calls filing needs (FR-10.5, P0-8): read a page with its
-// storage body and version, and update it with the next version number. No retries of its own: a
+// Confluence Cloud REST API, the calls filing needs (FR-10.2, FR-10.5, P0-8): a CQL search for the
+// catalogue (v1, the only API with CQL), read a page with its storage body and version, and update
+// it with the next version number (v2). No retries of its own: a
 // failure is classified, health hears about it, and the outbox decides when to try again. The
 // credentials are "email:token" under the Keychain account `confluence-api-token`, read once and
 // kept in memory; they are never written to settings, logs or prompts.
@@ -37,6 +38,23 @@ export class ConfluenceError extends Error {
 
 type PageJson = { id?: string; title?: string; version?: { number?: number; message?: string }; body?: { storage?: { value?: string } } };
 
+/** A page as a CQL search finds it: its ancestors (root first) and labels. */
+export interface FoundPage {
+  id: string;
+  title: string;
+  ancestors: { id: string; title: string }[];
+  labels: string[];
+}
+
+type SearchJson = {
+  results?: { id?: string; type?: string; title?: string; ancestors?: { id?: string; title?: string }[]; metadata?: { labels?: { results?: { name?: string }[] } } }[];
+  _links?: { next?: string };
+};
+
+/** At most this many pages from one search; the PSG tree has about 150. */
+export const SEARCH_MAX = 1000;
+const SEARCH_PAGE = 100;
+
 export class ConfluenceApi {
   private auth?: string;
 
@@ -60,11 +78,12 @@ export class ConfluenceApi {
     return (this.auth = `Basic ${Buffer.from(creds).toString('base64')}`);
   }
 
+  /** `path` below /wiki, e.g. `api/v2/pages/1`, or a search's `_links.next` (which may repeat /wiki). */
   private url(path: string) {
-    return `${this.siteUrl().replace(/\/+$/, '')}/wiki/api/v2/${path}`;
+    return `${this.siteUrl().replace(/\/+$/, '')}/wiki/${path.replace(/^\/+/, '').replace(/^wiki\//, '')}`;
   }
 
-  private async call(method: 'GET' | 'PUT', path: string, timeoutMs: number, signal?: AbortSignal, body?: unknown): Promise<PageJson> {
+  private async call<T = PageJson>(method: 'GET' | 'PUT', path: string, timeoutMs: number, signal?: AbortSignal, body?: unknown): Promise<T> {
     const auth = await this.authHeader();
     let res: Response;
     try {
@@ -91,7 +110,7 @@ export class ConfluenceApi {
       throw new ConfluenceError(http, `Confluence ${method}: ${http.reason}`, res.status);
     }
     try {
-      return (await res.json()) as PageJson;
+      return (await res.json()) as T;
     } catch (err) {
       const f = classifyError(err);
       throw new ConfluenceError(f.reason === 'error' ? { state: 'degraded', reason: 'bad_json' } : f, `Confluence ${method}: unreadable answer`);
@@ -105,12 +124,12 @@ export class ConfluenceApi {
   }
 
   async getPage(id: string, signal?: AbortSignal): Promise<Page> {
-    return this.page(await this.call('GET', `pages/${encodeURIComponent(id)}?body-format=storage`, DEADLINES.confluenceGet, signal), id);
+    return this.page(await this.call('GET', `api/v2/pages/${encodeURIComponent(id)}?body-format=storage`, DEADLINES.confluenceGet, signal), id);
   }
 
   /** Saves `storage` as version `version` (the current one plus one). A 409 means it lost a race. */
   async updatePage(p: { id: string; title: string; storage: string; version: number; message: string }, signal?: AbortSignal): Promise<{ version: number }> {
-    const j = await this.call('PUT', `pages/${encodeURIComponent(p.id)}`, DEADLINES.confluencePut, signal, {
+    const j = await this.call('PUT', `api/v2/pages/${encodeURIComponent(p.id)}`, DEADLINES.confluencePut, signal, {
       id: p.id,
       status: 'current',
       title: p.title,
@@ -118,5 +137,38 @@ export class ConfluenceApi {
       version: { number: p.version, message: p.message },
     });
     return { version: j.version?.number ?? p.version };
+  }
+
+  /**
+   * Every page a CQL query finds, with ancestors and labels, following the result pages. Confluence
+   * answers a token it doesn't accept as an anonymous user with no results rather than a 401, so an
+   * empty answer is checked against the current user before it is believed.
+   */
+  async search(cql: string, signal?: AbortSignal): Promise<FoundPage[]> {
+    const out: FoundPage[] = [];
+    let path: string | undefined = `rest/api/content/search?${new URLSearchParams({ cql, expand: 'ancestors,metadata.labels', limit: String(SEARCH_PAGE) })}`;
+    while (path && out.length < SEARCH_MAX) {
+      const j: SearchJson = await this.call<SearchJson>('GET', path, DEADLINES.confluenceGet, signal);
+      for (const r of j.results ?? []) {
+        if (!r.id || (r.type && r.type !== 'page')) continue;
+        out.push({
+          id: r.id,
+          title: r.title ?? r.id,
+          ancestors: (r.ancestors ?? []).filter((a) => a.id).map((a) => ({ id: a.id!, title: a.title ?? a.id! })),
+          labels: (r.metadata?.labels?.results ?? []).map((l) => l.name ?? '').filter(Boolean),
+        });
+      }
+      path = j._links?.next;
+    }
+    if (!out.length) await this.checkSignedIn(signal);
+    return out;
+  }
+
+  private async checkSignedIn(signal?: AbortSignal) {
+    const me = await this.call<{ type?: string }>('GET', 'rest/api/user/current', DEADLINES.confluenceGet, signal);
+    if (me.type === 'anonymous') {
+      this.auth = undefined;
+      throw new ConfluenceError({ state: 'auth_failed', reason: 'token_rejected' }, `Confluence did not accept the credentials in the Keychain (${CONFLUENCE_TOKEN_ACCOUNT}); it answered as an anonymous user. Create a classic API token and store it as email:token.`);
+    }
   }
 }

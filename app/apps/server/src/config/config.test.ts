@@ -57,6 +57,24 @@ describe('data directory and settings', () => {
     expect(load.status).toBe('ok');
   });
 
+  it('fills the Confluence scope with the PSG defaults in a settings file from before it existed, and keeps an emptied one', async () => {
+    await init();
+    const s = JSON.parse(await readFile(paths(dir).settings, 'utf8'));
+    s.confluence = { siteUrl: 'https://pole-star.atlassian.net', spaceKey: 'PRD', pages: [{ id: '3261890575', title: 'MR&C - Pricing' }] };
+    await writeFile(paths(dir).settings, JSON.stringify(s));
+    const load = await loadSettings(dir);
+    if (load.status !== 'ok') throw new Error(load.status);
+    expect(load.settings.confluence.roots.map((r) => r.id)).toContain('3031007299'); // Data Products
+    expect(load.settings.confluence.roots).toHaveLength(11);
+    expect(load.settings.confluence.labels).toContain('psg-shared-competitors');
+    expect(load.settings.confluence.exclude.map((r) => r.id)).toEqual(['3215425626', '3032842242', '3157229580']);
+    expect(load.settings.confluence.pages).toEqual([{ id: '3261890575', title: 'MR&C - Pricing' }]);
+    s.confluence = { ...s.confluence, roots: [], labels: [], exclude: [] };
+    await writeFile(paths(dir).settings, JSON.stringify(s));
+    const emptied = await loadSettings(dir);
+    expect(emptied.status === 'ok' && emptied.settings.confluence).toMatchObject({ roots: [], labels: [], exclude: [] });
+  });
+
   it('never overwrites existing config', async () => {
     await init();
     await writeFile(paths(dir).settings, '{"edited": true}');

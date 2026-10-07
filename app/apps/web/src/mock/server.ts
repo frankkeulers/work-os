@@ -32,6 +32,7 @@ import {
   topicPiecesView,
   unsnooze,
   type Action,
+  type ConfluenceCatalogueView,
   type ActionType,
   type BudgetState,
   type CorrectionInput,
@@ -65,6 +66,7 @@ import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
+import { inMockScope, mockCatalogue } from './seed/catalogue';
 import { ME } from './me';
 import { FRANK } from './seed/people';
 import { SEED_CLOCK, STATE_VERSION, buildState, type Preset } from './seed';
@@ -80,7 +82,7 @@ const STAGE_MS = 1500;
 
 const DRAFT_STAGES: Record<ActionType, string[]> = {
   vault_note: ['Reading the thread', 'Finding related notes in the vault', 'Drafting the note'],
-  confluence_entry: ['Reading the thread', 'Finding the page and section', 'Drafting the entry', 'People check (Haiku)'],
+  confluence_entry: ['Reading the thread', 'Reading the Confluence catalogue', 'Picking the page', 'Drafting the entry', 'People check (Haiku)'],
 };
 
 const ACTIVE: Action['status'][] = ['drafting', 'ready', 'approved', 'executing'];
@@ -551,6 +553,11 @@ export class MockServer implements WorkOsApi, MockControls {
     return [...new Set([...names, ...this.s.settings.slack.vips])].sort((a, b) => a.localeCompare(b)).map((name) => ({ name }));
   }
 
+  async getConfluenceCatalogue(): Promise<ConfluenceCatalogueView> {
+    await this.gate(QUERY_MS * 10); // a few CQL pages on the real site
+    return { pages: mockCatalogue(this.s.settings.confluence), truncated: false };
+  }
+
   async getItem(requested: string): Promise<ItemView> {
     await this.gate(QUERY_MS);
     // A part opens as its topic, with every piece's messages.
@@ -580,7 +587,7 @@ export class MockServer implements WorkOsApi, MockControls {
       drafts: structuredClone(drafts),
       progress: { ...progress },
       results,
-      allowListedPageIds: this.s.settings.confluence.pages.map((p) => p.id),
+      excludedPageIds: this.s.settings.confluence.exclude.map((p) => p.id),
       dryRun: this.s.settings.dryRun,
       dataDir: this.s.settings.dataDir,
       targets: { confluenceSite: this.s.settings.confluence.siteUrl, spaceKey: this.s.settings.confluence.spaceKey, vaultPath: this.s.settings.vaultPath },
@@ -889,8 +896,8 @@ export class MockServer implements WorkOsApi, MockControls {
     const stages = DRAFT_STAGES[action.type];
     this.progress[action.id] = { stages, stage: 0, startedAt: Date.now() };
     const timers: ReturnType<typeof setTimeout>[] = [];
-    // People check fails on its own stage, so the failure lands where it happens.
-    const lastStage = outcome === 'people_check' || outcome === 'no_fit' ? stages.length - 1 : stages.length;
+    // The people check and the picker fail on their own stages, so the failure lands where it happens.
+    const lastStage = outcome === 'people_check' ? stages.length - 1 : outcome === 'no_fit' ? stages.indexOf('Picking the page') : stages.length;
     for (let i = 1; i < stages.length; i++) {
       timers.push(
         setTimeout(() => {
@@ -928,13 +935,14 @@ export class MockServer implements WorkOsApi, MockControls {
       this.s.results[actionId] = action.error;
       this.event('action.failed', { reason: 'model_error' }, { itemId: rec.item.id, actionId });
     } else if (outcome === 'no_fit') {
-      this.recordUsage(purpose, model, 18000, 120, [rec.item.id], 'draft-confluence v2', 21000);
-      action.error = 'The thread is about AIS pricing for Data Products, and DP - Pricing is not on the allow-list. Suggested home: DP - Pricing.';
+      this.recordUsage('confluence_pick', model, 9000, 90, [rec.item.id], 'pick-confluence v1', 9000);
+      action.error = 'The thread is about AIS pricing for Defence, and there is no DEF - Pricing page in the catalogue. Suggested home: DEF - Pricing.';
       this.s.results[actionId] = action.error;
       this.event('action.failed', { reason: 'no_fit' }, { itemId: rec.item.id, actionId });
     } else {
       const attempt = this.actionsFor(rec.item.id).filter((a) => a.type === action.type).length;
       const draft = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
+      if (action.type === 'confluence_entry') this.recordUsage('confluence_pick', model, 9000, 90, [rec.item.id], 'pick-confluence v1', 9000);
       this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
       if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-4.5', 2100, 60, [rec.item.id], 'people-check v1', 1900);
       if (outcome === 'people_check') {
@@ -1040,8 +1048,8 @@ export class MockServer implements WorkOsApi, MockControls {
       return;
     }
 
-    if (d.kind === 'confluence' && !this.s.settings.confluence.pages.some((p) => p.id === d.pageId)) {
-      a.error = `Page ${d.pageId} (${d.pageTitle}) is not on the Confluence allow-list. The executor refused the write.`;
+    if (d.kind === 'confluence' && !inMockScope(this.s.settings.confluence, d.pageId)) {
+      a.error = `Page ${d.pageId} (${d.pageTitle}) is not in the Confluence scope. The executor refused the write.`;
       this.s.results[actionId] = a.error;
       this.event('action.failed', { reason: 'allow_list', pageId: d.pageId }, { itemId: a.itemId, actionId });
       this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });

@@ -124,7 +124,7 @@ test('inbox, poll, correction, done, a restart, a vault note, a Confluence entry
   await expect(action.getByRole('status')).toContainText('/sandbox/vault/Inbox/Matt M.md');
   await page.screenshot({ path: join(APP, 'screenshots/server-vault-light.png') });
 
-  // A Confluence entry (Story 10.1): drafted from the fake allow-listed page, people-checked,
+  // A Confluence entry (Story 10.1): picked from the fake catalogue, drafted, people-checked,
   // approved; dry-run only logs the write and saves the would-be page in the sandbox.
   await action.getByRole('tab', { name: /Confluence entry/ }).click();
   await action.getByRole('button', { name: 'Draft Confluence entry' }).click();
@@ -166,7 +166,8 @@ test('the prompt and guidance files are listed from the data directory, and a sa
   await page.goto('/settings/prompts');
   await expect(page.getByRole('heading', { name: 'Prompts', level: 2 })).toBeVisible();
   // Written on first run from the built-in defaults.
-  await expect(page.locator('[data-prompt="confluence-routing"]')).toContainText('confluence-routing v2#');
+  await expect(page.locator('[data-prompt="confluence-routing"]')).toContainText('confluence-routing v3#');
+  await expect(page.locator('[data-prompt="pick-confluence"]')).toContainText('pick-confluence v1#');
   await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
   await page.screenshot({ path: join(APP, 'screenshots/server-prompts-light.png') });
 

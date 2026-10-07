@@ -1,4 +1,5 @@
 import type { Rule, Settings } from '@work-os/shared';
+import { MOCK_SCOPE } from './catalogue';
 
 // Matches the Settings & rules artboard. Dry-run is on by default in development (FR-1.6).
 export const SEED_SETTINGS: Settings = {
@@ -21,11 +22,7 @@ export const SEED_SETTINGS: Settings = {
   confluence: {
     siteUrl: 'https://pole-star.atlassian.net',
     spaceKey: 'PRD',
-    pages: [
-      { title: 'Insights APIs › Decisions', id: '39004512' },
-      { title: 'Meridia › Context: Decisions', id: '40217733' },
-      { title: 'Pole Star Labs › Graduation gate', id: '41120987' },
-    ],
+    ...MOCK_SCOPE,
   },
   notifications: { enabled: true, quietHours: '19:00–08:00' },
   dryRun: true,

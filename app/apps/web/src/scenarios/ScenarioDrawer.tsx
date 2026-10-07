@@ -52,7 +52,7 @@ const OUTCOMES: [DraftOutcome, string][] = [
   ['vault_conflict', 'Vault hash conflict'],
   ['confluence_conflict', 'Confluence version conflict'],
   ['people_check', 'People check blocks'],
-  ['allow_list', 'Page off allow-list'],
+  ['allow_list', 'Page out of scope'],
   ['no_fit', 'No page fits'],
   ['model_error', 'Model error'],
 ];

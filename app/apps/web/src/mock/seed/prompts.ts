@@ -1,6 +1,6 @@
 import type { PromptFileId, PromptSourceView } from '@work-os/shared';
 
-// The seven prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
+// The eight prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
 // Shortened stand-ins for the server's built-in defaults: the shape matters here, not the wording.
 
 export interface SeedPromptFile {
@@ -63,15 +63,29 @@ conventions below. Prefer adding under a heading of the note that owns the topic
 Answer with JSON only, no prose.`,
   },
   {
+    id: 'pick-confluence',
+    label: 'Pick Confluence page',
+    description: 'Picks up to three candidate pages from the live Confluence catalogue, or declines when nothing fits.',
+    usedBy: 'Draft Confluence entry',
+    path: 'config/prompts/pick-confluence.md',
+    defaultText: `<!-- prompt: pick-confluence v1 -->
+You choose where a Slack thread belongs in Pole Star Global's Confluence context corpus.
+
+The catalogue below lists every page that may be written to, read live from Confluence. Follow the
+routing guidance, prefer a child page over a hub, and choose one to three candidates.
+
+Answer with JSON only, no prose.`,
+  },
+  {
     id: 'draft-confluence',
     label: 'Draft Confluence entry',
-    description: 'Drafts an entry for an allow-listed Confluence page, or declines when nothing fits.',
+    description: 'Drafts an entry for one of the picked Confluence pages, or declines when none fits.',
     usedBy: 'Draft Confluence entry',
     path: 'config/prompts/draft-confluence.md',
-    defaultText: `<!-- prompt: draft-confluence v2 -->
+    defaultText: `<!-- prompt: draft-confluence v3 -->
 You draft an entry for one of Pole Star Global's Confluence context pages from a Slack thread.
 
-Follow the routing guidance below. Choose the page and section from the allow-listed pages only.
+Follow the routing guidance below. Choose the page and section from the picked pages only.
 
 Answer with JSON only, no prose.`,
   },
@@ -119,7 +133,7 @@ Decisions and their reasons, facts that stay true beyond this week. No action it
     path: 'config/psg-context-builder.md',
     // Changed since the guidance was written, so the Prompts section shows its review flow.
     sources: [{ id: 'psg-context-builder', label: 'psg-context-builder skill', path: '~/.claude/skills/psg-context-builder/SKILL.md', state: 'changed' }],
-    defaultText: `<!-- prompt: confluence-routing v2 -->
+    defaultText: `<!-- prompt: confluence-routing v3 -->
 <!-- source: psg-context-builder sha1:93e9fcf27450 -->
 # Filing into the PSG context corpus
 

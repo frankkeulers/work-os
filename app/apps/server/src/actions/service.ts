@@ -18,6 +18,7 @@ import type { Store } from '../store/store';
 import { writeFileAtomic } from '../store/atomic';
 import { crashPoint } from '../runtime/crash';
 import { ConfluenceError, type ConfluenceApi } from './confluenceApi';
+import { scopeCql } from './confluenceCatalogue';
 import { draftConfluenceEntry } from './confluenceDrafter';
 import { marker, planConfluenceWrite } from './confluenceExecutor';
 import { readTopic } from '../pipeline/topics';
@@ -38,7 +39,7 @@ import { NoteExistsError, planVaultWrite, writeVaultFile, type VaultTargets } fr
 const ACTIVE: ActionState['status'][] = ['drafting', 'ready', 'approved', 'executing'];
 export const DRAFT_STAGES: Record<ActionType, string[]> = {
   vault_note: ['Reading the thread', 'Finding related notes in the vault', 'Drafting the note'],
-  confluence_entry: ['Reading the thread', 'Finding the page and section', 'Drafting the entry', 'People check (Haiku)'],
+  confluence_entry: ['Reading the thread', 'Reading the Confluence catalogue', 'Picking the page', 'Drafting the entry', 'People check (Haiku)'],
 };
 export const MAX_ATTEMPTS = 5; // transient write failures before `unreachable` (FR-14.5)
 const RETRY_BASE_MS = 30_000;
@@ -68,7 +69,7 @@ export interface ActionDeps {
   reportOk: (dep: DepId) => Promise<void> | void;
   online: () => boolean;
   confluence: ConfluenceApi;
-  prompt: (id: 'draft-vault' | 'draft-confluence' | 'people-check') => Promise<Prompt>;
+  prompt: (id: 'draft-vault' | 'pick-confluence' | 'draft-confluence' | 'people-check') => Promise<Prompt>;
   /** The vault conventions for vault drafts. */
   conventions: () => Promise<string>;
   /** The Confluence routing guidance (from psg-context-builder) for Confluence drafts. */
@@ -129,7 +130,7 @@ export class ActionService {
     if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     if (type === 'confluence_entry') {
       if (it.decision?.containsPeopleObservations) throw new HttpError('forbidden', 'This thread contains observations about people, so it can only go to the vault (FR-10.1).');
-      if (!this.d.settings().confluence.pages.length) throw new HttpError('conflict', 'No Confluence pages are on the allow-list yet. Add them in Settings.');
+      if (!scopeCql(this.d.settings().confluence)) throw new HttpError('conflict', 'Nothing is in the Confluence scope yet. Add root pages, labels or single pages in Settings › Write targets.');
     }
     if (this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
     if (type === 'vault_note' && !(await vaultExists(this.vaultRoot()))) throw new HttpError('unavailable', `The vault folder ${this.vaultRoot()} doesn't exist. Set the vault path in Settings.`);
@@ -380,6 +381,7 @@ export class ActionService {
                   claude: this.d.claude,
                   api: this.d.confluence,
                   settings: this.d.settings(),
+                  pickPrompt: await this.d.prompt('pick-confluence'),
                   prompt: await this.d.prompt('draft-confluence'),
                   peoplePrompt: await this.d.prompt('people-check'),
                   routing: await this.d.routing(),
@@ -479,13 +481,7 @@ export class ActionService {
     const dryRun = this.d.dryRun();
     const signal = this.d.signal();
     try {
-      const plan = await planConfluenceWrite(
-        this.d.confluence,
-        this.d.settings().confluence.pages.map((p) => p.id),
-        a.id,
-        d,
-        signal,
-      );
+      const plan = await planConfluenceWrite(this.d.confluence, this.d.settings().confluence, a.id, d, signal);
       if (plan.kind !== 'refused') await this.d.reportOk('confluence'); // the page was read
       if (plan.kind === 'refused') return this.fail(a, 'allow_list', plan.message);
       if (plan.kind === 'conflict') return this.conflict(a, plan.message);

@@ -137,7 +137,7 @@ function TargetLink({ href, title, children }: { href: string; title: string; ch
   );
 }
 
-function TargetLine({ d, allowListed, links }: { d: Draft; allowListed: boolean; links: TargetLinks }) {
+function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: TargetLinks }) {
   if (d.kind === 'confluence')
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
@@ -148,7 +148,7 @@ function TargetLine({ d, allowListed, links }: { d: Draft; allowListed: boolean;
         </TargetLink>
         <span className="text-muted">under</span>
         <span className="font-semibold">{d.section}</span>
-        {!allowListed && <span className="sr-only">Not on the allow-list</span>}
+        {!inScope && <span className="sr-only">Excluded from the Confluence scope</span>}
       </div>
     );
   return (
@@ -178,11 +178,11 @@ type TargetLinks = { page: (id: string) => string; note: (path: string) => strin
 
 type Check = { ok: boolean | 'info' | 'warn'; label: string; detail?: string };
 
-function checksFor(d: Draft, allowListed: boolean, dryRun: boolean): Check[] {
+function checksFor(d: Draft, inScope: boolean, dryRun: boolean): Check[] {
   const c: Check[] =
     d.kind === 'confluence'
       ? [
-          allowListed ? { ok: true, label: 'Page on allow-list', detail: `page ${d.pageId}` } : { ok: false, label: 'Page not on allow-list', detail: `page ${d.pageId}` },
+          inScope ? { ok: true, label: 'Page in scope', detail: `page ${d.pageId}, checked again at write` } : { ok: false, label: 'Page excluded from scope', detail: `page ${d.pageId}` },
           { ok: 'info', label: 'Version check at write', detail: `base v${d.baseVersion}` },
           { ok: true, label: 'People check passed' },
         ]
@@ -350,7 +350,9 @@ export function ActionPanel({
   const state = draftState(s, type);
   const peopleBlocked = type === 'confluence_entry' && s.containsPeopleObservations;
   const budgetHit = view.budgets.drafts.hit;
-  const allowListed = draft?.kind === 'confluence' ? view.allowListedPageIds.includes(draft.pageId) : true;
+  // Picked from the live catalogue, so in scope when drafted; excluded since if it or a page above
+  // it is now on the exclude list. The executor checks the full scope again at write time.
+  const inScope = draft?.kind === 'confluence' ? ![draft.pageId, ...(draft.ancestorIds ?? [])].some((id) => view.excludedPageIds.includes(id)) : true;
   const stale = action?.status === 'ready' && action.itemRevision < item.revision;
   const dirty = !!editing && editing.text !== editing.original;
 
@@ -462,7 +464,7 @@ export function ActionPanel({
       ) : action.failureReason === 'no_fit' ? (
         <div className="flex flex-col gap-3">
           <Banner tone="warn" icon="confluence" action={<Link to="/settings/writing" className="text-[13px] font-medium">Settings › Write targets</Link>}>
-            <strong>No allow-listed page fits.</strong> {msg}
+            <strong>No page in scope fits.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
             <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
@@ -522,7 +524,7 @@ export function ActionPanel({
       note: (path) => obsidianNoteUrl(view.targets.vaultPath, path),
       noteExists: written,
     };
-    const checks = checksFor(draft, allowListed, view.dryRun);
+    const checks = checksFor(draft, inScope, view.dryRun);
     const cancelEdit = () =>
       dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', danger: true, run: () => setEditing(null) }) : setEditing(null);
     const frame: FrameProps = {
@@ -556,7 +558,7 @@ export function ActionPanel({
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <TargetLine d={draft} allowListed={allowListed} links={links} />
+            <TargetLine d={draft} inScope={inScope} links={links} />
             <span className="flex-1" />
             <ChecksToggle checks={checks} open={checksOpen} onToggle={() => setChecksOpen(!checksOpen)} />
           </div>
@@ -580,9 +582,9 @@ export function ActionPanel({
             <strong>New replies since this draft</strong> (revision {action.itemRevision} → {item.revision}). You can still approve it as it is.
           </Banner>
         )}
-        {!allowListed && action.status === 'ready' && (
+        {!inScope && action.status === 'ready' && (
           <Banner tone="bad" icon="lock" action={<Link to="/settings/writing" className="text-[13px] font-medium">Write targets</Link>}>
-            Page {draft.kind === 'confluence' && draft.pageId} isn’t on the Confluence allow-list. The executor will refuse this write.
+            Page {draft.kind === 'confluence' && draft.pageId} is excluded from the Confluence scope. The executor will refuse this write.
           </Banner>
         )}
         {draft.kind === 'confluence' ? (

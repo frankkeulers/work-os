@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import type { PromptFileId, PromptFileView, PromptSourceView } from '@work-os/shared';
 import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
-import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, type Prompt } from './prompts';
+import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, type Prompt } from './prompts';
 
-// Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the five prompts and the two
+// Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the six prompts and the two
 // filing guidance files. Each is written on first run, read on every call (empty or missing → the
 // built-in default) and editable in Settings. A file that still holds an earlier built-in default,
 // byte for byte once trimmed, is replaced by the current one at start; an edited file is left alone.
@@ -52,13 +52,22 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     previousDefaults: ['e7eb3efd72a888f525ea0b05e750f9b3f2b1060c'], // draft-vault v1
   },
   {
+    id: 'pick-confluence',
+    file: 'prompts/pick-confluence.md',
+    label: 'Pick Confluence page',
+    description: 'Picks up to three candidate pages from the live Confluence catalogue, or declines when nothing fits.',
+    usedBy: 'Draft Confluence entry',
+    defaultText: DEFAULT_PICK_CONFLUENCE_PROMPT,
+    previousDefaults: [],
+  },
+  {
     id: 'draft-confluence',
     file: 'prompts/draft-confluence.md',
     label: 'Draft Confluence entry',
-    description: 'Drafts an entry for an allow-listed Confluence page, or declines when nothing fits.',
+    description: 'Drafts an entry for one of the picked Confluence pages, or declines when none fits.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_CONFLUENCE_PROMPT,
-    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20'], // draft-confluence v1
+    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20', '4b97acd122e6f9a3cee48ea30d36baa1854a88b3'], // draft-confluence v1, v2
   },
   {
     id: 'people-check',
@@ -85,7 +94,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Exclusion screen, attribution and where each kind of fact goes. From psg-context-builder.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_CONFLUENCE_ROUTING,
-    previousDefaults: ['bfd61af35ae154733721f70fa0b6bdd2080d9bcb'], // confluence-routing v1
+    previousDefaults: ['bfd61af35ae154733721f70fa0b6bdd2080d9bcb', 'd2c97596843982fb215760ec923365300849c31f'], // confluence-routing v1, v2
   },
 ];
 

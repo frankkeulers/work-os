@@ -5,17 +5,19 @@ import type { Prompt } from '../claude/prompts';
 import { DEADLINES } from '../net/http';
 import { threadForTriage } from '../pipeline/truncate';
 import type { ConfluenceApi, Page } from './confluenceApi';
+import { buildCatalogue, type CatalogueEntry } from './confluenceCatalogue';
 import { DraftError } from './errors';
 import { entryStorage } from './markdown';
 import { headings, outline, textOf } from './storage';
 import { DRAFT_KEEP_LAST } from './vaultDrafter';
 
-// "Draft Confluence entry" (FR-10.1–10.4). Code reads the allow-listed pages over REST and gives
-// the model their outlines, so the model gets no tools and can only see allow-listed pages
-// (FR-10.2). It answers with a page, a section, a title and Markdown; code checks the page and
-// section exist, records the page version (FR-10.3), and a second Haiku call checks the entry for
-// observations about people before anyone sees it (FR-10.4). The model may instead decline with
-// noFit when the right home isn't allow-listed or nothing in the thread should be filed.
+// "Draft Confluence entry" (FR-10.1–10.4), in two calls, because the PSG context tree is too big to
+// outline in one. Code reads the live catalogue (every page in scope, from CQL: path, labels, hub)
+// and a first call picks up to three candidate pages from it, or declines with noFit. Code then
+// reads only those pages over REST and the draft call gets their outlines. Neither call has tools,
+// so the model only ever sees pages in scope (FR-10.2). The draft answers with a page, a section, a
+// title and Markdown; code checks the page and section exist, records the page version (FR-10.3),
+// and a Haiku call checks the entry for observations about people before anyone sees it (FR-10.4).
 
 export const ConfluenceEntryAnswer = z.object({
   pageId: z.string().min(1),
@@ -32,23 +34,55 @@ export const ConfluenceNoFitAnswer = z.object({
 
 export const ConfluenceAnswer = z.union([ConfluenceNoFitAnswer, ConfluenceEntryAnswer]);
 
+export const MAX_CANDIDATES = 3;
+
+export const ConfluencePickAnswer = z.union([
+  ConfluenceNoFitAnswer,
+  z.object({
+    candidates: z
+      .array(z.object({ pageId: z.string().min(1), why: z.string().max(400).optional() }))
+      .min(1)
+      .max(MAX_CANDIDATES),
+  }),
+]);
+
 export const PeopleCheckAnswer = z.object({ containsPeopleObservations: z.boolean(), reason: z.string().max(400) });
 
-const OUTLINE_CHARS = 8000; // per page, so many pages still fit one call
+const OUTLINE_CHARS = 8000; // per page, so the three candidates fit one call easily
 
 export interface ConfluenceDraftDeps {
   claude: ClaudeAdapter;
   api: ConfluenceApi;
   settings: Settings;
+  pickPrompt: Prompt;
   prompt: Prompt;
   peoplePrompt: Prompt;
   /** The psg-context-builder routing guidance, if Frank has made it available. */
   routing: string;
   now: () => Date;
   signal?: AbortSignal;
-  /** 1 once the pages are read, 2 while drafting, 3 for the people check. */
+  /** 1 while the catalogue is read, 2 while picking, 3 while drafting, 4 for the people check. */
   onStage?: (stage: number) => void;
 }
+
+/** The catalogue as the picker sees it: one compact object per page. */
+export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[], routing: string, now: Date): string {
+  const thread = { ...threadForTriage(item, me, DRAFT_KEEP_LAST), permalink: item.permalink };
+  const pages = catalogue.map((c) => ({ id: c.id, path: c.path, ...(c.labels.length && { labels: c.labels }), ...(c.hub && { hub: true }) }));
+  return [
+    `Today: ${now.toISOString().slice(0, 10)}`,
+    ...(routing.trim() ? ['<routing-guidance>', routing.trim(), '</routing-guidance>'] : []),
+    '<confluence-catalogue>',
+    ...pages.map((p) => JSON.stringify(p)),
+    '</confluence-catalogue>',
+    '<thread>',
+    JSON.stringify(thread),
+    '</thread>',
+    'Pick the candidate pages. Answer with the JSON only.',
+  ].join('\n');
+}
+
+const noFit = (a: { reason: string; suggestedHome?: string }) => new DraftError(a.suggestedHome?.trim() ? `${a.reason} Suggested home: ${a.suggestedHome.trim()}.` : a.reason, 'no_fit');
 
 export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routing: string, now: Date): string {
   const thread = { ...threadForTriage(item, me, DRAFT_KEEP_LAST), permalink: item.permalink };
@@ -71,22 +105,44 @@ export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routi
 }
 
 export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, me: Me): Promise<{ draft: ConfluenceDraft }> {
-  const allowed = d.settings.confluence.pages;
-  if (!allowed.length) throw new DraftError('No Confluence pages are on the allow-list yet. Add them in Settings.', 'allow_list');
   const t0 = performance.now();
+  const model = d.settings.models.draftConfluence;
+  const catalogue = await buildCatalogue(d.api, d.settings.confluence, d.signal);
+  if (!catalogue.length) throw new DraftError(`No Confluence pages are in scope: nothing in space ${d.settings.confluence.spaceKey} matches the root pages, labels and single pages in Settings.`, 'allow_list');
+
+  // Step 1: pick up to three candidates from the catalogue.
+  d.onStage?.(2);
+  const pick = await d.claude.structured(
+    {
+      purpose: 'confluence_pick',
+      model,
+      system: d.pickPrompt.text,
+      prompt: renderPickRequest(item, me, catalogue, d.routing, d.now()),
+      promptVersion: d.pickPrompt.version,
+      timeoutMs: DEADLINES.draft,
+      signal: d.signal,
+      itemIds: [item.id],
+    },
+    ConfluencePickAnswer,
+  );
+  if ('noFit' in pick.value) throw noFit(pick.value);
+  const inCatalogue = new Set(catalogue.map((c) => c.id));
+  const picked = [...new Set(pick.value.candidates.map((c) => c.pageId))].filter((id) => inCatalogue.has(id));
+  if (!picked.length) throw new DraftError('The page picker chose pages that are not in the Confluence scope.', 'allow_list');
+
+  // Step 2: read only the candidates, and draft against their outlines.
   const pages: Page[] = [];
-  for (const p of allowed) {
+  for (const id of picked) {
     try {
-      pages.push(await d.api.getPage(p.id, d.signal));
+      pages.push(await d.api.getPage(id, d.signal));
     } catch (err) {
-      if ((err as { notFound?: boolean }).notFound) continue; // deleted or moved: offer the rest
+      if ((err as { notFound?: boolean }).notFound) continue; // deleted since the search: offer the rest
       throw err;
     }
   }
-  if (!pages.length) throw new DraftError('None of the allow-listed Confluence pages could be found.', 'allow_list');
-  d.onStage?.(2);
+  if (!pages.length) throw new DraftError('None of the picked Confluence pages could be read.', 'allow_list');
+  d.onStage?.(3);
 
-  const model = d.settings.models.draftConfluence;
   const r = await d.claude.structured(
     {
       purpose: 'draft_confluence',
@@ -100,18 +156,15 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
     },
     ConfluenceAnswer,
   );
-  if ('noFit' in r.value) {
-    const { reason, suggestedHome } = r.value;
-    throw new DraftError(suggestedHome?.trim() ? `${reason} Suggested home: ${suggestedHome.trim()}.` : reason, 'no_fit');
-  }
+  if ('noFit' in r.value) throw noFit(r.value);
   const a = r.value;
   const page = pages.find((p) => p.id === a.pageId);
-  if (!page) throw new DraftError(`The draft targets page ${a.pageId}, which is not on the allow-list.`, 'allow_list');
+  if (!page) throw new DraftError(`The draft targets page ${a.pageId}, which is not one of the picked pages.`, 'allow_list');
   const section = headings(page.storage).find((h) => h.text.toLowerCase() === textOf(a.section).toLowerCase());
   if (!section) throw new DraftError(`The draft would file under “${a.section}”, but ${page.title} has no such section.`);
 
   // FR-10.4: a second, cheap look at the entry itself, before it is shown.
-  d.onStage?.(3);
+  d.onStage?.(4);
   const check = await d.claude.structured(
     {
       purpose: 'people_check',
@@ -128,12 +181,13 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
   if (check.value.containsPeopleObservations) {
     throw new DraftError(`The people check found observations about named people in the draft (${check.value.reason}). Nothing will be written to Confluence.`, 'people_check');
   }
-  const tokens = [...r.usage, ...check.usage].reduce((n, u) => n + u.inputTokens + u.outputTokens + u.cacheTokens, 0);
+  const tokens = [...pick.usage, ...r.usage, ...check.usage].reduce((n, u) => n + u.inputTokens + u.outputTokens + u.cacheTokens, 0);
   return {
     draft: {
       kind: 'confluence',
       pageId: page.id,
       pageTitle: page.title,
+      ancestorIds: catalogue.find((c) => c.id === page.id)?.ancestorIds,
       section: section.text,
       baseVersion: page.version,
       title: a.title,
