@@ -64,8 +64,8 @@ const STARTUP: Record<StartupFailure, { title: string; body: ReactNode; fix: Rea
     body: <p className="m-0">The startup check found no Slack user token. Work OS reads Slack with read-only scopes and never stores the token in a file (FR-2.2).</p>,
     fix: (
       <>
-        <p className="m-0">Install the internal Slack app (P0-1), then store the user token:</p>
-        <Code>security add-generic-password -s work-os -a slack-user-token -w</Code>
+        <p className="m-0">Install the internal Slack app (P0-1), copy the user token, then store it from the clipboard:</p>
+        <Code>security add-generic-password -U -s com.polestar.workos -a slack-user-token -w "$(pbpaste)"</Code>
       </>
     ),
   },

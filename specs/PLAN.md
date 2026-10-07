@@ -726,7 +726,12 @@ As built (M3 step 19):
 
 **Before the soak (Frank).** Before the soak can start, Frank needs to:
 
-1. Store the Slack user token (P0-1) and, if Confluence filing is wanted, the Confluence `email:token` (P0-8, Keychain account `confluence-api-token`).
+1. Store the Slack user token (P0-1) and, if Confluence filing is wanted, the Confluence `email:token` (P0-8, Keychain account `confluence-api-token`). Copy each value to the clipboard and pass it as an argument: the `security` password prompt keeps only the first 128 characters, which cuts an `email:token` short. Then copy something else to clear the clipboard.
+
+   ```
+   security add-generic-password -U -s com.polestar.workos -a slack-user-token -w "$(pbpaste)"
+   security add-generic-password -U -s com.polestar.workos -a confluence-api-token -w "$(pbpaste)"
+   ```
 2. Check the Confluence scope in Settings › Write targets (P0-6; the defaults cover the PSG context tree), and use Preview catalogue to confirm the token works. Check the vault conventions (P0-5).
 3. Optionally, `brew install terminal-notifier`. The filing guidance ships with the app; adjust it in Settings › Prompts.
 4. Deploy and install:

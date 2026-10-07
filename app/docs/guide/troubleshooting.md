@@ -34,10 +34,11 @@ Tokens live in the macOS Keychain under the service `com.polestar.workos`:
 
 The `security` command's password prompt keeps only the first 128 characters, and an Atlassian
 token with your email is longer than that. So pass the value as an argument instead. Copy the full
-`email:token` to the clipboard, then run:
+value to the clipboard, then run the line for that token:
 
 ```
 security add-generic-password -U -s com.polestar.workos -a confluence-api-token -w "$(pbpaste)"
+security add-generic-password -U -s com.polestar.workos -a slack-user-token -w "$(pbpaste)"
 ```
 
 Then copy something else, to clear the clipboard, and choose **Check again**. Keychain Access
