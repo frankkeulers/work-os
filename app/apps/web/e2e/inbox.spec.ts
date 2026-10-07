@@ -1,4 +1,7 @@
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+
+const APP = join(import.meta.dirname, '../../..');
 
 // FR-8.1: Now and Today rows share the Needs you group; data-lane tells them apart.
 const group = (page: Page, name: 'Needs you' | 'To file') => page.getByRole('region', { name, exact: true });
@@ -133,6 +136,38 @@ test('J10 file from the panel: review and approve the Confluence entry in place'
   await expect(page).toHaveURL(/file=confluence/);
   await action.getByRole('button', { name: 'Approve and write to sandbox' }).click();
   await expect(action.getByRole('status')).toContainText('Dry-run: write logged only', { timeout: 20_000 });
+});
+
+test('the Next step card holds the filing: its options, the draft’s progress and the review', async ({ page }) => {
+  // A reply: the step's action is Slack, so both targets are filing options in the same card.
+  const step = itemPanel(page).getByRole('region', { name: 'Next step' });
+  const options = step.getByRole('region', { name: 'File it' });
+  await expect(options.getByRole('button')).toHaveText(['Draft Confluence entry', 'Draft vault note']);
+  await options.getByRole('button', { name: 'Draft Confluence entry' }).click();
+  // The progress shows in the card, under the step, in place of the options.
+  const action = step.getByRole('region', { name: 'Action' });
+  await expect(action.getByTestId('drafting')).toBeVisible();
+  await expect(step.getByRole('button', { name: 'Reply in Slack' })).toBeVisible();
+  await expect(options).toHaveCount(0);
+  await action.getByRole('button', { name: 'Back to filing options' }).click();
+  await expect(options).toBeVisible();
+  await expect(page).toHaveURL((u) => !u.searchParams.has('file'));
+
+  // To file: the step's action is the draft, so the options offer only the other target…
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  const also = step.getByRole('region', { name: 'Also file' });
+  await expect(also.getByText('Vault note', { exact: true })).toBeVisible();
+  await expect(also.getByText('Confluence entry', { exact: true })).toHaveCount(0);
+  await expect(step.getByText('To Insights APIs › Decisions')).toBeVisible();
+  // …and once the draft is open, its tabs switch target, so the step's own button steps aside.
+  await step.getByRole('button', { name: 'Review Confluence entry' }).click();
+  await expect(action.getByRole('tab', { name: /Confluence entry/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(step.getByRole('button', { name: 'Review Confluence entry' })).toHaveCount(0);
+  await expect(step.getByRole('button', { name: /^Snooze until/ })).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-filing-light.png') });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-filing-dark.png'), animations: 'disabled' }); // fast-forward the colour transitions
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 });
 
 test('Full scope adds the Outlook and Teams items with their brand marks', async ({ page }) => {

@@ -75,50 +75,64 @@ function SnoozeSplit({ item, hint }: { item: ItemSummary; hint: { label: string;
   );
 }
 
-function NextStepCard({ item, draftsBudgetHit, onFile }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void }) {
+/**
+ * What to do, and the doing of it: the next step (or, with nothing to do, the item's status) on top,
+ * and under it either the filing options or the open draft (`workflow`) with its progress and review.
+ */
+function NextStepCard({ item, draftsBudgetHit, onFile, workflow }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void; workflow?: ReactNode }) {
   const now = useNow(30_000);
   const step = shownStep(item, draftsBudgetHit, now);
   const hint = suggestedSnooze(item, now);
-  if (!step) return <StatusCard item={item} />;
+  if (!step) return <StatusCard item={item}>{workflow ?? <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} />}</StatusCard>;
   const p = step.primary;
+  // A draft as the primary action leaves the filing options; once a draft is open, its tabs take over.
+  const draft = p.kind === 'draft' && !workflow ? p.button : undefined;
+  const target = draft && targetOf(item, draft.type);
+  const draftHint = draft && (draft.disabledReason ?? (draft.state === 'stale' ? 'Draft out of date: new messages since' : target ? `To ${target}` : undefined));
   return (
-    <section aria-label="Next step" className="flex flex-col gap-2.5 rounded-xl border border-accent-line-2 px-[18px] py-4">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-accent-ink">Next step</span>
-        <NeedTag>{step.need}</NeedTag>
-        {step.due && <DueChip due={step.due} />}
-        {step.blocks && <StatusChip tone="block">{step.blocks}</StatusChip>}
-      </div>
-      <div className="flex flex-col gap-[3px]">
-        <div className="text-base font-semibold">{step.step}</div>
-        {step.why && <div className="text-[13px] leading-normal text-ink-2">{step.why}</div>}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {p.kind === 'open' ? (
-          <Button variant="solid" icon={item.kind === 'dm' || item.kind === 'chat' ? 'dm' : 'external'} onClick={() => openInSource(item)}>
-            {p.label}
-          </Button>
-        ) : (
-          <span title={p.button.disabledReason} className="inline-flex">
-            <Button
-              variant="solid"
-              icon={p.button.type === 'vault_note' ? 'vault' : 'confluence'}
-              disabled={!!p.button.disabledReason && p.button.state === 'none'}
-              onClick={() => onFile(p.button.type)}
-            >
-              {(p.button.state === 'drafting' || p.button.state === 'writing') && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
-              {p.button.label}
+    <section aria-label="Next step" className="flex flex-col rounded-xl border border-accent-line-2">
+      <div className="flex flex-col gap-2.5 px-[18px] py-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-accent-ink">Next step</span>
+          <NeedTag>{step.need}</NeedTag>
+          {step.due && <DueChip due={step.due} />}
+          {step.blocks && <StatusChip tone="block">{step.blocks}</StatusChip>}
+        </div>
+        <div className="flex flex-col gap-[3px]">
+          <div className="text-base font-semibold">{step.step}</div>
+          {step.why && <div className="text-[13px] leading-normal text-ink-2">{step.why}</div>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {p.kind === 'open' ? (
+            <Button variant="solid" icon={item.kind === 'dm' || item.kind === 'chat' ? 'dm' : 'external'} onClick={() => openInSource(item)}>
+              {p.label}
             </Button>
-          </span>
-        )}
-        <SnoozeSplit item={item} hint={hint} />
+          ) : (
+            draft && (
+              <span title={draft.disabledReason} className="inline-flex">
+                <Button
+                  variant="solid"
+                  icon={draft.type === 'vault_note' ? 'vault' : 'confluence'}
+                  disabled={!!draft.disabledReason && draft.state === 'none'}
+                  onClick={() => onFile(draft.type)}
+                >
+                  {(draft.state === 'drafting' || draft.state === 'writing') && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
+                  {draft.label}
+                </Button>
+              </span>
+            )
+          )}
+          <SnoozeSplit item={item} hint={hint} />
+        </div>
+        {draftHint && <div className="-mt-1 text-xs text-muted">{draftHint}</div>}
       </div>
+      {workflow ?? <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} skip={draft?.type} />}
     </section>
   );
 }
 
-/** For items with nothing to do: why they're here and how to bring them back. */
-function StatusCard({ item }: { item: ItemSummary }) {
+/** For items with nothing to do: why they're here and how to bring them back, then the filing area. */
+function StatusCard({ item, children }: { item: ItemSummary; children: ReactNode }) {
   const now = useNow(5_000);
   const [busy, setBusy] = useState(false);
   let title: string;
@@ -157,10 +171,13 @@ function StatusCard({ item }: { item: ItemSummary }) {
     body = 'No reply needed and nothing to file. Correct the triage if that’s wrong.';
   }
   return (
-    <section aria-label="Status" className={cx('flex flex-col gap-1.5 rounded-xl border px-[18px] py-4', item.triageState === 'failed' ? 'border-red-line' : 'border-line')}>
-      <div className="text-[15px] font-semibold">{title}</div>
-      <div className="text-[13px] leading-normal text-ink-2">{body}</div>
-      {action && <div className="pt-1.5">{action}</div>}
+    <section aria-label="Status" className={cx('flex flex-col rounded-xl border', item.triageState === 'failed' ? 'border-red-line' : 'border-line')}>
+      <div className="flex flex-col gap-1.5 px-[18px] py-4">
+        <div className="text-[15px] font-semibold">{title}</div>
+        <div className="text-[13px] leading-normal text-ink-2">{body}</div>
+        {action && <div className="pt-1.5">{action}</div>}
+      </div>
+      {children}
     </section>
   );
 }
@@ -331,13 +348,18 @@ function Messages({ view }: { view: ItemView }) {
   );
 }
 
-function FileIt({ item, draftsBudgetHit, onFile }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void }) {
+const targetOf = (item: ItemSummary, t: ActionType) => (t === 'vault_note' ? item.targetHints.vault : item.targetHints.confluence);
+
+/** The filing targets, as the lower half of the Next step or Status card. `skip` is already the card's primary action. */
+function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void; skip?: ActionType }) {
+  const title = skip ? 'Also file' : 'File it';
   return (
-    <Section title="File it">
-      {TYPES.map((t) => {
+    <section aria-label={title} className="flex flex-col border-t border-line-soft px-[18px] pb-2 pt-3">
+      <h3 className="m-0 text-[13px] font-semibold">{title}</h3>
+      {TYPES.filter((t) => t !== skip).map((t) => {
         const b = draftButton(item, t, draftsBudgetHit);
         const suggested = t === 'vault_note' ? item.triage?.vault : item.triage?.confluence;
-        const target = t === 'vault_note' ? item.targetHints.vault : item.targetHints.confluence;
+        const target = targetOf(item, t);
         const hint =
           b.state === 'none'
             ? (b.disabledReason ?? (suggested ? `Suggested by triage${target ? ` · ${target}` : ''}` : 'Not suggested'))
@@ -353,7 +375,7 @@ function FileIt({ item, draftsBudgetHit, onFile }: { item: ItemSummary; draftsBu
                       ? 'Drafting…'
                       : 'Writing…';
         return (
-          <div key={t} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line px-3 py-2.5">
+          <div key={t} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-soft-2 py-2.5 first-of-type:border-t-0">
             <BrandIcon brand={t === 'vault_note' ? 'obsidian' : 'confluence'} size={16} decorative />
             <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
               <span className="text-[13px] font-medium">{TYPE_LABEL[t].short}</span>
@@ -365,7 +387,7 @@ function FileIt({ item, draftsBudgetHit, onFile }: { item: ItemSummary; draftsBu
           </div>
         );
       })}
-    </Section>
+    </section>
   );
 }
 
@@ -428,7 +450,7 @@ export function ItemPanel({
     setFiling(t);
   };
   useEffect(() => {
-    if (filing) filingRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    if (filing) filingRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [filing]);
   useEffect(() => {
     body.current?.scrollTo({ top: 0 });
@@ -542,26 +564,23 @@ export function ItemPanel({
           />
         )}
 
-        <NextStepCard item={item} draftsBudgetHit={draftsBudgetHit} onFile={file} />
+        <NextStepCard
+          item={item}
+          draftsBudgetHit={draftsBudgetHit}
+          onFile={file}
+          workflow={
+            filing && view ? (
+              <div ref={filingRef} className="scroll-mt-4">
+                <ActionPanel key={item.id} embedded view={view} type={filing} setType={setFiling} onDirty={onDirty} onDoneNext={onDoneNext} onClose={() => setFiling(undefined)} />
+              </div>
+            ) : undefined
+          }
+        />
         <Asks key={`asks:${item.id}`} item={item} />
 
         {item.next?.actionItems?.length ? <ActionItems key={item.id} items={item.next.actionItems} /> : null}
         {view ? <Messages key={item.id} view={view} /> : <div className="text-[13px] text-muted">Loading…</div>}
 
-        {filing && view ? (
-          <div ref={filingRef} className="flex scroll-mt-4 flex-col gap-2.5 border-t border-line-soft pt-[18px]">
-            <div className="flex items-baseline gap-2">
-              <h3 className="m-0 flex-1 text-[13px] font-semibold">File it</h3>
-              <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={() => setFiling(undefined)}>
-                <Icon name="back" size={14} />
-                Back to filing options
-              </button>
-            </div>
-            <ActionPanel key={item.id} embedded view={view} type={filing} setType={setFiling} onDirty={onDirty} onDoneNext={onDoneNext} />
-          </div>
-        ) : (
-          <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={file} />
-        )}
 
         {view && <MetaLine view={view} />}
       </div>

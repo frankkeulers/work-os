@@ -13,7 +13,7 @@ import { itemPath } from './item';
 import { Banner, Button, ConfirmDialog, Spinner, cx } from './ui';
 
 // The draft → review → approve panel (FR-9.x, FR-10.x). Used full width on Item detail and,
-// embedded, in the Inbox item panel.
+// embedded, inside the Next step card of the Inbox item panel.
 
 export const TYPES: ActionType[] = ['confluence_entry', 'vault_note'];
 
@@ -327,14 +327,17 @@ export function ActionPanel({
   onDirty,
   embedded,
   onDoneNext,
+  onClose,
 }: {
   view: ItemView;
   type: ActionType;
   setType: (t: ActionType) => void;
   onDirty: (dirty: boolean) => void;
-  /** Inside the Inbox item panel: a lighter frame, and "Done and next" moves the panel on. */
+  /** Inside the Inbox item panel's Next step card: no frame of its own, and "Done and next" moves the panel on. */
   embedded?: boolean;
   onDoneNext?: () => void;
+  /** Embedded only: folds the panel back to the filing options. */
+  onClose?: () => void;
 }) {
   const navigate = useNavigate();
   const { summary: s, item } = view;
@@ -624,7 +627,7 @@ export function ActionPanel({
   // Save and Cancel sit under the editor and this row steps aside.
   const footer =
     action && draft && !editing && (action.status === 'ready' || action.status === 'approved' || action.status === 'executing') ? (
-      <div className={cx('flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3', embedded ? 'px-4' : 'px-6')}>
+      <div className={cx('flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3', embedded ? 'rounded-b-[11px] px-[18px]' : 'px-6')}>
         <Button variant="solid" size="lg" icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(() => api.approveAction(action.id))}>
           {action.status === 'ready' ? (
             view.dryRun ? (
@@ -645,53 +648,75 @@ export function ActionPanel({
       </div>
     ) : null;
 
+  const tabs = (
+    <div className={cx('flex items-center gap-2', embedded && 'w-full')}>
+      <div role="tablist" aria-label="Draft target" className="inline-flex gap-1 rounded-[10px] bg-track-2 p-1">
+        {TYPES.map((t) => {
+          const on = t === type;
+          const badge = STATUS_BADGE[draftState(s, t)];
+          return (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              disabled={!!editing && !on}
+              onClick={() => setType(t)}
+              className={cx(
+                'inline-flex min-h-9 items-center gap-1.5 rounded-[7px] px-3.5 text-[13px] font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
+                on ? 'bg-seg-on text-accent shadow-[0_1px_2px_rgba(20,23,28,0.12)]' : 'text-ink-2',
+              )}
+            >
+              {t === 'confluence_entry' && s.containsPeopleObservations && <Icon name="lock" size={12} />}
+              {TYPE_LABEL[t].short}
+              {badge && <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold', badge.cls)}>{badge.label}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <span className="flex-1" />
+      {action?.status === 'ready' && !editing && (
+        <Button variant="ghost" icon="redraft" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : 'Ask for a fresh draft'}>
+          Re-draft
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <section
       aria-label="Action"
       className={cx(
-        'flex min-w-0 flex-col overflow-hidden border bg-surface',
-        embedded ? 'rounded-xl border-accent-line-2' : 'flex-[2_1_600px] rounded-[14px] border-accent-line-2 shadow-[0_1px_2px_rgba(20,23,28,0.06),0_12px_32px_rgba(29,78,216,0.10)]',
+        'flex min-w-0 flex-col',
+        embedded
+          ? 'border-t border-line-soft'
+          : 'flex-[2_1_600px] overflow-hidden rounded-[14px] border border-accent-line-2 bg-surface shadow-[0_1px_2px_rgba(20,23,28,0.06),0_12px_32px_rgba(29,78,216,0.10)]',
       )}
     >
-      <div className={cx('flex flex-col', embedded ? 'gap-4 px-4 pb-4 pt-4' : 'gap-[18px] px-6 pb-5 pt-[22px]')}>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-[1_1_260px] flex-col gap-0.5">
-            <span className="text-xs font-semibold uppercase tracking-[0.06em] text-accent">Action</span>
-            <h2 className={cx('m-0 font-semibold tracking-[-0.01em]', embedded ? 'text-base' : 'text-xl')}>{heading}</h2>
-          </div>
-          <div className={cx('flex items-center gap-2', embedded && 'w-full')}>
-            <div role="tablist" aria-label="Draft target" className="inline-flex gap-1 rounded-[10px] bg-track-2 p-1">
-              {TYPES.map((t) => {
-                const on = t === type;
-                const badge = STATUS_BADGE[draftState(s, t)];
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    role="tab"
-                    aria-selected={on}
-                    disabled={!!editing && !on}
-                    onClick={() => setType(t)}
-                    className={cx(
-                      'inline-flex min-h-9 items-center gap-1.5 rounded-[7px] px-3.5 text-[13px] font-semibold cursor-pointer disabled:cursor-not-allowed disabled:opacity-60',
-                      on ? 'bg-seg-on text-accent shadow-[0_1px_2px_rgba(20,23,28,0.12)]' : 'text-ink-2',
-                    )}
-                  >
-                    {t === 'confluence_entry' && s.containsPeopleObservations && <Icon name="lock" size={12} />}
-                    {TYPE_LABEL[t].short}
-                    {badge && <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold', badge.cls)}>{badge.label}</span>}
-                  </button>
-                );
-              })}
+      <div className={cx('flex flex-col', embedded ? 'gap-3.5 px-[18px] pb-4 pt-3.5' : 'gap-[18px] px-6 pb-5 pt-[22px]')}>
+        {embedded ? (
+          // The Next step card above says what to do; this part says where the filing has got to.
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="m-0 flex-1 text-[15px] font-semibold">{heading}</h3>
+              {onClose && (
+                <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={onClose}>
+                  <Icon name="back" size={14} />
+                  Back to filing options
+                </button>
+              )}
             </div>
-            <span className="flex-1" />
-            {action?.status === 'ready' && !editing && (
-              <Button variant="ghost" icon="redraft" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : 'Ask for a fresh draft'}>
-                Re-draft
-              </Button>
-            )}
+            {tabs}
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-[1_1_260px] flex-col gap-0.5">
+              <span className="text-xs font-semibold uppercase tracking-[0.06em] text-accent">Action</span>
+              <h2 className="m-0 text-xl font-semibold tracking-[-0.01em]">{heading}</h2>
+            </div>
+            {tabs}
           </div>
-        </div>
+        )}
         {state === 'none' && latest?.status === 'discarded' && <div className="-mt-2 text-xs text-muted">The last draft was discarded.</div>}
         {body}
       </div>
