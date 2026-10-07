@@ -28,7 +28,9 @@ test('a group DM in pieces shows as two topics, each with its asks and pieces', 
   await expect(branch.locator('[data-pieces]')).toHaveText(' · 4 parts');
   await expect(branch.getByText('+2 asks')).toBeVisible();
   await expect(branch.getByText('Approve', { exact: true })).toBeVisible();
-  await page.screenshot({ path: join(APP, 'screenshots/topics-inbox-light.png') });
+  await page.keyboard.press('Escape'); // show the rows' ends, which the open panel covers
+  await expect(itemPanel(page)).toBeHidden();
+  await page.screenshot({ path: join(APP, 'screenshots/topics-inbox-light.png'), animations: 'disabled' });
 
   await branch.click();
   const panel = itemPanel(page);
@@ -39,7 +41,7 @@ test('a group DM in pieces shows as two topics, each with its asks and pieces', 
   await expect(panel.locator('[data-piece]').first().getByRole('button', { name: 'Not this topic' })).toHaveCount(0); // the anchor stays
   await page.screenshot({ path: join(APP, 'screenshots/topics-panel-light.png') });
   await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
-  await page.screenshot({ path: join(APP, 'screenshots/topics-panel-dark.png') });
+  await page.screenshot({ path: join(APP, 'screenshots/topics-panel-dark.png'), animations: 'disabled' }); // fast-forward the colour transitions
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 
   // Ticking the main ask moves the row on to the next open one.
