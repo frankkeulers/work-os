@@ -1,13 +1,15 @@
-import { useState, type ComponentType, type ReactNode } from 'react';
+import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { CataloguePageView, ConfluenceCatalogueView, ConfluencePage, ModelId, PromptFileId, Rule, Settings } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
+import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
 import { Icon } from '../../components/icons';
 import { RulesList, newRuleEdit, type RuleEdit } from '../../components/Rules';
 import { Banner, Button, Chip, IconButton, Segmented, Spinner, Switch, cx, inputBase, inputClass } from '../../components/ui';
 import { onTopics, useApiQuery } from '../../hooks/useApiQuery';
 import { fmtMoney, fmtTime } from '../../lib/format';
+import { avatarDataUrl } from '../../lib/avatar';
 import { confluencePageUrl } from '../../lib/links';
 import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
@@ -942,6 +944,42 @@ function StorageSection({ s, view, full, type, flush, err }: Ctx) {
 
 // ---------- Appearance ----------
 
+/** The avatar in the sidebar's account menu: a picture from disk, or the person icon. */
+function ProfilePicture() {
+  const avatar = usePrefs((s) => s.avatar);
+  const setAvatar = usePrefs((s) => s.setAvatar);
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      setAvatar(await avatarDataUrl(file));
+      toast('Profile picture updated.', { tone: 'success' });
+    } catch (e) {
+      errorToast(e);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = ''; // so picking the same file again still fires
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Avatar size={48} />
+      <input ref={input} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-label="Profile picture file" onChange={(e) => void pick(e.target.files?.[0])} />
+      <Button size="sm" disabled={busy} onClick={() => input.current?.click()}>
+        {busy && <Spinner size={12} />}
+        {avatar ? 'Change picture' : 'Upload picture'}
+      </Button>
+      {avatar && (
+        <Button size="sm" variant="ghost" icon="trash" onClick={() => (setAvatar(undefined), toast('Profile picture removed.'))}>
+          Remove
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function AppearanceSection() {
   const theme = usePrefs((s) => s.theme);
   const setTheme = usePrefs((s) => s.setTheme);
@@ -956,11 +994,14 @@ function AppearanceSection() {
             value={theme}
             onChange={setTheme}
             options={[
-              { value: 'system', label: 'System' },
               { value: 'light', label: 'Light' },
               { value: 'dark', label: 'Dark' },
+              { value: 'system', label: 'System' },
             ]}
           />
+        </Row>
+        <Row label="Profile picture" help="Shown in the sidebar’s account menu. Cropped to a square.">
+          <ProfilePicture />
         </Row>
       </Group>
     </>

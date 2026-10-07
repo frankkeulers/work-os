@@ -13,12 +13,14 @@ interface Prefs {
   navCollapsed: boolean; // the sidebar shows icons only
   inboxSort: InboxSort;
   groupByChannel: boolean; // the Inbox lists Slack items under their channel
+  avatar?: string; // the profile picture, a small square data: URL (lib/avatar.ts); a person icon until set
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
   setNavCollapsed: (collapsed: boolean) => void;
   setInboxSort: (s: InboxSort) => void;
   setGroupByChannel: (on: boolean) => void;
+  setAvatar: (dataUrl: string | undefined) => void;
 }
 
 export const usePrefs = create<Prefs>()(
@@ -36,6 +38,7 @@ export const usePrefs = create<Prefs>()(
       setNavCollapsed: (navCollapsed) => set({ navCollapsed }),
       setInboxSort: (inboxSort) => set({ inboxSort }),
       setGroupByChannel: (groupByChannel) => set({ groupByChannel }),
+      setAvatar: (avatar) => set({ avatar }),
     }),
     { name: 'workos.prefs' },
   ),

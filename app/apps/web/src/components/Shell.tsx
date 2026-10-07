@@ -1,13 +1,14 @@
-import { useEffect, type ReactNode } from 'react';
-import { NavLink, Outlet, useOutletContext } from 'react-router';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link, NavLink, Outlet, useOutletContext } from 'react-router';
 import { api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
-import { usePrefs } from '../store/prefs';
+import { usePrefs, type Scope, type Theme } from '../store/prefs';
+import { Avatar } from './Avatar';
 import { BrandIcon } from './BrandIcon';
 import { Icon, type IconName } from './icons';
-import { Dot, IconButton, PhaseTag, Segmented, cx, phaseToast, type Phase } from './ui';
+import { Dot, IconButton, PhaseTag, Segmented, cx, phaseToast, usePopover, type Phase } from './ui';
 
 export type ShellContext = { inbox: QueryState<InboxView> };
 export const useShell = () => useOutletContext<ShellContext>();
@@ -65,10 +66,115 @@ function FutureNavItem({ icon, label, phase, collapsed }: { icon: IconName; labe
   );
 }
 
+const MenuLabel = ({ children }: { children: ReactNode }) => <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">{children}</span>;
+
+/**
+ * The account button at the foot of the sidebar, and its menu: the view preferences you change
+ * often (theme, scope), with the profile picture and the rest in Settings › Appearance. The menu is
+ * fixed, not absolute, so it isn't clipped by the sidebar, collapsed or not.
+ */
+function AccountMenu({ collapsed }: { collapsed: boolean }) {
+  const theme = usePrefs((s) => s.theme);
+  const setTheme = usePrefs((s) => s.setTheme);
+  const scope = usePrefs((s) => s.scope);
+  const setScope = usePrefs((s) => s.setScope);
+  const { open, setOpen, close, trigger, panel } = usePopover();
+  const button = useRef<HTMLButtonElement | null>(null);
+  const [at, setAt] = useState<{ left: number; bottom: number }>();
+  const toggle = () => {
+    // Above the button; beside the rail when collapsed, so it doesn't cover the icons.
+    const r = button.current?.getBoundingClientRect();
+    const rail = button.current?.closest('nav')?.getBoundingClientRect();
+    if (r && rail) setAt(collapsed ? { left: rail.right + 8, bottom: window.innerHeight - r.bottom } : { left: r.left, bottom: window.innerHeight - r.top + 6 });
+    setOpen(!open);
+  };
+  return (
+    <div>
+      <button
+        ref={(el) => {
+          button.current = el;
+          trigger(el);
+        }}
+        type="button"
+        aria-label="Account"
+        title={collapsed ? `Account · ${scope === 'full' ? 'Full' : 'MVP'} scope` : undefined}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={toggle}
+        className={cx('flex min-h-11 w-full items-center gap-2.5 rounded-lg text-left cursor-pointer hover:bg-surface-2', collapsed ? 'justify-center' : 'px-2', open && 'bg-surface-2')}
+      >
+        <Avatar size={28} />
+        {!collapsed && (
+          <>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">Account</span>
+            {/* Full changes what every page shows, so the button says which scope is on. */}
+            <span className="rounded bg-track px-1.5 py-px font-mono text-[10px] font-medium text-ink-2">{scope === 'full' ? 'Full' : 'MVP'}</span>
+            <Icon name="up" size={14} className="text-muted" />
+          </>
+        )}
+      </button>
+      {open && at && (
+        <div
+          ref={panel}
+          role="dialog"
+          aria-label="Account"
+          style={{ left: at.left, bottom: at.bottom }}
+          className="fixed z-50 flex w-[260px] flex-col gap-3.5 whitespace-normal rounded-[10px] border border-line bg-surface p-3 shadow-[0_12px_32px_rgba(20,23,28,0.14)]"
+        >
+          <div className="flex items-center gap-2.5">
+            <Avatar size={36} />
+            <div className="flex min-w-0 flex-col">
+              <span className="text-[13px] font-semibold">Account</span>
+              <span className="text-xs text-muted">Preferences in this browser</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <MenuLabel>Theme</MenuLabel>
+            <Segmented<Theme>
+              label="Theme"
+              size="sm"
+              className="w-full"
+              value={theme}
+              onChange={setTheme}
+              options={[
+                { value: 'light', label: 'Light' },
+                { value: 'dark', label: 'Dark' },
+                { value: 'system', label: 'System' },
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <MenuLabel>Scope</MenuLabel>
+            <Segmented<Scope>
+              label="Scope"
+              size="sm"
+              className="w-full"
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: 'mvp', label: 'MVP' },
+                { value: 'full', label: 'Full' },
+              ]}
+            />
+            <span className="text-[11px] leading-snug text-muted">Full shows later phases as dashed placeholders.</span>
+          </div>
+          <Link
+            to="/settings/appearance"
+            onClick={() => close(false)}
+            className="-mx-1.5 -mb-1.5 flex min-h-9 items-center gap-2 rounded-md border-t border-line-soft px-2.5 pt-0.5 text-[13px] !text-ink no-underline hover:bg-surface-2"
+          >
+            <Icon name="settings" size={14} className="text-muted" />
+            Profile picture and appearance
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Nav({ inbox }: { inbox?: InboxView }) {
   const now = useNow();
   const scope = usePrefs((s) => s.scope);
-  const setScope = usePrefs((s) => s.setScope);
   const collapsed = usePrefs((s) => s.navCollapsed);
   const setCollapsed = usePrefs((s) => s.setNavCollapsed);
   const full = scope === 'full';
@@ -180,32 +286,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
         <div className="mt-auto flex flex-col gap-0.5">
           <NavItem to="/guide" icon="book" label="Guide" collapsed={collapsed} />
         </div>
-        {collapsed ? (
-          <button
-            type="button"
-            onClick={() => setScope(full ? 'mvp' : 'full')}
-            aria-label={`Scope: ${full ? 'Full' : 'MVP'}. Switch to ${full ? 'MVP' : 'Full'}`}
-            title={`Scope: ${full ? 'Full' : 'MVP'} (click for ${full ? 'MVP' : 'Full'})`}
-            className="min-h-8 rounded-lg bg-track font-mono text-[10px] font-medium text-ink-2 cursor-pointer hover:text-ink"
-          >
-            {full ? 'Full' : 'MVP'}
-          </button>
-        ) : (
-          <div className="flex flex-col gap-1.5 px-1">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Scope</span>
-            <Segmented
-              label="Scope"
-              size="sm"
-              value={scope}
-              onChange={setScope}
-              options={[
-                { value: 'mvp', label: 'MVP' },
-                { value: 'full', label: 'Full' },
-              ]}
-            />
-            <span className="whitespace-normal text-[11px] leading-snug text-muted">Full shows later phases as dashed placeholders.</span>
-          </div>
-        )}
+        <AccountMenu collapsed={collapsed} />
       </nav>
     </div>
   );

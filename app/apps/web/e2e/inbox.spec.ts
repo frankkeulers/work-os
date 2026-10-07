@@ -15,6 +15,13 @@ async function openControls(page: Page) {
   await page.getByRole('group', { name: 'Scenario tab' }).getByRole('button', { name: 'Controls' }).click();
 }
 
+/** Scope lives in the account menu at the foot of the sidebar. */
+async function setScope(page: Page, scope: 'MVP' | 'Full') {
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Account' }).click();
+  await page.getByRole('dialog', { name: 'Account' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: scope }).click();
+  await page.keyboard.press('Escape');
+}
+
 async function closeDrawer(page: Page) {
   await page.getByRole('button', { name: 'Close scenarios' }).click();
 }
@@ -201,7 +208,7 @@ test('Full scope adds the Outlook and Teams items with their brand marks', async
   await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('11');
   await expect(page.locator('[data-row^="outlook:"]')).toHaveCount(0);
 
-  await nav.getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
+  await setScope(page, 'Full');
   await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('14');
   await expect(rows(page, 'Now')).toHaveCount(4);
   const email = page.locator('[data-row^="outlook:"]');
@@ -279,7 +286,7 @@ test('the panel slides in, and a click outside it closes it', async ({ page }) =
 
   // Header and sidebar buttons work alongside the panel.
   await page.getByRole('button', { name: 'Poll now' }).click();
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
+  await setScope(page, 'Full');
   await expect(itemPanel(page)).toBeVisible();
 
   // Rows switch the item; they don't close the panel.

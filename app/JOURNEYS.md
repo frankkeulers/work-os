@@ -86,7 +86,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J41 | Edit a prompt | Prompts → Edit Vault conventions, change a line, try to leave (it asks), Save. The row shows the new version and Edited. Open it again and Reset to default. Models links each call's prompt version here. Open Confluence routing (Source changed), read the banner, Mark reviewed. | Is it clear the change applies to the next call? Is Reset safe enough? Is it clear what to do when a source changed? | FR-1.7 | |
 | J42 | Confluence scope | Write targets → Preview catalogue: see the pages in scope, grouped by root, with index pages marked. Add a root page by URL and read again: its pages appear. Exclude Competitor Profiles: its profiles go. Add a label; a bad one is refused. | Is it clear that new pages are picked up on their own? Is "index" clear? Is it obvious that excluding a page takes everything below it? | FR-10.2, FR-10.6 | |
 | J43 | The guide | Open Guide from the sidebar. Read Filing to Confluence, jump to No fit from On this page, then Next. Search "keychain token" and press Enter. Copy the `security` command. From Write targets, follow Guide: Confluence scope. Press `?` on the inbox. | Can you find the answer to a real question in under a minute? Do the contextual links land on the right section? Is it clear which pages may be out of date? | FR-1.8 | |
-| J34 | Theme and scope | Switch System/Light/Dark. Switch Scope to Full and click a P3 placeholder. | Do placeholders read as "later", not "broken"? | — | |
+| J34 | Theme, scope and avatar | Open the account menu at the foot of the sidebar. Switch Light/Dark/System. Switch Scope to Full and click a P3 placeholder. Follow Profile picture and appearance, upload a picture, then collapse the sidebar and open the menu again. | Do placeholders read as "later", not "broken"? Is the picture cropped well? Does the menu open beside the rail? | — | |
 
 ### Failure and empty states
 
@@ -126,7 +126,7 @@ These came out of the prototype. They are not yet applied to PLAN.md.
 - **Next step (Inbox redesign):** `TriageDecision.next` (optional): `need` (reply, approve, decide, prepare, review, actions, file), `step`, `why`, `dueAt`, `dueLabel`, `blocks` and `actionItems`. Model triage returns it; rule decisions don't (no model call), so the Inbox falls back to a default from the lane. The item summary carries `source` and `next`.
 - **Item kinds:** `chat` joins `ItemKind`, for Teams chats.
 - **Confluence site URL:** `Settings.confluence.siteUrl` (https only, e.g. `https://pole-star.atlassian.net`), so drafts can link to the target page. The executor needs it anyway. The item view returns `targets` (site, space key, vault path) for the links.
-- **Client preferences:** theme, scope and whether the Inbox item panel is open are client-side preferences, not part of `settings.json`.
+- **Client preferences:** theme, scope, the profile picture and whether the Inbox item panel is open are client-side preferences, not part of `settings.json`.
 
 ## Deviations from the designs
 

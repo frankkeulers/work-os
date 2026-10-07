@@ -39,8 +39,12 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 ## Sidebar (applied)
 
 - **Collapsing:** the sidebar folds to a 60px icon rail and back (200 ms width transition; with reduced motion it just snaps). Use the button in its header or the `[` key. The choice is a per-browser preference, like theme and scope, so it survives a reload.
-- **Rail contents:** the same items in the same order, as icons only. Each label moves to a tooltip and stays available to screen readers. The Inbox count becomes a small badge on the icon. Slack's health shows as a dot on its mark. Scope becomes a small "MVP" / "Full" button that switches scope. Placeholders keep their dashed style.
+- **Rail contents:** the same items in the same order, as icons only. Each label moves to a tooltip and stays available to screen readers. The Inbox count becomes a small badge on the icon. Slack's health shows as a dot on its mark. The account button shows only the avatar. Placeholders keep their dashed style.
 - **Header:** 64px tall in both states, so it stays level with the page top bars. Collapsing hides the brand and leaves only the toggle.
+- **Fixed height:** the app is one screen high. The sidebar never scrolls with the page, and pages with a 64px top bar (Inbox, Settings, Usage, Guide) keep the bar fixed and scroll only their body.
+- **Account menu:** the foot of the sidebar is an account button: the avatar, "Account" and a small MVP / Full chip, since scope changes what every page shows. It opens a menu above the button (beside the rail when collapsed) with a Light / Dark / System theme switch, the Scope switch, and a link to Settings › Appearance.
+- **Avatar:** a person icon until a profile picture is uploaded in Settings › Appearance. The picture is cropped to a centred square, scaled down and kept in this browser, like the theme. It never goes to the server.
+- **Icons:** Settings & rules uses a gear. The old sun-like glyph read as a light-mode control.
 
 ## Settings (applied)
 
@@ -61,7 +65,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
 ## Guide (applied)
 
-- **Way in:** a quiet **Guide** item (book icon) at the bottom of the sidebar, above Scope; an icon with a tooltip in the rail. `?` anywhere outside a text field opens Keyboard shortcuts.
+- **Way in:** a quiet **Guide** item (book icon) at the bottom of the sidebar, above the account button; an icon with a tooltip in the rail. `?` anywhere outside a text field opens Keyboard shortcuts.
 - **Source:** Markdown files in `app/docs/guide/`, one page each. Front matter gives the title, nav group, order, summary and `updated` date. The build carries a copy, shown at once; the server then reads the folder (`GET /api/guide`) and its pages replace the copy, again whenever the window regains focus. So an edit shows without a deploy. Under the page list, a muted line says which it is: "Read live from docs/guide" or "Built-in copy from this build". A file that doesn't parse keeps its built-in copy, with a warning banner naming the problem. The page loads lazily, so it costs nothing until opened.
 - **Layout:** like Settings, so it feels native:
   - a 64px top bar with the title and a search box (`/` focuses it);
@@ -115,7 +119,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
 **Shell**
 - Add group labels to the nav once P2–P4 items exist: Work (Inbox, Commitments, Briefs) and System (Usage, Settings).
-- Move the Scope control into the scenarios drawer. It's a prototype aid, not a product setting.
+- Move the Scope control into the scenarios drawer. It's a prototype aid, not a product setting. (For now it sits in the account menu, with the theme.)
 
 **Item detail**
 - **Match the Inbox panel.** Item detail is now the "open as a full page" view of the panel, so it should use the same blocks: the source line, the summary with its lane chip, the Next step card, and the messages.

@@ -14,9 +14,16 @@ test('the sidebar collapses to an icon rail and remembers it', async ({ page }) 
   await expect(usage).toHaveAttribute('title', 'Usage & health');
   expect((await usage.boundingBox())!.width).toBeLessThanOrEqual(40);
   await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('11');
-  // Scope stays one click away.
-  await nav.getByRole('button', { name: /Scope: MVP/ }).click();
-  await expect(nav.getByRole('button', { name: /Scope: Full/ })).toBeVisible();
+  // The account menu still opens from the rail, beside it rather than clipped by it.
+  await nav.getByRole('button', { name: 'Account' }).click();
+  const menu = page.getByRole('dialog', { name: 'Account' });
+  await menu.getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
+  await expect(menu.getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' })).toHaveAttribute('aria-pressed', 'true');
+  const box = (await menu.boundingBox())!;
+  expect(box.width).toBe(260);
+  expect(box.x).toBeGreaterThanOrEqual(60); // beside the 60px rail, not over its icons
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
   // The item panel stays open: sidebar buttons aren't "outside" it.
   await expect(page.getByRole('complementary', { name: 'Item panel' })).toBeVisible();
 
