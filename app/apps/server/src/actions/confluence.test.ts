@@ -6,7 +6,7 @@ import { marker, planConfluenceWrite } from './confluenceExecutor';
 import { buildCatalogue, inScope, scopeCql, type ConfluenceScope } from './confluenceCatalogue';
 import { FAKE_CONFLUENCE_CREDS, FakeConfluence, parseCql } from './fakeConfluence';
 import { entryStorage, inline, markdownToStorage } from './markdown';
-import { headings, insertIntoSection, outline, textOf } from './storage';
+import { findHeading, headings, insertIntoSection, outline, textOf } from './storage';
 
 // Confluence filing against a fake Confluence (FR-10.3, FR-10.5, FR-10.6, FR-14.5). Never the real site.
 
@@ -38,6 +38,28 @@ describe('storage format', () => {
     expect(out).toContain('<p>x</p><p>NEW</p><h2>Open questions</h2>');
     expect(insertIntoSection(PAGE, 'Nope', 'x')).toBeUndefined();
     expect(textOf('<p>a&nbsp;&lt;b&gt; &#65;</p>')).toBe('a <b> A');
+  });
+});
+
+describe('headings with entities, as Confluence writes them', () => {
+  // From DP - Customer & Prospect Signals: the model copied the heading with a real dash.
+  const SIGNALS =
+    '<h2>Per-account signals</h2><h3>Qatar Ministry of Transport and Communications &mdash; Customer (June 2026)</h3><p>Uses MVI.</p>' +
+    '<h3>Valpara&iacute;so Port Authority (Chile) &mdash; Prospect</h3><p>RFP.</p><h3>Seward &amp; Kissel&rsquo;s view</h3><p>x</p><h2>Page log</h2>';
+
+  it('decodes named, accented and numeric entities', () => {
+    expect(textOf('a&mdash;b &ndash; &iacute;&Uuml;&ccedil;&scaron; &rsquo;&hellip; &#8212;&#x2014; &bogus;')).toBe('a—b – íÜçš ’… —— &bogus;');
+    expect(outline(SIGNALS)[1].heading).toBe('Qatar Ministry of Transport and Communications — Customer (June 2026)');
+  });
+
+  it('finds a section whatever dash, quote, space or case the model wrote', () => {
+    expect(findHeading(SIGNALS, 'Qatar Ministry of Transport and Communications — Customer (June 2026)')?.level).toBe(3);
+    expect(findHeading(SIGNALS, 'qatar ministry of transport and communications - customer (june 2026)')).toBeDefined();
+    expect(findHeading(SIGNALS, 'Valparaíso Port Authority (Chile) – Prospect')).toBeDefined();
+    expect(findHeading(SIGNALS, "Seward & Kissel's view")).toBeDefined();
+    expect(findHeading(SIGNALS, 'Qatar Ministry — Prospect')).toBeUndefined();
+    const out = insertIntoSection(SIGNALS, 'Qatar Ministry of Transport and Communications - Customer (June 2026)', '<h4>New</h4>')!;
+    expect(out).toContain('<p>Uses MVI.</p><h4>New</h4><h3>Valpara');
   });
 });
 

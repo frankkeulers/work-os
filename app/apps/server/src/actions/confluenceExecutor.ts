@@ -2,7 +2,7 @@ import type { ConfluenceDraft } from '@work-os/shared';
 import type { ConfluenceApi, Page } from './confluenceApi';
 import { inScope, type ConfluenceScope } from './confluenceCatalogue';
 import { entryStorage } from './markdown';
-import { headings, insertIntoSection } from './storage';
+import { findHeading, insertIntoSection } from './storage';
 
 // The Confluence executor (FR-10.5, FR-10.6, FR-14.5, NF-5): code, never a model, applies an
 // approved entry. Before every attempt it asks Confluence whether the page is in scope as the
@@ -33,7 +33,7 @@ export async function planConfluenceWrite(api: ConfluenceApi, scope: ConfluenceS
   const next = d.baseVersion + 1;
   if (page.version === next && page.versionMessage.includes(marker(actionId))) return { kind: 'already', version: next, message: `Written to ${page.title}, now v${next}. Logged action.executed.` };
   if (page.version !== d.baseVersion) return { kind: 'conflict', message: `The page changed after drafting (v${d.baseVersion} → v${page.version}). Re-drafting instead of writing.` };
-  const section = headings(page.storage).find((h) => h.text.toLowerCase() === d.section.toLowerCase());
+  const section = findHeading(page.storage, d.section);
   const storage = section && insertIntoSection(page.storage, d.section, entryStorage(d.title, d.content, section.level));
   if (!storage) return { kind: 'conflict', message: `${page.title} no longer has the section ${d.section}. Re-drafting instead of writing.` };
   return {

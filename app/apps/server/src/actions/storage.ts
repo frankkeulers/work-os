@@ -4,15 +4,61 @@
 
 const HEADING_RE = /<h([1-6])(?:\s[^>]*)?>([\s\S]*?)<\/h\1>/gi;
 
-const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+// The named entities Confluence writes in storage format: markup, spaces, punctuation and symbols.
+// Accented letters (&eacute;, &Uuml;, &ccedil; …) are composed from their name below.
+const ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'",
+  nbsp: '\u00a0', ensp: '\u2002', emsp: '\u2003', thinsp: '\u2009', shy: '\u00ad', zwj: '\u200d', zwnj: '\u200c',
+  ndash: '–', mdash: '—', hellip: '…', bull: '•', middot: '·', prime: '′', Prime: '″',
+  lsquo: '‘', rsquo: '’', sbquo: '‚', ldquo: '“', rdquo: '”', bdquo: '„', laquo: '«', raquo: '»', lsaquo: '‹', rsaquo: '›',
+  iexcl: '¡', iquest: '¿', sect: '§', para: '¶', dagger: '†', Dagger: '‡', permil: '‰',
+  copy: '©', reg: '®', trade: '™', deg: '°', plusmn: '±', times: '×', divide: '÷', minus: '−', micro: 'µ',
+  frac12: '½', frac14: '¼', frac34: '¾', sup1: '¹', sup2: '²', sup3: '³', ordf: 'ª', ordm: 'º', not: '¬',
+  le: '≤', ge: '≥', ne: '≠', asymp: '≈', infin: '∞', larr: '←', rarr: '→', uarr: '↑', darr: '↓', harr: '↔', rArr: '⇒', lArr: '⇐',
+  euro: '€', pound: '£', yen: '¥', cent: '¢', curren: '¤',
+  szlig: 'ß', aelig: 'æ', AElig: 'Æ', oelig: 'œ', OElig: 'Œ', oslash: 'ø', Oslash: 'Ø', eth: 'ð', ETH: 'Ð', thorn: 'þ', THORN: 'Þ',
+};
+const ACCENTS: Record<string, string> = { acute: '\u0301', grave: '\u0300', circ: '\u0302', tilde: '\u0303', uml: '\u0308', ring: '\u030a', cedil: '\u0327', caron: '\u030c' };
+
+function entity(name: string): string | undefined {
+  if (name.startsWith('#')) {
+    const code = name[1] === 'x' || name[1] === 'X' ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return Number.isInteger(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : undefined;
+  }
+  if (ENTITIES[name]) return ENTITIES[name];
+  const m = /^([A-Za-z])(acute|grave|circ|tilde|uml|ring|cedil|caron)$/.exec(name);
+  return m ? `${m[1]}${ACCENTS[m[2]]}`.normalize('NFC') : undefined;
+}
 
 /** The text of some storage markup: tags dropped, entities decoded, whitespace collapsed. */
 export function textOf(markup: string): string {
   return markup
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&(#\d+|[a-z]+);/gi, (m, e: string) => (e.startsWith('#') ? String.fromCodePoint(Number(e.slice(1))) : (ENTITIES[e.toLowerCase()] ?? m)))
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/gi, (m, e: string) => entity(e) ?? m)
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * How headings are compared: decoded, case-folded, with every kind of dash, quote and space made
+ * the same, so a model writing "—" for "&mdash;" or "'" for "’" still finds the section.
+ */
+export function headingKey(s: string): string {
+  return textOf(s)
+    .normalize('NFC')
+    .replace(/[\u00ad\u200b-\u200d]/g, '')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[\u2018\u2019\u201a\u2032`]/g, "'")
+    .replace(/[\u201c\u201d\u201e\u2033]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** The heading in `storage` whose text is `text`, as headingKey compares them. */
+export function findHeading(storage: string, text: string): Heading | undefined {
+  const key = headingKey(text);
+  return headings(storage).find((h) => headingKey(h.text) === key);
 }
 
 export interface Heading {
@@ -27,8 +73,6 @@ export function headings(storage: string): Heading[] {
   for (const m of storage.matchAll(HEADING_RE)) out.push({ level: Number(m[1]), text: textOf(m[2]), start: m.index, end: m.index + m[0].length });
   return out;
 }
-
-const norm = (s: string) => textOf(s).toLowerCase();
 
 /** Where the section under `heading` ends: the next heading of the same or a higher level. */
 function sectionEnd(storage: string, all: Heading[], i: number): number {
@@ -49,7 +93,8 @@ export function outline(storage: string, excerptChars = 300): { level: number; h
 /** Inserts `content` at the end of the section under `heading`. Undefined if there's no such heading. */
 export function insertIntoSection(storage: string, heading: string, content: string): string | undefined {
   const all = headings(storage);
-  const i = all.findIndex((h) => h.text.toLowerCase() === norm(heading));
+  const key = headingKey(heading);
+  const i = all.findIndex((h) => headingKey(h.text) === key);
   if (i < 0) return undefined;
   const at = sectionEnd(storage, all, i);
   return `${storage.slice(0, at)}${content}${storage.slice(at)}`;

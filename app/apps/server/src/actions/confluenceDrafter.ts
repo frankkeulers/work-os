@@ -8,7 +8,7 @@ import type { ConfluenceApi, Page } from './confluenceApi';
 import { buildCatalogue, type CatalogueEntry } from './confluenceCatalogue';
 import { DraftError } from './errors';
 import { entryStorage } from './markdown';
-import { headings, outline, textOf } from './storage';
+import { findHeading, outline, textOf } from './storage';
 import { DRAFT_KEEP_LAST } from './vaultDrafter';
 
 // "Draft Confluence entry" (FR-10.1–10.4), in two calls, because the PSG context tree is too big to
@@ -160,7 +160,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
   const a = r.value;
   const page = pages.find((p) => p.id === a.pageId);
   if (!page) throw new DraftError(`The draft targets page ${a.pageId}, which is not one of the picked pages.`, 'allow_list');
-  const section = headings(page.storage).find((h) => h.text.toLowerCase() === textOf(a.section).toLowerCase());
+  const section = findHeading(page.storage, a.section);
   if (!section) throw new DraftError(`The draft would file under “${a.section}”, but ${page.title} has no such section.`);
 
   // FR-10.4: a second, cheap look at the entry itself, before it is shown.
