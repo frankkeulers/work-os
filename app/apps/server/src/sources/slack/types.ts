@@ -79,6 +79,12 @@ export interface MembersResponse extends Paged {
   members: string[];
 }
 
+export type SlackUser = { id: string; name?: string; real_name?: string; is_bot?: boolean; deleted?: boolean; profile?: { display_name?: string; real_name?: string } };
+
 export interface UserInfo {
-  user: { id: string; name?: string; real_name?: string; is_bot?: boolean; deleted?: boolean; profile?: { display_name?: string; real_name?: string } };
+  user: SlackUser;
+}
+
+export interface UsersListResponse extends Paged {
+  members: SlackUser[];
 }

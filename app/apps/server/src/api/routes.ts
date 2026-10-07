@@ -1,4 +1,4 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, type EarlierView } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, type EarlierView, type PersonOption } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writePromptFile, type PromptFile } from '../claude/promptFiles';
 import { SettingsValidationError } from '../config/settingsState';
@@ -179,6 +179,22 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
       .map((c) => (c.startsWith('#') ? c : `#${c}`));
     const names: string[] = [...new Set(all)].sort((a, b) => a.localeCompare(b));
     return reply.headers(noStore).send(names);
+  });
+
+  // People for the VIP search: Slack's list when it answers, plus everyone already in the inbox and
+  // the VIPs themselves. One entry per name; Slack's carries the real name.
+  app.get('/api/people', async (_req, reply) => {
+    const live = (await d.people?.().catch(() => undefined)) ?? [];
+    const me = d.meId?.();
+    const known = Object.values(d.store.projection.items)
+      .flatMap((i) => (i.source === 'slack' ? i.participants : []))
+      .filter((p) => p.id !== me && p.name && p.name !== p.id)
+      .map((p): PersonOption => ({ name: p.name }));
+    const vips = d.settings.editable.settings.slack.vips.map((name): PersonOption => ({ name }));
+    const byName = new Map<string, PersonOption>();
+    for (const p of [...live, ...known, ...vips]) if (!byName.has(p.name.toLowerCase())) byName.set(p.name.toLowerCase(), p);
+    const people = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return reply.headers(noStore).send(people);
   });
 
   app.get('/api/usage', async (_req, reply) => reply.headers(noStore).send(usageView(d)));

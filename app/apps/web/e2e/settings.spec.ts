@@ -191,3 +191,21 @@ test('channel fields in Settings › Slack search the channels you’re in', asy
   await expect(page.getByRole('button', { name: 'Remove #insights-api' })).toBeVisible();
   for (const name of ['Customer channels', 'Include channels', 'Exclude channels']) await expect(page.getByRole('combobox', { name })).toBeVisible();
 });
+
+test('VIPs are picked from a search of people', async ({ page }) => {
+  await open(page, 'slack');
+  const search = page.getByRole('combobox', { name: 'VIPs' });
+  await search.fill('meri');
+  const options = page.getByRole('listbox', { name: 'VIPs suggestions' }).getByRole('option');
+  await expect(options).toHaveText(['Meridia PM']);
+  await page.screenshot({ path: join(APP, 'screenshots/settings-slack-vip-search-light.png') });
+  await search.press('Enter');
+  await expect(page.getByRole('button', { name: 'Remove Meridia PM' })).toBeVisible();
+  // People already VIPs aren't offered again.
+  await search.fill('matt');
+  await expect(options).toHaveCount(0);
+  await search.fill('');
+  await expect(saved(page)).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Remove Meridia PM' })).toBeVisible();
+});

@@ -3,7 +3,7 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Rule as RuleSchema, isValidRegex, type NamedList, type Rule, type RuleCondition, type RuleOutcome } from '@work-os/shared';
-import { ChannelPicker } from './ChannelPicker';
+import { ChannelPicker } from './LookupPicker';
 import { DragIcon, Icon } from './icons';
 import { Button, ConfirmDialog, Dialog, Field, IconButton, Segmented, Switch, cx, inputBase, inputClass } from './ui';
 

@@ -368,6 +368,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     earlier: (item, signal) => earlier.forItem(item, signal),
     // Where the guidance files' sources live (FR-1.7); never the real home folder in tests or fakes.
     promptSources: deps.fakes || process.env.VITEST ? undefined : () => ({ home: homedir(), vault: actions.vaultRoot() }),
+    people: (signal) => slackDirectory.listPeople(signal),
     channels: async (signal) => [...(await slackDirectory.conversations(signal)).values()].filter((c) => !c.is_im && !c.is_mpim && c.name).map((c) => `#${c.name}`),
     slackTeamId: () => slackDirectory.identityKnown?.team_id,
     dmTitle: (itemId) => {

@@ -79,6 +79,8 @@ export class FakeSlack {
         const c = this.channels.get(p.channel)!;
         return page(c.members ?? [...new Set([this.me, ...(c.user ? [c.user] : []), ...c.messages.flatMap((m) => (m.user ? [m.user] : []))])], p, 'members');
       }
+      case 'users.list':
+        return page([...this.users].map(([id, name]) => ({ id, name: id.toLowerCase(), profile: { display_name: name }, ...(this.bots.has(id) && { is_bot: true }) })), p, 'members');
       case 'users.conversations':
         return page([...this.channels.values()].filter((c) => c.member).map(strip), p, 'channels');
       case 'conversations.replies': {

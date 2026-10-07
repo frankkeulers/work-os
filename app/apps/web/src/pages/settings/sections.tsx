@@ -2,7 +2,7 @@ import { useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { ModelId, PromptFileId, Rule, Settings } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
-import { ChannelPicker } from '../../components/ChannelPicker';
+import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
 import { Icon } from '../../components/icons';
 import { RulesList, newRuleEdit, type RuleEdit } from '../../components/Rules';
 import { Banner, Button, Chip, IconButton, Segmented, Spinner, Switch, cx, inputBase, inputClass } from '../../components/ui';
@@ -10,7 +10,7 @@ import { onTopics, useApiQuery } from '../../hooks/useApiQuery';
 import { fmtMoney, fmtTime } from '../../lib/format';
 import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
-import { ChipInput, FutureRow, Group, Meter, NumInput, Row, SectionHeader } from './parts';
+import { FutureRow, Group, Meter, NumInput, Row, SectionHeader } from './parts';
 
 export interface Confirm {
   title: string;
@@ -102,7 +102,7 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
       />
       <Group title="People and channels">
         <Row stacked label="VIPs" help="DMs from these people skip the quiet window and go straight to Now.">
-          <ChipInput label="VIPs" placeholder="Add a name…" items={s.slack.vips} onChange={(v) => set((x) => (x.slack.vips = v))} />
+          <PeoplePicker label="VIPs" placeholder="Search people…" values={s.slack.vips} onChange={(v) => set((x) => (x.slack.vips = v))} />
         </Row>
         <Row stacked label="Customer channels" help="Used by the customer-channels rule.">
           <ChannelPicker label="Customer channels" placeholder="Search channels…" values={s.slack.customerChannels} onChange={(v) => set((x) => (x.slack.customerChannels = v))} />

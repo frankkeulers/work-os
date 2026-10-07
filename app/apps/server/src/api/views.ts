@@ -21,6 +21,7 @@ import {
   type Item,
   type ItemSummary,
   type Participant,
+  type PersonOption,
   type ItemView,
   type SettingsView,
   type SourceHealth,
@@ -80,6 +81,8 @@ export interface ViewDeps {
   earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
   /** The Slack channels Frank is in, as "#name", for the rule editor's channel search. */
   channels?: (signal?: AbortSignal) => Promise<string[]>;
+  /** The people in the Slack workspace, for the VIP search. */
+  people?: (signal?: AbortSignal) => Promise<PersonOption[]>;
   /** Drafts, approvals and the outbox (FR-9.x, FR-14.5). */
   actions?: ActionService;
 }

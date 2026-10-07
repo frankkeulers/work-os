@@ -157,6 +157,12 @@ export interface TopicPiece {
   anchor: boolean; // the piece the topic is anchored on: it can't be split out
 }
 
+/** A person to pick as a VIP: `name` is what rules match on; `realName` when it differs. */
+export interface PersonOption {
+  name: string;
+  realName?: string;
+}
+
 /** The messages just before a DM item, read live from the source and never stored. Oldest first. */
 export interface EarlierView {
   messages: Message[];
@@ -310,6 +316,8 @@ export interface WorkOsApi {
   getEarlier(id: string): Promise<EarlierView>;
   /** Slack channel names ("#name") for the rule editor's search. */
   getChannels(): Promise<string[]>;
+  /** People in the Slack workspace, for the VIP search. */
+  getPeople(): Promise<PersonOption[]>;
   getUsage(): Promise<UsageView>;
   getEvalReports(): Promise<EvalReport[]>;
   getSettings(): Promise<SettingsView>;

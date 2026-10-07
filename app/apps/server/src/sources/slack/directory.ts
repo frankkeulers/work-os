@@ -1,5 +1,5 @@
 import type { SlackApi } from './api';
-import type { AuthTest, Conversation, ConversationsResponse, MembersResponse, UserInfo } from './types';
+import type { AuthTest, Conversation, ConversationsResponse, MembersResponse, SlackUser, UserInfo, UsersListResponse } from './types';
 
 // Who is who, and which conversations Frank is in. Kept in memory: names for participants and
 // titles, membership to keep search to Frank's own conversations. Refreshed hourly; a user seen for
@@ -7,6 +7,9 @@ import type { AuthTest, Conversation, ConversationsResponse, MembersResponse, Us
 
 const REFRESH_MS = 60 * 60_000;
 const MAX_PAGES = 20;
+
+/** The name Work OS shows and rules match on: display name, then real name, then handle. */
+const nameOf = (u: SlackUser) => u.profile?.display_name || u.profile?.real_name || u.real_name || u.name || u.id;
 
 /**
  * A group DM's own name, "mpdm-frank.keulers--dana.lee--sam-1", as "dana.lee, sam": the handles of
@@ -76,8 +79,7 @@ export class SlackDirectory {
       if (this.users.has(id)) continue;
       try {
         const r = await this.api.call<UserInfo>('users.info', { user: id }, signal);
-        const p = r.user.profile;
-        this.users.set(id, p?.display_name || p?.real_name || r.user.real_name || r.user.name || id);
+        this.users.set(id, nameOf(r.user));
         if (r.user.is_bot) this.bots.add(id);
       } catch (err) {
         // A missing name is not worth failing a poll over, but an outage is.
@@ -88,6 +90,33 @@ export class SlackDirectory {
   }
 
   name = (id: string): string => this.users.get(id) ?? id;
+
+  private people?: { at: number; list: { name: string; realName?: string }[] };
+
+  /**
+   * The workspace's people, for the VIP search: active humans other than Frank, by the name the rules match on,
+   * with the real name when it differs. Listed once an hour.
+   */
+  async listPeople(signal?: AbortSignal): Promise<{ name: string; realName?: string }[]> {
+    if (this.people && this.now() - this.people.at < REFRESH_MS) return this.people.list;
+    const me = (await this.identity(signal)).user_id;
+    const list: { name: string; realName?: string }[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const r = await this.api.call<UsersListResponse>('users.list', { limit: 200, cursor }, signal);
+      for (const u of r.members) {
+        if (u.deleted || u.is_bot || u.id === 'USLACKBOT' || u.id === me) continue;
+        const name = nameOf(u);
+        this.users.set(u.id, name);
+        const real = u.profile?.real_name || u.real_name;
+        list.push({ name, ...(real && real !== name && { realName: real }) });
+      }
+      cursor = r.response_metadata?.next_cursor || undefined;
+      if (!cursor) break;
+    }
+    this.people = { at: this.now(), list };
+    return list;
+  }
 
   /** Whether a user resolved so far is an app's bot user. */
   isBot = (id: string): boolean => this.bots.has(id);

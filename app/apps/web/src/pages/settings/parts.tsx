@@ -1,6 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { BrandIcon, type Brand } from '../../components/BrandIcon';
-import { Icon } from '../../components/icons';
 import { FutureButton, PhaseTag, cx, inputBase, type Phase } from '../../components/ui';
 
 // Building blocks for the settings views. See DESIGN.md: one surface, hairline dividers,
@@ -122,42 +121,6 @@ export function NumInput({
       />
       {suffix}
     </span>
-  );
-}
-
-export function ChipInput({ label, items, onChange, placeholder = 'Add…' }: { label: string; items: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
-  const [text, setText] = useState('');
-  const add = () => {
-    const v = text.trim().replace(/,$/, '');
-    if (!v) return;
-    if (!items.includes(v)) onChange([...items, v]);
-    setText('');
-  };
-  return (
-    <div className="flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-2 py-1.5 focus-within:border-accent">
-      {items.map((it) => (
-        <span key={it} className="inline-flex items-center gap-0.5 rounded-md bg-track py-0.5 pl-2 pr-0.5 text-[13px]">
-          {it}
-          <button type="button" aria-label={`Remove ${it}`} className="inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:bg-track-2 hover:text-ink cursor-pointer" onClick={() => onChange(items.filter((x) => x !== it))}>
-            <Icon name="x" size={12} />
-          </button>
-        </span>
-      ))}
-      <input
-        aria-label={`Add to ${label}`}
-        placeholder={items.length ? 'Add…' : placeholder}
-        className="min-w-[140px] flex-1 border-0 bg-transparent px-1 text-[13px] text-ink outline-none"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ',') {
-            e.preventDefault();
-            add();
-          } else if (e.key === 'Backspace' && !text && items.length) onChange(items.slice(0, -1));
-        }}
-        onBlur={add}
-      />
-    </div>
   );
 }
 

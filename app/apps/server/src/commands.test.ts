@@ -260,6 +260,15 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(items.find((i) => i.title === 'Dana Lee')).toMatchObject({ triage: { attention: 'none', vault: true, confluence: false } });
   });
 
+  it('lists people for the VIP search: humans from Slack, without Frank, bots or the deactivated', async () => {
+    slack.users.set('U03SAM', 'Sam Okafor');
+    slack.users.set('U09GONG', 'Gong');
+    slack.bots.add('U09GONG');
+    const r = await call<{ name: string }[]>('GET', '/api/people');
+    expect(r.status).toBe(200);
+    expect(r.body.map((p) => p.name)).toEqual(['Dana Lee', 'Sam Okafor']);
+  });
+
   it('lists channel names for the rule editor, from Slack and the inbox', async () => {
     slack.channel({ id: 'C02SIG', name: 'product-signals' });
     const r = await call<string[]>('GET', '/api/channels');

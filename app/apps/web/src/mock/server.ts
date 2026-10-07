@@ -45,6 +45,7 @@ import {
   type InboxView,
   type ItemSummary,
   type EarlierView,
+  type PersonOption,
   type ItemView,
   type Notice,
   type PromptFileId,
@@ -542,6 +543,12 @@ export class MockServer implements WorkOsApi, MockControls {
     const sl = this.s.settings.slack;
     const fromItems = Object.values(this.s.items).filter((r) => r.item.source === 'slack' && r.item.kind !== 'dm' && r.item.title.startsWith('#')).map((r) => r.item.title);
     return [...new Set([...fromItems, ...sl.includeChannels, ...sl.excludeChannels, ...sl.customerChannels, ...(sl.appChannels ?? [])])].sort((a, b) => a.localeCompare(b));
+  }
+
+  async getPeople(): Promise<PersonOption[]> {
+    await this.gate(QUERY_MS);
+    const names = Object.values(this.s.items).flatMap((r) => (r.item.source === 'slack' ? r.item.participants : []).filter((p) => p.id !== FRANK).map((p) => p.name));
+    return [...new Set([...names, ...this.s.settings.slack.vips])].sort((a, b) => a.localeCompare(b)).map((name) => ({ name }));
   }
 
   async getItem(requested: string): Promise<ItemView> {
