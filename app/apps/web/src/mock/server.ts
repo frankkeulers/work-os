@@ -540,7 +540,7 @@ export class MockServer implements WorkOsApi, MockControls {
   async getChannels(): Promise<string[]> {
     await this.gate(QUERY_MS);
     const sl = this.s.settings.slack;
-    const fromItems = Object.values(this.s.items).filter((r) => r.item.kind !== 'dm').map((r) => r.item.title);
+    const fromItems = Object.values(this.s.items).filter((r) => r.item.source === 'slack' && r.item.kind !== 'dm' && r.item.title.startsWith('#')).map((r) => r.item.title);
     return [...new Set([...fromItems, ...sl.includeChannels, ...sl.excludeChannels, ...sl.customerChannels, ...(sl.appChannels ?? [])])].sort((a, b) => a.localeCompare(b));
   }
 

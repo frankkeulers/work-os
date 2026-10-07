@@ -1,4 +1,7 @@
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+
+const APP = join(import.meta.dirname, '../../..');
 
 const saved = (page: Page) => page.getByRole('status').filter({ hasText: 'Changes saved' });
 
@@ -172,4 +175,19 @@ test('a guidance file whose source changed says so until it is marked reviewed (
   await expect(page.getByTestId('prompt-sources')).toHaveCount(0);
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByRole('main').getByText('Source changed')).toHaveCount(0);
+});
+
+test('channel fields in Settings › Slack search the channels you’re in', async ({ page }) => {
+  await open(page, 'slack');
+  const search = page.getByRole('combobox', { name: 'App channels' });
+  await search.fill('insig');
+  const options = page.getByRole('listbox', { name: 'App channels suggestions' }).getByRole('option');
+  await expect(options).toHaveText(['#insights-api']); // channels only: not the "Insights APIs roadmap review" meeting
+  await page.screenshot({ path: join(APP, 'screenshots/settings-slack-channel-search-light.png') });
+  await search.press('Enter');
+  await expect(page.getByRole('button', { name: 'Remove #insights-api' })).toBeVisible();
+  await expect(saved(page)).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Remove #insights-api' })).toBeVisible();
+  for (const name of ['Customer channels', 'Include channels', 'Exclude channels']) await expect(page.getByRole('combobox', { name })).toBeVisible();
 });

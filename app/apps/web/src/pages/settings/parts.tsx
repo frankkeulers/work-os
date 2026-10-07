@@ -125,12 +125,11 @@ export function NumInput({
   );
 }
 
-export function ChipInput({ label, items, onChange, channel, placeholder = 'Add…' }: { label: string; items: string[]; onChange: (v: string[]) => void; channel?: boolean; placeholder?: string }) {
+export function ChipInput({ label, items, onChange, placeholder = 'Add…' }: { label: string; items: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
   const [text, setText] = useState('');
   const add = () => {
-    let v = text.trim().replace(/,$/, '');
+    const v = text.trim().replace(/,$/, '');
     if (!v) return;
-    if (channel && !v.startsWith('#')) v = `#${v}`;
     if (!items.includes(v)) onChange([...items, v]);
     setText('');
   };

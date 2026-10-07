@@ -2,6 +2,7 @@ import { useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { ModelId, PromptFileId, Rule, Settings } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
+import { ChannelPicker } from '../../components/ChannelPicker';
 import { Icon } from '../../components/icons';
 import { RulesList, newRuleEdit, type RuleEdit } from '../../components/Rules';
 import { Banner, Button, Chip, IconButton, Segmented, Spinner, Switch, cx, inputBase, inputClass } from '../../components/ui';
@@ -104,16 +105,16 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
           <ChipInput label="VIPs" placeholder="Add a name…" items={s.slack.vips} onChange={(v) => set((x) => (x.slack.vips = v))} />
         </Row>
         <Row stacked label="Customer channels" help="Used by the customer-channels rule.">
-          <ChipInput channel label="Customer channels" placeholder="Add #channel…" items={s.slack.customerChannels} onChange={(v) => set((x) => (x.slack.customerChannels = v))} />
+          <ChannelPicker label="Customer channels" placeholder="Search channels…" values={s.slack.customerChannels} onChange={(v) => set((x) => (x.slack.customerChannels = v))} />
         </Row>
         <Row stacked label="Only read these channels" help="Leave empty to read every channel you can see.">
-          <ChipInput channel label="Include channels" placeholder="Every channel you can see" items={s.slack.includeChannels} onChange={(v) => set((x) => (x.slack.includeChannels = v))} />
+          <ChannelPicker label="Include channels" placeholder="Every channel you can see" values={s.slack.includeChannels} onChange={(v) => set((x) => (x.slack.includeChannels = v))} />
         </Row>
         <Row stacked label="Read app posts in these channels" help="Posts from apps such as Gong (call recaps, mentions) are read here and dropped everywhere else.">
-          <ChipInput channel label="App channels" placeholder="Add #channel…" items={s.slack.appChannels ?? []} onChange={(v) => set((x) => (x.slack.appChannels = v))} />
+          <ChannelPicker label="App channels" placeholder="Search channels…" values={s.slack.appChannels ?? []} onChange={(v) => set((x) => (x.slack.appChannels = v))} />
         </Row>
         <Row stacked label="Never read these channels" help="Dropped as they’re fetched, and never stored.">
-          <ChipInput channel label="Exclude channels" placeholder="Add #channel…" items={s.slack.excludeChannels} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
+          <ChannelPicker label="Exclude channels" placeholder="Search channels…" values={s.slack.excludeChannels} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
         </Row>
       </Group>
       <Group title="Links">

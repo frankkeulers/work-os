@@ -173,7 +173,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const live = await d.channels?.().catch(() => []);
     const slack = d.settings.editable.settings.slack;
     const known = Object.values(d.store.projection.items)
-      .filter((i) => i.source === 'slack' && i.kind !== 'dm')
+      .filter((i) => i.source === 'slack' && i.kind !== 'dm' && i.title.startsWith('#'))
       .map((i) => i.title);
     const all = [...(live ?? []), ...known, ...slack.includeChannels, ...slack.excludeChannels, ...slack.customerChannels, ...(slack.appChannels ?? [])]
       .map((c) => (c.startsWith('#') ? c : `#${c}`));
