@@ -53,6 +53,11 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
   - Write targets shows "Dry-run" while dry-run is on.
   - A section with an unsaved invalid field shows a red dot.
 - Rows sit directly on the page surface with hairline dividers; there are no boxed cards.
+- **Write targets › Confluence scope:** four stacked lists, one per rule:
+  - **Root pages**, **Excluded pages** and **Single pages** are page rows (title, ID in mono, ×), each with an "Add … by ID or URL" form.
+  - **Labels** are mono chips.
+
+  **Preview catalogue** reads the scope live and lists the pages in a bordered, scrolling box. They are grouped by root under sticky headers, and pages with children carry an "index" chip. Each row links to the page.
 
 ## Inbox (applied, from `specs/Inbox Redesign Options.html`)
 

@@ -48,7 +48,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J11 | Blocked: people observations | Open the overloaded-engineers item (Today). | The Confluence button is disabled. Is the reason clear? Is the vault the obvious alternative? | FR-10.1, NF-2 | |
 | J12 | Blocked: people check | Start J12. Draft a Confluence entry on the Labs graduation item. | The draft is blocked at the people-check step. Is "Draft vault note instead" helpful? | FR-10.4 | |
 | J13 | Version conflict | Start J13. Draft and approve a Confluence entry on the Labs graduation item. | Page v42 changed to v44. Does the re-draft explain what happened? | FR-10.5 | |
-| J14 | Allow-list refusal | Open the roadmap ownership item (File). Draft a Confluence entry; the target is not on the allow-list. Approve anyway. | Is the red chip noticed before approving? Does the refusal point to Settings › Write targets? | FR-10.6 | |
+| J14 | Scope refusal | Open the roadmap ownership item (File). Its drafted page sits under an excluded page (Product org). Approve anyway. | Is the red chip noticed before approving? Does the refusal point to Settings › Write targets? | FR-10.6 | |
 | J15 | Discard and re-draft | On a ready draft, edit the text, then click Re-draft, then Discard. Try to leave the page with unsaved edits. | Are the confirmations proportionate? | FR-9.3 | |
 | J16 | Draft ready while away | On a To file item, click the draft button in the panel's File it section, then move to another item at once. | Does the "Draft ready" toast bring you back? Does the File it row show the state? | FR-9.1 | |
 
@@ -84,6 +84,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J32 | Dry-run | Write targets → turn dry-run off (it asks first; the nav badge goes away), then approve a draft. Turn it back on. | Is the difference between dry-run and real writes always visible? | FR-1.6 | |
 | J33 | Rebuild state | Storage & data → Rebuild. | Is it clear that nothing is lost? | §4.3 | |
 | J41 | Edit a prompt | Prompts → Edit Vault conventions, change a line, try to leave (it asks), Save. The row shows the new version and Edited. Open it again and Reset to default. Models links each call's prompt version here. Open Confluence routing (Source changed), read the banner, Mark reviewed. | Is it clear the change applies to the next call? Is Reset safe enough? Is it clear what to do when a source changed? | FR-1.7 | |
+| J42 | Confluence scope | Write targets → Preview catalogue: see the pages in scope, grouped by root, with index pages marked. Add a root page by URL and read again: its pages appear. Exclude Competitor Profiles: its profiles go. Add a label; a bad one is refused. | Is it clear that new pages are picked up on their own? Is "index" clear? Is it obvious that excluding a page takes everything below it? | FR-10.2, FR-10.6 | |
 | J34 | Theme and scope | Switch System/Light/Dark. Switch Scope to Full and click a P3 placeholder. | Do placeholders read as "later", not "broken"? | — | |
 
 ### Failure and empty states
@@ -106,7 +107,7 @@ The prototype shows one default for each question. Decide each one in the UX rou
 4. **New reply after a draft.** Default: a stale-draft banner appears, and you can still approve.
 5. **After a write.** Default: the item stays open, with a "Mark done and next item" button. Should filing an item that only needed filing mark it done automatically?
 6. **Keyboard shortcuts.** Are they worth building in M1?
-7. **Allow-list warning before approval.** The prototype warns before you approve. PLAN.md only requires the executor to refuse at write time.
+7. **Scope warning before approval.** The app warns before you approve when the drafted page, or a page above it, has since been excluded. PLAN.md only requires the executor to refuse at write time. Other scope changes, such as removing a root, show up only as the executor's refusal.
 
 ## Proposed PLAN.md amendments
 

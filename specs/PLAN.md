@@ -442,7 +442,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 **FR-1.2** `settings.json` is validated with zod at startup. If it is invalid, the server does not stop: it logs a clear message, falls back to `settings.last-good.json`, and runs in degraded mode with the error shown in the UI (FR-14.6). With no good copy, the server stays up with every source paused until the settings are fixed. A stopped server would be invisible when it starts unattended at login.
 
-**FR-1.3** Settings include at least: data dir, poll schedule (work hours, interval in work hours, interval off hours), Slack channel include/exclude lists, VIP user IDs, quiet minutes, model map, budgets, retention days, Confluence allow-list (space key + page IDs), vault path, dry-run flag. Per-source schedules live in an optional `sources.<id>` block (`enabled`, `intervalWorkMinutes`, `intervalOffMinutes`, where `null` means work hours only), with defaults, so existing settings stay valid. Defaults: Slack 10 / 60 min, email 30 / 120 min, Wispr Flow 180 min in work hours only.
+**FR-1.3** Settings include at least: data dir, poll schedule (work hours, interval in work hours, interval off hours), Slack channel include/exclude lists, VIP user IDs, quiet minutes, model map, budgets, retention days, Confluence scope (site, space key, root pages, labels, excluded pages and single pages; amended from an allow-list of page IDs, see FR-10.2), vault path, dry-run flag. Per-source schedules live in an optional `sources.<id>` block (`enabled`, `intervalWorkMinutes`, `intervalOffMinutes`, where `null` means work hours only), with defaults, so existing settings stay valid. Defaults: Slack 10 / 60 min, email 30 / 120 min, Wispr Flow 180 min in work hours only.
 
 **FR-1.4** The event log, item files, cursors and snapshot follow the storage rules in section 4.3.
 
@@ -601,7 +601,7 @@ As built (M3 step 17):
 
 **FR-10.1** Allowed only for items where `containsPeopleObservations` is false. Otherwise the button is disabled with an explanation.
 
-**FR-10.2** "Draft Confluence entry" runs a Sonnet draft with read-only Confluence access (Atlassian MCP or REST search) limited to the allow-listed space and pages, and the `psg-context-builder` routing guidance (see CLAUDE.md for how to make the skill available).
+**FR-10.2** "Draft Confluence entry" runs a Sonnet draft with read-only Confluence access (Atlassian MCP or REST search) limited to the pages in scope, and the `psg-context-builder` routing guidance. *Amended 2026-10-07:* the scope is a live catalogue, not a fixed list of page IDs, because pages are added to the PRD context tree all the time and must not be missed. It is every root page and everything below it, every page in the space with one of the scope labels, and any single pages, minus the excluded pages and everything below them. It is read from Confluence for every draft.
 
 **FR-10.3** The draft output is a structured patch: page ID, page version at draft time, section heading anchor, and content in Confluence storage format.
 
@@ -609,23 +609,52 @@ As built (M3 step 17):
 
 **FR-10.5** On approval, **code** applies the patch through the Confluence REST API, with an optimistic version check. A version mismatch means re-draft, never overwrite.
 
-**FR-10.6** Pages outside the allow-list are refused by the executor, whatever the draft says.
+**FR-10.6** Pages outside the scope are refused by the executor, whatever the draft says. *Amended 2026-10-07:* the executor checks the scope as it is in Confluence at write time.
 
 > **Story 10.1** As Frank, I want to file a decision from Slack into the right Confluence context page so that the PSPD pipeline and the Knowledge Desk can use it.
 >
 > - Given a thread suggested for Confluence with no people observations, when I click Draft Confluence entry, then I see the target page, section and content.
 > - Given the page was edited after the draft, when I approve, then the app re-drafts instead of writing.
-> - Given a draft targets a page outside the allow-list, when I approve, then the executor refuses and logs `action.failed`.
+> - Given a draft targets a page outside the scope, when I approve, then the executor refuses and logs `action.failed`.
+> - Given a page added under a root page since the last draft, when I draft, then it can be picked without changing settings.
 
 As built (M3 step 18):
 
-- **Code reads the pages, not the model (FR-10.2).** Before drafting, code reads every allow-listed page over REST v2 (`GET /wiki/api/v2/pages/{id}?body-format=storage`) and gives the model their section outlines. The draft call (Sonnet, `config/prompts/draft-confluence.md`) has no tools and no MCP servers, so it can only see allow-listed pages. A page that answers 404 is skipped; if none can be read, the action fails as `allow_list`.
+- **The live catalogue (FR-10.2, amended).** This follows the psg-context-builder skill's Step 1. For every draft, code runs one CQL search over REST v1 (`GET /wiki/rest/api/content/search`, with ancestors and labels expanded, following `_links.next`, at most 1,000 pages):
+
+  `space = "<key>" AND type = page AND (id in (<roots, single pages>) OR ancestor in (<roots>) OR label in (<labels>)) AND id not in (<excluded>) AND ancestor not in (<excluded>)`
+
+  Each page becomes `{id, path, labels, hub}`:
+  - `path` is its ancestors below the space home, then its title.
+  - `labels` keeps only the `psg-*` labels.
+  - `hub` means another page in the catalogue sits under it.
+
+  Settings › Write targets has a **Preview catalogue** button (`GET /api/confluence/catalogue`) that shows the same list, grouped by root.
+
+  The defaults are the skill's constants:
+  - the seven BU roots;
+  - UX Principles, Competitor Profiles, Glossary & Taxonomy and Company Strategic & Commercial Context;
+  - the six `psg-shared-*` labels;
+  - excluded: the skill's two never-write pages and Archive.
+
+  Settings files from before the amendment get these defaults when they load. Their old page list stays, as single pages. On 2026-10-07 the PRD tree had about 145 pages in scope.
+- **Two calls (FR-10.2).** 145 outlines don't fit one call, so drafting runs in two:
+  1. A picker (`config/prompts/pick-confluence.md`, usage purpose `confluence_pick`, the Confluence draft model) gets the routing guidance, the thread and the catalogue. It answers with one to three candidate page IDs, or `noFit`. Picks that aren't in the catalogue are dropped; if none is left, the action fails as `allow_list`.
+  2. Code reads only the candidates over REST v2 (`GET /wiki/api/v2/pages/{id}?body-format=storage`), and the draft call (`config/prompts/draft-confluence.md`) gets their section outlines. A candidate that answers 404 is skipped; if none can be read, the action fails as `allow_list`.
+
+  Neither call has tools or MCP servers, so the model only ever sees pages in scope. The draft records the page's ancestors (`ancestorIds`), so the item panel can warn when the page, or a page above it, has been excluded since drafting. The picker costs a call, but it is not counted as a draft against the drafts budget.
+- **A token Confluence doesn't accept.** Confluence answers it as an anonymous user, with empty search results and 404s rather than a 401. An empty search therefore checks `GET /wiki/rest/api/user/current`. If the answer is `anonymous`, the call fails as `auth_failed` (`token_rejected`), and the message says to store a classic API token as `email:token`.
 - **Routing guidance.** It comes from `config/psg-context-builder.md`, written on first run from a built-in default distilled from the psg-context-builder skill for a single drafting call: the exclusion screen, the attribution ladder and tiers, how to choose the business unit, and where each kind of fact goes (FR-1.1). The skill's interactive modes, tools and label handover are left out. Edit it in Settings › Prompts (FR-1.7).
-- **No fit.** The model may answer `{noFit, reason, suggestedHome}` instead of an entry, when the right page isn't allow-listed, nothing survives the exclusion screen, or the thread isn't context. The action fails as `no_fit`, before the people check, and the panel offers a vault note instead.
+- **No fit.** The picker or the draft call may answer `{noFit, reason, suggestedHome}` instead. They do this when:
+  - the right page isn't in the catalogue;
+  - nothing survives the exclusion screen;
+  - the thread isn't context.
+
+  The action fails as `no_fit`, before any page is read when the picker declines, and always before the people check. The panel offers a vault note instead.
 - **Deviation from FR-10.3: the draft is Markdown, not storage format.** The model answers `{pageId, section, title, content}` with Markdown content. That is what the preview shows and what Frank edits. Code checks that the page and section exist, records the page version at draft time (`baseVersion`), and converts the Markdown to storage format only when it writes. The conversion handles a safe subset: headings, paragraphs, lists, bold, italics, code, and https or mailto links. Everything else is escaped. The entry goes at the end of the chosen section, under a heading one level below it.
 - **People check (FR-10.4).** A second Haiku call (`config/prompts/people-check.md`, usage purpose `people_check`) reads the entry as it would be written. If it finds observations about named people, the action fails as `people_check` and nothing is shown. Items flagged `containsPeopleObservations` are refused with a 403 before any call.
 - **Executor (FR-10.5, FR-10.6, NF-5).** Before every attempt, code:
-  1. checks the allow-list as it is now; a page that is no longer on it fails the action as `allow_list`;
+  1. checks the scope as it is now, with the catalogue's CQL narrowed to `id = <page>`. A page no longer in scope fails the action as `allow_list`. A failed query is a failed attempt, never a yes;
   2. re-reads the page;
   3. decides from the version it finds:
      - the drafted version: save version + 1 with the version message `Work OS <actionId>`;
@@ -634,9 +663,9 @@ As built (M3 step 18):
 
   A 409 on save means another save won the race: the next attempt, 30 s later, re-reads and reconciles. Offline, needs-probe, auth and rate-limit failures don't use up any of the 5 attempts.
 - **Dry-run.** The page is only read. The would-be page is saved to `<data>/sandbox/confluence/<pageId>-<actionId>.html`, and the result says "Dry-run: write logged only. <page> stays at v<n>".
-- **Credentials (P0-8).** They are `email:token` in the Keychain account `confluence-api-token`, sent as Basic auth. The site URL and the allow-list come from settings.
+- **Credentials (P0-8).** They are `email:token` in the Keychain account `confluence-api-token`, sent as Basic auth. The site URL and the scope come from settings.
 - **Retries.** A draft that fails on a transient Claude or Confluence error stays drafting and waits at least 30 s before the next try, so a failure the breaker lets through is not retried at once. Writes after a 409 or a dropped connection wait the same way.
-- **Test runs.** Tests and `--fakes` runs use a made-up Confluence (`actions/fakeConfluence.ts`) that checks Basic auth and version numbers. Under vitest, with no fake given, any Confluence call fails.
+- **Test runs.** Tests and `--fakes` runs use a made-up Confluence (`actions/fakeConfluence.ts`). It checks Basic auth and version numbers, evaluates the CQL the catalogue writes, and can answer as an anonymous user. Under vitest, with no fake given, any Confluence call fails.
 
 ### 7.11 E10 Notifications
 
@@ -696,7 +725,7 @@ As built (M3 step 19):
 **Before the soak (Frank).** Before the soak can start, Frank needs to:
 
 1. Store the Slack user token (P0-1) and, if Confluence filing is wanted, the Confluence `email:token` (P0-8, Keychain account `confluence-api-token`).
-2. Fill in the allow-list (P0-6) and vault conventions (P0-5).
+2. Check the Confluence scope in Settings › Write targets (P0-6; the defaults cover the PSG context tree), and use Preview catalogue to confirm the token works. Check the vault conventions (P0-5).
 3. Optionally, `brew install terminal-notifier`. The filing guidance ships with the app; adjust it in Settings › Prompts.
 4. Deploy and install:
 
@@ -830,7 +859,7 @@ The server runs unattended on a laptop that sleeps, travels and loses its networ
 | NF-2 | Privacy | Observations about people never leave the vault. Enforced by FR-10.1 and FR-10.4. |
 | NF-3 | Security | Secrets live only in the Keychain. Never logged, never in files or prompts. |
 | NF-4 | Security | Slack scopes are read-only. The app never sends messages in the MVP. |
-| NF-5 | Safety | Every write needs explicit approval. Executors re-validate the target (allow-list, version or hash) at write time, and reconcile against the target before every retry, so a write is applied at most once (FR-14.5). |
+| NF-5 | Safety | Every write needs explicit approval. Executors re-validate the target (Confluence scope, version or hash) at write time, and reconcile against the target before every retry, so a write is applied at most once (FR-14.5). |
 | NF-6 | Reliability | Polling is idempotent. State can be rebuilt from the event log. Single instance. The server starts at login, survives sleep, network loss, crashes and power loss, and shows degraded states instead of stopping (E13). |
 | NF-7 | Performance | A poll with triage completes in under 60 s for 25 threads. The UI first paint is under 1 s. Detailed budgets in NF-11. |
 | NF-8 | Cost | Daily usage stays at or under the Phase 0 baseline (S3). The usage panel makes drift visible. |
@@ -925,7 +954,7 @@ Requirements:
 | Anthropic changes subscription terms for SDK use | Medium | Usage moves to a credit or API billing | CL-8 adapter switch. Usage log gives the numbers for a business case. |
 | Triage precision too low | Medium | Noise, the app gets ignored | Eval harness, rules first, corrections loop, kill criteria. |
 | Usage above baseline | Medium | Competes with Cowork work | Batching rules, budgets, usage panel, retire old tasks. |
-| Writing wrong content into Confluence | Low | Pollutes the shared context | Allow-list, preview, people check, version check, approval. |
+| Writing wrong content into Confluence | Low | Pollutes the shared context | Scope rules with excluded pages, preview, people check, version check, approval. |
 | Company data on the laptop | Low | Data-protection exposure | FileVault, localhost only, retention, Keychain secrets. |
 | Scope creep before committed work lands | High | Delays MVI V2, Apidog and other commitments | Phase 0 first; phases gated on success criteria. |
 | The server silently stops running (sleep, network loss, crash, bad settings) | Medium | Items missed while Frank thinks the app is watching | E13: launchd autostart, wake catch-up, degraded mode with a visible banner and rate-limited alerts, safe mode instead of a crash loop. |
@@ -940,6 +969,6 @@ Requirements:
 2. Which Agent SDK option names control the system prompt preset, tools, MCP servers and settings loading in the current SDK version? (Check docs at build time, CL-3.)
 3. Is the Obsidian MCP server usable from the Agent SDK, or should vault reads use scoped file tools?
 4. How does Haiku usage weigh against plan limits compared with Sonnet and Opus? Measure from the usage log.
-5. Which Confluence pages go on the initial allow-list (P0-6)?
+5. ~~Which Confluence pages go on the initial allow-list (P0-6)?~~ Answered (7 Oct 2026): none. The scope is a live catalogue of the PSG context tree (FR-10.2, amended).
 6. ~~Do claude.ai connectors load in a headless Agent SDK run under launchd, and what does one relay call cost?~~ Answered by P0-9: yes, if declared explicitly; about $0.009 per call. Still open: does `mcpServerStatus()` expose the connector id, so setup needs no debug log?
 7. ~~Does Node's `fsync` on macOS issue `F_FULLFSYNC`?~~ Answered (6 Oct 2026): libuv's macOS `fsync` and `fdatasync` both use `F_FULLFSYNC`, falling back to `F_BARRIERFSYNC`. Measured on this Mac (Node 24.16, libuv 1.52.1, APFS): `datasync` and `sync` both take 3.0 ms p50 and under 4 ms p95, which is drive-flush time, not the ~0.1 ms of a plain `fsync`. Group commit keeps this to one sync per batch, well inside the 30 ms command budget (NF-11).
