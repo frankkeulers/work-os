@@ -72,6 +72,9 @@ test('Regroup merges a conversation’s topics on the same subject', async ({ pa
   await expect(page.getByText('Regrouped #insights-api · 1 entry merged into its topic')).toBeVisible({ timeout: 10_000 });
   await expect(rows).toHaveCount(1);
   await expect(rows.locator('[data-pieces]')).toHaveText(' · 2 parts');
-  await page.screenshot({ path: join(APP, 'screenshots/topics-regroup-light.png'), animations: 'disabled' }); // toast at the bottom middle
+  // The toast sits at the bottom middle, its bar running down over the 4.5 s it stays.
+  const bar = page.getByRole('status').filter({ hasText: 'Regrouped #insights-api' }).locator('[data-countdown]');
+  await expect(bar).toHaveCSS('animation-duration', '4.5s');
+  await page.screenshot({ path: join(APP, 'screenshots/topics-regroup-light.png') });
   await expect(rows).toHaveAttribute('data-lane', 'today');
 });

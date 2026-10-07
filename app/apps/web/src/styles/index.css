@@ -144,6 +144,16 @@ select:not([multiple]) {
 .item-panel-backdrop[data-state='closed'] {
   animation: backdrop-out 180ms ease-in forwards;
 }
+/* Toast: a thin bar along the bottom edge runs down until the toast closes; its duration is the toast's. */
+@keyframes toast-countdown {
+  to {
+    transform: scaleX(0);
+  }
+}
+.toast-countdown {
+  transform-origin: left;
+  animation: toast-countdown linear forwards;
+}
 @media (prefers-reduced-motion: reduce) {
   .item-panel,
   .item-panel[data-state='closed'],

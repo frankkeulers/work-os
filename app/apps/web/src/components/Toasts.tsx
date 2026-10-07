@@ -6,15 +6,16 @@ import { cx } from './ui';
 
 function ToastRow({ t }: { t: Toast }) {
   const dismiss = useToasts((s) => s.dismiss);
+  const ttl = t.ttl ?? (t.action ? 7000 : 4500);
   useEffect(() => {
-    const id = setTimeout(() => dismiss(t.id), t.ttl ?? (t.action ? 7000 : 4500));
+    const id = setTimeout(() => dismiss(t.id), ttl);
     return () => clearTimeout(id);
-  }, [t, dismiss]);
+  }, [t, ttl, dismiss]);
   const tone = t.tone ?? 'default';
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
-      className="pointer-events-auto flex w-[380px] max-w-full items-start gap-3 rounded-xl border border-line bg-surface p-3.5 text-ink shadow-[0_12px_32px_rgba(20,23,28,0.16)]"
+      className="pointer-events-auto relative flex w-[380px] max-w-full items-start gap-3 overflow-hidden rounded-xl border border-line bg-surface p-3.5 text-ink shadow-[0_12px_32px_rgba(20,23,28,0.16)]"
     >
       <span className={cx('mt-px inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full', TONE[tone])}>
         <Icon name={tone === 'success' ? 'check' : tone === 'error' ? 'alert' : 'info'} size={15} strokeWidth={2.25} />
@@ -38,9 +39,13 @@ function ToastRow({ t }: { t: Toast }) {
       <button type="button" aria-label="Dismiss" className="-mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink cursor-pointer" onClick={() => dismiss(t.id)}>
         <Icon name="x" size={14} />
       </button>
+      {/* Runs down until the toast closes. */}
+      <span aria-hidden data-countdown className={cx('toast-countdown absolute inset-x-0 bottom-0 h-0.5 bg-current opacity-60', BAR[tone])} style={{ animationDuration: `${ttl}ms` }} />
     </div>
   );
 }
+
+const BAR = { default: 'text-accent', success: 'text-green-fg', error: 'text-red-fg' } as const;
 
 const TONE = {
   default: 'bg-accent-wash text-accent',
