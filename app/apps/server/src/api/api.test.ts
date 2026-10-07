@@ -439,6 +439,13 @@ describe('NoticeHub', () => {
     expect(noticesFor([e('triage.corrected', 'x')])).toEqual([{ topic: 'item', id: 'x' }, { topic: 'inbox' }, { topic: 'settings' }]);
     expect(noticesFor([e('health.changed')])).toEqual([{ topic: 'health' }]);
   });
+
+  it('refreshes the inbox and every topic a routed piece touches, so Regroup and a split show at once', () => {
+    const routed = (itemId: string, data: object) => ({ type: 'topic.routed', itemId, data }) as unknown as WorkEvent;
+    expect(noticesFor([routed('b', { into: 'a', by: 'regroup' })])).toEqual([{ topic: 'item', id: 'b' }, { topic: 'item', id: 'a' }, { topic: 'inbox' }]);
+    expect(noticesFor([routed('b', { from: 'a', by: 'user' })])).toEqual([{ topic: 'item', id: 'b' }, { topic: 'item', id: 'a' }, { topic: 'inbox' }]);
+    expect(noticesFor([{ type: 'topic.askDone', itemId: 'a', data: { askId: 'x' } } as unknown as WorkEvent])).toEqual([{ topic: 'item', id: 'a' }, { topic: 'inbox' }]);
+  });
 });
 
 describe('ItemFiles', () => {

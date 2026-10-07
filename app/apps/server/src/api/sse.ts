@@ -107,7 +107,12 @@ export function noticesFor(events: WorkEvent[]): Notice[] {
       out.push({ topic: 'item', id: e.itemId }, { topic: 'inbox' });
       if (e.type === 'triage.corrected') out.push({ topic: 'settings' }); // the labelled count
       else if (e.type === 'triage.decided' || e.type === 'triage.failed') out.push({ topic: 'usage' }); // a call was made
-    } else if (area === 'source') out.push({ topic: 'inbox' }, { topic: 'usage' });
+    } else if (e.type === 'topic.routed' && e.itemId) {
+      // The piece, the topic it joined and the topic it left all show different content now.
+      for (const id of new Set([e.itemId, e.data.into, e.data.from])) if (id) out.push({ topic: 'item', id });
+      out.push({ topic: 'inbox' });
+    } else if (e.type === 'topic.askDone' && e.itemId) out.push({ topic: 'item', id: e.itemId }, { topic: 'inbox' });
+    else if (area === 'source') out.push({ topic: 'inbox' }, { topic: 'usage' });
     else if (area === 'settings' || area === 'rules') out.push({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
     else if (area === 'prompt') out.push({ topic: 'settings' });
     else if (area === 'health' || area === 'system') out.push({ topic: 'health' });

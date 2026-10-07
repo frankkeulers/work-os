@@ -820,7 +820,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const from = rec.topicOf;
     if (!from) throw new ApiError('conflict', 'This piece is the topic itself, so it can’t be split out. Split out the other pieces instead.');
     routeTopic(this.s.items, recActivity, pieceId, undefined, 'user');
-    this.event('topic.routed', { by: 'user' }, { itemId: pieceId });
+    this.event('topic.routed', { from, by: 'user' }, { itemId: pieceId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: pieceId }, { topic: 'item', id: from });
     // Both are triaged again: the piece on its own, the topic without it.
     await sleep(1200);

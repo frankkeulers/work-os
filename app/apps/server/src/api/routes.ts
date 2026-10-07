@@ -86,8 +86,9 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   });
   app.post<{ Params: { id: string } }>('/api/items/:id/split', async (req, reply) => {
     item(req.params.id);
-    if (!d.store.projection.items[req.params.id].topicOf) throw new HttpError('conflict', 'This piece is the topic itself, so it can’t be split out. Split out the other pieces instead.');
-    await d.store.append({ type: 'topic.routed', itemId: req.params.id, data: { by: 'user' } });
+    const from = d.store.projection.items[req.params.id].topicOf;
+    if (!from) throw new HttpError('conflict', 'This piece is the topic itself, so it can’t be split out. Split out the other pieces instead.');
+    await d.store.append({ type: 'topic.routed', itemId: req.params.id, data: { from, by: 'user' } });
     d.runtime?.wantTriage();
     return reply.code(204).send();
   });
