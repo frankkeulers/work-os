@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useOutletContext } from 'react-router';
-import { api, type InboxView } from '../api';
+import { API_MODE, api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
@@ -101,9 +101,10 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={toggle}
-        className={cx('flex min-h-11 w-full items-center gap-2.5 rounded-lg text-left cursor-pointer hover:bg-surface-2', collapsed ? 'justify-center' : 'px-2', open && 'bg-surface-2')}
+        // Lined up with the nav items: a 24px avatar centred on their 16px icons, the label where theirs start.
+        className={cx('flex min-h-10 w-full items-center gap-1.5 rounded-lg px-1.5 text-left cursor-pointer hover:bg-surface-2', open && 'bg-surface-2')}
       >
-        <Avatar size={28} />
+        <Avatar size={24} />
         {!collapsed && (
           <>
             <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">Account</span>
@@ -211,7 +212,8 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
 
   return (
     <div className={cx('h-full shrink-0 overflow-hidden border-r border-line bg-surface transition-[width] duration-200 ease-out motion-reduce:transition-none', collapsed ? 'w-[60px]' : 'w-[220px]')}>
-      <nav aria-label="Main" className={cx('flex h-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden whitespace-nowrap pb-16', collapsed ? 'px-2.5' : 'px-3.5')}>
+      {/* The mock's Scenarios button floats over the foot of the sidebar, so it gets room there. */}
+      <nav aria-label="Main" className={cx('flex h-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden whitespace-nowrap', API_MODE === 'mock' ? 'pb-16' : 'pb-3', collapsed ? 'px-2.5' : 'px-3.5')}>
         {/* 64px, the height of the Inbox top bar, so the two line up. */}
         <div className={cx('flex h-16 shrink-0 items-center gap-2', collapsed ? 'justify-center' : 'pl-2')}>
           {!collapsed && (
@@ -285,8 +287,8 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
         {/* The guide sits at the bottom, out of the way of the work. */}
         <div className="mt-auto flex flex-col gap-0.5">
           <NavItem to="/guide" icon="book" label="Guide" collapsed={collapsed} />
+          <AccountMenu collapsed={collapsed} />
         </div>
-        <AccountMenu collapsed={collapsed} />
       </nav>
     </div>
   );

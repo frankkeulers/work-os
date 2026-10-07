@@ -77,6 +77,13 @@ test('the account menu: theme and scope, and a profile picture from Settings', a
   // Until a picture is set, the avatar is a person icon. The button shows the scope.
   await expect(account.locator('[data-avatar="icon"]')).toBeVisible();
   await expect(account).toContainText('MVP');
+  // It lines up with the Guide item above it: avatar centred on the icon, label where the label starts, same height.
+  const guide = nav.getByRole('link', { name: 'Guide' });
+  const box = async (l: import('@playwright/test').Locator) => (await l.boundingBox())!;
+  const [icon, avatar] = [await box(guide.locator('svg')), await box(account.locator('[data-avatar]'))];
+  expect(avatar.x + avatar.width / 2).toBeCloseTo(icon.x + icon.width / 2, 0);
+  expect((await box(account.getByText('Account', { exact: true }))).x).toBeCloseTo((await box(guide.getByText('Guide', { exact: true }))).x, 0);
+  expect((await box(account)).height).toBe((await box(guide)).height);
 
   await account.click();
   const menu = page.getByRole('dialog', { name: 'Account' });
