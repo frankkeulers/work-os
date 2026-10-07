@@ -47,7 +47,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 - Each section is its own view at `/settings/<section>`, with grouped navigation:
   - **Inbox:** Triage rules, Slack, Notifications
   - **Actions:** Write targets
-  - **Claude:** Models, Budgets
+  - **Claude:** Models, Prompts, Budgets
   - **System:** Storage & data, Appearance
 - **Nav badges:**
   - Write targets shows "Dry-run" while dry-run is on.

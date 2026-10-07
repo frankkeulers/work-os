@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
@@ -159,4 +159,27 @@ test('a proxy answering 502 (Vite with the server down) shows the reconnecting s
   // The server is back: the page finds it on its own.
   await page.unroute('**/api/**');
   await expect(lane(page, 'now')).toHaveCount(1, { timeout: 20_000 });
+});
+
+test('the prompt and guidance files are listed from the data directory, and a saved edit lands in the file (FR-1.7)', async ({ page }) => {
+  await page.goto('/settings/prompts');
+  await expect(page.getByRole('heading', { name: 'Prompts', level: 2 })).toBeVisible();
+  // Written on first run from the built-in defaults.
+  await expect(page.locator('[data-prompt="confluence-routing"]')).toContainText('confluence-routing v1#');
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v1#');
+  await page.screenshot({ path: join(APP, 'screenshots/server-prompts-light.png') });
+
+  await page.getByRole('button', { name: 'Edit Vault conventions' }).click();
+  const text = page.getByLabel('Vault conventions text');
+  await expect(text).toHaveValue(/Split hubs/);
+  await text.fill('<!-- prompt: vault-conventions v2 -->\nFile meetings under Work/Meetings.');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
+  expect(await readFile(join(dir, 'data/config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v2 -->\nFile meetings under Work/Meetings.\n');
+
+  // Back to the default, for whatever runs next.
+  await page.getByRole('button', { name: 'Edit Vault conventions' }).click();
+  await page.getByRole('button', { name: 'Reset to default' }).click();
+  await page.getByRole('dialog', { name: 'Reset Vault conventions?' }).getByRole('button', { name: 'Reset to default' }).click();
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v1#');
 });

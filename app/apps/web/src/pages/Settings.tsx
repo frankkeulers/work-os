@@ -81,10 +81,16 @@ export function SettingsPage() {
   useEffect(() => () => editor.dispose(), [editor]);
 
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  // A prompt file open with unsaved text (its label), from the Prompts section.
+  const [unsavedPrompt, setUnsavedPrompt] = useState<string | null>(null);
   const errorPaths = Object.keys(st.errors);
-  const unsaved = st.pending || st.saving || errorPaths.length > 0;
-  // Moving between sections keeps every change. Only leaving Settings with an invalid field loses anything.
-  const blocker = useBlocker(({ nextLocation }) => Object.keys(editor.getState().errors).length > 0 && !nextLocation.pathname.startsWith('/settings'));
+  const unsaved = st.pending || st.saving || errorPaths.length > 0 || !!unsavedPrompt;
+  // Moving between sections keeps every change. Only leaving Settings with an invalid field loses
+  // anything, or leaving the Prompts section with a prompt file edited but not saved.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      (Object.keys(editor.getState().errors).length > 0 && !nextLocation.pathname.startsWith('/settings')) || (!!unsavedPrompt && nextLocation.pathname !== currentLocation.pathname),
+  );
   useHashScroll(!!st.draft);
   useEffect(() => {
     if (!unsaved) return;
@@ -119,6 +125,7 @@ export function SettingsPage() {
     err: (path) => st.errors[`settings.${path}`],
     ruleError: (i) => Object.entries(st.errors).find(([k]) => k.startsWith(`rules.${i}.`) || k === `rules.${i}`)?.[1],
     confirm: setConfirm,
+    setUnsaved: setUnsavedPrompt,
   };
   const { View } = section;
 
@@ -183,11 +190,18 @@ export function SettingsPage() {
       {blocker.state === 'blocked' && (
         <ConfirmDialog
           title="Leave with unsaved changes?"
-          body={`${errorPaths.length} ${errorPaths.length === 1 ? 'field has an error, so it wasn’t' : 'fields have errors, so they weren’t'} saved. Leaving drops ${errorPaths.length === 1 ? 'that change' : 'those changes'}; everything else is already saved.`}
+          body={
+            unsavedPrompt
+              ? `Your edit to ${unsavedPrompt} isn’t saved. Leaving drops it; the file stays as it was.`
+              : `${errorPaths.length} ${errorPaths.length === 1 ? 'field has an error, so it wasn’t' : 'fields have errors, so they weren’t'} saved. Leaving drops ${errorPaths.length === 1 ? 'that change' : 'those changes'}; everything else is already saved.`
+          }
           confirmLabel="Leave"
           danger
           onCancel={() => blocker.reset()}
-          onConfirm={() => blocker.proceed()}
+          onConfirm={() => {
+            setUnsavedPrompt(null);
+            blocker.proceed();
+          }}
         />
       )}
     </div>

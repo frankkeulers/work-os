@@ -202,11 +202,13 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
     settings.json             sources, schedules, model map, budgets, allow-lists, VIPs
     settings.last-good.json   last settings that passed validation (FR-1.2)
     rules.json                deterministic triage rules
-    vault-conventions.md      from P0-5
+    vault-conventions.md      vault filing guidance (P0-5), built-in default from the vault's Notes System note
+    psg-context-builder.md    Confluence routing guidance, built-in default from the psg-context-builder skill
     prompts/
       triage.md
       draft-vault.md
       draft-confluence.md
+      people-check.md
   state/
     cursors.json              last cursor per source
     snapshot.json             materialised inbox state (rebuildable from events), with lastSeq
@@ -436,7 +438,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 ### 7.1 E1 Settings and storage
 
-**FR-1.1** The server creates the data directory structure on first run and copies default prompts into `config/prompts/`.
+**FR-1.1** The server creates the data directory structure on first run and copies default prompts into `config/prompts/`, and the default filing guidance into `config/vault-conventions.md` and `config/psg-context-builder.md`. A prompt or guidance file that still holds an earlier built-in default (byte for byte, once trimmed) is replaced by the current default at start; an edited file is never touched. An empty or missing file means the built-in default.
 
 **FR-1.2** `settings.json` is validated with zod at startup. If it is invalid, the server does not stop: it logs a clear message, falls back to `settings.last-good.json`, and runs in degraded mode with the error shown in the UI (FR-14.6). With no good copy, the server stays up with every source paused until the settings are fixed. A stopped server would be invisible when it starts unattended at login.
 
@@ -447,6 +449,8 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 **FR-1.5** The UI settings page edits `settings.json` and `rules.json`. Changes are validated before saving and logged as events.
 
 **FR-1.6** Dry-run mode (default **on** in development) redirects vault writes to `~/WorkOS-data/sandbox/vault/` and turns Confluence writes into logged no-ops.
+
+**FR-1.7** Settings › Prompts lists the four prompt files and the two filing guidance files with their versions, marks the ones that differ from the built-in default, and edits them with an explicit Save (not autosave: every Claude call reads its file fresh, so a half-typed edit would reach a real call). A save names the version it was edited from and fails as a conflict if the file changed on disk since. Reset to default asks first. Each change is logged as `prompt.changed`.
 
 > **Story 1.1** As Frank, I want all Work OS state in plain local files so that I can inspect, back up or delete it without a database.
 >
@@ -616,7 +620,8 @@ As built (M3 step 17):
 As built (M3 step 18):
 
 - **Code reads the pages, not the model (FR-10.2).** Before drafting, code reads every allow-listed page over REST v2 (`GET /wiki/api/v2/pages/{id}?body-format=storage`) and gives the model their section outlines. The draft call (Sonnet, `config/prompts/draft-confluence.md`) has no tools and no MCP servers, so it can only see allow-listed pages. A page that answers 404 is skipped; if none can be read, the action fails as `allow_list`.
-- **Routing guidance.** It comes from `config/psg-context-builder.md` if that file exists, else from `~/.claude/skills/psg-context-builder/SKILL.md`. Neither exists on this Mac yet, so drafts run without it. Frank: copy the skill's text to `~/WorkOS-data/config/psg-context-builder.md`.
+- **Routing guidance.** It comes from `config/psg-context-builder.md`, written on first run from a built-in default distilled from the psg-context-builder skill for a single drafting call: the exclusion screen, the attribution ladder and tiers, how to choose the business unit, and where each kind of fact goes (FR-1.1). The skill's interactive modes, tools and label handover are left out. Edit it in Settings › Prompts (FR-1.7).
+- **No fit.** The model may answer `{noFit, reason, suggestedHome}` instead of an entry, when the right page isn't allow-listed, nothing survives the exclusion screen, or the thread isn't context. The action fails as `no_fit`, before the people check, and the panel offers a vault note instead.
 - **Deviation from FR-10.3: the draft is Markdown, not storage format.** The model answers `{pageId, section, title, content}` with Markdown content. That is what the preview shows and what Frank edits. Code checks that the page and section exist, records the page version at draft time (`baseVersion`), and converts the Markdown to storage format only when it writes. The conversion handles a safe subset: headings, paragraphs, lists, bold, italics, code, and https or mailto links. Everything else is escaped. The entry goes at the end of the chosen section, under a heading one level below it.
 - **People check (FR-10.4).** A second Haiku call (`config/prompts/people-check.md`, usage purpose `people_check`) reads the entry as it would be written. If it finds observations about named people, the action fails as `people_check` and nothing is shown. Items flagged `containsPeopleObservations` are refused with a 403 before any call.
 - **Executor (FR-10.5, FR-10.6, NF-5).** Before every attempt, code:
@@ -692,7 +697,7 @@ As built (M3 step 19):
 
 1. Store the Slack user token (P0-1) and, if Confluence filing is wanted, the Confluence `email:token` (P0-8, Keychain account `confluence-api-token`).
 2. Fill in the allow-list (P0-6) and vault conventions (P0-5).
-3. Optionally, `brew install terminal-notifier` and copy psg-context-builder to `~/WorkOS-data/config/psg-context-builder.md`.
+3. Optionally, `brew install terminal-notifier`. The filing guidance ships with the app; adjust it in Settings › Prompts.
 4. Deploy and install:
 
    ```

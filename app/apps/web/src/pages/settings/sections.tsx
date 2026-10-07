@@ -1,10 +1,11 @@
 import { useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { ModelId, Rule, Settings } from '@work-os/shared';
-import { api, type CheckStatus, type SettingsView, type SlackStatus, type UsageView } from '../../api';
+import type { ModelId, PromptFileId, Rule, Settings } from '@work-os/shared';
+import { api, isApiError, type CheckStatus, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Icon } from '../../components/icons';
 import { RulesList, newRuleEdit, type RuleEdit } from '../../components/Rules';
-import { Button, IconButton, Segmented, Spinner, Switch, cx, inputBase, inputClass } from '../../components/ui';
+import { Banner, Button, Chip, IconButton, Segmented, Spinner, Switch, cx, inputBase, inputClass } from '../../components/ui';
+import { onTopics, useApiQuery } from '../../hooks/useApiQuery';
 import { fmtMoney, fmtTime } from '../../lib/format';
 import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
@@ -33,6 +34,8 @@ export interface Ctx {
   err: (path: string) => string | undefined;
   ruleError: (index: number) => string | undefined;
   confirm: (c: Confirm) => void;
+  /** A section with its own unsaved edit (a prompt file) names it here, so leaving asks first. */
+  setUnsaved: (what: string | null) => void;
 }
 
 // ---------- Triage rules ----------
@@ -332,6 +335,7 @@ const BACKENDS = [
 ] as const;
 
 function ModelsSection({ s, full, set, type, flush, err, confirm }: Ctx) {
+  const prompts = useApiQuery(() => api.getPrompts(), onTopics('settings'), []);
   const batchingErr = ['maxThreadsPerCall', 'maxInputTokens', 'keepLastMessages'].some((k) => err(`triage.${k}`));
   const [showBatching, setShowBatching] = useState(false);
   const open = showBatching || batchingErr;
@@ -384,9 +388,9 @@ function ModelsSection({ s, full, set, type, flush, err, confirm }: Ctx) {
       <Group title="Model per purpose">
         {(
           [
-            ['Triage', 'One batched call per poll. No tools, no MCP.', 'triage', 'triage.md v3'],
-            ['Vault drafts', 'One call per click, with read-only vault access.', 'draftVault', 'draft-vault.md v2'],
-            ['Confluence drafts', 'One call per click, reading allow-listed pages only.', 'draftConfluence', 'draft-confluence.md v2'],
+            ['Triage', 'One batched call per poll. No tools, no MCP.', 'triage', 'triage'],
+            ['Vault drafts', 'One call per click, with read-only vault access.', 'draftVault', 'draft-vault'],
+            ['Confluence drafts', 'One call per click, reading allow-listed pages only.', 'draftConfluence', 'draft-confluence'],
           ] as const
         ).map(([purpose, shape, key, prompt]) => (
           <Row
@@ -396,9 +400,9 @@ function ModelsSection({ s, full, set, type, flush, err, confirm }: Ctx) {
             help={
               <>
                 {shape}{' '}
-                <button type="button" className="font-mono text-xs text-muted underline decoration-line-strong underline-offset-2 hover:text-accent cursor-pointer" onClick={() => toast(`${prompt}`, { description: 'Lives in apps/server/src/claude/prompts and is versioned with the eval.' })}>
-                  {prompt}
-                </button>
+                <Link to="/settings/prompts" className="font-mono text-xs text-muted underline decoration-line-strong underline-offset-2 hover:text-accent">
+                  {prompts.data?.find((p) => p.id === prompt)?.version ?? `${prompt}.md`}
+                </Link>
               </>
             }
           >
@@ -442,6 +446,182 @@ function ModelsSection({ s, full, set, type, flush, err, confirm }: Ctx) {
           </>
         )}
       </Group>
+    </>
+  );
+}
+
+// ---------- Prompts ----------
+
+const GUIDANCE: PromptFileId[] = ['vault-conventions', 'confluence-routing'];
+
+interface PromptEdit {
+  id: PromptFileId;
+  text: string;
+  baseVersion: string;
+  saving?: boolean;
+  error?: string;
+  /** The file changed on disk since it was opened: this version is now current. */
+  conflict?: PromptFileView;
+}
+
+const kb = (text: string) => `${(new TextEncoder().encode(text).length / 1024).toFixed(1)} KB`;
+
+/**
+ * The prompt and guidance files (FR-1.7). Unlike the rest of Settings this saves on an explicit
+ * Save: every Claude call reads its file fresh, so a half-typed autosave would reach a real call.
+ */
+function PromptsSection({ confirm, setUnsaved }: Ctx) {
+  const q = useApiQuery(() => api.getPrompts(), onTopics('settings'), []);
+  const [edit, setEditState] = useState<PromptEdit | null>(null);
+  const files = q.data;
+  const open = files?.find((f) => f.id === edit?.id);
+  const dirty = !!edit && !!open && edit.text !== open.text && !edit.conflict;
+
+  const setEdit = (e: PromptEdit | null) => {
+    setEditState(e);
+    const f = e && files?.find((x) => x.id === e.id);
+    setUnsaved(e && f && e.text !== f.text ? f.label : null);
+  };
+  const done = (saved: PromptFileView, what: string) => {
+    setEdit(null);
+    q.reload();
+    toast(`${saved.label} ${what}`, { tone: 'success', description: `Now ${saved.version}. The next call uses it.` });
+  };
+  const failed = (e: unknown) => {
+    if (!edit) return;
+    if (isApiError(e) && e.code === 'conflict') {
+      void api.getPrompts().then((fresh) => setEditState((x) => x && { ...x, saving: false, conflict: fresh.find((f) => f.id === x.id) }));
+    } else if (isApiError(e) && e.code === 'validation') {
+      setEditState({ ...edit, saving: false, error: e.issues[0]?.message ?? e.message });
+    } else {
+      setEditState({ ...edit, saving: false });
+      errorToast(e);
+    }
+  };
+  const save = async () => {
+    if (!edit) return;
+    setEditState({ ...edit, saving: true, error: undefined });
+    try {
+      done(await api.savePrompt(edit.id, edit.text, edit.baseVersion), 'saved');
+    } catch (e) {
+      failed(e);
+    }
+  };
+  const reset = (f: PromptFileView) =>
+    confirm({
+      title: `Reset ${f.label}?`,
+      body: `This replaces ${f.path} with the built-in default (${f.defaultVersion}). Your edits are not kept.`,
+      label: 'Reset to default',
+      danger: true,
+      run: async () => {
+        try {
+          done(await api.resetPrompt(f.id, f.version), 'reset to default');
+        } catch (e) {
+          q.reload(); // a conflict means the file moved on: show what is there now
+          errorToast(e);
+        }
+      },
+    });
+
+  const row = (f: PromptFileView) =>
+    edit?.id === f.id ? (
+      <div key={f.id} className="flex flex-col gap-3 border-b border-line-soft py-5 last:border-b-0" data-prompt={f.id}>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-sm font-medium text-ink">{f.label}</span>
+          <span className="font-mono text-xs text-muted">{f.path}</span>
+          <span className="flex-1" />
+          <span className="font-mono text-xs text-muted" data-testid="prompt-size">
+            {kb(edit.text)}
+          </span>
+        </div>
+        {edit.conflict && (
+          <Banner
+            tone="warn"
+            icon="alert"
+            action={
+              <Button size="sm" onClick={() => setEdit({ id: f.id, text: edit.conflict!.text, baseVersion: edit.conflict!.version })}>
+                Load it
+              </Button>
+            }
+          >
+            <strong>This file changed since you opened it</strong> (now {edit.conflict.version}). Load the new version to edit it; your changes here are dropped.
+          </Banner>
+        )}
+        <textarea
+          aria-label={`${f.label} text`}
+          spellCheck={false}
+          className="min-h-[360px] w-full resize-y rounded-lg border border-line-strong bg-surface p-3 font-mono text-[13px] leading-relaxed text-ink outline-none focus:border-accent aria-[invalid=true]:border-red"
+          aria-invalid={!!edit.error}
+          value={edit.text}
+          onChange={(e) => setEdit({ ...edit, text: e.target.value, error: undefined })}
+        />
+        {edit.error && <span className="text-xs text-red-fg">{edit.error}</span>}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="solid" disabled={!dirty || edit.saving} onClick={() => void save()}>
+            {edit.saving ? (
+              <>
+                <Spinner size={12} /> Saving…
+              </>
+            ) : (
+              'Save'
+            )}
+          </Button>
+          <Button onClick={() => setEdit(null)}>{dirty ? 'Cancel' : 'Close'}</Button>
+          <span className="flex-1" />
+          {f.edited && (
+            <Button variant="ghost" icon="redraft" onClick={() => reset(f)}>
+              Reset to default
+            </Button>
+          )}
+        </div>
+      </div>
+    ) : (
+      <Row
+        key={f.id}
+        label={
+          <span className="inline-flex items-center gap-2">
+            {f.label}
+            {f.edited && <Chip tone="accent">Edited</Chip>}
+          </span>
+        }
+        help={
+          <>
+            {f.description} Used by: {f.usedBy}.
+          </>
+        }
+      >
+        <div className="flex items-center gap-3" data-prompt={f.id}>
+          <span className="font-mono text-xs text-muted" title={f.edited ? `Built-in default: ${f.defaultVersion}` : 'The built-in default'}>
+            {f.version}
+          </span>
+          <Button
+            size="sm"
+            disabled={dirty}
+            aria-label={`Edit ${f.label}`}
+            onClick={() => setEdit({ id: f.id, text: f.text, baseVersion: f.version })}
+          >
+            Edit
+          </Button>
+        </div>
+      </Row>
+    );
+
+  return (
+    <>
+      <SectionHeader
+        title="Prompts"
+        description="What each Claude call is told. Every call reads its file from the data directory, so a saved change applies to the next call. Versions match the usage log and eval reports."
+      />
+      {!files ? (
+        <div className="py-6 text-[13px] text-muted">{q.error ? 'Could not load the prompt files.' : 'Loading…'}</div>
+      ) : (
+        <>
+          <Group title="Prompts">{files.filter((f) => !GUIDANCE.includes(f.id)).map(row)}</Group>
+          <Group title="Filing guidance" aside={<span className="text-xs text-muted">Sent with every draft request</span>}>
+            {files.filter((f) => GUIDANCE.includes(f.id)).map(row)}
+          </Group>
+        </>
+      )}
     </>
   );
 }
@@ -588,6 +768,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'notifications', label: 'Notifications', group: 'Inbox', View: NotificationsSection, owns: under('settings.notifications') },
   { id: 'writing', label: 'Write targets', group: 'Actions', View: WritingSection, owns: under('settings.dryRun', 'settings.vaultPath', 'settings.confluence') },
   { id: 'models', label: 'Models', group: 'Claude', View: ModelsSection, owns: under('settings.models', 'settings.claudeBackend', 'settings.triage.maxThreadsPerCall', 'settings.triage.maxInputTokens', 'settings.triage.keepLastMessages') },
+  { id: 'prompts', label: 'Prompts', group: 'Claude', View: PromptsSection, owns: () => false },
   { id: 'budgets', label: 'Budgets', group: 'Claude', View: BudgetsSection, owns: under('settings.budgets', 'settings.baselineCostPerDay') },
   { id: 'storage', label: 'Storage & data', group: 'System', View: StorageSection, owns: under('settings.retentionDays', 'settings.dataDir') },
   { id: 'appearance', label: 'Appearance', group: 'System', View: AppearanceSection, owns: () => false },
