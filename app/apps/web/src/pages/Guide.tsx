@@ -129,7 +129,7 @@ function GuideSearch() {
   );
 }
 
-/** The h2 nearest above the top of the viewport, for "On this page". */
+/** The h2 nearest above the top of the page body (under the 64px top bar), for "On this page". */
 function useCurrentSection(page: GuidePage, root: RefObject<HTMLElement | null>) {
   const [current, setCurrent] = useState<string | undefined>();
   useEffect(() => {
@@ -138,13 +138,15 @@ function useCurrentSection(page: GuidePage, root: RefObject<HTMLElement | null>)
       frame = 0;
       const hs = Array.from(root.current?.querySelectorAll<HTMLElement>('h2[id]') ?? []);
       let id = hs[0]?.id;
-      for (const h of hs) if (h.getBoundingClientRect().top <= 120) id = h.id;
+      for (const h of hs) if (h.getBoundingClientRect().top <= 64 + 120) id = h.id;
       setCurrent(id);
     };
     const onScroll = () => (frame ||= requestAnimationFrame(update));
     update();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => (window.removeEventListener('scroll', onScroll), cancelAnimationFrame(frame));
+    // The page body scrolls, not the window.
+    const scroller = root.current?.closest('[data-page-scroll]');
+    scroller?.addEventListener('scroll', onScroll, { passive: true });
+    return () => (scroller?.removeEventListener('scroll', onScroll), cancelAnimationFrame(frame));
   }, [page, root]);
   return current;
 }
@@ -168,7 +170,7 @@ function GuideBody({ page }: { page: GuidePage }) {
   useEffect(() => {
     const target = hash ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
     if (target) target.scrollIntoView({ block: 'start' });
-    else window.scrollTo(0, 0);
+    else article.current?.closest('[data-page-scroll]')?.scrollTo(0, 0);
   }, [page, hash]);
 
   // Links in the Markdown are plain anchors; in-app ones navigate without a reload.
@@ -247,35 +249,37 @@ export function GuidePage() {
   if (!page) return <Navigate replace to={`/guide/${PAGES[0].slug}`} />;
 
   return (
-    <div className="min-h-screen bg-surface">
-      {/* 64px, like the other top bars, lined up with the sidebar's header. */}
-      <header className="flex h-16 items-center border-b border-line px-8">
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      {/* 64px, like the other top bars, lined up with the sidebar's header. It stays put; the body below scrolls. */}
+      <header className="flex h-16 shrink-0 items-center border-b border-line px-8">
         <div className="flex max-w-[1240px] flex-1 items-center gap-x-6">
           <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Guide</h1>
           <GuideSearch />
         </div>
       </header>
-      <div className="max-w-[1304px] px-8 pt-6 empty:hidden">
-        <HealthBanner />
-      </div>
-      <div className="flex max-w-[1304px] items-start gap-12 px-8 pb-24 pt-8">
-        <nav aria-label="Guide pages" className="sticky top-8 flex w-[200px] shrink-0 flex-col gap-6">
-          {GROUPS.map((g) => (
-            <div key={g} className="flex flex-col gap-0.5">
-              <span className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">{g}</span>
-              {PAGES.filter((p) => p.group === g).map((p) => (
-                <NavLink
-                  key={p.slug}
-                  to={`/guide/${p.slug}`}
-                  className={({ isActive }) => cx('flex min-h-9 items-center rounded-md px-3 text-sm no-underline', isActive ? 'bg-track font-medium !text-ink' : '!text-ink-2 hover:bg-surface-2 hover:!text-ink')}
-                >
-                  {p.title}
-                </NavLink>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <GuideBody page={page} />
+      <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
+        <div className="max-w-[1304px] px-8 pt-6 empty:hidden">
+          <HealthBanner />
+        </div>
+        <div className="flex max-w-[1304px] items-start gap-12 px-8 pb-24 pt-8">
+          <nav aria-label="Guide pages" className="sticky top-8 flex w-[200px] shrink-0 flex-col gap-6">
+            {GROUPS.map((g) => (
+              <div key={g} className="flex flex-col gap-0.5">
+                <span className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">{g}</span>
+                {PAGES.filter((p) => p.group === g).map((p) => (
+                  <NavLink
+                    key={p.slug}
+                    to={`/guide/${p.slug}`}
+                    className={({ isActive }) => cx('flex min-h-9 items-center rounded-md px-3 text-sm no-underline', isActive ? 'bg-track font-medium !text-ink' : '!text-ink-2 hover:bg-surface-2 hover:!text-ink')}
+                  >
+                    {p.title}
+                  </NavLink>
+                ))}
+              </div>
+            ))}
+          </nav>
+          <GuideBody page={page} />
+        </div>
       </div>
     </div>
   );

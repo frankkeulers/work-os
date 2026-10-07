@@ -774,7 +774,7 @@ export function InboxPage() {
   const panel = selItem ? { item: selItem, view, pos: idx + 1 } : shown;
 
   return (
-    <div className="flex h-screen min-h-0 flex-col bg-surface">
+    <div className="flex h-full min-h-0 flex-col bg-surface">
       {/* 64px, the height of the sidebar's header, so the two line up. */}
       <header data-inbox-header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-6">
         <h1 className="m-0 text-xl font-semibold tracking-[-0.01em]">Inbox</h1>

@@ -67,7 +67,7 @@ function useHelpKey() {
 }
 
 const guide = (
-  <Suspense fallback={<div className="min-h-screen bg-surface" />}>
+  <Suspense fallback={<div className="h-full bg-surface" />}>
     <GuidePage />
   </Suspense>
 );

@@ -130,48 +130,50 @@ export function SettingsPage() {
   const { View } = section;
 
   return (
-    <div className="min-h-screen bg-surface">
-      {/* 64px, like the Inbox top bar, lined up with the sidebar's header. */}
-      <header className="flex h-16 items-center border-b border-line px-8">
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      {/* 64px, like the Inbox top bar, lined up with the sidebar's header. It stays put; the body below scrolls. */}
+      <header className="flex h-16 shrink-0 items-center border-b border-line px-8">
         <div className="flex max-w-[1008px] flex-1 items-center gap-x-6">
           <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Settings &amp; rules</h1>
           <SaveStatus st={st} savedAt={view.savedAt} onRetry={ctx.flush} />
         </div>
       </header>
-      <div className="max-w-[1072px] px-8 pt-6 empty:hidden">
-        <HealthBanner />
-      </div>
-      <div className="flex max-w-[1072px] items-start gap-12 px-8 pb-24 pt-8">
-        <nav aria-label="Settings sections" className="sticky top-8 flex w-[200px] shrink-0 flex-col gap-6">
-          {GROUPS.map((g) => (
-            <div key={g} className="flex flex-col gap-0.5">
-              <span className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">{g}</span>
-              {SECTIONS.filter((x) => x.group === g).map((x) => {
-                const hasError = errorPaths.some(x.owns);
-                return (
-                  <NavLink
-                    key={x.id}
-                    to={`/settings/${x.id}`}
-                    className={({ isActive }) =>
-                      cx('flex min-h-9 items-center gap-2 rounded-md px-3 text-sm no-underline', isActive ? 'bg-track font-medium !text-ink' : '!text-ink-2 hover:bg-surface-2 hover:!text-ink')
-                    }
-                  >
-                    <span className="flex-1">{x.label}</span>
-                    {x.id === 'writing' && draft.settings.dryRun && <span className="rounded bg-amber-wash px-1.5 py-px text-[11px] font-medium text-amber-fg">Dry-run</span>}
-                    {hasError && (
-                      <span className="h-2 w-2 rounded-full bg-red" title="Has a field that isn’t saved">
-                        <span className="sr-only">(has an unsaved field)</span>
-                      </span>
-                    )}
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-        <main className="flex min-w-0 max-w-[760px] flex-1 flex-col" aria-label={section.label}>
-          <View {...ctx} />
-        </main>
+      <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
+        <div className="max-w-[1072px] px-8 pt-6 empty:hidden">
+          <HealthBanner />
+        </div>
+        <div className="flex max-w-[1072px] items-start gap-12 px-8 pb-24 pt-8">
+          <nav aria-label="Settings sections" className="sticky top-8 flex w-[200px] shrink-0 flex-col gap-6">
+            {GROUPS.map((g) => (
+              <div key={g} className="flex flex-col gap-0.5">
+                <span className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">{g}</span>
+                {SECTIONS.filter((x) => x.group === g).map((x) => {
+                  const hasError = errorPaths.some(x.owns);
+                  return (
+                    <NavLink
+                      key={x.id}
+                      to={`/settings/${x.id}`}
+                      className={({ isActive }) =>
+                        cx('flex min-h-9 items-center gap-2 rounded-md px-3 text-sm no-underline', isActive ? 'bg-track font-medium !text-ink' : '!text-ink-2 hover:bg-surface-2 hover:!text-ink')
+                      }
+                    >
+                      <span className="flex-1">{x.label}</span>
+                      {x.id === 'writing' && draft.settings.dryRun && <span className="rounded bg-amber-wash px-1.5 py-px text-[11px] font-medium text-amber-fg">Dry-run</span>}
+                      {hasError && (
+                        <span className="h-2 w-2 rounded-full bg-red" title="Has a field that isn’t saved">
+                          <span className="sr-only">(has an unsaved field)</span>
+                        </span>
+                      )}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+          <main className="flex min-w-0 max-w-[760px] flex-1 flex-col" aria-label={section.label}>
+            <View {...ctx} />
+          </main>
+        </div>
       </div>
 
       {confirm && (

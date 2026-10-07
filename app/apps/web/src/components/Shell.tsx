@@ -104,8 +104,8 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   );
 
   return (
-    <div className={cx('shrink-0 overflow-hidden border-r border-line bg-surface transition-[width] duration-200 ease-out motion-reduce:transition-none', collapsed ? 'w-[60px]' : 'w-[220px]')}>
-      <nav aria-label="Main" className={cx('sticky top-0 flex h-screen flex-col gap-[22px] overflow-y-auto overflow-x-hidden whitespace-nowrap pb-16', collapsed ? 'px-2.5' : 'px-3.5')}>
+    <div className={cx('h-full shrink-0 overflow-hidden border-r border-line bg-surface transition-[width] duration-200 ease-out motion-reduce:transition-none', collapsed ? 'w-[60px]' : 'w-[220px]')}>
+      <nav aria-label="Main" className={cx('flex h-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden whitespace-nowrap pb-16', collapsed ? 'px-2.5' : 'px-3.5')}>
         {/* 64px, the height of the Inbox top bar, so the two line up. */}
         <div className={cx('flex h-16 shrink-0 items-center gap-2', collapsed ? 'justify-center' : 'pl-2')}>
           {!collapsed && (
@@ -214,9 +214,11 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
 export function Shell() {
   const inbox = useApiQuery(() => api.getInbox(), onTopics('inbox', 'settings', 'health'), []);
   return (
-    <div className="flex min-h-screen bg-bg">
+    // One screen high: the sidebar stays put and only main scrolls. Pages with a top bar keep it
+    // fixed and scroll their own body (PageFrame); the others scroll whole, inside main.
+    <div className="flex h-screen overflow-hidden bg-bg">
       <Nav inbox={inbox.data} />
-      <main className="min-w-0 flex-1">
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         <Outlet context={{ inbox } satisfies ShellContext} />
       </main>
     </div>
