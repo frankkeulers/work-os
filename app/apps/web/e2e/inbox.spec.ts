@@ -325,6 +325,20 @@ test('the footer opens Low priority, Snoozed and Done one at a time, and j/k wal
   await expect(page.getByRole('region', { name: 'Done' })).toHaveCount(0);
 });
 
+test('a row can be marked done from the list without opening it', async ({ page }) => {
+  const row = rows(page, 'Today').first();
+  const id = (await row.getAttribute('data-row'))!;
+  const before = await rows(page, 'Today').count();
+  await page.keyboard.press('Escape'); // the open panel covers the row's end
+  await expect(itemPanel(page)).toHaveCount(0);
+  await row.locator('xpath=..').locator('[data-row-action]').click();
+  await expect(page.locator(`[data-row="${id}"]`)).toHaveCount(0);
+  await expect(rows(page, 'Today')).toHaveCount(before - 1);
+  await expect(itemPanel(page)).toHaveCount(0); // it didn't open the item
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator(`[data-row="${id}"]`)).toHaveCount(1);
+});
+
 test('Low priority can be marked done as a whole, and Undo brings it back', async ({ page }) => {
   const footer = page.getByTestId('inbox-footer');
   await footer.getByRole('button', { name: /low priority/ }).click();

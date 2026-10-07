@@ -421,46 +421,65 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
   const target = targetChip(item);
   const meta = top && !failed ? undefined : lowerMeta(item, now);
   const ago = fmtAgo(item.lastActivityAt, now);
+  // The row opens the item; Done sits beside it (a button can't hold another), for items you
+  // already know are finished or don't matter.
   return (
-    <button
-      type="button"
-      data-row={item.id}
-      data-lane={item.lane} data-activity={item.lastActivityAt}
-      aria-current={selected ? 'true' : undefined}
-      onClick={onPick}
+    <div
       className={cx(
-        'flex w-full flex-wrap items-center gap-x-3.5 gap-y-1.5 border-t px-6 py-[11px] text-left cursor-pointer',
+        'group/row flex items-center border-t pr-3',
         divide ? 'border-line' : 'border-line-soft',
         selected ? 'bg-accent-wash shadow-[inset_3px_0_0_var(--accent-bg)]' : item.lane === 'now' ? 'bg-orange-wash-2' : 'hover:bg-surface-2',
       )}
     >
-      <span className="flex w-5 justify-center">
-        <SourceMark source={item.source} size={18} />
-      </span>
-      <span className="flex min-w-[110px] flex-[0_1_170px] flex-col gap-px">
-        <span className="truncate text-xs font-medium text-ink-2">{item.title}</span>
-        <span className="text-[11px] text-muted">
-          {kindLabel(item.kind)} · {ago}
+      <button
+        type="button"
+        data-row={item.id}
+        data-lane={item.lane}
+        data-activity={item.lastActivityAt}
+        aria-current={selected ? 'true' : undefined}
+        onClick={onPick}
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-1.5 py-[11px] pl-6 pr-2 text-left cursor-pointer"
+      >
+        <span className="flex w-5 justify-center">
+          <SourceMark source={item.source} size={18} />
         </span>
-      </span>
-      {/* Chips sit at the right edge, or wrap under the summary when the list is narrow. */}
-      <span className="flex min-w-0 flex-[1_1_260px] flex-wrap items-center gap-x-3.5 gap-y-1.5">
-        <span className={cx('flex min-w-0 flex-[1_1_240px] flex-col gap-1 text-[13px] leading-[1.4]', top ? 'font-medium text-ink' : 'text-ink-2')}>
-          <span>
-            {item.summary}
-            {fresh && <span className="ml-1.5 rounded bg-accent-bg px-1.5 py-px align-[1px] text-[10px] font-semibold text-on-solid">New</span>}
+        <span className="flex min-w-[110px] flex-[0_1_170px] flex-col gap-px">
+          <span className="truncate text-xs font-medium text-ink-2">{item.title}</span>
+          <span className="text-[11px] text-muted">
+            {kindLabel(item.kind)} · {ago}
           </span>
-          <ItemMarkers item={item} />
         </span>
-        <span className="flex flex-wrap gap-1">
-          {top && !failed && <NeedTag>{item.next ? needLabel(item.next) : item.lane === 'file' ? 'File' : 'Reply'}</NeedTag>}
-          {due && <DueChip due={due} />}
-          {target && <StatusChip tone="file">{target}</StatusChip>}
-          {item.lane === 'failed' && <StatusChip tone="bad">Triage failed</StatusChip>}
-          {meta && <span className="font-mono text-[11px] text-muted">{meta}</span>}
+        {/* Chips sit at the right edge, or wrap under the summary when the list is narrow. */}
+        <span className="flex min-w-0 flex-[1_1_260px] flex-wrap items-center gap-x-3.5 gap-y-1.5">
+          <span className={cx('flex min-w-0 flex-[1_1_240px] flex-col gap-1 text-[13px] leading-[1.4]', top ? 'font-medium text-ink' : 'text-ink-2')}>
+            <span>
+              {item.summary}
+              {fresh && <span className="ml-1.5 rounded bg-accent-bg px-1.5 py-px align-[1px] text-[10px] font-semibold text-on-solid">New</span>}
+            </span>
+            <ItemMarkers item={item} />
+          </span>
+          <span className="flex flex-wrap gap-1">
+            {top && !failed && <NeedTag>{item.next ? needLabel(item.next) : item.lane === 'file' ? 'File' : 'Reply'}</NeedTag>}
+            {due && <DueChip due={due} />}
+            {target && <StatusChip tone="file">{target}</StatusChip>}
+            {item.lane === 'failed' && <StatusChip tone="bad">Triage failed</StatusChip>}
+            {meta && <span className="font-mono text-[11px] text-muted">{meta}</span>}
+          </span>
         </span>
-      </span>
-    </button>
+      </button>
+      {item.status !== 'done' ? (
+        <IconButton
+          data-row-action
+          label={`Mark done: ${item.summary}`}
+          icon="check"
+          size={32}
+          className="text-muted opacity-60 hover:text-ink hover:opacity-100 focus-visible:opacity-100 group-hover/row:opacity-100"
+          onClick={() => void markDoneWithUndo(item)}
+        />
+      ) : (
+        <span aria-hidden="true" className="w-8 shrink-0" />
+      )}
+    </div>
   );
 }
 
@@ -533,7 +552,7 @@ const keyOf = (q: URLSearchParams) => `${q.get('item')}:${parseType(q.get('file'
  * (Poll, Usage, Scope) work alongside it; and layers (toasts, dialogs, menus, the scenario drawer)
  * sit above it.
  */
-const NOT_OUTSIDE = '[data-row], a[href], [data-inbox-header] button, nav button, [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
+const NOT_OUTSIDE = '[data-row], [data-row-action], a[href], [data-inbox-header] button, nav button, [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
 
 export function InboxPage() {
   const { inbox: q } = useShell();
