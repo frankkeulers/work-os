@@ -16,7 +16,7 @@
     "perf": "tsx src/cli/perf.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.291",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.293",
     "@work-os/shared": "*",
     "fastify": "^5.12.5",
     "pino": "^10.4.0",
