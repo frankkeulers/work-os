@@ -150,7 +150,7 @@ export function buildState(preset: Preset = 'default'): MockState {
         batchId,
         ruleId: rule?.id,
         min: rule?.outcome.type === 'model' ? rule.outcome.min : undefined,
-        model: 'haiku-4.5',
+        model: 'haiku-5.5',
       });
     }
     applyDecision(rec, decision);

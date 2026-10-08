@@ -76,7 +76,7 @@ describe('labelled set', () => {
 
 describe('reports', () => {
   it('saves to logs/eval-<timestamp>.json and lists newest first', async () => {
-    const base = { labelCount: 1, promptVersion: 'triage v1#00000000', model: 'haiku-4.5' as const, ...score([row('now', 'now')]), tokens: 10, costEquivalent: 0.001 };
+    const base = { labelCount: 1, promptVersion: 'triage v1#00000000', model: 'haiku-5.5' as const, ...score([row('now', 'now')]), tokens: 10, costEquivalent: 0.001 };
     const older: EvalReport = { ...base, id: 'eval-1', at: '2026-10-05T09:00:00.000Z' };
     const newer: EvalReport = { ...base, id: 'eval-2', at: '2026-10-06T09:00:00.000Z' };
     expect(await saveReport(dir, older)).toBe(join(dir, 'eval-2026-10-05T09-00-00-000Z.json'));

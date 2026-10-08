@@ -159,7 +159,7 @@ function ByPurpose({ u }: { u: UsageView }) {
             {full &&
               (
                 [
-                  ['Meeting summaries', 'haiku-4.5', 'P2'],
+                  ['Meeting summaries', 'haiku-5.5', 'P2'],
                   ['Daily brief', 'opus-5.5', 'P4'],
                 ] as const
               ).map(([p, m, phase]) => (

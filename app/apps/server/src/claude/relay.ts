@@ -46,7 +46,7 @@ export async function relayToolCall(claude: ClaudeAdapter, call: RelayCall): Pro
     let called = false;
     const run = await claude.run({
       purpose: 'fetch',
-      model: 'haiku-4.5',
+      model: 'haiku-5.5',
       system: SYSTEM,
       prompt: `Call ${allow} exactly once with these arguments: ${JSON.stringify(call.args)}. Then reply with the single word OK.`,
       promptVersion: RELAY_PROMPT_VERSION,

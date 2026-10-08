@@ -159,7 +159,7 @@ describe('routeTopics', () => {
     await add({ ...piece(200, ['PR 63 looks fine'], {}), id: pid(200, 'C9'), title: '#api' });
     const run = await routeTopics(deps, new AbortController().signal);
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ purpose: 'routing', model: 'haiku-4.5', system: 'topics' });
+    expect(calls[0]).toMatchObject({ purpose: 'routing', model: 'haiku-5.5', system: 'topics' });
     expect(run).toMatchObject({ calls: 1, joined: 1 });
     expect(p()[pid(120)].topicOf).toBe(pid(300));
     expect(p()[pid(300)]).toMatchObject({ parts: [pid(120)], triageState: 'pending', newReplies: true });
