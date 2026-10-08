@@ -19,6 +19,28 @@ test('/settings and old anchors open the right section', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Budgets', level: 2 })).toBeVisible();
 });
 
+test('Inbox holds what applies to every source; Sources has a page per source', async ({ page }) => {
+  await open(page, 'rules');
+  const group = (name: string) => sectionNav(page).locator('div').filter({ has: page.getByText(name, { exact: true }) });
+  await expect(group('Inbox').getByRole('link')).toHaveText(['Triage rules', 'People', 'Schedule', 'Notifications']);
+  await expect(group('Sources').getByRole('link')).toHaveText(['Slack']);
+
+  await sectionNav(page).getByRole('link', { name: 'Schedule' }).click();
+  await expect(page.getByLabel('Work hours', { exact: true })).toHaveValue('Mon–Fri 08:00–18:30');
+  await expect(page.getByLabel('Quiet window before triage')).toHaveValue('10');
+  await sectionNav(page).getByRole('link', { name: 'Slack' }).click();
+  await expect(page.getByLabel('Work hours', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Poll every, work hours')).toBeVisible();
+
+  // Full scope lists the sources still to come.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Account' }).click();
+  await page.getByRole('dialog', { name: 'Account' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
+  await page.keyboard.press('Escape');
+  await expect(group('Sources').getByRole('link')).toHaveText(['Slack', 'More sources']);
+  await sectionNav(page).getByRole('link', { name: 'More sources' }).click();
+  await expect(page.getByText('Outlook mail')).toBeVisible();
+});
+
 test('J31 changes save on their own; an invalid field shows inline and is held back', async ({ page }) => {
   await open(page, 'slack');
   await expect(page.getByText('Unsaved changes')).toHaveCount(0);
@@ -47,7 +69,7 @@ test('J31 changes save on their own; an invalid field shows inline and is held b
 });
 
 test('Undo in the saved toast puts the change back', async ({ page }) => {
-  await open(page, 'slack');
+  await open(page, 'people');
   await page.getByRole('button', { name: 'Remove Matt M.' }).click();
   await expect(saved(page)).toBeVisible();
   await page.getByRole('button', { name: 'Undo' }).click();
@@ -193,12 +215,12 @@ test('channel fields in Settings › Slack search the channels you’re in', asy
 });
 
 test('VIPs are picked from a search of people', async ({ page }) => {
-  await open(page, 'slack');
+  await open(page, 'people');
   const search = page.getByRole('combobox', { name: 'VIPs' });
   await search.fill('meri');
   const options = page.getByRole('listbox', { name: 'VIPs suggestions' }).getByRole('option');
   await expect(options).toHaveText(['Meridia PM']);
-  await page.screenshot({ path: join(APP, 'screenshots/settings-slack-vip-search-light.png') });
+  await page.screenshot({ path: join(APP, 'screenshots/settings-people-vip-search-light.png') });
   await search.press('Enter');
   await expect(page.getByRole('button', { name: 'Remove Meridia PM' })).toBeVisible();
   // People already VIPs aren't offered again.

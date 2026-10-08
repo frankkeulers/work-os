@@ -14,7 +14,7 @@ import { usePrefs } from '../store/prefs';
 import { errorToast, toast } from '../store/toasts';
 import { LEGACY_ANCHORS, SECTIONS, type Confirm, type Ctx } from './settings/sections';
 
-const GROUPS = ['Account', 'Inbox', 'Actions', 'Claude', 'System'] as const;
+const GROUPS = ['Account', 'Inbox', 'Sources', 'Actions', 'Claude', 'System'] as const;
 
 function SaveStatus({ st, savedAt, onRetry }: { st: EditorState; savedAt: string; onRetry: () => void }) {
   const now = useNow(60_000);
@@ -147,7 +147,7 @@ export function SettingsPage() {
             {GROUPS.map((g) => (
               <div key={g} className="flex flex-col gap-0.5">
                 <span className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-muted">{g}</span>
-                {SECTIONS.filter((x) => x.group === g).map((x) => {
+                {SECTIONS.filter((x) => x.group === g && (full || !x.fullOnly)).map((x) => {
                   const hasError = errorPaths.some(x.owns);
                   return (
                     <NavLink

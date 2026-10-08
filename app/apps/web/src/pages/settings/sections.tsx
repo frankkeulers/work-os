@@ -80,6 +80,44 @@ function RulesSection({ rules, view, full, setRules, ruleError }: Ctx) {
   );
 }
 
+// ---------- People ----------
+
+function PeopleSection({ s, full, set }: Ctx) {
+  return (
+    <>
+      <SectionHeader title="People" description="The people who matter most. One list for every source, matched by sender name." />
+      <Group>
+        <Row stacked label="VIPs" help="Rules can match on this list. The vip-dm rule sends their DMs straight to Now, without waiting for the quiet window.">
+          <PeoplePicker label="VIPs" placeholder="Search people…" values={s.people.vips} onChange={(v) => set((x) => (x.people.vips = v))} />
+        </Row>
+      </Group>
+      {full && (
+        <FutureRow title="Customer domains" phase="P2" marks={['outlook']}>
+          Email from these domains counts as customer mail, as the customer channels do in Slack.
+        </FutureRow>
+      )}
+    </>
+  );
+}
+
+// ---------- Schedule ----------
+
+function ScheduleSection({ s, type, flush, err }: Ctx) {
+  return (
+    <>
+      <SectionHeader title="Schedule" description="When you work, and how long a conversation waits before it’s triaged. Each source sets how often it polls." />
+      <Group>
+        <Row label="Work hours" htmlFor="work-hours" help="Sources poll more often in these hours, and offline alerts only fire in them." error={err('schedule.workHours')}>
+          <input id="work-hours" className={cx(inputBase, 'w-[200px]')} aria-invalid={!!err('schedule.workHours')} value={s.schedule.workHours} onBlur={flush} onChange={(e) => type((x) => (x.schedule.workHours = e.target.value))} />
+        </Row>
+        <Row label="Quiet window" help="How long a thread must be quiet before it’s triaged, so a live conversation is read once." error={err('triage.quietMinutes')}>
+          <NumInput label="Quiet window before triage" suffix="min" value={s.triage.quietMinutes} invalid={!!err('triage.quietMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.triage.quietMinutes = v ?? NaN))} />
+        </Row>
+      </Group>
+    </>
+  );
+}
+
 // ---------- Slack ----------
 
 const SLACK_STATUS: Record<SlackStatus, { dot: string; text: string }> = {
@@ -92,13 +130,13 @@ const SLACK_STATUS: Record<SlackStatus, { dot: string; text: string }> = {
   paused: { dot: 'bg-gray-mid', text: 'Paused' },
 };
 
-function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
+function SlackSection({ s, usage, set, type, flush, err }: Ctx) {
   const status = usage ? SLACK_STATUS[usage.source.status] : undefined;
   return (
     <>
       <SectionHeader
         title="Slack"
-        description="Who counts as important, which channels are read, and how often Work OS polls."
+        description="Which channels are read, how often Work OS polls, and where Slack links open."
         action={
           status && (
             <Link to="/usage#health" className="inline-flex min-h-9 items-center gap-2 text-[13px] !text-ink-2 no-underline hover:!text-ink">
@@ -108,21 +146,46 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
           )
         }
       />
-      <Group title="People and channels">
-        <Row stacked label="VIPs" help="DMs from these people skip the quiet window and go straight to Now.">
-          <PeoplePicker label="VIPs" placeholder="Search people…" values={s.people.vips} onChange={(v) => set((x) => (x.people.vips = v))} />
-        </Row>
-        <Row stacked label="Customer channels" help="Used by the customer-channels rule.">
-          <ChannelPicker label="Customer channels" placeholder="Search channels…" values={s.slack.customerChannels} onChange={(v) => set((x) => (x.slack.customerChannels = v))} />
-        </Row>
+      <Group title="Channels">
         <Row stacked label="Only read these channels" help="Leave empty to read every channel you can see.">
           <ChannelPicker label="Include channels" placeholder="Every channel you can see" values={s.slack.includeChannels} onChange={(v) => set((x) => (x.slack.includeChannels = v))} />
+        </Row>
+        <Row stacked label="Never read these channels" help="Dropped as they’re fetched, and never stored.">
+          <ChannelPicker label="Exclude channels" placeholder="Search channels…" values={s.slack.excludeChannels} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
         </Row>
         <Row stacked label="Read app posts in these channels" help="Posts from apps such as Gong (call recaps, mentions) are read here and dropped everywhere else.">
           <ChannelPicker label="App channels" placeholder="Search channels…" values={s.slack.appChannels ?? []} onChange={(v) => set((x) => (x.slack.appChannels = v))} />
         </Row>
-        <Row stacked label="Never read these channels" help="Dropped as they’re fetched, and never stored.">
-          <ChannelPicker label="Exclude channels" placeholder="Search channels…" values={s.slack.excludeChannels} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
+        <Row stacked label="Customer channels" help="Used by the customer-channels rule.">
+          <ChannelPicker label="Customer channels" placeholder="Search channels…" values={s.slack.customerChannels} onChange={(v) => set((x) => (x.slack.customerChannels = v))} />
+        </Row>
+      </Group>
+      <Group title="Polling">
+        <Row
+          label="During work hours"
+          help={
+            <>
+              How often to poll Slack in your <Link to="/settings/schedule">work hours</Link>.
+            </>
+          }
+          error={err('schedule.intervalWorkMinutes')}
+        >
+          <NumInput label="Poll every, work hours" prefix="Every" suffix="min" value={s.schedule.intervalWorkMinutes} invalid={!!err('schedule.intervalWorkMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.schedule.intervalWorkMinutes = v ?? NaN))} />
+        </Row>
+        <Row label="Outside work hours" error={err('schedule.intervalOffMinutes')}>
+          <NumInput label="Poll every, off hours" prefix="Every" suffix="min" value={s.schedule.intervalOffMinutes} invalid={!!err('schedule.intervalOffMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.schedule.intervalOffMinutes = v ?? NaN))} />
+        </Row>
+        <Row label="Fetch mode" help="search.messages finds threads you’re in across channels. history reads each channel in turn.">
+          <Segmented
+            label="Fetch mode"
+            size="sm"
+            value={s.slack.fetchMode}
+            onChange={(v) => set((x) => (x.slack.fetchMode = v))}
+            options={[
+              { value: 'search', label: 'search.messages' },
+              { value: 'history', label: 'history' },
+            ]}
+          />
         </Row>
       </Group>
       <Group title="Links">
@@ -139,44 +202,36 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
           />
         </Row>
       </Group>
-      <Group title="Polling">
-        <Row label="During work hours" help="How often to poll Slack between the hours below." error={err('schedule.intervalWorkMinutes')}>
-          <NumInput label="Poll every, work hours" prefix="Every" suffix="min" value={s.schedule.intervalWorkMinutes} invalid={!!err('schedule.intervalWorkMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.schedule.intervalWorkMinutes = v ?? NaN))} />
-        </Row>
-        <Row label="Outside work hours" error={err('schedule.intervalOffMinutes')}>
-          <NumInput label="Poll every, off hours" prefix="Every" suffix="min" value={s.schedule.intervalOffMinutes} invalid={!!err('schedule.intervalOffMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.schedule.intervalOffMinutes = v ?? NaN))} />
-        </Row>
-        <Row label="Work hours" htmlFor="work-hours" error={err('schedule.workHours')}>
-          <input id="work-hours" className={cx(inputBase, 'w-[200px]')} aria-invalid={!!err('schedule.workHours')} value={s.schedule.workHours} onBlur={flush} onChange={(e) => type((x) => (x.schedule.workHours = e.target.value))} />
-        </Row>
-        <Row label="Quiet window" help="How long a thread must be quiet before it’s triaged, so a live conversation is read once." error={err('triage.quietMinutes')}>
-          <NumInput label="Quiet window before triage" suffix="min" value={s.triage.quietMinutes} invalid={!!err('triage.quietMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.triage.quietMinutes = v ?? NaN))} />
-        </Row>
-        <Row label="Fetch mode" help="search.messages finds threads you’re in across channels. history reads each channel in turn.">
-          <Segmented
-            label="Fetch mode"
-            size="sm"
-            value={s.slack.fetchMode}
-            onChange={(v) => set((x) => (x.slack.fetchMode = v))}
-            options={[
-              { value: 'search', label: 'search.messages' },
-              { value: 'history', label: 'history' },
-            ]}
-          />
-        </Row>
-      </Group>
-      {full && (
-        <Group title="More sources">
-          <FutureRow title="Outlook mail" phase="P2" cta="Request consent" marks={['outlook']}>
-            Graph delta query on the Inbox. Needs delegated Mail.Read with admin consent. Retires the daily Outlook digest.
+    </>
+  );
+}
+
+// ---------- More sources ----------
+
+function MoreSourcesSection({ full }: Ctx) {
+  return (
+    <>
+      <SectionHeader title="More sources" description="Each new source gets its own page here and retires the scheduled task it replaces." />
+      {full ? (
+        <>
+          <FutureRow title="Outlook mail" phase="P2" cta="Connect" marks={['outlook']}>
+            Your Inbox, read through the Microsoft 365 connector IT has already approved, every 30 minutes in work hours. Retires the daily Outlook digest.
           </FutureRow>
           <FutureRow title="Teams chats and transcripts" phase="P2" cta="Request consent" marks={['teams']}>
-            Graph delta on chats, plus transcripts for meetings you attended. Retires the daily Teams transcript sweep.
+            Graph delta on chats, plus transcripts for meetings you attended. Needs admin consent. Retires the daily Teams transcript sweep.
+          </FutureRow>
+          <FutureRow title="Wispr Flow" phase="P2" cta="Connect">
+            Meetings and notes from Wispr Flow’s local database, read-only, every 3 hours in work hours. No network or tokens needed.
+          </FutureRow>
+          <FutureRow title="Plaud" phase="P2" cta="Connect">
+            Meeting transcripts, triaged on their summary. Retires the daily Plaud transcript sweep.
           </FutureRow>
           <FutureRow title="Gong · Salesforce · HubSpot" phase="P4" cta="Connect" marks={['salesforce', 'hubspot']}>
             Read-only sources for pre-meeting account briefs. Needs data-rights checks.
           </FutureRow>
-        </Group>
+        </>
+      ) : (
+        <p className="m-0 mt-5 text-[13px] text-muted">Slack is the only source in this version.</p>
       )}
     </>
   );
@@ -1058,8 +1113,10 @@ function AppearanceSection() {
 export interface SectionDef {
   id: string;
   label: string;
-  group: 'Inbox' | 'Actions' | 'Claude' | 'System' | 'Account';
+  group: 'Inbox' | 'Sources' | 'Actions' | 'Claude' | 'System' | 'Account';
   View: ComponentType<Ctx>;
+  /** Shown in the nav in Full scope only. */
+  fullOnly?: boolean;
   /** Which validation paths belong to this section, for the nav's error dot. */
   owns: (path: string) => boolean;
 }
@@ -1068,8 +1125,11 @@ const under = (...prefixes: string[]) => (path: string) => prefixes.some((p) => 
 
 export const SECTIONS: SectionDef[] = [
   { id: 'rules', label: 'Triage rules', group: 'Inbox', View: RulesSection, owns: under('rules') },
-  { id: 'slack', label: 'Slack', group: 'Inbox', View: SlackSection, owns: under('settings.slack', 'settings.schedule', 'settings.triage.quietMinutes') },
+  { id: 'people', label: 'People', group: 'Inbox', View: PeopleSection, owns: under('settings.people') },
+  { id: 'schedule', label: 'Schedule', group: 'Inbox', View: ScheduleSection, owns: under('settings.schedule.workHours', 'settings.triage.quietMinutes') },
   { id: 'notifications', label: 'Notifications', group: 'Inbox', View: NotificationsSection, owns: under('settings.notifications') },
+  { id: 'slack', label: 'Slack', group: 'Sources', View: SlackSection, owns: under('settings.slack', 'settings.schedule.intervalWorkMinutes', 'settings.schedule.intervalOffMinutes') },
+  { id: 'sources', label: 'More sources', group: 'Sources', View: MoreSourcesSection, owns: () => false, fullOnly: true },
   { id: 'writing', label: 'Write targets', group: 'Actions', View: WritingSection, owns: under('settings.dryRun', 'settings.vaultPath', 'settings.confluence') },
   { id: 'models', label: 'Models', group: 'Claude', View: ModelsSection, owns: under('settings.models', 'settings.claudeBackend', 'settings.triage.maxThreadsPerCall', 'settings.triage.maxInputTokens', 'settings.triage.keepLastMessages') },
   { id: 'prompts', label: 'Prompts', group: 'Claude', View: PromptsSection, owns: () => false },

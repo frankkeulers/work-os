@@ -285,7 +285,7 @@ function FirstRun({ inbox }: { inbox: InboxView }) {
         )}
       </Button>
       <div className="text-xs text-muted">
-        Rules, VIPs and the quiet window are in <Link to="/settings/rules">Settings &amp; rules</Link>.
+        <Link to="/settings/rules">Rules</Link>, <Link to="/settings/people">VIPs</Link> and the <Link to="/settings/schedule">quiet window</Link> are in Settings.
       </div>
     </div>
   );

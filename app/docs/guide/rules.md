@@ -3,7 +3,7 @@ title: Triage rules
 group: Inbox
 order: 40
 summary: Rules that decide before Claude does, or set a floor for its decision.
-updated: 2026-10-07
+updated: 2026-10-08
 ---
 
 Rules run before Claude, in order. **The first rule that matches decides**; the rest are skipped.
@@ -16,8 +16,8 @@ A rule matches when all its conditions do.
 
 | Condition | Matches when |
 |---|---|
-| Sender in | the message is from someone in a list: your VIPs, or names you type |
-| Channel in | the thread is in one of the listed channels (or a named list: included, excluded, customer channels) |
+| Sender in | the message is from someone in a list: your VIPs (set in [Settings › People](/settings/people)), or names you type |
+| Channel in | the thread is in one of the listed channels (or a named list from [Settings › Slack](/settings/slack): included, excluded, customer channels) |
 | Mentions me | you are @-mentioned |
 | Is a DM | it is a direct message or group DM |
 | Keyword | the text matches a regular expression, e.g. `/blocked\|go\/no-go/i` |

@@ -3,7 +3,7 @@ title: The inbox
 group: Inbox
 order: 30
 summary: Needs you and To file, what the chips mean, topics, and how to correct a decision.
-updated: 2026-10-07
+updated: 2026-10-08
 ---
 
 ## Needs you and To file
@@ -29,7 +29,7 @@ filing. It is worth a glance now and then, to catch a wrong decision. **Snoozed*
 their lists the same way; a snoozed item comes back at its time, marked "Back from snooze".
 
 Threads still being written show as **N still active** in the header. They are triaged once they
-have been quiet for the quiet window (10 minutes by default, in [Settings › Slack](/settings/slack)).
+have been quiet for the quiet window (10 minutes by default, in [Settings › Schedule](/settings/schedule)).
 
 ## The item panel
 

@@ -51,11 +51,13 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
 - Each section is its own view at `/settings/<section>`, with grouped navigation:
   - **Account:** Profile, Appearance
-  - **Inbox:** Triage rules, Slack, Notifications
+  - **Inbox:** Triage rules, People, Schedule, Notifications. What applies to every source.
+  - **Sources:** Slack, then More sources (Full scope only). One page per source: what's read, how often it polls, where its links open.
   - **Actions:** Write targets
   - **Claude:** Models, Prompts, Budgets
   - **System:** Storage & data
 - Plain `/settings` still opens Triage rules, the section used most.
+- **Adding a source** (Outlook, say) adds a page to Sources and the source to `RULE_SOURCES`. Rules, People and Schedule stay where they are: a rule can be scoped to sources, VIPs are matched by name on any source, and work hours and the quiet window hold for all of them.
 - **Nav badges:**
   - Write targets shows "Dry-run" while dry-run is on.
   - A section with an unsaved invalid field shows a red dot.
