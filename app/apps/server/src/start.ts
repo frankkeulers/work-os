@@ -29,6 +29,10 @@ import { CursorFile } from './pipeline/cursors';
 import { returnSnoozed } from './pipeline/due';
 import { pollSource } from './pipeline/poll';
 import { buildSources, type AdapterFactory } from './sources/registry';
+import { wisprFactory } from './sources/wispr/adapter';
+import { wisprLink, type WisprLink } from './sources/wispr/link';
+import { httpConnector, WisprMcp } from './sources/wispr/mcp';
+import { WisprAuth } from './sources/wispr/oauth';
 import { slackFactory } from './sources/slack/adapter';
 import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
@@ -80,6 +84,8 @@ export interface RunDeps {
   confluenceFetch?: FetchFn;
   /** The Agent SDK's query(), or a fake. Tests must pass one: they never call Claude. */
   claude?: QueryFn;
+  /** Wispr Flow's sign-in for Settings; the real one by default, `--fakes` passes its own. */
+  wispr?: WisprLink;
 }
 
 export type RunResult =
@@ -140,7 +146,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // The made-up threads are anchored to the first start, so a restart sees the same ones.
     const world = fakeWorld(await fakeAnchor(config.dataDir, now()));
     armCrash(deps.env.WORKOS_CRASH_AT);
-    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude };
+    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude, wispr: world.wisprLink };
     extraRoutes = world.routes;
   }
 
@@ -230,7 +236,10 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       .catch((err: unknown) => logger.debug?.({ channel, err: String(err) }, 'Could not read group DM members'))
       .finally(() => setTimeout(() => warming.delete(channel), 10 * 60_000).unref());
   };
-  const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger) };
+  // Wispr Flow (R2.7): one sign-in store and MCP client for the process, like Slack's directory.
+  const wisprAuth = new WisprAuth(secrets, `http://127.0.0.1:${config.port}/oauth/wispr/callback`);
+  const wisprMcp = new WisprMcp(httpConnector(wisprAuth, config.version, deps.fetch ?? fetch));
+  const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger), wispr: wisprFactory(wisprMcp, logger) };
   // Claude (M2): one adapter for the process; triage reads the prompt file on every run.
   const claude = new ClaudeAdapter({
     usage,
@@ -375,6 +384,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     promptSources: deps.fakes || process.env.VITEST ? undefined : () => ({ home: homedir(), vault: actions.vaultRoot() }),
     people: (signal) => slackDirectory.listPeople(signal),
     catalogue: (signal) => buildCatalogue(confluenceApi, settings.editable.settings.confluence, signal),
+    wispr: deps.wispr ?? (deps.sources ? undefined : wisprLink(wisprAuth, wisprMcp, deps.fetch ?? fetch)),
     channels: async (signal) => [...(await slackDirectory.conversations(signal)).values()].filter((c) => !c.is_im && !c.is_mpim && c.name).map((c) => `#${c.name}`),
     slackTeamId: () => slackDirectory.identityKnown?.team_id,
     dmTitle: (itemId) => {

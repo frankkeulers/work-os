@@ -41,6 +41,7 @@ import type { ActionService } from '../actions/service';
 import type { Evals } from '../pipeline/eval';
 import { readTopic } from '../pipeline/topics';
 import { SOURCE_PRIORITY } from '../sources/types';
+import type { WisprLink } from '../sources/wispr/link';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { LabelStore } from '../store/labels';
@@ -93,6 +94,8 @@ export interface ViewDeps {
   actions?: ActionService;
   /** The pages in the Confluence scope, read live (FR-10.2). */
   catalogue?: (signal?: AbortSignal) => Promise<CatalogueEntry[]>;
+  /** Wispr Flow's sign-in, for Settings › Sources (R2.7). Absent: Wispr Flow can't be connected. */
+  wispr?: WisprLink;
 }
 
 /**

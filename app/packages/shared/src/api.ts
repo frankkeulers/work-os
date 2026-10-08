@@ -92,6 +92,17 @@ export interface SourceHealth {
   message?: string;
 }
 
+/** Settings › Sources › Wispr Flow (R2.7). */
+export interface WisprStatusView {
+  connected: boolean;
+  account?: string; // the signed-in name, once known
+}
+
+/** Connect: the sign-in page to open, or none when the stored sign-in still works. */
+export interface WisprConnectView {
+  url?: string;
+}
+
 export interface BudgetLine {
   used: number;
   limit: number;

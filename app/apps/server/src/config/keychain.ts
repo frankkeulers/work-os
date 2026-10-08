@@ -11,6 +11,9 @@ export const SLACK_TOKEN_ACCOUNT = 'slack-user-token';
 /** Confluence REST credentials as "email:token" under KEYCHAIN_SERVICE (P0-8). */
 export const CONFLUENCE_TOKEN_ACCOUNT = 'confluence-api-token';
 
+/** Wispr Flow's OAuth client registration and tokens, as one JSON value (R2.7, P0-11). */
+export const WISPR_OAUTH_ACCOUNT = 'wispr-oauth';
+
 export interface SecretStore {
   /** The secret, or undefined if there is none. Throws if the Keychain can't be read. */
   get(account: string): Promise<string | undefined>;

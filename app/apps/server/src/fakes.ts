@@ -15,6 +15,10 @@ import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
 import { FakeSlack } from './sources/slack/fakeSlack';
 import { isoToTs } from './sources/slack/normalise';
+import { wisprFactory } from './sources/wispr/adapter';
+import { FakeWispr } from './sources/wispr/fakeWispr';
+import { fakeWisprLink } from './sources/wispr/link';
+import { WisprMcp } from './sources/wispr/mcp';
 
 // `server.mjs --fakes` (M1 step 11): the real server against a made-up Slack workspace, for the
 // e2e:server tests. Never near real data: refused unless dry-run is forced (the dev instance) and
@@ -71,6 +75,33 @@ export function fakeWorld(now: Date) {
   // FileVault on, Power Nap off: the checks pass, so the UI starts in normal mode.
   const exec: Exec = async (cmd) => ({ code: 0, stdout: cmd.endsWith('fdesetup') ? 'FileVault is On.\n' : ' powernap 0\n' });
 
+  // Wispr Flow: two finished meetings, not connected until Connect in Settings (R2.7).
+  const wispr = new FakeWispr();
+  wispr.signedIn = false;
+  const iso = (minsAgo: number) => new Date(now.getTime() - minsAgo * 60_000).toISOString().replace('Z', '000Z');
+  wispr
+    .add({
+      id: '5f0c1e2a-0000-4000-8000-000000000001',
+      title: 'MVI V2 launch readiness',
+      start: iso(150),
+      end: iso(120),
+      modified_at: iso(118),
+      summary: '### Context and Goals\n- Confirm MVI V2 is ready to launch on Thursday.\n\n### Next Steps\n- Frank to confirm the rollback owner by Wednesday.\n- Sam to share the support briefing.\n\n### Decisions Made\n- Launch stays on Thursday if the licensing wording is signed off.',
+      content: 'Check the data-licensing wording with Legal.',
+      transcript: 'Frank: Are we still on for Thursday?\nSam Okafor: Yes, apart from the licensing wording.\nFrank: I will confirm the rollback owner by Wednesday.',
+      participants: [{ name: 'Sam Okafor', is_self: false, spoke: true, relationship: 'colleague' }],
+    })
+    .add({
+      id: '5f0c1e2a-0000-4000-8000-000000000002',
+      title: 'Insights APIs roadmap',
+      start: iso(300),
+      end: iso(270),
+      modified_at: iso(268),
+      summary: '### Discussion\n- Webhooks for vessel events were discussed.\n\n### Decisions Made\n- Vessel-event webhooks move to v2.1; v2.0 ships with polling only.',
+      participants: [{ name: 'Dana Lee', is_self: false, spoke: true, relationship: 'colleague' }],
+    });
+  const wisprMcp = new WisprMcp(wispr.connector);
+
   /** POST /api/fake/slack/messages: a new message in the fake workspace, for tests. */
   const routes = (app: FastifyInstance) => {
     app.post('/api/fake/slack/messages', async (req, reply) => {
@@ -81,7 +112,7 @@ export function fakeWorld(now: Date) {
     });
   };
 
-  return { slack, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory) }, claude: fakeClaude().query, routes };
+  return { slack, wispr, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory), wispr: wisprFactory(wisprMcp) }, wisprLink: fakeWisprLink(wispr), claude: fakeClaude().query, routes };
 }
 
 /** When the fake world began: the first start in this data dir, kept in fake-world.json. */

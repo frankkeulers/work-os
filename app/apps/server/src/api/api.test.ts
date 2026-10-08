@@ -31,7 +31,7 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources'] } = {}) {
+async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; wispr?: ViewDeps['wispr'] } = {}) {
   await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }) }, rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
@@ -55,6 +55,7 @@ async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewD
     guideDir: opts.guideDir,
     earlier: opts.earlier,
     promptSources: opts.promptSources,
+    wispr: opts.wispr,
     devOrigins: ['http://localhost:5173'],
   });
 }
@@ -550,3 +551,61 @@ describe('GET /api/guide (FR-1.8)', () => {
     expect((await get('/api/guide', {})).statusCode).toBe(401);
   });
 });
+
+describe('Wispr Flow connect (R2.7)', () => {
+  const post = (url: string) => server.app.inject({ method: 'POST', url, headers: auth });
+  const enabled = async () => (await get('/api/settings')).json<SettingsView>().settings.sources?.wispr?.enabled ?? false;
+  let signedIn: boolean;
+  const link = (): NonNullable<ViewDeps['wispr']> => ({
+    status: async () => ({ connected: signedIn, ...(signedIn && { account: 'Frank Keulers' }) }),
+    begin: async () => (signedIn ? {} : { url: 'https://mcp-auth.example/authorize?state=s1' }),
+    finish: async (_code, state) => {
+      if (state !== 's1') throw new Error('This sign-in link is stale or was not started here. <b>');
+      signedIn = true;
+    },
+    forget: async () => void (signedIn = false),
+  });
+  beforeEach(() => (signedIn = false));
+
+  it('Connect returns the sign-in page; the callback finishes it and turns the source on', async () => {
+    await build({ wispr: link() });
+    expect((await get('/api/sources/wispr')).json()).toEqual({ connected: false });
+    expect((await post('/api/sources/wispr/connect')).json()).toEqual({ url: 'https://mcp-auth.example/authorize?state=s1' });
+    expect(await enabled()).toBe(false);
+    // The browser arrives without the bearer token.
+    const cb = await get('/oauth/wispr/callback?code=c1&state=s1', {});
+    expect(cb.statusCode).toBe(200);
+    expect(cb.headers['content-type']).toContain('text/html');
+    expect(cb.body).toContain('Wispr Flow is connected');
+    expect(await enabled()).toBe(true);
+    expect((await get('/api/sources/wispr')).json()).toEqual({ connected: true, account: 'Frank Keulers' });
+  });
+
+  it('a stale or refused sign-in says so, escaped, and changes nothing', async () => {
+    await build({ wispr: link() });
+    const stale = await get('/oauth/wispr/callback?code=c1&state=forged', {});
+    expect(stale.statusCode).toBe(400);
+    expect(stale.body).toContain('stale');
+    expect(stale.body).toContain('&#60;b&#62;');
+    const refused = await get('/oauth/wispr/callback?error=access_denied', {});
+    expect(refused.statusCode).toBe(400);
+    expect(refused.body).toContain('access_denied');
+    expect(await enabled()).toBe(false);
+  });
+
+  it('Connect with a working sign-in turns the source on at once; Disconnect turns it off', async () => {
+    signedIn = true;
+    await build({ wispr: link() });
+    expect((await post('/api/sources/wispr/connect')).json()).toEqual({});
+    expect(await enabled()).toBe(true);
+    expect((await post('/api/sources/wispr/disconnect')).statusCode).toBe(204);
+    expect(await enabled()).toBe(false);
+    expect((await get('/api/sources/wispr')).json()).toEqual({ connected: false });
+  });
+
+  it('is unavailable where the server has no Wispr Flow link', async () => {
+    await build();
+    expect((await get('/api/sources/wispr')).statusCode).toBe(503);
+  });
+});
+

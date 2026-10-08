@@ -1,4 +1,4 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, type ConfluenceCatalogueView, type EarlierView, type PersonOption } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type PersonOption, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -238,6 +238,63 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
 
   app.get('/api/settings', async (_req, reply) => reply.headers(noStore).send(await settingsView(d)));
 
+  // A source turned on or off from its own page, as if Frank had saved Settings with it changed.
+  const setSourceEnabled = async (id: SourceId, enabled: boolean) => {
+    const { settings: cur, rules } = d.settings.editable;
+    if (sourceSchedule(cur, id).enabled === enabled) return;
+    const saved = await d.settings.save({ settings: { ...cur, sources: { ...cur.sources, [id]: { ...cur.sources?.[id], enabled } } }, rules }, d.now());
+    if (!saved.settingsChanged) return;
+    await d.store.append({ type: 'settings.changed', data: { dryRun: saved.settings.dryRun } });
+    d.runtime?.settingsChanged();
+  };
+
+  // Wispr Flow (R2.7): Connect opens Wispr's sign-in in the browser, which comes back to the
+  // callback below; a working sign-in turns the source on and polls it at once.
+  const wispr = () => {
+    if (!d.wispr) throw new HttpError('unavailable', 'Wispr Flow is not available in this run.');
+    return d.wispr;
+  };
+  const wisprConnected = async () => {
+    d.runtime?.health.ok('wisprMcp');
+    await setSourceEnabled('wispr', true);
+    d.runtime?.pollNow(['wispr']);
+  };
+  app.get('/api/sources/wispr', async (_req, reply) => reply.headers(noStore).send((await wispr().status()) satisfies WisprStatusView));
+  app.post('/api/sources/wispr/connect', async (_req, reply) => {
+    let r: WisprConnectView;
+    try {
+      r = await wispr().begin();
+    } catch (e) {
+      throw new HttpError('unavailable', `Could not reach Wispr Flow's sign-in: ${(e as Error).message}`);
+    }
+    if (!r.url) await wisprConnected();
+    return reply.headers(noStore).send(r);
+  });
+  app.post('/api/sources/wispr/disconnect', async (_req, reply) => {
+    await wispr().forget();
+    await setSourceEnabled('wispr', false);
+    return reply.code(204).send();
+  });
+  // Outside /api: the browser arrives here from Wispr's sign-in page, without the bearer token.
+  // The OAuth state, issued by Connect and checked by finish(), is what makes it safe.
+  app.get('/oauth/wispr/callback', async (req, reply) => {
+    const q = req.query as { code?: string; state?: string; error?: string; error_description?: string };
+    let ok = false;
+    let message: string;
+    if (q.error || !q.code || !q.state) message = `Wispr Flow did not sign you in${q.error ? ` (${q.error_description ?? q.error})` : ''}. Go back to Work OS and choose Connect again.`;
+    else {
+      try {
+        await wispr().finish(q.code, q.state);
+        await wisprConnected();
+        ok = true;
+        message = 'Wispr Flow is connected. You can close this tab and go back to Work OS.';
+      } catch (e) {
+        message = `${(e as Error).message}`;
+      }
+    }
+    return reply.code(ok ? 200 : 400).headers({ ...noStore, 'content-type': 'text/html; charset=utf-8' }).send(callbackPage(ok, message));
+  });
+
   app.put('/api/settings', async (req, reply) => {
     const body = SettingsSave.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { settings, rules }.');
@@ -302,4 +359,12 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!e) throw new HttpError('unavailable', 'This server can’t read the sources (tests or fakes).');
     return reply.headers(noStore).send(await writePrompt(f, body.data.baseVersion, (text) => withCurrentSourceHashes(text, e), false));
   });
+}
+
+const escapeHtml = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** The page the browser lands on after Wispr Flow's sign-in. */
+function callbackPage(ok: boolean, message: string): string {
+  const title = ok ? 'Wispr Flow connected' : 'Wispr Flow not connected';
+  return `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><title>${title} · Work OS</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font:15px/1.5 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#f7f7f8;color:#1d1d1f}main{max-width:28rem;padding:2rem}h1{font-size:1.15rem;margin:0 0 .5rem}@media (prefers-color-scheme:dark){body{background:#161618;color:#ececef}}</style></head><body><main><h1>${title}</h1><p>${escapeHtml(message)}</p></main></body></html>`;
 }
