@@ -70,11 +70,11 @@ describe('settings autosave (FR-1.3, FR-1.5)', () => {
   });
 
   it('undo puts the previous files back and saves them', async () => {
-    editor.change((d) => (d.settings.slack.vips = []));
+    editor.change((d) => (d.settings.people.vips = []));
     await editor.flush();
     toasts[0].undo();
     await editor.flush();
-    expect(saved[saved.length - 1].settings.slack.vips).toEqual(SEED_SETTINGS.slack.vips);
+    expect(saved[saved.length - 1].settings.people.vips).toEqual(SEED_SETTINGS.people.vips);
     expect(toasts.map((t) => t.kind)).toEqual(['saved', 'undone']);
   });
 

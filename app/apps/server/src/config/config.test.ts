@@ -75,6 +75,18 @@ describe('data directory and settings', () => {
     expect(emptied.status === 'ok' && emptied.settings.confluence).toMatchObject({ roots: [], labels: [], exclude: [] });
   });
 
+  it('moves the VIPs of a settings file from before People existed out of the Slack block', async () => {
+    await init();
+    const s = JSON.parse(await readFile(paths(dir).settings, 'utf8'));
+    delete s.people;
+    s.slack.vips = ['Dana Lee'];
+    await writeFile(paths(dir).settings, JSON.stringify(s));
+    const load = await loadSettings(dir);
+    if (load.status !== 'ok') throw new Error(load.status);
+    expect(load.settings.people).toEqual({ vips: ['Dana Lee'] });
+    expect(load.settings.slack).not.toHaveProperty('vips');
+  });
+
   it('never overwrites existing config', async () => {
     await init();
     await writeFile(paths(dir).settings, '{"edited": true}');

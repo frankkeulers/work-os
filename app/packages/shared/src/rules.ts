@@ -1,4 +1,4 @@
-import type { Item, Rule, RuleCondition, Settings } from './schemas';
+import { ruleSources, type Item, type NamedList, type Rule, type RuleCondition, type Settings, type SourceId } from './schemas';
 
 // Deterministic rules (FR-4.1, FR-4.2): first enabled match wins.
 
@@ -8,10 +8,10 @@ export interface Me {
   mentionRe?: RegExp; // plain-text mentions such as "@frank"; `<@id>` mentions always match
 }
 
-const listValues = (c: { list?: string; values: string[] }, s: Settings): string[] => {
-  const named = c.list ? (s.slack[c.list as keyof Settings['slack']] as string[] | undefined) ?? [] : [];
-  return [...named, ...c.values];
-};
+/** The values behind a named list: VIPs hold for every source, the channel lists are Slack's. */
+const namedList = (list: NamedList, s: Settings): string[] => (list === 'vips' ? s.people.vips : s.slack[list]);
+
+const listValues = (c: { list?: NamedList; values: string[] }, s: Settings): string[] => [...(c.list ? namedList(c.list, s) : []), ...c.values];
 
 export const toRegExp = (pattern: string): RegExp => {
   const m = /^\/(.+)\/([a-z]*)$/.exec(pattern);
@@ -45,8 +45,13 @@ function matches(c: RuleCondition, item: Item, s: Settings, me: Me): boolean {
   }
 }
 
+/**
+ * The sources whose items are checked against the rules (FR-4.1). Items from other sources go
+ * straight to the model. A source joins once its adapter fills the fields its conditions read.
+ */
+export const RULE_SOURCES: readonly SourceId[] = ['slack'];
+
 export function firstMatchingRule(item: Item, rules: Rule[], settings: Settings, me: Me): Rule | undefined {
-  // Rules are written against Slack fields (FR-4.1); other sources go straight to the model.
-  if (item.source !== 'slack') return undefined;
-  return rules.find((r) => r.enabled && r.conditions.every((c) => matches(c, item, settings, me)));
+  if (!RULE_SOURCES.includes(item.source)) return undefined;
+  return rules.find((r) => r.enabled && ruleSources(r).includes(item.source) && r.conditions.every((c) => matches(c, item, settings, me)));
 }

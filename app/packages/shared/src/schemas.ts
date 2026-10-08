@@ -225,15 +225,37 @@ export const RuleOutcome = z.discriminatedUnion('type', [
 ]);
 export type RuleOutcome = z.infer<typeof RuleOutcome>;
 
-export const Rule = z.object({
-  id: z
-    .string()
-    .min(1, 'Give the rule an id')
-    .regex(/^[a-z0-9-]+$/, 'Use lower-case letters, digits and hyphens'),
-  enabled: z.boolean(),
-  conditions: z.array(RuleCondition).min(1, 'Add at least one condition'),
-  outcome: RuleOutcome,
-});
+/** The sources each condition can be checked on. Email has no channels, DMs or `<@id>` mentions. */
+export const CONDITION_SOURCES: Record<RuleCondition['type'], readonly SourceId[]> = {
+  sender_in: SourceId.options,
+  keyword: SourceId.options,
+  channel_in: ['slack', 'teams'],
+  mentions_me: ['slack', 'teams'],
+  is_dm: ['slack', 'teams'],
+};
+
+/** The sources a rule can match: its own scope (every source when unset), narrowed to where all its conditions apply. */
+export function ruleSources(rule: { sources?: SourceId[]; conditions: { type: RuleCondition['type'] }[] }): SourceId[] {
+  const scope = rule.sources?.length ? rule.sources : SourceId.options;
+  return scope.filter((src) => rule.conditions.every((c) => CONDITION_SOURCES[c.type].includes(src)));
+}
+
+export const Rule = z
+  .object({
+    id: z
+      .string()
+      .min(1, 'Give the rule an id')
+      .regex(/^[a-z0-9-]+$/, 'Use lower-case letters, digits and hyphens'),
+    enabled: z.boolean(),
+    sources: z.array(SourceId).optional(), // amendment (sources): unset or empty means every source
+    conditions: z.array(RuleCondition).min(1, 'Add at least one condition'),
+    outcome: RuleOutcome,
+  })
+  .superRefine((r, ctx) => {
+    if (r.conditions.length && ruleSources(r).length === 0) {
+      ctx.addIssue({ code: 'custom', path: ['sources'], message: 'None of the chosen sources supports every condition' });
+    }
+  });
 export type Rule = z.infer<typeof Rule>;
 
 export const Rules = z.array(Rule).superRefine((rules, ctx) => {
@@ -299,9 +321,12 @@ export const Settings = z.object({
     includeChannels: z.array(z.string()),
     excludeChannels: z.array(z.string()),
     customerChannels: z.array(z.string()),
-    vips: z.array(z.string()),
     openLinksIn: z.enum(['browser', 'app']).optional(), // amendment: where Open in Slack goes; browser when unset
     appChannels: z.array(z.string()).optional(), // amendment: channels whose app posts (Gong, say) are read; dropped elsewhere (FR-2.10)
+  }),
+  // Amendment (sources): who matters on every source, matched by name. Was `slack.vips`; see upgradeSettings.
+  people: z.object({
+    vips: z.array(z.string()),
   }),
   schedule: z.object({
     workHours: z.string().min(1, 'Enter work hours'),
@@ -349,6 +374,21 @@ export const Settings = z.object({
   schemaVersion: z.literal(1),
 });
 export type Settings = z.infer<typeof Settings>;
+
+/**
+ * Brings a settings file written by an older version up to the current shape, still at
+ * schemaVersion 1: `slack.vips` moves to `people.vips`. The next save writes the new shape.
+ */
+export function upgradeSettings(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const s = raw as Record<string, unknown> & { slack?: Record<string, unknown> };
+  if (s.people !== undefined || !s.slack || !('vips' in s.slack)) return raw;
+  const { vips, ...slack } = s.slack;
+  return { ...s, slack, people: { vips } };
+}
+
+/** What `settings.json` is read with: the upgrade, then the schema. */
+export const SettingsFile = z.preprocess(upgradeSettings, Settings);
 
 const SOURCE_DEFAULTS: Record<SourceId, SourceSchedule> = {
   slack: { enabled: true, intervalWorkMinutes: 10, intervalOffMinutes: 60 },

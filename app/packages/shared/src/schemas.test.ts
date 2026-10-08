@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Rule, Rules, Settings, isValidRegex, sourceSchedule } from './schemas';
+import { Rule, Rules, Settings, SettingsFile, isValidRegex, sourceSchedule, upgradeSettings } from './schemas';
 
 describe('rule validation (FR-4.1)', () => {
   it('accepts slash-delimited and bare regular expressions', () => {
@@ -17,6 +17,17 @@ describe('rule validation (FR-4.1)', () => {
     });
     expect(r.success).toBe(false);
     expect(r.error?.issues[0].message).toBe('Not a valid regular expression');
+  });
+
+  it('accepts a rule without a source scope, as rules.json files from before scopes have', () => {
+    expect(Rule.safeParse({ id: 'x', enabled: true, conditions: [{ type: 'is_dm' }], outcome: { type: 'now' } }).success).toBe(true);
+  });
+
+  it('rejects a rule scoped to sources that cannot check its conditions', () => {
+    const r = Rule.safeParse({ id: 'x', enabled: true, sources: ['outlook'], conditions: [{ type: 'channel_in', values: ['#a'] }], outcome: { type: 'now' } });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]).toMatchObject({ path: ['sources'], message: 'None of the chosen sources supports every condition' });
+    expect(Rule.safeParse({ id: 'x', enabled: true, sources: ['outlook'], conditions: [{ type: 'keyword', pattern: 'x' }], outcome: { type: 'now' } }).success).toBe(true);
   });
 
   it('rejects duplicate rule ids', () => {
@@ -47,5 +58,24 @@ describe('per-source schedules (R2.1)', () => {
     expect(parsed.success).toBe(true);
     expect(Settings.shape.sources.safeParse({ wispr: { intervalWorkMinutes: 0 } }).success).toBe(false);
     expect(Settings.shape.sources.safeParse({ fax: { enabled: true } }).success).toBe(false);
+  });
+});
+
+describe('settings upgrade (sources)', () => {
+  it('moves slack.vips to people.vips in a file from before People existed', () => {
+    const old = { dataDir: '/x', slack: { fetchMode: 'search', vips: ['Dana Lee'] }, schemaVersion: 1 };
+    expect(upgradeSettings(old)).toEqual({ dataDir: '/x', slack: { fetchMode: 'search' }, people: { vips: ['Dana Lee'] }, schemaVersion: 1 });
+  });
+
+  it('leaves a current file, and anything that is not an object, as it is', () => {
+    const current = { slack: { fetchMode: 'search' }, people: { vips: [] } };
+    expect(upgradeSettings(current)).toBe(current);
+    expect(upgradeSettings(null)).toBeNull();
+  });
+
+  it('is what settings files are read with, while Settings itself wants the new shape', () => {
+    const shape = { ...Settings.shape };
+    expect(shape.people).toBeDefined();
+    expect(SettingsFile.safeParse({ slack: { vips: [] } }).error?.issues.some((i) => i.path[0] === 'people')).toBe(false);
   });
 });

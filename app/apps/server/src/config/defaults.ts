@@ -6,7 +6,8 @@ import { CONFLUENCE_SCOPE_DEFAULTS, type Rule, type Settings } from '@work-os/sh
 export function defaultSettings(dataDir: string): Settings {
   return {
     dataDir,
-    slack: { fetchMode: 'search', includeChannels: [], excludeChannels: [], customerChannels: [], vips: [] },
+    slack: { fetchMode: 'search', includeChannels: [], excludeChannels: [], customerChannels: [] },
+    people: { vips: [] },
     schedule: { workHours: 'Mon–Fri 08:00–18:30', intervalWorkMinutes: 10, intervalOffMinutes: 60 },
     triage: { quietMinutes: 10, maxThreadsPerCall: 25, maxInputTokens: 40000, keepLastMessages: 3 },
     models: { triage: 'haiku-4.5', draftVault: 'sonnet-5.5', draftConfluence: 'sonnet-5.5' },

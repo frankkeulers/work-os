@@ -110,7 +110,7 @@ function SlackSection({ s, usage, full, set, type, flush, err }: Ctx) {
       />
       <Group title="People and channels">
         <Row stacked label="VIPs" help="DMs from these people skip the quiet window and go straight to Now.">
-          <PeoplePicker label="VIPs" placeholder="Search people…" values={s.slack.vips} onChange={(v) => set((x) => (x.slack.vips = v))} />
+          <PeoplePicker label="VIPs" placeholder="Search people…" values={s.people.vips} onChange={(v) => set((x) => (x.people.vips = v))} />
         </Row>
         <Row stacked label="Customer channels" help="Used by the customer-channels rule.">
           <ChannelPicker label="Customer channels" placeholder="Search channels…" values={s.slack.customerChannels} onChange={(v) => set((x) => (x.slack.customerChannels = v))} />

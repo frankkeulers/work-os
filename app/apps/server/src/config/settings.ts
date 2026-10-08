@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { Rules, Settings, type FieldIssue, type Rule } from '@work-os/shared';
+import { Rules, SettingsFile, type FieldIssue, type Rule, type Settings } from '@work-os/shared';
 import type { z } from 'zod';
 import { writeFileAtomic } from '../store/atomic';
 import { paths } from './dataDir';
@@ -42,14 +42,14 @@ async function keepLastGood(file: string, raw: string) {
 
 export async function loadSettings(dataDir: string): Promise<SettingsLoad> {
   const p = paths(dataDir);
-  const [settings, rules] = await Promise.all([readValid(p.settings, Settings, 'settings'), readValid(p.rules, Rules, 'rules')]);
+  const [settings, rules] = await Promise.all([readValid(p.settings, SettingsFile, 'settings'), readValid(p.rules, Rules, 'rules')]);
   if (settings.ok && rules.ok) {
     await keepLastGood(p.settingsLastGood, settings.raw);
     await keepLastGood(p.rulesLastGood, rules.raw);
     return { status: 'ok', settings: settings.value, rules: rules.value };
   }
   const issues = [...(settings.ok ? [] : settings.issues), ...(rules.ok ? [] : rules.issues)];
-  const s = settings.ok ? settings : await readValid(p.settingsLastGood, Settings, 'settings');
+  const s = settings.ok ? settings : await readValid(p.settingsLastGood, SettingsFile, 'settings');
   const r = rules.ok ? rules : await readValid(p.rulesLastGood, Rules, 'rules');
   if (s.ok && r.ok) return { status: 'fallback', settings: s.value, rules: r.value, issues };
   return { status: 'paused', issues };

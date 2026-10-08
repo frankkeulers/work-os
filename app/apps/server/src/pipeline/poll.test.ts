@@ -196,7 +196,8 @@ describe('pollSource (FR-2.8)', () => {
 describe('rules at ingest (FR-4, §5.3)', () => {
   const withRules = () => {
     const settings = defaultSettings(dir);
-    settings.slack = { ...settings.slack, vips: ['U2'], excludeChannels: ['#random'] };
+    settings.slack = { ...settings.slack, excludeChannels: ['#random'] };
+    settings.people = { vips: ['U2'] };
     d.rules = () => ({ rules: DEFAULT_RULES, settings });
   };
 

@@ -31,6 +31,7 @@ import {
   topicItem,
   topicPiecesView,
   unsnooze,
+  upgradeSettings,
   type Action,
   type ConfluenceCatalogueView,
   type GuideFilesView,
@@ -131,7 +132,9 @@ export class MockServer implements WorkOsApi, MockControls {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return undefined;
       const parsed = JSON.parse(raw) as MockState;
-      return parsed.schemaVersion === STATE_VERSION ? parsed : undefined;
+      if (parsed.schemaVersion !== STATE_VERSION) return undefined;
+      parsed.settings = upgradeSettings(parsed.settings) as Settings; // a session saved before VIPs moved to People
+      return parsed;
     } catch {
       return undefined;
     }
@@ -551,7 +554,7 @@ export class MockServer implements WorkOsApi, MockControls {
   async getPeople(): Promise<PersonOption[]> {
     await this.gate(QUERY_MS);
     const names = Object.values(this.s.items).flatMap((r) => (r.item.source === 'slack' ? r.item.participants : []).filter((p) => p.id !== FRANK).map((p) => p.name));
-    return [...new Set([...names, ...this.s.settings.slack.vips])].sort((a, b) => a.localeCompare(b)).map((name) => ({ name }));
+    return [...new Set([...names, ...this.s.settings.people.vips])].sort((a, b) => a.localeCompare(b)).map((name) => ({ name }));
   }
 
   /** The mock has no guide folder: the app shows the copy in its build, as a server without one does. */

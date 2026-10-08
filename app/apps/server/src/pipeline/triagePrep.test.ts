@@ -55,7 +55,8 @@ describe('quiet window and eligibility (§5.3)', () => {
 
 describe('rule verdicts (FR-4.2, FR-4.3)', () => {
   const settings = defaultSettings('/tmp/x');
-  settings.slack = { ...settings.slack, vips: ['Dana Lee'], excludeChannels: ['#random'] };
+  settings.slack = { ...settings.slack, excludeChannels: ['#random'] };
+  settings.people = { vips: ['Dana Lee'] };
   const me = meFrom({ id: 'UFRANK', name: 'frank' });
 
   it('maps the first matching rule to drop, a fixed level, or the model with a floor', () => {

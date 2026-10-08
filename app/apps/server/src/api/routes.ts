@@ -194,7 +194,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
       .flatMap((i) => (i.source === 'slack' ? i.participants : []))
       .filter((p) => p.id !== me && p.name && p.name !== p.id)
       .map((p): PersonOption => ({ name: p.name }));
-    const vips = d.settings.editable.settings.slack.vips.map((name): PersonOption => ({ name }));
+    const vips = d.settings.editable.settings.people.vips.map((name): PersonOption => ({ name }));
     const byName = new Map<string, PersonOption>();
     for (const p of [...live, ...known, ...vips]) if (!byName.has(p.name.toLowerCase())) byName.set(p.name.toLowerCase(), p);
     const people = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));

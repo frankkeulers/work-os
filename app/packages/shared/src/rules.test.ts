@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { firstMatchingRule, type Me } from './rules';
-import type { Item, Rule, Settings } from './schemas';
+import { ruleSources, type Item, type Rule, type Settings } from './schemas';
 
 const ME: Me = { id: 'U01FRANK', mentionRe: /@frank\b/i };
 
-// Rules only read the Slack lists from settings.
+// Rules only read the named lists from settings: VIPs from People, channels from Slack.
 const settings = {
-  slack: { fetchMode: 'search', includeChannels: [], excludeChannels: ['#random'], customerChannels: [], vips: ['Dana Lee'] },
+  slack: { fetchMode: 'search', includeChannels: [], excludeChannels: ['#random'], customerChannels: [] },
+  people: { vips: ['Dana Lee'] },
 } as unknown as Settings;
 
 const item = (over: Partial<Item> = {}): Item => ({
@@ -81,5 +82,26 @@ describe('firstMatchingRule (FR-4.1, FR-4.2)', () => {
   it('leaves non-Slack items to the model', () => {
     const rules = [rule('any-dm', [{ type: 'is_dm' }])];
     expect(firstMatchingRule(item({ source: 'outlook', kind: 'dm' }), rules, settings, ME)).toBeUndefined();
+  });
+
+  it('skips a rule scoped to other sources', () => {
+    const rules = [{ ...rule('teams-dm', [{ type: 'is_dm' }]), sources: ['teams' as const] }, rule('any-dm', [{ type: 'is_dm' }], { type: 'today' })];
+    expect(firstMatchingRule(item({ kind: 'dm' }), rules, settings, ME)?.id).toBe('any-dm');
+    expect(firstMatchingRule(item({ kind: 'dm' }), [{ ...rules[0], sources: ['teams', 'slack'] }], settings, ME)?.id).toBe('teams-dm');
+  });
+});
+
+describe('ruleSources (sources)', () => {
+  it('is every source for a rule without a scope whose conditions work everywhere', () => {
+    expect(ruleSources(rule('k', [{ type: 'keyword', pattern: 'renewal' }]))).toEqual(['slack', 'outlook', 'teams', 'plaud', 'wispr']);
+  });
+
+  it('narrows to the sources every condition works on', () => {
+    expect(ruleSources(rule('c', [{ type: 'keyword', pattern: 'x' }, { type: 'channel_in', values: ['#a'] }]))).toEqual(['slack', 'teams']);
+    expect(ruleSources({ ...rule('c', [{ type: 'channel_in', values: ['#a'] }]), sources: ['outlook', 'slack'] })).toEqual(['slack']);
+  });
+
+  it('is empty when no chosen source supports every condition', () => {
+    expect(ruleSources({ ...rule('c', [{ type: 'is_dm' }]), sources: ['outlook'] })).toEqual([]);
   });
 });
