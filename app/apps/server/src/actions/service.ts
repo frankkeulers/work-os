@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Me, Notice, Settings } from '@work-os/shared';
+import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Me, Notice, Settings, SourceId } from '@work-os/shared';
 import { londonParts, topicItem } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
@@ -55,7 +55,8 @@ export interface ActionDeps {
   settings: () => Settings;
   /** Dry-run in force: the settings, or forced on for the development instance. */
   dryRun: () => boolean;
-  me: () => Me;
+  /** Frank in a source (Slack by default). */
+  me: (source?: SourceId) => Me;
   draftsBudgetHit: () => boolean;
   /** Awake 45 s, online and the Claude breaker ready (CL-10). */
   claudeReady: () => boolean;
@@ -374,7 +375,7 @@ export class ActionService {
                   onTurn: (usedTool) => this.stage(a.id, usedTool ? 1 : 2),
                 },
                 content.item,
-                this.d.me(),
+                this.d.me(content.item.source),
               )
             : await draftConfluenceEntry(
                 {
@@ -390,7 +391,7 @@ export class ActionService {
                   onStage: (n) => this.stage(a.id, n),
                 },
                 content.item,
-                this.d.me(),
+                this.d.me(content.item.source),
               );
         if (a.type === 'confluence_entry') await this.d.reportOk('confluence');
         if (!stillDrafting()) return; // cancelled or discarded during the call

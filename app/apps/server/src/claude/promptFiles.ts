@@ -31,7 +31,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Decides attention, filing suggestions, the summary and the open asks for each topic.',
     usedBy: 'Triage and the eval',
     defaultText: DEFAULT_TRIAGE_PROMPT,
-    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550'], // triage v2
+    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550', 'd4b00d127a3dd9605964c0b44ac43c7967894f3f'], // triage v2, v3
   },
   {
     id: 'topics',

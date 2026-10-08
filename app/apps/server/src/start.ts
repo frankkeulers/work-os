@@ -259,7 +259,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     now,
     logger,
     config: () => ({ settings: settings.editable.settings, rules: settings.rules }),
-    me: () => meFrom(runtime.whoAmI('slack')),
+    me: (source: SourceId = 'slack') => meFrom(runtime.whoAmI(source)),
     prompt: () => loadPromptFile(config.dataDir, 'triage'),
     topicsPrompt: () => loadPromptFile(config.dataDir, 'topics'),
     earlier: (item, signal) => earlier.forItem(item, signal),
@@ -301,7 +301,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
     settings: () => settings.editable.settings,
     dryRun: () => settings.settings?.dryRun ?? true,
-    me: () => triageDeps.me(),
+    me: (source) => triageDeps.me(source),
     draftsBudgetHit: () => {
       const b = budgetsOf(usage.records(), settings.editable.settings, now());
       return b.drafts.hit || b.cost.hit;

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { triageQueue } from './eligibility';
 import { meFrom, ruleVerdict } from './rules';
-import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
+import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
 
 const NOW = new Date('2026-10-06T09:00:00.000Z');
 const ago = (mins: number) => new Date(NOW.getTime() - mins * 60_000).toISOString();
@@ -107,6 +107,23 @@ describe('truncation and batching (§5.3, CL-4)', () => {
     expect(t.omitted).toBe(0);
     expect(t.messages[1].text).toHaveLength(MESSAGE_MAX_CHARS);
     expect(t.messages[1].text.endsWith('…')).toBe(true);
+  });
+
+  it('sends a meeting as a meeting: the whole summary, and Frank\'s notes as "me" (R2.3)', () => {
+    const summary = `### Context\n${'Background. '.repeat(250)}\n### Next Steps\n- Frank to send the sample by Friday.`;
+    const meeting = thread([{ id: 'summary', authorId: 'Wispr Flow summary', ts: ago(30), text: summary }, { id: 'notes', authorId: 'wispr:me', ts: ago(29), text: 'Ask about tanker coverage.' }], {
+      id: 'wispr:0b9e7c2a',
+      source: 'wispr',
+      kind: 'meeting',
+      title: 'Fleet data partner sync',
+      participants: [{ id: 'wispr:me', name: 'Frank Keulers' }],
+    });
+    expect(summary.length).toBeGreaterThan(MESSAGE_MAX_CHARS);
+    expect(summary.length).toBeLessThan(MEETING_MAX_CHARS);
+    const t = threadForTriage(meeting, meFrom({ id: 'wispr:me', name: 'Frank Keulers' }), 3);
+    expect(t).toMatchObject({ kind: 'meeting', title: 'Fleet data partner sync', omitted: 0 });
+    expect(t.messages.map((m) => m.author)).toEqual(['Wispr Flow summary', 'me']);
+    expect(t.messages[0].text).toContain('Frank to send the sample by Friday.');
   });
 
   it('packs threads in order within the thread and token limits; an oversized one goes alone', () => {

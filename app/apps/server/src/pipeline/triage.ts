@@ -1,4 +1,4 @@
-import { Attention, NextStep, askId, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type TriageDecision } from '@work-os/shared';
+import { Attention, NextStep, askId, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type SourceId, type TriageDecision } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -51,7 +51,8 @@ export interface TriageDeps {
   now: () => Date;
   logger?: Logger;
   config: () => { settings: Settings; rules: Rule[] };
-  me: () => Me;
+  /** Frank in a source (Slack by default): his own messages show as "me". */
+  me: (source?: SourceId) => Me;
   prompt: () => Promise<Prompt>;
   /** A DM item's earlier conversation, for context. A failure is logged and triage goes ahead without it. */
   earlier?: (item: Item, signal?: AbortSignal) => Promise<EarlierView>;
@@ -94,7 +95,6 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
   // What the model sees of each thread. An item whose file is gone can't be triaged: it fails
   // once, visibly, instead of being retried on every tick.
   // A topic is triaged through its anchor, over all its pieces.
-  const me = d.me();
   const threads: { item: Item; thread: TriageThread; topicVersion: number; asksDone: string[] }[] = [];
   const missing: EventDraft[] = [];
   for (const it of due) {
@@ -112,7 +112,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         return undefined;
       });
     }
-    const topic = await topicForTriage(d.store.projection, d.items, it.id, me, t.keepLastMessages, earlier);
+    const topic = await topicForTriage(d.store.projection, d.items, it.id, d.me(it.source), t.keepLastMessages, earlier);
     if (!topic) continue;
     const asksDone = it.asksDone ?? [];
     const done = (stored.text?.next?.asks ?? []).filter((a) => asksDone.includes(askId(a.step))).map((a) => a.step);
@@ -173,7 +173,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         continue;
       }
       // A rule that sends to the model may set a floor (FR-4.3), or send the thread to To file.
-      const verdict = ruleVerdict(item, rules, settings, me);
+      const verdict = ruleVerdict(item, rules, settings, d.me(item.source));
       const floor = verdict.kind === 'model' ? verdict.min : undefined;
       const toFile = verdict.kind === 'model' && verdict.file;
       // Never Confluence for observations about people (NF-2, FR-10.1).

@@ -201,7 +201,7 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(prod).toMatchObject({ triageState: 'triaged', summary: 'Release notes draft is up', reason: 'Fake triage for tests.', triage: { attention: 'today', vault: true } });
     // CL-4: no tools, no servers, no settings; the prompt file's version is logged.
     expect(claude.calls[0].options).toMatchObject({ tools: [], mcpServers: {}, settingSources: [], maxTurns: 1, persistSession: false });
-    expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v3 -->/);
+    expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v4 -->/);
     const usage = (await call<UsageView>('GET', '/api/usage')).body;
     expect(usage.budgets.triage.used).toBe(1);
     expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('ok');
