@@ -835,7 +835,7 @@ The server runs unattended on a laptop that sleeps, travels and loses its networ
 **FR-14.4 Working offline.** The inbox, done, snooze and corrections work with no network.
 - Triage keeps items pending, and rules still apply.
 - A draft request waits for Claude.
-- Sources that need no network, such as Wispr Flow (R2.6), keep ingesting.
+- Sources that need no network (local reads, R2.6) keep ingesting. Wispr Flow now reads through its MCP server (R2.7, amended from R2.6), so it pauses offline like Slack and catches up on reconnect.
 
 **FR-14.5 Durable outbox.** An approval made offline, or interrupted by sleep or a crash, is never lost and never applied twice.
 - **Before every write attempt:** an `action.executing` event is fsynced, and the executor reconciles against the target.
@@ -934,14 +934,14 @@ Each phase starts only when the previous phase meets its success criteria. Each 
 | Source | Approach | Approval needed | Retires |
 |---|---|---|---|
 | Outlook mail | Relay call (R2.5) to `outlook_email_search` on the claude.ai Microsoft 365 connector, every 30 min in work hours and 120 min outside. Our own Graph app registration is unlikely to get consent, and the connector is already approved for the tenant. Local reads are not viable: new Outlook for Mac caches mail in an undocumented binary store (`HxStore.hxd`) that only refreshes while Outlook runs. Fallback if P0-9 fails: add the account to Apple Mail and read its local store, which needs Full Disk Access. | P0-9 passes. Tell IT the approved connector will be polled automatically. | Daily Outlook digest |
-| Wispr Flow notes and meetings | Local read-only reads of `flow.sqlite` (R2.6), every 3 h in work hours. No network, tokens or MCP needed. | P0-10 passes | Whichever scheduled task covers Wispr Flow notes, if any |
+| Wispr Flow meetings | Wispr Flow's official MCP server, called from code with an MCP client and no model in the loop (R2.7), every 3 h in work hours. Amended from local reads of `flow.sqlite` (R2.6, P0-10) at Frank's choice: the MCP is the only supported way out and adds attendees and a share link. The local read stays the documented fallback if the MCP is withdrawn or its sign-in can't be kept. | P0-11 passes (P0-10 for the fallback) | Whichever scheduled task covers Wispr Flow notes, if any |
 | Teams chats | Graph delta on chats Frank is in | `Chat.Read` delegated, admin consent | Part of the daily Teams transcript sweep |
 | Teams meeting transcripts | Graph online meeting transcripts for meetings Frank organised or attended | `OnlineMeetingTranscript.Read.All` (admin-level; may be refused) | Daily Teams transcript sweep |
 | Plaud | Plaud API if one is available to Frank; otherwise call the Plaud MCP server directly from code through an MCP client, with no model in the loop | Plaud account | Daily Plaud transcript sweep |
 
 Requirements:
 
-- **R2.1** Each source implements the same adapter interface: `fetchSince(cursor) → { items, nextCursor }`, plus `normalise`, `probe`, its dependencies (`deps`) and `needsNetwork`. The interface, the source registry, per-source schedules, cursors, health and circuit breakers are built in the MVP with Slack as the only adapter, so a Phase 2 source needs no changes to the core. After a wake, only overdue sources run, one after another (Slack, then email, then Wispr Flow).
+- **R2.1** Each source implements the same adapter interface: `fetchSince(cursor) → { items, nextCursor }`, plus `normalise`, `probe`, its dependencies (`deps`) and `needsNetwork`. The interface, the source registry, per-source schedules, cursors, health and circuit breakers are built in the MVP with Slack as the only adapter, so a Phase 2 source needs no changes to the core. After a wake, only overdue sources run, one after another (Slack, then email, then Wispr Flow). Amendment (R2.7): cursors are opaque strings that the cursor file compares as numbers only when both parse as numbers, and otherwise as text, so a source's cursor must sort as text (Wispr Flow: `modified_at|id`).
 - **R2.2** Triage prompts gain per-source sections. The eval set gains labelled examples per source before the source goes live.
 - **R2.3** Meeting items are triaged on the transcript summary, not the full transcript. Summarise with Haiku, or use Plaud's own summary.
 - **R2.4** If a Graph permission is refused, the source stays on the existing scheduled task. No workarounds that bypass IT. Using a connector IT has already approved is not a workaround, but tell IT before polling through it.
@@ -956,6 +956,11 @@ Requirements:
   - **Tables:** allow-listed tables only. For Wispr Flow: `Meetings` (plus `Notes` and `Todos`, empty today), never the dictation `History`. Transcripts are read from `meetings/<id>/refined.ndjson` for vault drafts only; audio files are never read (P0-10 findings).
   - **Schema check:** a fingerprint compared on every run. A mismatch after an app update marks the source `degraded` (`schema_changed`) and sends a notification.
   - **Never** writes to the source database.
+- **R2.7** MCP sources: a source whose only supported way out is a remote MCP server is read by code through an MCP client (`@modelcontextprotocol/sdk`), with no model in the loop. This is not the R2.5 relay: no Agent SDK call, no tokens.
+  - **Sign-in:** OAuth with dynamic client registration and PKCE. The redirect is the server's own loopback address (`127.0.0.1`), the only API route without the bearer token, and it checks the OAuth `state`. The client registration and tokens live in the Keychain as one item (`wispr-oauth`), never in files or logs. Refresh tokens rotate, so the server is the only writer of that item.
+  - **Tools:** an allow-list of read tools, checked against the server's tool list (with `readOnlyHint`) when connecting. For Wispr Flow: `get_account_info`, `search_meetings`, `get_meeting`, `get_meeting_participants_enriched`.
+  - **Network:** every call has a deadline and goes through the source's own breaker (`wisprMcp`), with no SDK retries. A 401 or a failed refresh is `auth_failed` with the fix "Reconnect Wispr Flow in Settings". A 429 backs off.
+  - **Content:** triage reads the summary and Frank's notes (R2.3). Transcripts are fetched only when drafting, and are never stored in `items/`.
 
 ### Phase 3: More actions
 
@@ -993,7 +998,7 @@ Requirements:
 | Company data on the laptop | Low | Data-protection exposure | FileVault, localhost only, retention, Keychain secrets. |
 | Scope creep before committed work lands | High | Delays MVI V2, Apidog and other commitments | Phase 0 first; phases gated on success criteria. |
 | The server silently stops running (sleep, network loss, crash, bad settings) | Medium | Items missed while Frank thinks the app is watching | E13: launchd autostart, wake catch-up, degraded mode with a visible banner and rate-limited alerts, safe mode instead of a crash loop. |
-| A Wispr Flow update changes its database schema | Medium | The Wispr Flow source stops | Schema fingerprint check, `degraded` status and a notification (R2.6). Other sources are unaffected. |
+| Wispr Flow changes its MCP tools, or its sign-in lapses | Medium | The Wispr Flow source stops | Tool allow-list checked on connect, response schemas validated with zod, `auth_failed` or `degraded` status and a notification, with a reconnect button (R2.7). Fallback: the local read (R2.6, P0-10). Other sources are unaffected. |
 | A Claude Code or SDK update changes how claude.ai connectors load headless | Low | The email source stops | P0-9 passed with an explicit connector declaration. The relay checks the connector's status in the init message and shows `auth_failed` with a fix. Fallback: Apple Mail local store. |
 
 ---
