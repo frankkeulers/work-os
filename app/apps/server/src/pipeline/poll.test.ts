@@ -9,7 +9,7 @@ import type { FetchResult, SourceAdapter } from '../sources/types';
 import { ItemFiles } from '../store/items';
 import { readLog } from '../store/recover';
 import { Store } from '../store/store';
-import { CursorFile } from './cursors';
+import { cmpCursor, CursorFile } from './cursors';
 import { returnSnoozed } from './due';
 import { mergeItem, pollSource, type PollDeps } from './poll';
 
@@ -181,6 +181,17 @@ describe('pollSource (FR-2.8)', () => {
     const reopened = await CursorFile.open(paths(dir).cursors);
     expect(reopened.get('slack', undefined)).toBe('1791277000.000200');
     expect(reopened.get('slack', '1791278000.000000')).toBe('1791278000.000000');
+  });
+
+  it('compares text cursors as text, not as NaN (R2.7)', async () => {
+    const older = '2026-10-06T08:55:10.118843Z|7d3f1a88-2b6c-4e09-b1f4-9e8a7c6d5b42';
+    const newer = '2026-10-07T13:44:02.517309Z|0b9e7c2a-5f41-4d8e-9a6b-3c1d2e4f5a60';
+    await d.cursors.set('wispr', older);
+    expect(d.cursors.get('wispr', newer)).toBe(newer);
+    await d.cursors.set('wispr', newer);
+    expect(d.cursors.get('wispr', older)).toBe(newer);
+    expect(cmpCursor('9.5', '10.1')).toBeLessThan(0); // Slack ts still compare as numbers
+    expect(cmpCursor(newer, newer)).toBe(0);
   });
 
   it('writes nothing when the Mac slept mid-fetch', async () => {

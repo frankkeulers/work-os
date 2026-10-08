@@ -24,6 +24,7 @@ const NAMES: Record<DepId, string> = {
   keychain: 'Keychain',
   storage: 'Data disk',
   wisprDb: 'Wispr Flow',
+  wisprMcp: 'Wispr Flow',
 };
 
 const TITLES: Partial<Record<DepState, (name: string) => string>> = {

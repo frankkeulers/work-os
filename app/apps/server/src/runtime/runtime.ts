@@ -421,7 +421,7 @@ export class Runtime {
   }
 
   /** A source's status for the UI, from its dependency's health. */
-  sourceStatus(id: SourceId, dep: DepId = id === 'wispr' ? 'wisprDb' : id === 'outlook' ? 'claude' : (id as DepId)): { status: SlackStatus; retryAt?: string; message?: string } {
+  sourceStatus(id: SourceId, dep: DepId = id === 'wispr' ? 'wisprMcp' : id === 'outlook' ? 'claude' : (id as DepId)): { status: SlackStatus; retryAt?: string; message?: string } {
     if (this.safeMode || !this.d.settings.settings) return { status: 'paused', message: this.safeMode ? 'Safe mode: polling is off after repeated crashes.' : 'Paused until the settings are fixed.' };
     if (this.health.state('network') === 'offline') return { status: 'offline', message: this.health.get('network').fix };
     const h = this.health.get(dep);

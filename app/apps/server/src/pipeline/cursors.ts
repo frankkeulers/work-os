@@ -7,6 +7,15 @@ import { writeJsonAtomic } from '../store/atomic';
 
 type Cursors = Partial<Record<SourceId, string>>;
 
+/** Cursors compare as numbers when both are numbers (Slack ts), and otherwise as text, so a
+ *  source's cursor must sort as text (Wispr Flow: "modified_at|id", amendment R2.7). */
+export function cmpCursor(a: string, b: string): number {
+  const x = Number(a);
+  const y = Number(b);
+  if (Number.isFinite(x) && Number.isFinite(y)) return x - y;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export class CursorFile {
   private cursors: Cursors = {};
 
@@ -23,11 +32,11 @@ export class CursorFile {
     return c;
   }
 
-  /** The newer of this file's cursor and the log's. Cursors compare as numbers (Slack ts). */
+  /** The newer of this file's cursor and the log's (see cmpCursor). */
   get(id: SourceId, fromLog: string | undefined): string | undefined {
     const mine = this.cursors[id];
     if (!mine || !fromLog) return mine ?? fromLog;
-    return Number(mine) >= Number(fromLog) ? mine : fromLog;
+    return cmpCursor(mine, fromLog) >= 0 ? mine : fromLog;
   }
 
   async set(id: SourceId, cursor: string) {

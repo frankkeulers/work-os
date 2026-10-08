@@ -6,6 +6,7 @@ import {
   budgetsOf,
   isWorkHours,
   londonParts,
+  sourceSchedule,
   summaryOf,
   topicItem,
   topicPiecesView,
@@ -25,6 +26,7 @@ import {
   type ItemView,
   type SettingsView,
   type SourceHealth,
+  type SourceId,
   type StartupCheck,
   type TriageDecision,
   type UsagePurpose,
@@ -38,6 +40,7 @@ import type { CatalogueEntry } from '../actions/confluenceCatalogue';
 import type { ActionService } from '../actions/service';
 import type { Evals } from '../pipeline/eval';
 import { readTopic } from '../pipeline/topics';
+import { SOURCE_PRIORITY } from '../sources/types';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { LabelStore } from '../store/labels';
@@ -126,16 +129,17 @@ function actionsByItem(d: ViewDeps): Map<string, ActionState[]> {
   return by;
 }
 
-export function slackHealth(d: ViewDeps): SourceHealth {
-  const src = d.store.projection.sources.slack;
+export function sourceHealth(d: ViewDeps, id: SourceId): SourceHealth {
+  const src = d.store.projection.sources[id];
+  const mode = id === 'slack' ? d.settings.editable.settings.slack.fetchMode : undefined;
   if (d.runtime) {
-    const st = d.runtime.sourceStatus('slack');
+    const st = d.runtime.sourceStatus(id);
     return {
-      id: 'slack',
+      id,
       status: st.status,
-      mode: d.settings.editable.settings.slack.fetchMode,
+      ...(mode && { mode }),
       lastPollAt: src?.lastPollAt,
-      nextPollAt: d.runtime.scheduler.nextPollAt('slack'),
+      nextPollAt: d.runtime.scheduler.nextPollAt(id),
       retryAt: st.retryAt,
       rateLimitedToday: 0,
       cursor: src?.cursor,
@@ -143,14 +147,22 @@ export function slackHealth(d: ViewDeps): SourceHealth {
     };
   }
   return {
-    id: 'slack',
+    id,
     status: src?.lastPollAt ? 'healthy' : 'never',
-    mode: d.settings.editable.settings.slack.fetchMode,
+    ...(mode && { mode }),
     lastPollAt: src?.lastPollAt,
     rateLimitedToday: 0,
     cursor: src?.cursor,
     message: src?.lastPollAt ? undefined : 'Not polled yet.',
   };
+}
+
+export const slackHealth = (d: ViewDeps): SourceHealth => sourceHealth(d, 'slack');
+
+/** Every enabled source, in wake order (R2.1). Slack is always listed: the inbox is built around it. */
+function enabledSources(d: ViewDeps): SourceHealth[] {
+  const s = d.settings.editable.settings;
+  return SOURCE_PRIORITY.filter((id) => id === 'slack' || sourceSchedule(s, id).enabled).map((id) => sourceHealth(d, id));
 }
 
 export function settingsCheck(s: SettingsState): StartupCheck {
@@ -238,7 +250,7 @@ export function inboxView(d: ViewDeps): InboxView {
     items,
     poll: d.runtime?.pollStatus('slack') ?? { phase: 'idle', lastPollAt: source.lastPollAt },
     source,
-    sources: [source],
+    sources: enabledSources(d),
     budgets: b,
     dryRun: d.settings.settings?.dryRun ?? true,
     notices: { rebuilt: d.recovery?.rebuiltNotice, fileVaultOff: false },

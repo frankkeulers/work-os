@@ -12,8 +12,9 @@ const none = z.object({}).strict().optional();
 export const PollReason = z.enum(['manual', 'scheduled', 'wake', 'reconnect', 'first']);
 export type PollReason = z.infer<typeof PollReason>;
 
-// Dependencies whose health the server tracks (FR-14.3, FR-14.6). wisprDb is the local Wispr Flow database (R2.6).
-export const DepId = z.enum(['network', 'slack', 'claude', 'confluence', 'keychain', 'storage', 'wisprDb']);
+// Dependencies whose health the server tracks (FR-14.3, FR-14.6). wisprMcp is Wispr Flow's MCP server
+// (R2.7); wisprDb is its local database, kept for the fallback reader (R2.6).
+export const DepId = z.enum(['network', 'slack', 'claude', 'confluence', 'keychain', 'storage', 'wisprDb', 'wisprMcp']);
 export type DepId = z.infer<typeof DepId>;
 
 export const DepState = z.enum(['ok', 'unknown', 'offline', 'degraded', 'rate_limited', 'auth_failed', 'paused']);

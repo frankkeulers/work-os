@@ -18,6 +18,12 @@ const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal' | 
   keychain: { degraded: 'Unlock the login Keychain, then Check again.', auth_failed: 'Unlock the login Keychain, then Check again.' },
   storage: { degraded: 'The data disk is full or read-only. Free some space; commands are refused until then.' },
   wisprDb: { degraded: 'Wispr Flow changed its database. Work OS stopped reading it until the reader is updated.' },
+  wisprMcp: {
+    token_missing: 'Wispr Flow is not connected yet. Connect it in Settings › Sources › Wispr Flow.',
+    auth_failed: 'Wispr Flow signed Work OS out. Reconnect it in Settings › Sources › Wispr Flow.',
+    rate_limited: 'Wispr Flow asked us to wait. Polling resumes on its own.',
+    degraded: 'Wispr Flow changed its MCP tools. Work OS stopped reading it until the reader is updated.',
+  },
 };
 
 export type HealthChange = { dep: DepId; state: DepState; reason?: string };

@@ -19,6 +19,7 @@ const DEP_LABEL: Record<DependencyHealth['id'], string> = {
   keychain: 'Keychain',
   storage: 'Data disk',
   wisprDb: 'Wispr Flow',
+  wisprMcp: 'Wispr Flow',
 };
 
 const STATE_LABEL: Partial<Record<DependencyHealth['state'], string>> = {

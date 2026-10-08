@@ -2,7 +2,7 @@ import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, SettingsView, WorkEvent } from '@work-os/shared';
+import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, Settings, SettingsView, WorkEvent } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDataDir, paths } from '../config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
@@ -31,8 +31,8 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources'] } = {}) {
-  await initDataDir(dir, { settings: defaultSettings(dir), rules: DEFAULT_RULES });
+async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources'] } = {}) {
+  await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }) }, rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
   lifecycle = new Lifecycle();
@@ -109,6 +109,19 @@ describe('request guard (FR-3.3)', () => {
     expect(none.json<ApiErrorBody>()).toMatchObject({ code: 'unauthorized' });
     expect((await get('/api/inbox', { authorization: 'Bearer wrong' })).statusCode).toBe(401);
     expect((await get('/api/inbox')).statusCode).toBe(200);
+  });
+
+  it('lists every enabled source in the inbox health, Slack first (R2.1)', async () => {
+    expect((await get('/api/inbox')).json<InboxView>().sources.map((x) => x.id)).toEqual(['slack']);
+    await lifecycle.stop('test');
+    await rm(dir, { recursive: true, force: true });
+    dir = await mkdtemp(join(tmpdir(), 'workos-api-'));
+    await build({ sources: { wispr: { enabled: true } } });
+    const inbox = (await get('/api/inbox')).json<InboxView>();
+    expect(inbox.sources.map((x) => x.id)).toEqual(['slack', 'wispr']);
+    expect(inbox.sources[1]).toMatchObject({ id: 'wispr', status: 'never', message: 'Not polled yet.' });
+    expect(inbox.sources[1].mode).toBeUndefined();
+    expect(inbox.source).toMatchObject({ id: 'slack', mode: 'search' });
   });
 
   it('refuses a foreign Host, which is how DNS rebinding arrives', async () => {

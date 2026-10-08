@@ -83,7 +83,7 @@ export type SlackStatus = 'healthy' | 'backoff' | 'auth_failed' | 'never' | 'off
 export interface SourceHealth {
   id: SourceId;
   status: SlackStatus;
-  mode: Settings['slack']['fetchMode'];
+  mode?: Settings['slack']['fetchMode']; // Slack only
   lastPollAt?: string;
   nextPollAt?: string;
   retryAt?: string;
