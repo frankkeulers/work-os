@@ -11,7 +11,7 @@ import { API_KEY_ACCOUNT, backendEnv } from './backends';
 import { ClaudeError, ClaudeOutputError } from './errors';
 import { extractJson } from './outputs';
 import { loadPromptFile, PROMPT_FILES, sha1, sourceStates, withCurrentSourceHashes } from './promptFiles';
-import { relayToolCall, type Connector } from './relay';
+import { argKey, relayBatch, relayToolCall, RELAY_MAX_CALLS, type Connector } from './relay';
 import { UsageLog } from './usage';
 
 // The Claude module against a fake SDK (never a live call, never a real key: env objects here
@@ -201,19 +201,20 @@ describe('connector relay (CL-9)', () => {
 
   /** Plays the SDK: init, then the model's tool call through canUseTool and the PostToolUse hook. */
   const relayScript =
-    (o: { status?: string; call?: string; extra?: string } = {}): Script =>
+    (o: { status?: string; call?: string; extra?: string; input?: object } = {}): Script =>
     async (options) => {
       const msgs: unknown[] = [{ type: 'system', subtype: 'init', mcp_servers: [{ name: 'ms365', status: o.status ?? 'connected' }] }];
       const signal = new AbortController().signal;
       if (o.extra) await options.canUseTool!(o.extra, {}, { signal } as never);
       const tool = o.call;
       if (tool) {
-        const verdict = await options.canUseTool!(tool, { folderName: 'Inbox' }, { signal } as never);
+        const input = o.input ?? {};
+        const verdict = await options.canUseTool!(tool, input as Record<string, unknown>, { signal } as never);
         if (verdict?.behavior === 'allow') {
           msgs.push({ type: 'assistant', message: { content: [{ type: 'tool_use', name: tool }] } });
           const hook = options.hooks!.PostToolUse![0];
           expect(hook.matcher).toBe(tool);
-          const out = await hook.hooks[0]({ hook_event_name: 'PostToolUse', tool_name: tool, tool_input: {}, tool_response: RAW } as never, 'tu1', { signal });
+          const out = await hook.hooks[0]({ hook_event_name: 'PostToolUse', tool_name: tool, tool_input: input, tool_response: RAW } as never, 'tu1', { signal });
           msgs.push({ type: 'tool_output_seen_by_model', out });
         }
       }
@@ -221,8 +222,26 @@ describe('connector relay (CL-9)', () => {
       return msgs;
     };
 
+  /** Plays a batch: each call in turn through canUseTool, then the result or failure hook. */
+  const batchScript =
+    (o: { calls: { input: object; error?: string }[]; status?: string; tools?: string[] }): Script =>
+    async (options) => {
+      const msgs: unknown[] = [{ type: 'system', subtype: 'init', mcp_servers: [{ name: 'ms365', status: o.status ?? 'connected' }], tools: o.tools ?? [] }];
+      const signal = new AbortController().signal;
+      for (const c of o.calls) {
+        const tool = 'mcp__ms365__read_resource';
+        const verdict = await options.canUseTool!(tool, c.input as Record<string, unknown>, { signal } as never);
+        if (verdict?.behavior !== 'allow') continue;
+        if (c.error) await options.hooks!.PostToolUseFailure![0].hooks[0]({ hook_event_name: 'PostToolUseFailure', tool_name: tool, tool_input: c.input, error: c.error } as never, 'tu', { signal });
+        else await options.hooks!.PostToolUse![0].hooks[0]({ hook_event_name: 'PostToolUse', tool_name: tool, tool_input: c.input, tool_response: [{ type: 'text', text: JSON.stringify(c.input) }] } as never, 'tu', { signal });
+      }
+      msgs.push(result('OK', { num_turns: 2 }));
+      return msgs;
+    };
+  const reads = (n: number) => Array.from({ length: n }, (_, i) => ({ uri: `mail:///messages/m${i}` }));
+
   it('makes the one call, hands the raw result to code and shows the model only "ok"', async () => {
-    const q = fakeQuery(relayScript({ call: 'mcp__ms365__outlook_email_search', extra: 'mcp__ms365__outlook_send_mail' }));
+    const q = fakeQuery(relayScript({ call: 'mcp__ms365__outlook_email_search', extra: 'mcp__ms365__outlook_send_mail', input: { limit: 25, folderName: 'Inbox' } }));
     const r = await relayToolCall(adapter(q), { connector: ms365, tool: 'outlook_email_search', args: { folderName: 'Inbox', limit: 25 } });
     expect(r.raw).toEqual(RAW);
     expect(r.run.denied).toEqual(['mcp__ms365__outlook_send_mail']);
@@ -256,6 +275,126 @@ describe('connector relay (CL-9)', () => {
     const never = fakeQuery(relayScript());
     await expect(relayToolCall(adapter(never), { connector: ms365, tool: 'outlook_email_search', args: {} })).rejects.toMatchObject({ failure: { reason: 'relay: the tool was not called' } });
     expect(seen).toHaveLength(2);
+  });
+
+  it('asks for a call with no arguments in words, not as "{}"', async () => {
+    await relayToolCall(adapter(fakeQuery(relayScript({ call: 'mcp__ms365__get_me' }))), { connector: ms365, tool: 'get_me', args: {} });
+    expect(seen[0].prompt).toContain('exactly once with no arguments.');
+  });
+
+  it('refuses a call with other arguments than the ones asked for', async () => {
+    const q = fakeQuery(relayScript({ call: 'mcp__ms365__outlook_email_search', input: { folderName: 'Sent Items' } }));
+    await expect(relayToolCall(adapter(q), { connector: ms365, tool: 'outlook_email_search', args: { folderName: 'Inbox' } })).rejects.toMatchObject({ failure: { reason: 'relay: the tool was not called' } });
+  });
+
+  it('keys arguments the same whatever the order of their fields', () => {
+    expect(argKey({ b: 1, a: { d: [1, { y: 2, x: 1 }], c: 'x' } })).toBe(argKey({ a: { c: 'x', d: [1, { x: 1, y: 2 }] }, b: 1 }));
+    expect(argKey({ a: 1, b: undefined })).toBe(argKey({ a: 1 }));
+    expect(argKey({ a: 1 })).not.toBe(argKey({ a: '1' }));
+  });
+
+  describe('batches', () => {
+    const batch = (calls: object[]) => ({ connector: ms365, tool: 'read_resource', calls: calls as Record<string, unknown>[] });
+
+    it('makes several calls in one run and hands back each result in the order asked', async () => {
+      const asked = reads(3);
+      // The model makes them in another order: results still line up with the request.
+      const q = fakeQuery(batchScript({ calls: [asked[2], asked[0], asked[1]].map((input) => ({ input })) }));
+      const r = await relayBatch(adapter(q), batch(asked));
+      expect(r.runs).toHaveLength(1);
+      expect(r.results.map((x) => x?.ok && JSON.parse((x.raw as { text: string }[])[0].text).uri)).toEqual(asked.map((a) => a.uri));
+      expect(seen[0].options.maxTurns).toBe(4);
+      expect(seen[0].prompt).toContain('3 argument sets');
+      expect(seen[0].prompt).toContain('2. {"uri":"mail:///messages/m1"}');
+    });
+
+    it('refuses repeats and sets not asked for, and records what was refused', async () => {
+      const asked = reads(2);
+      const q = fakeQuery(batchScript({ calls: [{ input: asked[0] }, { input: asked[0] }, { input: { uri: 'mail:///messages/other' } }, { input: asked[1] }] }));
+      const r = await relayBatch(adapter(q), batch(asked));
+      expect(r.results.every((x) => x?.ok)).toBe(true);
+      expect(r.runs[0].denied).toEqual(['mcp__ms365__read_resource', 'mcp__ms365__read_resource']);
+    });
+
+    it('asks again for the calls the model left out, and only those', async () => {
+      const asked = reads(3);
+      const q = fakeQuery(batchScript({ calls: [{ input: asked[0] }] }), batchScript({ calls: [{ input: asked[1] }, { input: asked[2] }] }));
+      const r = await relayBatch(adapter(q), batch(asked));
+      expect(r.runs).toHaveLength(2);
+      expect(r.results.every((x) => x?.ok)).toBe(true);
+      expect(seen[1].prompt).not.toContain('m0');
+      expect(seen[1].prompt).toContain('2 argument sets');
+    });
+
+    it('gives back calls still missing after the second run as undefined, for the caller to keep', async () => {
+      const asked = reads(2);
+      const q = fakeQuery(batchScript({ calls: [{ input: asked[1] }] }), batchScript({ calls: [] }));
+      const r = await relayBatch(adapter(q), batch(asked));
+      expect(r.results[0]).toBeUndefined();
+      expect(r.results[1]).toMatchObject({ ok: true });
+      expect(r.runs).toHaveLength(2);
+    });
+
+    it("captures a tool's failure for that call alone", async () => {
+      const asked = reads(2);
+      const q = fakeQuery(batchScript({ calls: [{ input: asked[0], error: 'Item not found' }, { input: asked[1] }] }));
+      const r = await relayBatch(adapter(q), batch(asked));
+      expect(r.results[0]).toEqual({ ok: false, error: 'Item not found' });
+      expect(r.results[1]).toMatchObject({ ok: true });
+      expect(r.runs).toHaveLength(1);
+    });
+
+    it('caps a run at RELAY_MAX_CALLS and makes no run for nothing', async () => {
+      await expect(relayBatch(adapter(fakeQuery(batchScript({ calls: [] }))), batch(reads(RELAY_MAX_CALLS + 1)))).rejects.toThrow(/at most/);
+      expect(await relayBatch(adapter(fakeQuery(batchScript({ calls: [] }))), batch([]))).toEqual({ results: [], runs: [], tools: [] });
+      expect(seen).toHaveLength(0);
+    });
+
+    it('tells a signed-out connector from one that is not answering', async () => {
+      for (const [status, state] of [['needs-auth', 'auth_failed'], ['disabled', 'auth_failed'], ['pending', 'degraded'], ['failed', 'degraded']]) {
+        const err = await relayBatch(adapter(fakeQuery(batchScript({ calls: [], status }))), batch(reads(1))).catch((e: unknown) => e);
+        expect(err).toMatchObject({ name: 'ConnectorError', failure: { state, reason: `connector ${status}` } });
+      }
+    });
+
+    it('reports the tools the connector offers, and stops if the one needed is gone', async () => {
+      const tools = ['mcp__ms365__read_resource', 'mcp__ms365__outlook_email_search', 'Read'];
+      const r = await relayBatch(adapter(fakeQuery(batchScript({ calls: [{ input: reads(1)[0] }], tools }))), batch(reads(1)));
+      expect(r.tools).toEqual(['read_resource', 'outlook_email_search']);
+      const err = await relayBatch(adapter(fakeQuery(batchScript({ calls: [], tools: ['mcp__ms365__outlook_email_search'] }))), batch(reads(1))).catch((e: unknown) => e);
+      expect(err).toMatchObject({ name: 'ConnectorError', failure: { state: 'degraded', reason: 'tools_changed' } });
+    });
+  });
+});
+
+describe('MCP server status (connector discovery)', () => {
+  type StatusFn = NonNullable<ConstructorParameters<typeof ClaudeAdapter>[0]['statusQuery']>;
+  const statusAdapter = (statusQuery: StatusFn) => new ClaudeAdapter({ usage, settings: () => settings, secrets: memoryKeychain(), now: () => NOW, cwd: dir, env: { PATH: '/usr/bin' }, query: fakeQuery(), statusQuery });
+  /** Plays a session whose servers report the given lists, one per mcpServerStatus() call. */
+  const statusSession = (lists: object[][], opts: { seen?: { options: object }[] } = {}): StatusFn => {
+    let n = 0;
+    return ({ options }) => {
+      opts.seen?.push({ options });
+      const closed = new Promise<void>((r) => options.abortController!.signal.addEventListener('abort', () => r(), { once: true }));
+      const messages: AsyncIterable<unknown> = { [Symbol.asyncIterator]: () => ({ next: async () => (await closed, { done: true as const, value: undefined }) }) };
+      return Object.assign(messages, { mcpServerStatus: async () => lists[Math.min(n++, lists.length - 1)] });
+    };
+  };
+  const ms = { name: 'claude.ai Microsoft 365', status: 'connected', source: 'claudeai', config: { type: 'claudeai-proxy', url: 'https://mcp-proxy.anthropic.com/v1/mcp/srv1', id: 'srv1' }, tools: [{ name: 'outlook_email_search' }] };
+
+  it('polls until the servers have loaded, with no model turn, and closes the session', async () => {
+    const opened: { options: object }[] = [];
+    const servers = await statusAdapter(statusSession([[{ ...ms, status: 'pending' }], [ms]], { seen: opened })).mcpStatus({ timeoutMs: 2000, intervalMs: 5 });
+    expect(servers).toEqual([ms]);
+    expect(opened[0].options).toMatchObject({ tools: [], allowedTools: [], settingSources: [], persistSession: false });
+    expect((opened[0].options as { abortController: AbortController }).abortController.signal.aborted).toBe(true);
+  });
+
+  it('stops when `done` says so, and returns the last list when time runs out', async () => {
+    const found = await statusAdapter(statusSession([[], [ms]])).mcpStatus({ timeoutMs: 2000, intervalMs: 5, done: (l) => l.some((s) => s.config?.type === 'claudeai-proxy') });
+    expect(found).toEqual([ms]);
+    const late = await statusAdapter(statusSession([[{ ...ms, status: 'pending' }]])).mcpStatus({ timeoutMs: 60, intervalMs: 5 });
+    expect(late).toEqual([{ ...ms, status: 'pending' }]);
   });
 });
 

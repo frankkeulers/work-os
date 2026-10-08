@@ -15,6 +15,14 @@ export class ClaudeError extends Error {
   }
 }
 
+/** A claude.ai connector failed, not Claude itself: health charges it to the connector's dependency. */
+export class ConnectorError extends ClaudeError {
+  constructor(failure: Failure, message?: string) {
+    super(failure, message);
+    this.name = 'ConnectorError';
+  }
+}
+
 /** The model answered, but not in the expected shape, twice (CL-7). Not a health problem. */
 export class ClaudeOutputError extends Error {
   constructor(

@@ -21,6 +21,19 @@ import type { UsageLog } from './usage';
 /** The SDK's query(), or a fake in tests. Messages are read defensively, by the fields used here. */
 export type QueryFn = (params: { prompt: string; options: Options }) => AsyncIterable<unknown>;
 
+/** query() in streaming-input mode, for control requests only (mcpServerStatus): no model turn. */
+export type StatusQueryFn = (params: { prompt: AsyncIterable<unknown>; options: Options }) => AsyncIterable<unknown> & { mcpServerStatus?: () => Promise<unknown[]> };
+
+/** An MCP server as mcpServerStatus() reports it, read by the fields used here. */
+export interface McpStatus {
+  name: string;
+  status: string;
+  source?: string;
+  scope?: string;
+  config?: { type?: string; url?: string; id?: string };
+  tools?: { name: string; annotations?: { readOnly?: boolean; destructive?: boolean } }[];
+}
+
 export interface RunSpec {
   purpose: UsagePurpose;
   model: ModelId;
@@ -36,7 +49,11 @@ export interface RunSpec {
     servers: Record<string, unknown>; // claudeai-proxy configs, which the SDK's public type doesn't list
     allow: string; // the one tool canUseTool allows
     disallow: string[]; // the connector's other tools, hidden from the model
-    onResult: (response: unknown) => void; // the raw result, for code; the model sees "ok"
+    /** Also checks the arguments: a call it refuses is denied. Without it, any arguments pass. */
+    accept?: (input: unknown) => boolean;
+    onResult: (response: unknown, input: unknown) => void; // the raw result, for code; the model sees "ok"
+    /** The tool failed (PostToolUseFailure). The model sees the error text; code gets it here. */
+    onError?: (error: string, input: unknown) => void;
   };
   /** Draft calls: Read, Grep and Glob inside this folder only, which is also the cwd (FR-9.1). */
   readOnly?: { root: string };
@@ -51,6 +68,8 @@ export interface RunResult {
   toolCalls: string[];
   denied: string[];
   mcpServers: { name: string; status: string }[];
+  /** Every tool the run offered, from the init message (MCP tools as mcp__<server>__<tool>). */
+  tools: string[];
 }
 
 export interface ClaudeAdapterOptions {
@@ -64,6 +83,7 @@ export interface ClaudeAdapterOptions {
   env?: NodeJS.ProcessEnv;
   client?: string;
   query?: QueryFn;
+  statusQuery?: StatusQueryFn;
 }
 
 type Msg = {
@@ -72,6 +92,7 @@ type Msg = {
   error?: string;
   message?: { content?: { type?: string; name?: string }[] };
   mcp_servers?: { name: string; status: string }[];
+  tools?: string[];
   result?: string;
   num_turns?: number;
   total_cost_usd?: number;
@@ -106,6 +127,7 @@ export class ClaudeAdapter {
     const toolCalls: string[] = [];
     const denied: string[] = [];
     let mcpServers: RunResult['mcpServers'] = [];
+    let tools: string[] = [];
     let apiError: string | undefined;
     let result: Msg | undefined;
     try {
@@ -119,13 +141,30 @@ export class ClaudeAdapter {
               matcher: t.allow,
               hooks: [
                 async (input) => {
-                  t.onResult((input as { tool_response?: unknown }).tool_response);
+                  const i = input as { tool_response?: unknown; tool_input?: unknown };
+                  t.onResult(i.tool_response, i.tool_input);
                   return { hookSpecificOutput: { hookEventName: 'PostToolUse' as const, updatedToolOutput: 'ok' } };
                 },
               ],
             },
           ]
         : [];
+      const onError = t?.onError;
+      const postToolUseFailure: HookCallbackMatcher[] =
+        t && onError
+          ? [
+              {
+                matcher: t.allow,
+                hooks: [
+                  async (input) => {
+                    const i = input as { error?: string; tool_input?: unknown };
+                    onError(i.error ?? 'error', i.tool_input);
+                    return {};
+                  },
+                ],
+              },
+            ]
+          : [];
       const ro = spec.readOnly;
       const preToolUse: HookCallbackMatcher[] = ro
         ? [
@@ -144,6 +183,7 @@ export class ClaudeAdapter {
         : [];
       const hooks: Options['hooks'] = {};
       if (postToolUse.length) hooks.PostToolUse = postToolUse;
+      if (postToolUseFailure.length) hooks.PostToolUseFailure = postToolUseFailure;
       if (preToolUse.length) hooks.PreToolUse = preToolUse;
       const call = MODEL_CALL[spec.model];
       const options: Options = {
@@ -158,7 +198,7 @@ export class ClaudeAdapter {
         maxTurns: spec.maxTurns ?? 1,
         permissionMode: 'default',
         canUseTool: async (name, input) => {
-          if (t && name === t.allow) return { behavior: 'allow', updatedInput: input };
+          if (t && name === t.allow && (!t.accept || t.accept(input))) return { behavior: 'allow', updatedInput: input };
           if (ro && (await readVerdict(ro.root, name, input)).ok) return { behavior: 'allow', updatedInput: input };
           denied.push(name);
           return { behavior: 'deny', message: 'Not allowed' };
@@ -173,7 +213,10 @@ export class ClaudeAdapter {
       };
       for await (const raw of this.query({ prompt: spec.prompt, options })) {
         const m = raw as Msg;
-        if (m.type === 'system' && m.subtype === 'init') mcpServers = m.mcp_servers ?? [];
+        if (m.type === 'system' && m.subtype === 'init') {
+          mcpServers = m.mcp_servers ?? [];
+          tools = m.tools ?? [];
+        }
         else if (m.type === 'assistant') {
           if (m.error) apiError = m.error;
           const content = m.message?.content ?? [];
@@ -195,7 +238,60 @@ export class ClaudeAdapter {
     if (!result || !usage) throw new ClaudeError({ state: 'degraded', reason: 'no result' });
     if (result.subtype !== 'success') throw new ClaudeError({ state: 'degraded', reason: result.subtype ?? 'error' });
     this.o.logger?.info({ purpose: spec.purpose, model: spec.model, turns: result.num_turns, ms: usage.durationMs, cost: usage.costEquivalent, items: usage.itemIds.length }, 'Claude call');
-    return { text: result.result ?? '', usage, turns: result.num_turns ?? 0, toolCalls, denied, mcpServers };
+    return { text: result.result ?? '', usage, turns: result.num_turns ?? 0, toolCalls, denied, mcpServers, tools };
+  }
+
+  /**
+   * The MCP servers a session would load, with no model turn and no tokens: query() in
+   * streaming-input mode with nothing sent, asked mcpServerStatus() each second until `done` says
+   * the list is ready or the time is up. claude.ai connectors load on their own here (no
+   * strictMcpConfig), which is how a connector's id is found without a debug log (PLAN open
+   * question 6). Returns the last list seen.
+   */
+  async mcpStatus(o: { timeoutMs: number; signal?: AbortSignal; intervalMs?: number; done?: (servers: McpStatus[]) => boolean }): Promise<McpStatus[]> {
+    const settings = this.o.settings();
+    const signal = deadline(o.timeoutMs, o.signal);
+    const ctrl = new AbortController();
+    const onAbort = () => ctrl.abort(signal.reason);
+    if (signal.aborted) onAbort();
+    signal.addEventListener('abort', onAbort, { once: true });
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    // Sends nothing, and ends when we are done, which closes the session.
+    const input: AsyncIterable<unknown> = { [Symbol.asyncIterator]: () => ({ next: async () => (await held, { done: true as const, value: undefined }) }) };
+    let last: McpStatus[] = [];
+    try {
+      const env = await backendEnv(settings.claudeBackend, this.o.env ?? process.env, this.o.secrets, this.o.client ?? 'work-os');
+      const statusQuery = this.o.statusQuery ?? ((await loadQuery()) as unknown as StatusQueryFn);
+      if (o.signal?.aborted) throw o.signal.reason;
+      const q = statusQuery({
+        prompt: input,
+        options: { tools: [], allowedTools: [], settingSources: [], persistSession: false, permissionMode: 'default', canUseTool: async () => ({ behavior: 'deny', message: 'Not allowed' }), cwd: this.o.cwd, env, abortController: ctrl },
+      });
+      if (!q.mcpServerStatus) throw new ClaudeError({ state: 'degraded', reason: 'mcp status: not supported' });
+      const drain = (async () => {
+        for await (const _ of q) if (signal.aborted) break;
+      })().catch(() => {});
+      try {
+        while (!signal.aborted) {
+          last = ((await q.mcpServerStatus()) ?? []) as McpStatus[];
+          if (o.done ? o.done(last) : !last.some((s) => s.status === 'pending')) break;
+          await new Promise((r) => setTimeout(r, o.intervalMs ?? 1000));
+        }
+      } finally {
+        release();
+        ctrl.abort();
+        await drain;
+      }
+    } catch (err) {
+      if (o.signal?.aborted) throw o.signal.reason;
+      if (err instanceof ClaudeError) throw err;
+      if (signal.aborted) return last; // out of time: the caller judges the last list
+      throw new ClaudeError(failureFromThrown(err));
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+    }
+    return last;
   }
 
   /** The caller's abort (sleep, shutdown) passes through as is; the deadline is a failure. */

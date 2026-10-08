@@ -9,6 +9,7 @@ export const DEADLINES = {
   triage: 120_000,
   draft: 240_000,
   relay: 60_000, // one connector call; about 6 s in P0-9
+  relayBatch: 120_000, // up to RELAY_MAX_CALLS connector calls in one run
   wispr: 20_000, // one MCP request; about 0.7 s in P0-11
 } as const;
 
