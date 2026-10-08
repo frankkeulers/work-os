@@ -416,6 +416,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     catalogue: (signal) => buildCatalogue(confluenceApi, settings.editable.settings.confluence, signal),
     wispr: deps.wispr ?? (deps.sources ? undefined : wisprLink(wisprAuth, wisprMcp, deps.fetch ?? fetch)),
     outlook: deps.outlook ?? (deps.sources ? undefined : ms365Link(ms365)),
+    calendar: () => calendar.snapshot,
     channels: async (signal) => [...(await slackDirectory.conversations(signal)).values()].filter((c) => !c.is_im && !c.is_mpim && c.name).map((c) => `#${c.name}`),
     slackTeamId: () => slackDirectory.identityKnown?.team_id,
     dmTitle: (itemId) => {

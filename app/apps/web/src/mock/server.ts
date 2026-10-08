@@ -63,6 +63,7 @@ import {
   type UsageRecord,
   type UsageRow,
   type UsageView,
+  type AgendaView,
   type OutlookStatusView,
   type WisprConnectView,
   type WisprStatusView,
@@ -73,6 +74,7 @@ import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
+import { CALENDAR } from './seed/calendar';
 import { inMockScope, mockCatalogue } from './seed/catalogue';
 import { ME } from './me';
 import { FRANK } from './seed/people';
@@ -546,10 +548,9 @@ export class MockServer implements WorkOsApi, MockControls {
     };
   }
 
-  /** Outlook's line in the inbox health, once it is turned on (R2.5). */
+  /** Outlook's lines in the inbox health, mail and calendar, once each is turned on (R2.5, R2.8). */
   private outlookHealth(): SourceHealth[] {
-    if (!sourceSchedule(this.s.settings, 'outlook').enabled) return [];
-    return [{ id: 'outlook', status: 'healthy', lastPollAt: this.s.source.lastPollAt, rateLimitedToday: 0 }];
+    return (['outlook', 'calendar'] as const).filter((id) => sourceSchedule(this.s.settings, id).enabled).map((id) => ({ id, status: 'healthy', lastPollAt: this.s.source.lastPollAt, rateLimitedToday: 0 }));
   }
 
   /** Wispr Flow's line in the inbox health, once it is turned on (R2.7). */
@@ -808,9 +809,18 @@ export class MockServer implements WorkOsApi, MockControls {
     return this.outlookView();
   }
 
+  /** The seed week's calendar, once Outlook is connected and the calendar is on (R2.8). */
+  async getAgenda(): Promise<AgendaView> {
+    await this.gate(QUERY_MS);
+    if (!this.s.outlook || !sourceSchedule(this.s.settings, 'calendar').enabled) return { state: 'off', events: [] };
+    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events: CALENDAR };
+  }
+
+  /** Turns Outlook mail and calendar off: both read through the connector. */
   async disconnectOutlook() {
     await this.gate(COMMAND_MS);
-    this.s.settings = { ...this.s.settings, sources: { ...this.s.settings.sources, outlook: { ...this.s.settings.sources?.outlook, enabled: false } } };
+    const src = this.s.settings.sources;
+    this.s.settings = { ...this.s.settings, sources: { ...src, outlook: { ...src?.outlook, enabled: false }, calendar: { ...src?.calendar, enabled: false } } };
     this.emit({ topic: 'settings' }, { topic: 'health' }, { topic: 'inbox' });
   }
 

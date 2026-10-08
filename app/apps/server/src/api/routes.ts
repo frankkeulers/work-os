@@ -9,7 +9,7 @@ import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
+import { agendaView, healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
 
@@ -154,6 +154,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   });
 
   app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));
+  app.get('/api/calendar/agenda', async (_req, reply) => reply.headers(noStore).send(agendaView(d)));
 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {
     const view = await itemView(d, req.params.id);
@@ -240,10 +241,14 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   app.get('/api/settings', async (_req, reply) => reply.headers(noStore).send(await settingsView(d)));
 
   // A source turned on or off from its own page, as if Frank had saved Settings with it changed.
-  const setSourceEnabled = async (id: SourceId, enabled: boolean) => {
+  /** Turns sources on or off in one save. */
+  const setSourceEnabled = async (ids: SourceId | SourceId[], enabled: boolean) => {
     const { settings: cur, rules } = d.settings.editable;
-    if (sourceSchedule(cur, id).enabled === enabled) return;
-    const saved = await d.settings.save({ settings: { ...cur, sources: { ...cur.sources, [id]: { ...cur.sources?.[id], enabled } } }, rules }, d.now());
+    const change = [ids].flat().filter((id) => sourceSchedule(cur, id).enabled !== enabled);
+    if (!change.length) return;
+    const sources = { ...cur.sources };
+    for (const id of change) sources[id] = { ...cur.sources?.[id], enabled };
+    const saved = await d.settings.save({ settings: { ...cur, sources }, rules }, d.now());
     if (!saved.settingsChanged) return;
     await d.store.append({ type: 'settings.changed', data: { dryRun: saved.settings.dryRun } });
     d.runtime?.settingsChanged();
@@ -333,7 +338,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.headers(noStore).send(outlookView());
   });
   app.post('/api/sources/outlook/disconnect', async (_req, reply) => {
-    await setSourceEnabled('outlook', false);
+    await setSourceEnabled(['outlook', 'calendar'], false); // both read through the connector
     return reply.code(204).send();
   });
 

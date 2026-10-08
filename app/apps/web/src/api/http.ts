@@ -1,4 +1,4 @@
-import type { Action, ActionType, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -136,6 +136,7 @@ export class HttpApi implements WorkOsApi {
   getSettings = () => this.get<SettingsView>('/api/settings');
   getWisprStatus = () => this.get<WisprStatusView>('/api/sources/wispr');
   getOutlookStatus = () => this.get<OutlookStatusView>('/api/sources/outlook');
+  getAgenda = () => this.get<AgendaView>('/api/calendar/agenda');
 
   pollNow = () => this.post('/api/poll');
   connectWispr = () => this.post<WisprConnectView>('/api/sources/wispr/connect');

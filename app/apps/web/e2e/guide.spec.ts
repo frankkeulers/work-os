@@ -18,7 +18,7 @@ test('J43 the guide opens from the sidebar, in groups, with an outline and Previ
     'Dev and prod',
     'The inbox',
     'Triage rules',
-    'Outlook mail',
+    'Outlook mail and calendar',
     'Wispr Flow meetings',
     'Filing to Confluence',
     'Filing to the vault',

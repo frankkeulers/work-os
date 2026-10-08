@@ -5,12 +5,15 @@ import {
   anchorOf,
   budgetsOf,
   isWorkHours,
+  londonAt,
   londonParts,
   sourceSchedule,
   summaryOf,
   topicItem,
   topicPiecesView,
   type ActionState,
+  type AgendaEvent,
+  type AgendaView,
   type BudgetState,
   type CorrectionInput,
   type Criterion,
@@ -41,6 +44,7 @@ import type { ActionService } from '../actions/service';
 import type { Evals } from '../pipeline/eval';
 import { readTopic } from '../pipeline/topics';
 import { SOURCE_PRIORITY } from '../sources/types';
+import type { CalendarSnapshot } from '../sources/calendar/store';
 import type { Ms365Link } from '../sources/ms365/link';
 import type { WisprLink } from '../sources/wispr/link';
 import type { Runtime } from '../runtime/runtime';
@@ -66,6 +70,8 @@ export interface ViewDeps {
   startedAt: string;
   now: () => Date;
   meId?: (source?: SourceId) => string | undefined; // Frank in a source (Slack by default), once it has polled
+  /** The calendar as the last poll saw it (R2.8). */
+  calendar?: () => CalendarSnapshot | undefined;
   /** Health, wake state and the scheduler. Absent in tests of the HTTP layer alone. */
   runtime?: Runtime;
   /** The last eight days of Claude calls (CL-5), for budgets and the usage view. */
@@ -163,6 +169,44 @@ export function sourceHealth(d: ViewDeps, id: SourceId): SourceHealth {
 }
 
 export const slackHealth = (d: ViewDeps): SourceHealth => sourceHealth(d, 'slack');
+
+/** A calendar read older than this many polls is stale on the agenda. */
+const STALE_POLLS = 3;
+
+/** Today's and tomorrow's meetings from the calendar snapshot (R2.8): not cancelled, not declined. */
+export function agendaView(d: ViewDeps): AgendaView {
+  const settings = d.settings.editable.settings;
+  const schedule = sourceSchedule(settings, 'calendar');
+  if (!schedule.enabled || !settings.connectors?.ms365) return { state: 'off', events: [] };
+  const snap = d.calendar?.();
+  if (!snap) return { state: 'never', events: [] };
+  const now = d.now();
+  const from = londonAt(now, '00:00');
+  const to = londonAt(now, '00:00', 2);
+  const inviteOf = new Map(snap.invites.flatMap((g) => g.eventIds.map((id) => [id, g.itemId] as const)));
+  const events = snap.events
+    .filter((e) => !e.cancelled && e.response !== 'declined' && e.end > from && e.start < to)
+    .map((e): AgendaEvent => {
+      const invite = inviteOf.get(e.id);
+      const open = invite && d.store.projection.items[invite]?.status === 'open' ? invite : undefined;
+      const organizer = e.organizer?.name ?? e.organizer?.address;
+      return {
+        id: e.id,
+        title: e.subject || '(no title)',
+        start: e.start,
+        end: e.end,
+        allDay: e.allDay,
+        ...(e.showAs && { showAs: e.showAs }),
+        ...(organizer && { organizer }),
+        ...(e.link && { link: e.link }),
+        ...((e.isOrganizer || e.response) && { response: e.isOrganizer ? 'organizer' : e.response }),
+        ...(open && { inviteItemId: open }),
+      };
+    });
+  const status = d.runtime?.sourceStatus('calendar').status;
+  const stale = now.getTime() - Date.parse(snap.polledAt) > STALE_POLLS * schedule.intervalWorkMinutes * 60_000;
+  return { state: status === 'auth_failed' ? 'auth_failed' : stale ? 'stale' : 'ok', polledAt: snap.polledAt, events };
+}
 
 /** Every enabled source, in wake order (R2.1). Slack is always listed: the inbox is built around it. */
 function enabledSources(d: ViewDeps): SourceHealth[] {

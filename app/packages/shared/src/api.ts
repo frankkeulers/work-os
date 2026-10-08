@@ -113,6 +113,35 @@ export interface OutlookStatusView {
   enabled: boolean;
 }
 
+/** One meeting on the inbox's agenda strip (R2.8), from the calendar snapshot. */
+export interface AgendaEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  /** Outlook's free/busy: free, tentative, busy, oof, workingElsewhere. */
+  showAs?: string;
+  organizer?: string; // a name, or the address when the name isn't known
+  /** Opens the event in Outlook on the web. */
+  link?: string;
+  /** Frank's answer: "organizer" for his own meetings; unset when it hasn't been read. */
+  response?: string;
+  /** The open invite item asking Frank to answer it. */
+  inviteItemId?: string;
+  /** The Wispr Flow meeting notes for it (R2.8, Wispr enrichment). */
+  notesItemId?: string;
+}
+
+/** Today's and tomorrow's meetings, without cancelled or declined ones (R2.8). */
+export interface AgendaView {
+  /** off: the calendar isn't read; never: not read yet; stale: the last read is old. */
+  state: 'off' | 'never' | 'ok' | 'stale' | 'auth_failed';
+  polledAt?: string;
+  /** Today's, then tomorrow's, soonest first. */
+  events: AgendaEvent[];
+}
+
 export interface BudgetLine {
   used: number;
   limit: number;
@@ -381,6 +410,8 @@ export interface WorkOsApi {
   getWisprStatus(): Promise<WisprStatusView>;
   /** The Microsoft 365 connector Outlook reads through, and whether Outlook is on (R2.5). */
   getOutlookStatus(): Promise<OutlookStatusView>;
+  /** Today's and tomorrow's meetings from Outlook Calendar (R2.8). */
+  getAgenda(): Promise<AgendaView>;
 
   pollNow(): Promise<void>;
   markDone(itemId: string): Promise<void>;

@@ -1,15 +1,16 @@
 ---
-title: Outlook mail
+title: Outlook mail and calendar
 group: Inbox
 order: 44
-summary: Your Inbox and Sent Items through the Microsoft 365 connector on claude.ai, one item per conversation, triaged like Slack.
+summary: Your Inbox, Sent Items and calendar through the Microsoft 365 connector on claude.ai, one item per conversation, with today's meetings above the inbox.
 updated: 2026-10-08
 ---
 
 Work OS reads your Outlook mail through the **Microsoft 365 connector** you already use on
 claude.ai, read-only. Each conversation shows in the inbox as one item, triaged like a Slack
 thread, with **Reply in Outlook** to answer it. Your replies in Sent Items are read too, so triage
-knows what you have already answered.
+knows what you have already answered. Turn on the calendar as well, and today's meetings show
+above the inbox.
 
 ## Connect
 
@@ -22,8 +23,8 @@ knows what you have already answered.
 If Connect can't find the connector, choose **Enter the connector ID instead** and paste its ID.
 `npm run spike:outlook -- status` prints it.
 
-**Disconnect** turns Outlook off. Email already in the inbox stays, and the connector stays on
-claude.ai, so **Connect** turns Outlook back on at once.
+**Disconnect** turns Outlook mail and calendar off. Email already in the inbox stays, and the
+connector stays on claude.ai, so **Connect** turns Outlook mail back on at once.
 
 ## What's read
 
@@ -53,6 +54,27 @@ your Claude use. Like every Claude call, it waits for the 45 seconds after the M
 
 [Usage & health](/usage#health) shows Outlook under Source health: its state, when it last read
 and when it reads next.
+
+## Calendar
+
+The calendar is off until you turn on **Read calendar** in
+[Settings › Outlook](/settings/outlook). It reads through the same connector, so connect Outlook
+first.
+
+- **The agenda.** Today's meetings show in a strip above the inbox, the one on now picked out;
+  **Tomorrow** shows the next day's. Cancelled meetings and ones you declined are left out. Choose
+  a meeting to open it in Outlook.
+- **Not answered** marks a meeting someone else invited you to that you haven't accepted or
+  declined yet.
+- **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,
+  who organised it and who is invited, and your answer. Never a meeting's description, its Teams
+  link or its passcode.
+- Work OS only reads. It never answers, moves or changes a meeting.
+
+The calendar polls on its own schedule, every 30 minutes in work hours and every 2 hours outside
+them; change either under **Calendar** in [Settings › Outlook](/settings/outlook). Each poll is a
+short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it reads; it shows on
+[Usage](/usage). If the last read is old, the strip says when it was.
 
 ## Rules
 

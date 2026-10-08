@@ -22,6 +22,9 @@ blue later today) and, in To file, where it should go.
 
 The **Sort** menu orders by newest, oldest or priority, and can group items by channel or DM.
 
+With [Outlook Calendar](outlook.md) on, a strip above the groups shows today's meetings, the
+one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook.
+
 ## Low priority, snoozed and done
 
 Below the groups, **Low priority** opens everything that needs nothing and holds nothing worth

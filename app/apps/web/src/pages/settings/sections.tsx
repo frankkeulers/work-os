@@ -278,13 +278,13 @@ function SlackSection({ s, usage, set, type, flush, err }: Ctx) {
 // ---------- Wispr Flow ----------
 
 /** Sets one field of a source's schedule, keeping the others. */
-const setSchedule = (x: Settings, id: 'outlook' | 'wispr', patch: Partial<SourceSchedule>) => {
+const setSchedule = (x: Settings, id: 'outlook' | 'calendar' | 'wispr', patch: Partial<SourceSchedule>) => {
   x.sources = { ...x.sources, [id]: { ...x.sources?.[id], ...patch } };
 };
 
 /** What a source's Polling group says: its name, what it reads, and the help that follows the switches. */
 interface PollingWords {
-  id: 'outlook' | 'wispr';
+  id: 'outlook' | 'calendar' | 'wispr';
   name: string;
   read: string; // "Read meetings"
   switch: string; // "Read Wispr Flow meetings"
@@ -295,10 +295,10 @@ interface PollingWords {
 }
 
 /** A source's own schedule (R2.1): on or off, and how often in and outside work hours. */
-function SourcePolling({ words: w, s, set, type, flush, err, disabled }: Pick<Ctx, 's' | 'set' | 'type' | 'flush' | 'err'> & { words: PollingWords; disabled: boolean }) {
+function SourcePolling({ words: w, s, set, type, flush, err, disabled, title = 'Polling' }: Pick<Ctx, 's' | 'set' | 'type' | 'flush' | 'err'> & { words: PollingWords; disabled: boolean; title?: string }) {
   const schedule = sourceSchedule(s, w.id);
   return (
-    <Group title="Polling">
+    <Group title={title}>
       <Row label={w.read} help={schedule.enabled ? w.on : w.off}>
         <Switch label={w.switch} checked={schedule.enabled} disabled={disabled} onChange={(v) => set((x) => setSchedule(x, w.id, { enabled: v }))} />
       </Row>
@@ -491,7 +491,7 @@ function Ms365ConnectorGroup({ status, reload, confirm }: { status?: OutlookStat
   const disconnect = () =>
     confirm({
       title: 'Disconnect Outlook?',
-      body: 'Work OS stops reading your mail. Email already in the inbox stays. The connector stays on claude.ai, so Connect turns Outlook back on at once.',
+      body: 'Work OS stops reading your mail and calendar. Email and invites already in the inbox stay. The connector stays on claude.ai, so Connect turns Outlook mail back on at once.',
       label: 'Disconnect',
       danger: true,
       run: () =>
@@ -586,7 +586,7 @@ function OutlookSection({ s, set, type, flush, err, confirm }: Ctx) {
           : { dot: 'bg-green', text: 'Connected' };
   return (
     <>
-      <SectionHeader title="Outlook" description="Your Inbox and Sent Items, read through the Microsoft 365 connector you use on claude.ai." action={<StatusLink state={state} />} />
+      <SectionHeader title="Outlook" description="Your Inbox, Sent Items and calendar, read through the Microsoft 365 connector you use on claude.ai." action={<StatusLink state={state} />} />
       <Group title="Connection">
         <Ms365ConnectorGroup status={v} reload={status.reload} confirm={confirm} />
         <LastRead health={health} now={now} problem={linked && !!v?.enabled} />
@@ -602,6 +602,26 @@ function OutlookSection({ s, set, type, flush, err, confirm }: Ctx) {
           off: 'Outlook isn’t polled, so new email doesn’t arrive.',
           evening: 'Email from the evening waits for the next work-hours poll.',
         }}
+        title="Mail"
+        s={s}
+        set={set}
+        type={type}
+        flush={flush}
+        err={err}
+        disabled={!linked}
+      />
+      <SourcePolling
+        words={{
+          id: 'calendar',
+          name: 'Outlook Calendar',
+          read: 'Read calendar',
+          switch: 'Read Outlook Calendar',
+          what: 'calendar changes',
+          on: 'Today’s meetings show above the inbox, and invites you haven’t answered become items.',
+          off: 'The calendar isn’t read, so the inbox has no agenda and invites don’t arrive.',
+          evening: 'Calendar changes from the evening wait for the next work-hours poll.',
+        }}
+        title="Calendar"
         s={s}
         set={set}
         type={type}
@@ -614,6 +634,10 @@ function OutlookSection({ s, set, type, flush, err, confirm }: Ctx) {
           New email in your Inbox, one item per conversation, and your replies from Sent Items, so triage knows what you’ve already answered. Quoted history, signatures and the external-sender
           banner are cut; attachments show by name only. Receipts and automatic replies are skipped. Each poll is a short Claude Haiku run that relays the connector’s calls, so it shows on Usage.
           Work OS only reads; it never sends, moves or flags anything in Outlook.
+        </p>
+        <p className="m-0 pb-3 text-[13px] leading-relaxed text-ink-2">
+          Your calendar from yesterday to two weeks ahead. Today’s and tomorrow’s meetings show above the inbox; an invite you haven’t answered becomes an item, and is done once you answer it in
+          Outlook. Only invites are read in full, without the Teams joining details. Work OS never answers, moves or changes a meeting.
         </p>
         <GuideLink topic="outlook" label="Guide: Outlook" />
       </Group>

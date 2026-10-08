@@ -3,6 +3,7 @@ import { Link, useBlocker, useNavigate, useSearchParams, type BlockerFunction } 
 import type { ActionType } from '@work-os/shared';
 import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
 import { parseType } from '../components/ActionPanel';
+import { Agenda } from '../components/Agenda';
 import { SourceMark } from '../components/BrandIcon';
 import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo, markManyDoneWithUndo } from '../components/item';
 import { HealthBanner } from '../components/HealthBanner';
@@ -803,17 +804,7 @@ export function InboxPage() {
         <UsagePopover inbox={inbox} />
       </header>
 
-      {full && (
-        <div className="mx-6 mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border-[1.5px] border-dashed border-violet-line bg-violet-wash py-2 pl-3.5 pr-2 text-[13px]">
-          <Icon name="calendar" className="text-violet-fg" />
-          <span className="font-semibold">14:00</span>
-          <span className="flex-[1_1_240px] text-ink-2">[Customer] renewal call. Account brief ready.</span>
-          <span className="font-mono text-[10px] text-violet-fg">P4</span>
-          <Button variant="future" onClick={() => phaseToast('P4', 'Meeting briefs')}>
-            Open brief
-          </Button>
-        </div>
-      )}
+      <Agenda full={full} onOpenItem={(id) => (all.some((i) => i.id === id) ? pick(id) : navigate(itemPath(id)))} />
       <Banners inbox={inbox} />
 
       <div className="relative flex min-h-0 flex-1">

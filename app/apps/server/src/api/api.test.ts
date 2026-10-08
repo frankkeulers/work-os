@@ -2,7 +2,7 @@ import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, Settings, SettingsView, UsageView, WorkEvent } from '@work-os/shared';
+import type { AgendaView, ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, Settings, SettingsView, UsageView, WorkEvent } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDataDir, paths } from '../config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
@@ -13,6 +13,7 @@ import { SettingsState } from '../config/settingsState';
 import { createLogger } from '../log';
 import { Lifecycle } from '../runtime/lifecycle';
 import { createServer, type WorkOsServer } from '../server';
+import type { CalendarSnapshot, SnapEvent } from '../sources/calendar/store';
 import { FAKE_CONNECTOR_ID, FakeMs365 } from '../sources/ms365/fakeMs365';
 import { ms365Link } from '../sources/ms365/link';
 import { ItemFiles, fileNameFor } from '../store/items';
@@ -33,8 +34,8 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; wispr?: ViewDeps['wispr']; outlook?: ViewDeps['outlook'] } = {}) {
-  await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }) }, rules: DEFAULT_RULES });
+async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; connectors?: Settings['connectors']; wispr?: ViewDeps['wispr']; outlook?: ViewDeps['outlook']; calendar?: ViewDeps['calendar'] } = {}) {
+  await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }), ...(opts.connectors && { connectors: opts.connectors }) }, rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
   lifecycle = new Lifecycle();
@@ -59,6 +60,7 @@ async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewD
     promptSources: opts.promptSources,
     wispr: opts.wispr,
     outlook: opts.outlook,
+    calendar: opts.calendar,
     devOrigins: ['http://localhost:5173'],
   });
 }
@@ -661,11 +663,12 @@ describe('Outlook connect (R2.5)', () => {
     expect((await saved()).connectors?.ms365).toBeUndefined();
   });
 
-  it('Disconnect turns Outlook off and keeps the connector', async () => {
-    await build({ outlook: link() });
+  it('Disconnect turns Outlook mail and calendar off and keeps the connector', async () => {
+    await build({ outlook: link(), sources: { calendar: { enabled: true, intervalWorkMinutes: 30, intervalOffMinutes: 120 } } });
     await post('/api/sources/outlook/connect', {});
     expect((await post('/api/sources/outlook/disconnect')).statusCode).toBe(204);
     expect((await get('/api/sources/outlook')).json()).toEqual({ connectorId: FAKE_CONNECTOR_ID, account, enabled: false });
+    expect((await saved()).sources?.calendar?.enabled).toBe(false);
   });
 
   it('a Settings save from a form loaded before Connect keeps the connector', async () => {
@@ -686,5 +689,67 @@ describe('Outlook connect (R2.5)', () => {
     await build();
     expect((await post('/api/sources/outlook/connect', {})).statusCode).toBe(503);
     expect((await get('/api/sources/outlook')).json()).toEqual({ enabled: false });
+  });
+});
+
+describe('the agenda (R2.8)', () => {
+  const connectors = { ms365: { id: FAKE_CONNECTOR_ID, account: { name: 'Frank Keulers', address: 'frank.keulers@example.com' } } };
+  const sources = { calendar: { enabled: true, intervalWorkMinutes: 30, intervalOffMinutes: 120 } };
+  const ev = (id: string, start: string, end: string, over: Partial<SnapEvent> = {}): SnapEvent => ({ id, uri: `calendar:///events/${id}`, subject: id, attendees: [], start, end, allDay: false, cancelled: false, isOrganizer: false, ...over });
+  // NOW is Monday 5 October, 10:00 in London: today runs from 23:00 UTC on the 4th.
+  const snap = (over: Partial<CalendarSnapshot> = {}): CalendarSnapshot => ({
+    schemaVersion: 1,
+    polledAt: '2026-10-05T08:50:00.000Z',
+    from: '2026-10-03T23:00:00.000Z',
+    to: '2026-10-19T23:00:00.000Z',
+    events: [
+      ev('Yesterday', '2026-10-04T13:00:00.000Z', '2026-10-04T14:00:00.000Z', { response: 'accepted' }),
+      ev('Stand-up', '2026-10-05T08:00:00.000Z', '2026-10-05T08:15:00.000Z', { response: 'accepted', organizer: { name: 'Sam Ray', address: 'sam@example.com' }, link: 'https://outlook.office365.com/owa/?itemid=1', showAs: 'busy' }),
+      ev('Declined', '2026-10-05T10:00:00.000Z', '2026-10-05T11:00:00.000Z', { response: 'declined' }),
+      ev('Cancelled', '2026-10-05T11:00:00.000Z', '2026-10-05T12:00:00.000Z', { cancelled: true, response: 'accepted' }),
+      ev('Weekly', '2026-10-05T15:00:00.000Z', '2026-10-05T15:30:00.000Z', { isOrganizer: true }),
+      ev('Renewal review', '2026-10-06T13:00:00.000Z', '2026-10-06T14:00:00.000Z', { response: 'none', organizer: { address: 'ingrid@nordic.example' } }),
+      ev('Answered elsewhere', '2026-10-06T15:00:00.000Z', '2026-10-06T16:00:00.000Z', { response: 'none' }),
+      ev('Wednesday', '2026-10-06T23:00:00.000Z', '2026-10-07T00:00:00.000Z', { response: 'accepted' }),
+    ],
+    invites: [
+      { itemId: 'calendar:renewal', eventIds: ['Renewal review'] },
+      { itemId: 'calendar:done', eventIds: ['Answered elsewhere'] },
+    ],
+    ...over,
+  });
+
+  it('lists today and tomorrow, without cancelled or declined meetings, and links open invites', async () => {
+    await build({ connectors, sources, calendar: () => snap() });
+    await store.append({ ...upsert({ source: 'calendar', kind: 'event', title: 'Renewal review' }), itemId: 'calendar:renewal' }, { ...upsert({ source: 'calendar', kind: 'event', title: 'Answered elsewhere' }), itemId: 'calendar:done' });
+    await store.append({ type: 'item.done', itemId: 'calendar:done', data: undefined });
+    const view = (await get('/api/calendar/agenda')).json<AgendaView>();
+    expect(view.state).toBe('ok');
+    expect(view.polledAt).toBe('2026-10-05T08:50:00.000Z');
+    expect(view.events.map((e) => e.id)).toEqual(['Stand-up', 'Weekly', 'Renewal review', 'Answered elsewhere']);
+    expect(view.events[0]).toEqual({ id: 'Stand-up', title: 'Stand-up', start: '2026-10-05T08:00:00.000Z', end: '2026-10-05T08:15:00.000Z', allDay: false, showAs: 'busy', organizer: 'Sam Ray', link: 'https://outlook.office365.com/owa/?itemid=1', response: 'accepted' });
+    expect(view.events[1].response).toBe('organizer');
+    expect(view.events[2]).toMatchObject({ organizer: 'ingrid@nordic.example', response: 'none', inviteItemId: 'calendar:renewal' });
+    expect(view.events[3]).not.toHaveProperty('inviteItemId'); // its item is done
+  });
+
+  it('is off while the calendar is off, or Outlook was never connected', async () => {
+    await build({ connectors, calendar: () => snap() });
+    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'off', events: [] });
+  });
+
+  it('is off without a connector, even with the calendar switched on', async () => {
+    await build({ sources, calendar: () => snap() });
+    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'off', events: [] });
+  });
+
+  it('says when the calendar has not been read yet', async () => {
+    await build({ connectors, sources, calendar: () => undefined });
+    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'never', events: [] });
+  });
+
+  it('says the agenda is stale once the last read is over three polls old', async () => {
+    await build({ connectors, sources, calendar: () => snap({ polledAt: '2026-10-05T07:29:00.000Z' }) });
+    expect((await get('/api/calendar/agenda')).json<AgendaView>().state).toBe('stale');
   });
 });
