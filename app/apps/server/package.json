@@ -13,6 +13,7 @@
     "spike:slack": "tsx src/cli/slack-spike.ts",
     "spike:wispr": "tsx src/cli/wispr-spike.ts",
     "spike:outlook": "tsx src/cli/outlook-spike.ts",
+    "spike:calendar": "tsx src/cli/calendar-spike.ts",
     "eval": "tsx src/cli/eval.ts",
     "gen-data": "tsx src/cli/gen-data.ts",
     "perf": "tsx src/cli/perf.ts"

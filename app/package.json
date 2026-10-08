@@ -26,6 +26,7 @@
     "spike:slack": "npm run spike:slack -w @work-os/server",
     "spike:wispr": "npm run spike:wispr -w @work-os/server --",
     "spike:outlook": "npm run spike:outlook -w @work-os/server --",
+    "spike:calendar": "npm run spike:calendar -w @work-os/server --",
     "e2e:server": "npm run e2e:server -w @work-os/web",
     "dev:mock": "npm run dev:mock -w @work-os/web",
     "eval": "npm run eval -w @work-os/server --",

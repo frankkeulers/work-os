@@ -79,6 +79,7 @@ Stop or redesign if any of these hold:
 | P0-9 | Spike: confirm the claude.ai Microsoft 365 connector loads in a headless Agent SDK run started by launchd, and that a relay call (R2.5) returns the raw `outlook_email_search` result through a `PostToolUse` hook. Record whether the SDK init message reports connector status, and the tokens and latency per relay call. Gates Phase 2 email only. **Done, passed (findings below).** | Claude Code | Our own Graph app registration is unlikely to get admin consent. The connector is already approved for the tenant. |
 | P0-10 | Spike: map Wispr Flow's local database (`~/Library/Application Support/Wispr Flow/flow.sqlite`). Identify the note and meeting tables and columns, choose cursor columns, confirm a read-only reader is safe in WAL mode while the app writes, and capture a schema fingerprint. Gates Phase 2 Wispr Flow only. **Done, passed (findings below).** | Claude Code | Local reads need no network, no tokens and no MCP, but the schema is undocumented. |
 | P0-11 | Spike: sign in to Wispr Flow's official MCP server (`https://api.wisprflow.ai/connect/mcp`) from a headless Node process, list its tools, confirm meetings can be listed incrementally, and confirm the sign-in refreshes with no browser. Gates the Wispr Flow source through the MCP (amended from P0-10's local read, at Frank's choice). **Done, passed (findings below).** | Claude Code | The MCP is the only supported way meeting data leaves Wispr Flow, and it adds attendees and the share link. Its tool contract is undocumented. |
+| P0-12 | Spike: the calendar through the same Microsoft 365 connector. Confirm the search window and paging, the time zones returned, whether Frank's own answer to an invite is readable, what identifies a recurring series, and whether mail marks meeting requests. Gates the calendar source (R2.8) only. **Done, passed with gaps (findings below).** | Claude Code | The agenda, invites and Wispr enrichment need the calendar; there is no other approved way to read it. |
 
 ### Phase 0 findings
 
@@ -159,6 +160,16 @@ Read rules:
 - **Permalink:** `share_link`. A meeting without one falls back to `wispr-flow://`, the scheme the app registers.
 
 ---
+
+**P0-12: the calendar spike (8 Oct 2026, `npm run spike:calendar`, Agent SDK 0.3.293).** Passed with gaps. It shapes R2.8. Shapes and enumerations only were printed.
+- **Search** (`outlook_calendar_search`, `query: '*'`, `afterDateTime`/`beforeDateTime`, `order: 'oldest'`) returns occurrences in start order, 25 a page, with the same paging item as mail (`{moreResults, nextOffset, totalResultCount}`). Yesterday to 14 days ahead held more than 25 events, so a poll pages. One search run: $0.0008, 6 s.
+- **Times are UTC** (`start.timeZone: 'UTC'` on every event), as 27-character wall-clock strings with no `Z`. A mailbox time zone is still possible, so the reader converts named zones too.
+- **Search fields:** `uri`, `id`, `subject`, `organizer` (an address), `attendees` (addresses only, or null), `start`, `end`, `showAs` (busy/free seen), `isAllDay`, `isCancelled`, `isOrganizer`, `importance`, `categories`, `webLink`, `summary` (Teams join text) and `recurrence` (null on every occurrence). There is **no response status and no modified time** in search.
+- **Read** (`read_resource`, 10 in one run: 11 turns, $0.0017, 8 s) adds `organizer {name, address}`, `attendees [{name, address, type, responseStatus, responseTime}]`, `lastModifiedDateTime`, `body` (HTML), `onlineMeeting` and `meetingTranscriptUrl` (3 of 10), `sensitivity`.
+- **Frank's answer is his own attendee entry:** `responseStatus` is `none`, `accepted`, `tentativelyAccepted` or `declined`. He was an attendee on 7 of 10 events and the organiser of 3. There is no event-level `responseStatus` or `responseRequested`.
+- **No series identity:** no `seriesMasterId`, `type` or `iCalUId`, and `recurrence` is null on occurrences. A recurring meeting is a run of unrelated events.
+- **Mail doesn't mark meeting requests:** a read email has no `@odata.type`, `meetingMessageType` or event link, so mail can only spot invites by subject.
+- **Not settled read-only:** whether a reschedule resets Frank's answer, and whether events he declined stay in search. R2.8 copes with either.
 
 ## 4. Architecture
 
@@ -943,6 +954,7 @@ Each phase starts only when the previous phase meets its success criteria. Each 
 | Source | Approach | Approval needed | Retires |
 |---|---|---|---|
 | Outlook mail | Relay calls (R2.5) on the claude.ai Microsoft 365 connector, every 30 min in work hours and 120 min outside: `outlook_email_search` on Inbox and Sent Items, then `read_resource` for each new email, batched up to 10 per run, for the body, names, To/Cc and `conversationId` (one item per conversation). Sent Items is context only: triage sees Frank's replies as "me" and lanes don't move on their own. Go-live gate: three working days alongside the digest, at least 30 corrected emails, and S1/S2 on Outlook alone (`npm run eval -- --source outlook`). Our own Graph app registration is unlikely to get consent, and the connector is already approved for the tenant. Local reads are not viable: new Outlook for Mac caches mail in an undocumented binary store (`HxStore.hxd`) that only refreshes while Outlook runs. Fallback if P0-9 fails: add the account to Apple Mail and read its local store, which needs Full Disk Access. | P0-9 passes. Tell IT the approved connector will be polled automatically. | Daily Outlook digest |
+| Outlook calendar | Relay calls (R2.5) on the same connector, every 30 min in work hours and 120 min outside (R2.8): `outlook_calendar_search` over a rolling window, then `read_resource` only for new or changed invites. Feeds an agenda strip on the inbox, adds calendar titles and invitees to Wispr Flow meetings, and makes unanswered invites triaged items. A shadow week in Full scope first. | P0-12 passes. Covered by the mail notice to IT. | Checking invites by hand in Outlook |
 | Wispr Flow meetings | Wispr Flow's official MCP server, called from code with an MCP client and no model in the loop (R2.7), every 3 h in work hours. Amended from local reads of `flow.sqlite` (R2.6, P0-10) at Frank's choice: the MCP is the only supported way out and adds attendees and a share link. The local read stays the documented fallback if the MCP is withdrawn or its sign-in can't be kept. | P0-11 passes (P0-10 for the fallback) | Whichever scheduled task covers Wispr Flow notes, if any |
 | Teams chats | Graph delta on chats Frank is in | `Chat.Read` delegated, admin consent | Part of the daily Teams transcript sweep |
 | Teams meeting transcripts | Graph online meeting transcripts for meetings Frank organised or attended | `OnlineMeetingTranscript.Read.All` (admin-level; may be refused) | Daily Teams transcript sweep |
@@ -972,6 +984,15 @@ Requirements:
   - **Network:** every call has a deadline and goes through the source's own breaker (`wisprMcp`), with no SDK retries. A 401 or a failed refresh is `auth_failed` with the fix "Reconnect Wispr Flow in Settings". A 429 backs off.
   - **Content:** triage reads the summary and Frank's notes (R2.3). Transcripts are fetched only when drafting, and are never stored in `items/`.
 
+- **R2.8** Calendar (P0-12): the calendar is read as a snapshot of a rolling window, not as a stream, because search filters on start time and has no modified time.
+  - **Window:** from yesterday 00:00 to 14 days ahead, London time, paged. The snapshot lives in `state/calendar.json` and holds subjects, times, organiser, attendee addresses and Frank's answer only: never a body, summary or join link. The agenda is read from the snapshot, outside the event log.
+  - **Reads:** an event is read only when it is new or its search fields changed (a hash), Frank isn't its organiser and it has attendees, or when a Wispr Flow meeting links to it. At most 15 reads a poll; the rest wait for the next one.
+  - **Times:** UTC as the connector returns them; a named zone (IANA or Windows) is converted with `wallToUtc`.
+  - **Invites:** an event needs an answer when Frank's attendee entry says `none`. With no series identity, unanswered events with the same organiser and subject are one item, `calendar:<sha1(organiser|subject)>`, kind `event`, so a weekly series asks once. Messages: `invite`, `moved:<startUtc>` (re-triages) and `cancelled`, with the Teams block and passcode cut.
+  - **Closing:** the source closes an invite item (`item.done`, by source) when Frank answers, every event in it is cancelled or gone, or the last one starts. If a reschedule resets his answer, the item opens again.
+  - **Mail:** while the calendar is on, meeting requests, updates and cancellations in Outlook mail are dropped by subject prefix when the calendar holds a matching event; answers stay in mail.
+  - **Health and cost:** the `ms365` dependency, shared with mail. About $0.002 a poll for two search pages, plus $0.0017 for each ten reads.
+
 ### Phase 3: More actions
 
 | Action | Notes |
@@ -987,7 +1008,7 @@ Requirements:
 | Capability | Notes |
 |---|---|
 | Daily and weekly briefs | Generated from the event log and inbox state (Opus, once a day or week). Replaces the Weekly focus brief task. |
-| Pre-meeting account brief | Calendar-aware. Pulls related items, vault notes and CRM context before customer meetings. The first new build recommended in the October setup review. |
+| Pre-meeting account brief | **To do (logged 8 Oct 2026, at Frank's request).** Builds on the calendar source (R2.8): before a customer meeting on the agenda, pulls related items, vault notes and CRM context into a brief. Shown as a P4 placeholder on the agenda and in Settings › Outlook until built. The first new build recommended in the October setup review. |
 | CRM and call sources | Salesforce, HubSpot and Gong as read-only sources, for the revenue focus. Needs the matching approvals and data-rights checks. |
 | Unified search | Across items, decisions and the vault, from the local files. Add a local search index (still file-based, e.g. MiniSearch persisted to JSON) when linear scans get slow. |
 | Learning loop | Corrections become few-shot examples in the triage prompt, chosen by similarity. The eval gates every prompt change. |
