@@ -25,6 +25,12 @@ const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal' | 
     degraded: 'Wispr Flow is not answering properly. Work OS tries again on its own.',
     tools_changed: 'Wispr Flow changed its MCP tools. Work OS stopped reading it until the reader is updated.',
   },
+  ms365: {
+    token_missing: 'Outlook is not connected yet. Connect it in Settings › Sources › Outlook.',
+    auth_failed: 'The Microsoft 365 connector needs signing in again. Reconnect it on claude.ai (Settings → Connectors), then choose Check again.',
+    degraded: 'The Microsoft 365 connector is not answering properly. Work OS tries again on its own.',
+    tools_changed: 'The Microsoft 365 connector changed its tools. Work OS stopped reading Outlook until the reader is updated.',
+  },
 };
 
 export type HealthChange = { dep: DepId; state: DepState; reason?: string };

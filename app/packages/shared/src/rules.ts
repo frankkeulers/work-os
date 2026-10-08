@@ -49,7 +49,7 @@ function matches(c: RuleCondition, item: Item, s: Settings, me: Me): boolean {
  * The sources whose items are checked against the rules (FR-4.1). Items from other sources go
  * straight to the model. A source joins once its adapter fills the fields its conditions read.
  */
-export const RULE_SOURCES: readonly SourceId[] = ['slack'];
+export const RULE_SOURCES: readonly SourceId[] = ['slack', 'outlook'];
 
 export function firstMatchingRule(item: Item, rules: Rule[], settings: Settings, me: Me): Rule | undefined {
   if (!RULE_SOURCES.includes(item.source)) return undefined;

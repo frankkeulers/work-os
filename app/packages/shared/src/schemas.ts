@@ -22,6 +22,9 @@ export const Message = z.object({
   authorId: z.string().min(1),
   ts: isoDate,
   text: z.string(),
+  // Amendment (Outlook): who an email went to, as participant IDs. Chat messages have neither.
+  to: z.array(z.string().min(1)).optional(),
+  cc: z.array(z.string().min(1)).optional(),
 });
 export type Message = z.infer<typeof Message>;
 
@@ -287,6 +290,16 @@ export const SourceSchedule = z.object({
 });
 export type SourceSchedule = z.infer<typeof SourceSchedule>;
 
+/**
+ * The claude.ai Microsoft 365 connector (R2.5): its server id, as mcpServerStatus() reports it (not a
+ * secret; it goes into the proxy URL), and the account it reads, from get_me when it was connected.
+ */
+export const Ms365Connector = z.object({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,100}$/, 'Enter the connector id, e.g. mcpsrv_01…'),
+  account: z.object({ name: z.string(), address: z.string().min(1), upn: z.string().optional() }).optional(),
+});
+export type Ms365Connector = z.infer<typeof Ms365Connector>;
+
 export const ConfluencePage = z.object({
   title: z.string().min(1, 'Enter a page title'),
   id: z.string().regex(/^\d{5,12}$/, 'Page IDs are 5–12 digits'),
@@ -375,6 +388,9 @@ export const Settings = z.object({
   }),
   dryRun: z.boolean(),
   sources: z.partialRecord(SourceId, SourceSchedule.partial()).optional(),
+  // Amendment (Outlook, R2.5): the claude.ai connectors the relay reads through, shared by every
+  // source on them. Set by Settings › Sources › Outlook, never typed into the settings form.
+  connectors: z.object({ ms365: Ms365Connector.optional() }).optional(),
   schemaVersion: z.literal(1),
 });
 export type Settings = z.infer<typeof Settings>;

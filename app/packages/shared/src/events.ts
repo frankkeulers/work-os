@@ -13,8 +13,9 @@ export const PollReason = z.enum(['manual', 'scheduled', 'wake', 'reconnect', 'f
 export type PollReason = z.infer<typeof PollReason>;
 
 // Dependencies whose health the server tracks (FR-14.3, FR-14.6). wisprMcp is Wispr Flow's MCP server
-// (R2.7); wisprDb is its local database, kept for the fallback reader (R2.6).
-export const DepId = z.enum(['network', 'slack', 'claude', 'confluence', 'keychain', 'storage', 'wisprDb', 'wisprMcp']);
+// (R2.7); wisprDb is its local database, kept for the fallback reader (R2.6); ms365 is the claude.ai
+// Microsoft 365 connector the Outlook sources read through (R2.5), apart from Claude itself.
+export const DepId = z.enum(['network', 'slack', 'claude', 'confluence', 'keychain', 'storage', 'wisprDb', 'wisprMcp', 'ms365']);
 export type DepId = z.infer<typeof DepId>;
 
 export const DepState = z.enum(['ok', 'unknown', 'offline', 'degraded', 'rate_limited', 'auth_failed', 'paused']);

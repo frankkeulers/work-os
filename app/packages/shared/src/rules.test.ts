@@ -79,9 +79,33 @@ describe('firstMatchingRule (FR-4.1, FR-4.2)', () => {
     expect(firstMatchingRule(item({ messages: say('U02DANA', 'Renewal due') }), rules, settings, ME)?.id).toBe('renewal');
   });
 
-  it('leaves non-Slack items to the model', () => {
-    const rules = [rule('any-dm', [{ type: 'is_dm' }])];
-    expect(firstMatchingRule(item({ source: 'outlook', kind: 'dm' }), rules, settings, ME)).toBeUndefined();
+  it('leaves items from sources without rules to the model', () => {
+    const rules = [rule('any', [{ type: 'keyword', pattern: 'renewal' }])];
+    expect(firstMatchingRule(item({ source: 'wispr', kind: 'meeting', messages: say('U02DANA', 'Renewal due') }), rules, settings, ME)).toBeUndefined();
+  });
+
+  it('checks Outlook emails against the conditions that work on email', () => {
+    const ME_MAIL: Me = { id: 'frank.keulers@polestarglobal.com' };
+    const email = (from: string, name: string, text: string) =>
+      item({
+        id: 'outlook:AAQk1',
+        source: 'outlook',
+        kind: 'email',
+        title: 'Renewal terms',
+        participants: [
+          { id: ME_MAIL.id, name: 'Frank Keulers' },
+          { id: from, name },
+        ],
+        messages: say(from, text),
+      });
+    const vip = rule('vip', [{ type: 'sender_in', list: 'vips', values: [] }]);
+    const kw = rule('renewal', [{ type: 'keyword', pattern: 'renewal' }], { type: 'today' });
+    const dm = rule('any-dm', [{ type: 'is_dm' }]);
+    expect(firstMatchingRule(email('dana.lee@example.com', 'Dana Lee', 'Hello'), [dm, vip], settings, ME_MAIL)?.id).toBe('vip');
+    expect(firstMatchingRule(email('sam@example.com', 'Sam Ray', 'Renewal is due'), [dm, vip, kw], settings, ME_MAIL)?.id).toBe('renewal');
+    expect(firstMatchingRule(email('sam@example.com', 'Sam Ray', 'Hello'), [dm, vip, kw], settings, ME_MAIL)).toBeUndefined();
+    // Frank's own email never makes him a VIP sender.
+    expect(firstMatchingRule(email(ME_MAIL.id, 'Dana Lee', 'Hello'), [vip], settings, ME_MAIL)).toBeUndefined();
   });
 
   it('skips a rule scoped to other sources', () => {

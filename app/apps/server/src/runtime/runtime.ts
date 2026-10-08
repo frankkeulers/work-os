@@ -174,6 +174,9 @@ export class Runtime {
   canPoll(s: SourceAdapter): boolean {
     if (this.safeMode || this.phase === 'waking' || this.phase === 'stopping') return false;
     if (s.needsNetwork && this.health.state('network') === 'offline') return false;
+    // A relay source (Outlook) calls Claude to fetch, so it waits out the power nap too. The skipped
+    // poll stays due, and the next tick runs it.
+    if (s.deps.includes('claude') && !this.canUseClaude()) return false;
     // Only looks: the poll itself reports back, which closes or reopens each breaker.
     return s.deps.every((dep) => this.health.ready(dep));
   }
@@ -420,11 +423,16 @@ export class Runtime {
     };
   }
 
-  /** A source's status for the UI, from its dependency's health. */
-  sourceStatus(id: SourceId, dep: DepId = id === 'wispr' ? 'wisprMcp' : id === 'outlook' ? 'claude' : (id as DepId)): { status: SlackStatus; retryAt?: string; message?: string } {
+  /**
+   * A source's status for the UI, from its dependency's health. Outlook reads through the Microsoft 365
+   * connector and Claude: the connector's trouble shows first, then Claude's.
+   */
+  sourceStatus(id: SourceId, dep?: DepId): { status: SlackStatus; retryAt?: string; message?: string } {
     if (this.safeMode || !this.d.settings.settings) return { status: 'paused', message: this.safeMode ? 'Safe mode: polling is off after repeated crashes.' : 'Paused until the settings are fixed.' };
     if (this.health.state('network') === 'offline') return { status: 'offline', message: this.health.get('network').fix };
-    const h = this.health.get(dep);
+    const fine = (d: DepId) => ['ok', 'unknown'].includes(this.health.state(d));
+    const own: DepId = dep ?? (id === 'wispr' ? 'wisprMcp' : id === 'outlook' ? 'ms365' : (id as DepId));
+    const h = this.health.get(id === 'outlook' && !dep && fine(own) && !fine('claude') ? 'claude' : own);
     const map: Partial<Record<string, SlackStatus>> = { rate_limited: 'backoff', auth_failed: 'auth_failed', offline: 'offline', degraded: 'degraded', paused: 'paused' };
     const status = map[h.state] ?? (this.d.store.projection.sources[id]?.lastPollAt ? 'healthy' : 'never');
     return { status, retryAt: h.retryAt, message: h.fix ?? (status === 'never' ? 'Not polled yet.' : undefined) };

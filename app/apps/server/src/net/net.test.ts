@@ -236,4 +236,14 @@ describe('fix texts', () => {
     h.fail('wisprMcp', { state: 'degraded', reason: 'tools_changed' });
     expect(h.get('wisprMcp').fix).toMatch(/^Wispr Flow changed its MCP tools/);
   });
+
+  it('sends Frank to claude.ai when the Microsoft 365 connector is signed out (R2.5)', () => {
+    const h = new Health(() => new Date('2026-10-06T08:00:00Z'));
+    h.fail('ms365', { state: 'auth_failed', reason: 'connector needs-auth' });
+    expect(h.get('ms365').fix).toMatch(/Reconnect it on claude\.ai/);
+    h.fail('ms365', { state: 'degraded', reason: 'tools_changed' });
+    expect(h.get('ms365').fix).toMatch(/changed its tools/);
+    h.fail('ms365', { state: 'degraded', reason: 'connector pending' });
+    expect(h.get('ms365').fix).toMatch(/not answering properly/);
+  });
 });

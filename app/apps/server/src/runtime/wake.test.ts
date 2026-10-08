@@ -60,15 +60,16 @@ let triaged: number[]; // wall-clock ms since START of each triage run
 
 const adapter = (id: SourceId, needsNetwork: boolean): SourceAdapter => ({
   id,
-  deps: needsNetwork ? ['network', id === 'slack' ? 'slack' : 'claude'] : ['wisprDb'],
+  deps: needsNetwork ? ['network', ...(id === 'slack' ? (['slack'] as const) : id === 'outlook' ? (['claude', 'ms365'] as const) : (['claude'] as const))] : ['wisprDb'],
   needsNetwork,
   fetchSince: async () => ({ items: [], nextCursor: '' }),
   probe: async () => 'ok',
 });
 
-async function build(opts: { wispr?: boolean; safeMode?: boolean; lastPollAt?: Partial<Record<SourceId, number>> } = {}) {
+async function build(opts: { wispr?: boolean; outlook?: boolean; safeMode?: boolean; lastPollAt?: Partial<Record<SourceId, number>> } = {}) {
   const settings = defaultSettings(dir);
   if (opts.wispr !== false) settings.sources = { wispr: { enabled: true } };
+  if (opts.outlook) settings.sources = { ...settings.sources, outlook: { enabled: true } };
   await initDataDir(dir, { settings, rules: DEFAULT_RULES });
   ({ store } = await Store.open({ dataDir: dir, now: clock.now }));
   for (const [id, at] of Object.entries(opts.lastPollAt ?? {})) {
@@ -78,7 +79,7 @@ async function build(opts: { wispr?: boolean; safeMode?: boolean; lastPollAt?: P
     clock.wall = was;
   }
   const state = await SettingsState.create(dir, await loadSettings(dir), false);
-  sources = [adapter('slack', true), ...(opts.wispr === false ? [] : [adapter('wispr', false)])];
+  sources = [adapter('slack', true), ...(opts.outlook ? [adapter('outlook', true)] : []), ...(opts.wispr === false ? [] : [adapter('wispr', false)])];
   runtime = new Runtime({
     clock,
     store,
@@ -252,6 +253,22 @@ describe('sleep and wake', () => {
     expect(triaged.at(-1)! - woke).toBeGreaterThanOrEqual(POWER_NAP_MS);
   });
 
+  it('holds a relay source (Outlook) until 45 s after a wake: its fetch calls Claude (CL-10)', async () => {
+    await build({ outlook: true });
+    await awake(TICK_MS);
+    expect(polls.map((p) => p.id)).toContain('outlook');
+    clock.sleep(3 * HOUR);
+    const woke = clock.wall - START;
+    polls = [];
+    await awake(POWER_NAP_MS - TICK_MS);
+    expect(polls.map((p) => p.id)).toContain('slack');
+    expect(polls.map((p) => p.id)).not.toContain('outlook');
+    await awake(2 * TICK_MS);
+    const outlook = polls.find((p) => p.id === 'outlook');
+    expect(outlook?.at).toBeDefined();
+    expect(outlook!.at - woke).toBeGreaterThanOrEqual(POWER_NAP_MS);
+  });
+
   it('a Power Nap wake that sleeps again within 45 s fetches but never triages', async () => {
     await build();
     await awake(TICK_MS);
@@ -336,6 +353,18 @@ describe('health and degraded mode', () => {
     expect(runtime.sourceStatus('slack')).toMatchObject({ status: 'auth_failed', message: expect.stringMatching(/token/) });
     expect(runtime.view().deps.find((d) => d.id === 'slack')).toMatchObject({ state: 'auth_failed', reason: 'invalid_auth' });
     expect(await loggedTypes()).toContain('health.changed');
+  });
+
+  it("shows Outlook's connector trouble first, then Claude's", async () => {
+    await build({ wispr: false, outlook: true });
+    await awake(TICK_MS);
+    runtime.health.fail('ms365', { state: 'auth_failed', reason: 'connector needs-auth' });
+    runtime.health.fail('claude', { state: 'auth_failed', reason: 'login' });
+    expect(runtime.sourceStatus('outlook')).toMatchObject({ status: 'auth_failed', message: expect.stringMatching(/Reconnect it on claude\.ai/) });
+    runtime.health.ok('ms365');
+    expect(runtime.sourceStatus('outlook')).toMatchObject({ status: 'auth_failed', message: expect.stringMatching(/claude login/) });
+    runtime.health.ok('claude');
+    expect(runtime.sourceStatus('outlook').status).toBe('healthy');
   });
 
   it('reruns the checks every 5 minutes', async () => {

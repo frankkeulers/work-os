@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Rule, Rules, Settings, SettingsFile, isValidRegex, sourceSchedule, upgradeSettings } from './schemas';
+import { Message, Ms365Connector, Rule, Rules, Settings, SettingsFile, isValidRegex, sourceSchedule, upgradeSettings } from './schemas';
 
 describe('rule validation (FR-4.1)', () => {
   it('accepts slash-delimited and bare regular expressions', () => {
@@ -77,5 +77,21 @@ describe('settings upgrade (sources)', () => {
     const shape = { ...Settings.shape };
     expect(shape.people).toBeDefined();
     expect(SettingsFile.safeParse({ slack: { vips: [] } }).error?.issues.some((i) => i.path[0] === 'people')).toBe(false);
+  });
+});
+
+describe('Outlook (amendments)', () => {
+  it('keeps the Microsoft 365 connector in settings, and refuses an id that would not fit the proxy URL', () => {
+    const c = { id: 'mcpsrv_01RM1g8G4CFZVJykAVjtu8iW', account: { name: 'Frank Keulers', address: 'frank@example.com', upn: 'frank@example.com' } };
+    expect(Settings.shape.connectors.parse({ ms365: c })).toEqual({ ms365: c });
+    expect(Settings.shape.connectors.parse(undefined)).toBeUndefined();
+    expect(Ms365Connector.safeParse({ id: 'mcpsrv_01/../x' }).success).toBe(false);
+    expect(Ms365Connector.safeParse({ id: '' }).success).toBe(false);
+  });
+
+  it('lets an email message say who it went to, and a chat message leave that out', () => {
+    const m = { id: '<a@b>', authorId: 'dana@example.com', ts: '2026-10-08T09:00:00.000Z', text: 'Hi' };
+    expect(Message.parse({ ...m, to: ['frank@example.com'], cc: [] })).toMatchObject({ to: ['frank@example.com'], cc: [] });
+    expect(Message.parse(m)).toEqual(m);
   });
 });

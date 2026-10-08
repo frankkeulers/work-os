@@ -25,6 +25,7 @@ const NAMES: Record<DepId, string> = {
   storage: 'Data disk',
   wisprDb: 'Wispr Flow',
   wisprMcp: 'Wispr Flow',
+  ms365: 'Microsoft 365',
 };
 
 const TITLES: Partial<Record<DepState, (name: string) => string>> = {
