@@ -127,8 +127,8 @@ Answer with JSON only, no prose, in exactly this shape, one entry per piece:
 {"assignments":[{"id":"<piece id>","topic":"<topic id, piece id, or new>"}]}
 `;
 
-export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v2 -->
-You draft a note for Frank's Obsidian vault from a Slack thread. Frank is Product Innovation Lead at
+export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v3 -->
+You draft a note for Frank's Obsidian vault from a Slack thread or a meeting. Frank is Product Innovation Lead at
 Pole Star Global. The vault is his knowledge base, written for models and agents to read: decisions,
 facts, findings and meeting outcomes, one canonical note per topic. Messages written by Frank have
 the author "me".
@@ -143,8 +143,15 @@ Prefer adding under a heading of the note that owns the topic; create a new note
 covers it.
 
 Write in British English. Keep it short: what was decided or learnt and why, as current fact, with
-a link back to the Slack thread (its permalink). No action items or to-dos outside a meeting note.
-Do not copy the thread verbatim.
+a link back to the thread or meeting (its permalink). No action items or to-dos outside a meeting
+note. Do not copy the thread verbatim.
+
+A thread with "kind": "meeting" is a meeting Wispr Flow recorded. Its messages are Wispr's summary
+and Frank's own notes; "transcript", when present, is what was said, one "Speaker: text" turn per
+line, with unnamed speakers as "Speaker 1", "Speaker 2". Draft a meeting note as the conventions
+describe meeting notes, with its decisions and action items, taking detail from the transcript
+where the summary is thin. Never quote the transcript at length. When "transcript" says it is not
+available, draft from the summary and notes alone.
 
 Answer with JSON only, no prose, in one of these shapes:
 {"kind":"new","path":"Folder/Note name.md","content":"<the whole note, with frontmatter>"}
@@ -153,8 +160,8 @@ Answer with JSON only, no prose, in one of these shapes:
 in the note, copied exactly, and "content" is only the new block.
 `;
 
-export const DEFAULT_PICK_CONFLUENCE_PROMPT = `<!-- prompt: pick-confluence v1 -->
-You choose where a Slack thread belongs in Pole Star Global's Confluence context corpus, for Frank,
+export const DEFAULT_PICK_CONFLUENCE_PROMPT = `<!-- prompt: pick-confluence v2 -->
+You choose where a Slack thread or a meeting belongs in Pole Star Global's Confluence context corpus, for Frank,
 Product Innovation Lead. The corpus is read by the PSPD pipeline and the Product Knowledge Desk.
 Messages written by Frank have the author "me".
 
@@ -162,6 +169,9 @@ The catalogue below lists every page that may be written to, read live from Conf
 its path (ancestors, then the page title), its psg-* labels, and "hub" when other pages sit under
 it. Only these pages exist for you. Follow the routing guidance: run the exclusion screen first,
 then decide the business unit and the kind of fact, and find the page the routing table names.
+
+A thread with "kind": "meeting" is a meeting Wispr Flow recorded: Wispr's summary, Frank's notes
+and, when present, its transcript. Only its decisions, requirements and product facts are context.
 
 Choose one to three candidate pages, best first. Prefer the specific child page over a hub: a hub
 is an index of its children. Add a second or third candidate only when the right home is genuinely
@@ -174,8 +184,8 @@ Use the second shape when nothing fileable survives the exclusion screen, the th
 context, or the right home is not in the catalogue.
 `;
 
-export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v3 -->
-You draft an entry for one of Pole Star Global's Confluence context pages from a Slack thread, for
+export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v4 -->
+You draft an entry for one of Pole Star Global's Confluence context pages from a Slack thread or a meeting, for
 Frank, Product Innovation Lead. The pages are the context corpus that the PSPD pipeline and the
 Product Knowledge Desk read. Messages written by Frank have the author "me".
 
@@ -185,8 +195,12 @@ tiers, how to choose the business unit, and where each kind of fact goes. Choose
 section from these pages only, and use each page's outline to avoid repeating what is there.
 
 Write a short entry: what was decided or learnt, why, and what follows from it, ending with its
-tier, date and a link back to the Slack thread (its permalink). Never include observations about
-named people.
+tier, date and a link back to the thread or meeting (its permalink). Never include observations
+about named people.
+
+From a meeting ("kind": "meeting": Wispr's summary, Frank's notes and possibly its transcript),
+file only decisions, requirements and product facts. Never what people said about each other or
+how anyone came across, and never quote the transcript.
 
 Write in British English, in Markdown: paragraphs, bullet lists, **bold**, links. No tables, no
 HTML. Code turns it into the page's format.

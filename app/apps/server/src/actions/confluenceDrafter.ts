@@ -3,13 +3,12 @@ import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import type { Prompt } from '../claude/prompts';
 import { DEADLINES } from '../net/http';
-import { threadForTriage } from '../pipeline/truncate';
 import type { ConfluenceApi, Page } from './confluenceApi';
 import { buildCatalogue, type CatalogueEntry } from './confluenceCatalogue';
 import { DraftError } from './errors';
 import { entryStorage } from './markdown';
 import { findHeading, outline, textOf } from './storage';
-import { DRAFT_KEEP_LAST } from './vaultDrafter';
+import { draftThread } from './vaultDrafter';
 
 // "Draft Confluence entry" (FR-10.1–10.4), in two calls, because the PSG context tree is too big to
 // outline in one. Code reads the live catalogue (every page in scope, from CQL: path, labels, hub)
@@ -63,11 +62,13 @@ export interface ConfluenceDraftDeps {
   signal?: AbortSignal;
   /** 1 while the catalogue is read, 2 while picking, 3 while drafting, 4 for the people check. */
   onStage?: (stage: number) => void;
+  /** A meeting's transcript, read live for this draft (R2.3). */
+  transcript?: string;
 }
 
 /** The catalogue as the picker sees it: one compact object per page. */
-export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[], routing: string, now: Date): string {
-  const thread = { ...threadForTriage(item, me, DRAFT_KEEP_LAST), permalink: item.permalink };
+export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[], routing: string, now: Date, transcript?: string): string {
+  const thread = draftThread(item, me, transcript);
   const pages = catalogue.map((c) => ({ id: c.id, path: c.path, ...(c.labels.length && { labels: c.labels }), ...(c.hub && { hub: true }) }));
   return [
     `Today: ${now.toISOString().slice(0, 10)}`,
@@ -84,8 +85,8 @@ export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[
 
 const noFit = (a: { reason: string; suggestedHome?: string }) => new DraftError(a.suggestedHome?.trim() ? `${a.reason} Suggested home: ${a.suggestedHome.trim()}.` : a.reason, 'no_fit');
 
-export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routing: string, now: Date): string {
-  const thread = { ...threadForTriage(item, me, DRAFT_KEEP_LAST), permalink: item.permalink };
+export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routing: string, now: Date, transcript?: string): string {
+  const thread = draftThread(item, me, transcript);
   const outlines = pages.map((p) => {
     let budget = OUTLINE_CHARS;
     const sections = outline(p.storage).filter((s) => (budget -= s.heading.length + s.excerpt.length) > 0);
@@ -117,7 +118,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
       purpose: 'confluence_pick',
       model,
       system: d.pickPrompt.text,
-      prompt: renderPickRequest(item, me, catalogue, d.routing, d.now()),
+      prompt: renderPickRequest(item, me, catalogue, d.routing, d.now(), d.transcript),
       promptVersion: d.pickPrompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,
@@ -148,7 +149,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
       purpose: 'draft_confluence',
       model,
       system: d.prompt.text,
-      prompt: renderConfluenceRequest(item, me, pages, d.routing, d.now()),
+      prompt: renderConfluenceRequest(item, me, pages, d.routing, d.now(), d.transcript),
       promptVersion: d.prompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Me, Notice, Settings, SourceId } from '@work-os/shared';
+import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId } from '@work-os/shared';
 import { londonParts, topicItem } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
@@ -73,6 +73,8 @@ export interface ActionDeps {
   prompt: (id: 'draft-vault' | 'pick-confluence' | 'draft-confluence' | 'people-check') => Promise<Prompt>;
   /** The vault conventions for vault drafts. */
   conventions: () => Promise<string>;
+  /** A meeting's transcript from its source, read live for a draft (R2.3, R2.7). */
+  transcript?: (item: Item, signal: AbortSignal) => Promise<string | undefined>;
   /** The Confluence routing guidance (from psg-context-builder) for Confluence drafts. */
   routing: () => Promise<string>;
   notify: (n: Notice) => void;
@@ -345,6 +347,17 @@ export class ActionService {
     this.pump();
   }
 
+  /** The transcript, or undefined: a draft goes ahead from the summary when it can't be read. */
+  private async transcriptFor(item: Item, signal: AbortSignal): Promise<string | undefined> {
+    try {
+      return await this.d.transcript?.(item, signal);
+    } catch (err) {
+      if (signal.aborted) throw err;
+      this.d.logger?.warn({ itemId: item.id, err: String(err) }, 'Could not read the meeting transcript; drafting from the summary');
+      return undefined;
+    }
+  }
+
   private async runDraft(a: ActionState, signal: AbortSignal) {
     const stillDrafting = () => this.actions[a.id]?.status === 'drafting';
     if (!this.progress.has(a.id))
@@ -361,6 +374,7 @@ export class ActionService {
       if (!content) return this.fail(a, 'model_error', 'The thread’s content is no longer available, so it can’t be drafted.');
       try {
         this.stage(a.id, 1);
+        const transcript = content.item.kind === 'meeting' ? await this.transcriptFor(content.item, signal) : undefined;
         const result: { draft: Draft; baseHash?: string | null } =
           a.type === 'vault_note'
             ? await draftVaultNote(
@@ -373,6 +387,7 @@ export class ActionService {
                   now: this.d.now,
                   signal,
                   onTurn: (usedTool) => this.stage(a.id, usedTool ? 1 : 2),
+                  transcript,
                 },
                 content.item,
                 this.d.me(content.item.source),
@@ -389,6 +404,7 @@ export class ActionService {
                   now: this.d.now,
                   signal,
                   onStage: (n) => this.stage(a.id, n),
+                  transcript,
                 },
                 content.item,
                 this.d.me(content.item.source),

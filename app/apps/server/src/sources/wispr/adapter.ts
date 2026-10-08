@@ -18,6 +18,10 @@ export const PAGE_SIZE = 50;
 export const MAX_PAGES = 10;
 export const FIRST_POLL_MS = 7 * 86_400_000;
 export const CONCURRENCY = 3;
+/** How much transcript a draft gets: about 26k tokens, read 40,000 characters at a time. */
+export const TRANSCRIPT_MAX_CHARS = 60_000;
+const TRANSCRIPT_CHUNK = 40_000;
+const CONTINUE_RE = /\(\.\.\.truncated, \d+ chars remaining; continue with view_transcript\.start_char=(\d+)\.\.\.\)\s*$/;
 
 export class WisprAdapter implements SourceAdapter {
   readonly id = 'wispr' as const;
@@ -78,12 +82,44 @@ export class WisprAdapter implements SourceAdapter {
     return out;
   }
 
+  /**
+   * The transcript, for drafting: read in 40,000-character ranges up to TRANSCRIPT_MAX_CHARS, with
+   * Wispr's fence lines and continuation markers taken out. Undefined when there is none.
+   */
+  async transcript(item: Item, signal: AbortSignal): Promise<string | undefined> {
+    const id = meetingIdOf(item.id);
+    if (!id) return undefined;
+    return this.o.mcp.session(signal, async (call) => {
+      let text = '';
+      let from = 0;
+      for (;;) {
+        const m = await call('get_meeting', { meeting_id: id, view_transcript: { start_char: from, char_limit: TRANSCRIPT_CHUNK } }, WisprMeeting);
+        const part = m.transcript ?? '';
+        const more = CONTINUE_RE.exec(part);
+        text += more ? part.slice(0, more.index) : part;
+        if (!more) return clean(text);
+        from = Number(more[1]);
+        if (text.length >= TRANSCRIPT_MAX_CHARS) return `${clean(text)}\n[The transcript goes on: cut at ${TRANSCRIPT_MAX_CHARS.toLocaleString('en-GB')} characters.]`;
+      }
+    });
+  }
+
   private async read(call: Call, id: string, me: string): Promise<Item | undefined> {
     const m = await call('get_meeting', { meeting_id: id }, WisprMeeting);
     if (!ready(m)) return undefined;
     const p = await call('get_meeting_participants_enriched', { meeting_id: id }, WisprParticipants);
     return buildItem(m, participantsOf(p, me));
   }
+}
+
+/** Without Wispr's fence lines ("<<<…>>>"); undefined when nothing is left. */
+function clean(text: string): string | undefined {
+  const out = text
+    .split('\n')
+    .filter((l) => !/^<<<.*>>>$/.test(l.trim()))
+    .join('\n')
+    .trim();
+  return out || undefined;
 }
 
 export const wisprFactory = (mcp: WisprMcp, logger?: Logger) => () => new WisprAdapter({ mcp, logger });

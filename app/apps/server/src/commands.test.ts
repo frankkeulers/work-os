@@ -14,6 +14,10 @@ import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
 import { FakeSlack } from './sources/slack/fakeSlack';
 import { isoToTs } from './sources/slack/normalise';
+import { TRANSCRIPT_MISSING } from './actions/vaultDrafter';
+import { wisprFactory } from './sources/wispr/adapter';
+import { FakeWispr } from './sources/wispr/fakeWispr';
+import { WisprMcp } from './sources/wispr/mcp';
 import { run, type RunResult } from './start';
 
 // The server end to end against a fake Slack and a fake Claude: poll, inbox, item, done, reopen,
@@ -26,6 +30,7 @@ let dir: string;
 let res: Extract<RunResult, { running: true }>;
 let slack: FakeSlack;
 let claude: FakeClaude;
+let wispr: FakeWispr;
 let confluence: FakeConfluence;
 let instance = 'dev';
 let notes: Notification[];
@@ -66,6 +71,7 @@ beforeEach(async () => {
     .page('1234567', 'MVI V2 PRD', '<h1>MVI V2</h1><h2>Decisions</h2><ul><li>Bulk export first.</li></ul><h2>Open questions</h2><p>Pricing.</p>', 7, { parent: '1100000' });
   const secrets = memoryKeychain({ [SLACK_TOKEN_ACCOUNT]: slack.token, [CONFLUENCE_TOKEN_ACCOUNT]: FAKE_CONFLUENCE_CREDS });
   claude = fakeClaude();
+  wispr = new FakeWispr(); // off until a test turns it on in settings
   const directory = new SlackDirectory(new SlackApi(secrets, slack.fetch));
   const r = await run({
     env: { WORKOS_INSTANCE: instance, WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' },
@@ -75,7 +81,7 @@ beforeEach(async () => {
     wakeTime: () => wakeTime,
     followZone: () => undefined,
     fetch: slack.fetch,
-    sources: { slack: slackFactory(directory) },
+    sources: { slack: slackFactory(directory), wispr: wisprFactory(new WisprMcp(wispr.connector)) },
     claude: claude.query,
     confluenceFetch: (url, init) => confluence.fetch(url, init),
     notifier: { notify: async (n) => void notes.push(n) },
@@ -473,7 +479,7 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     // The call could read the vault, and nothing else (FR-9.1).
     const draftCall = claude.calls.at(-1)!;
     expect(draftCall.options).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], cwd: vault });
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v2 -->/);
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v3 -->/);
     // The vault conventions written on first run go with the request.
     expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v2 -->/);
 
@@ -593,13 +599,13 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     const [pickCall, draftCall, check] = claude.calls.slice(-3);
     expect(confluence.searches[0]).toBe('space = "MVI" AND type = page AND (id in (1100000) OR ancestor in (1100000))');
     expect(pickCall.options).toMatchObject({ tools: [], mcpServers: {} });
-    expect(pickCall.system).toMatch(/^<!-- prompt: pick-confluence v1 -->/);
+    expect(pickCall.system).toMatch(/^<!-- prompt: pick-confluence v2 -->/);
     expect(pickCall.prompt).toContain('<confluence-catalogue>\n{"id":"1100000","path":"MVI Context","hub":true}\n{"id":"1234567","path":"MVI Context › MVI V2 PRD"}\n</confluence-catalogue>');
     expect(pickCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
     expect(draftCall.options).toMatchObject({ tools: [], mcpServers: {} });
     expect(draftCall.prompt).toContain('"pageId":"1234567"');
     expect(draftCall.prompt).not.toContain('"pageId":"1100000"');
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v3 -->/);
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v4 -->/);
     expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
     expect(check.system).toMatch(/^<!-- prompt: people-check v1 -->/);
     expect(check.options.model).toBe('claude-haiku-5-5');
@@ -861,3 +867,54 @@ describe('notifications (FR-11.1, FR-11.2) and health alerts', () => {
     expect(notes.map((n) => n.title)).toEqual(['Claude needs you', 'Claude is back']);
   });
 });
+
+describe('meeting drafts (R2.3, R2.7)', () => {
+  const MEETING = '0b9e7c2a-5f41-4d8e-9a6b-3c1d2e4f5a60';
+  const ID = `wispr:${MEETING}`;
+
+  beforeEach(async () => {
+    const vault = join(dir, '..', 'vault');
+    await mkdir(join(vault, 'Work/Meetings'), { recursive: true });
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    const settings = { ...view.settings, vaultPath: vault, sources: { ...view.settings.sources, wispr: { enabled: true } } };
+    expect((await call('PUT', '/api/settings', { settings, rules: view.rules })).status).toBe(200);
+    wispr.add({
+      id: MEETING,
+      title: 'Fleet data partner sync',
+      modified_at: new Date(START - 30 * MIN).toISOString().replace('Z', '000Z'),
+      summary: '### Next Steps\n- Frank to send the AIS gap report sample by Friday.',
+      transcript: '<<<transcript start>>>\nFrank: Shall we start with the gap report?\nSpeaker 1: Could we trial it on three vessels?\n<<<transcript end>>>',
+    });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+  });
+  const draft = async () => {
+    const r = await call<Action>('POST', `/api/items/${encodeURIComponent(ID)}/actions`, { type: 'vault_note' });
+    await res.actions.settled();
+    expect(r.status).toBe(201);
+    return { r, call: claude.calls.at(-1)! };
+  };
+
+  it('polls the meeting in, and a vault draft reads its transcript live', async () => {
+    const box = await inbox();
+    expect(box.items.find((i) => i.id === ID)).toMatchObject({ source: 'wispr', kind: 'meeting', title: 'Fleet data partner sync' });
+    const files = await readdir(join(dir, 'items', 'wispr'));
+    expect(files).toHaveLength(1);
+    const stored = await readFile(join(dir, 'items', 'wispr', files[0]), 'utf8');
+    expect(stored).toContain('AIS gap report sample');
+    expect(stored).not.toContain('three vessels'); // the transcript is never stored
+    const { call: c } = await draft();
+    expect(c.prompt).toContain('"kind":"meeting"');
+    expect(c.prompt).toContain('Speaker 1: Could we trial it on three vessels?');
+    expect(c.prompt).not.toContain('<<<transcript');
+    expect(wispr.calls.some((x) => x.tool === 'get_meeting' && x.args.view_transcript)).toBe(true);
+  });
+
+  it('drafts from the summary when the transcript can’t be read', async () => {
+    wispr.signedIn = false;
+    const { r, call: c } = await draft();
+    expect((await call<ItemView>('GET', `/api/items/${encodeURIComponent(ID)}`)).body.actions.find((a) => a.id === r.body.id)?.status).toBe('ready');
+    expect(c.prompt).toContain(TRANSCRIPT_MISSING);
+  });
+});
+

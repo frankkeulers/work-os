@@ -49,7 +49,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Drafts a new note or an append for the Obsidian vault, reading the vault read-only.',
     usedBy: 'Draft vault note',
     defaultText: DEFAULT_VAULT_PROMPT,
-    previousDefaults: ['e7eb3efd72a888f525ea0b05e750f9b3f2b1060c'], // draft-vault v1
+    previousDefaults: ['e7eb3efd72a888f525ea0b05e750f9b3f2b1060c', 'dfa8657114bbe2a91c2bbdecf3c5cceb34d6200a'], // draft-vault v1, v2
   },
   {
     id: 'pick-confluence',
@@ -58,7 +58,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Picks up to three candidate pages from the live Confluence catalogue, or declines when nothing fits.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_PICK_CONFLUENCE_PROMPT,
-    previousDefaults: [],
+    previousDefaults: ['a59eb4aa2de26d243f521deabe060055485ec849'], // pick-confluence v1
   },
   {
     id: 'draft-confluence',
@@ -67,7 +67,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Drafts an entry for one of the picked Confluence pages, or declines when none fits.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_CONFLUENCE_PROMPT,
-    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20', '4b97acd122e6f9a3cee48ea30d36baa1854a88b3'], // draft-confluence v1, v2
+    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20', '4b97acd122e6f9a3cee48ea30d36baa1854a88b3', '3ca183c57f1c9a9b7d4947e27635de168a942cc5'], // draft-confluence v1, v2, v3
   },
   {
     id: 'people-check',

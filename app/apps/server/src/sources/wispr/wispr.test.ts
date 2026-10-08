@@ -4,7 +4,7 @@ import { Item } from '@work-os/shared';
 import { describe, expect, it } from 'vitest';
 import { KeychainError, memoryKeychain, WISPR_OAUTH_ACCOUNT } from '../../config/keychain';
 import { SourceError } from '../errors';
-import { CONCURRENCY, FIRST_POLL_MS, PAGE_SIZE, WisprAdapter } from './adapter';
+import { CONCURRENCY, FIRST_POLL_MS, PAGE_SIZE, TRANSCRIPT_MAX_CHARS, WisprAdapter } from './adapter';
 import { FakeWispr } from './fakeWispr';
 import meetingFixture from './fixtures/get_meeting.json';
 import participantsFixture from './fixtures/get_meeting_participants_enriched.json';
@@ -119,6 +119,27 @@ describe('Wispr Flow source (R2.7)', () => {
     fake.add({ id: uuid(1), modified_at: ts(30) });
     const r = await adapter.fetchSince(`${fixedTs(NOW.toISOString())}|`, ctx({ refetch: [`wispr:${uuid(1)}`, 'slack:C1:1.2'] }));
     expect(r.items.map((i) => i.id)).toEqual([`wispr:${uuid(1)}`]);
+  });
+
+  it('reads a transcript for drafting: whole, without fences, in ranges, cut at the cap', async () => {
+    const { fake, adapter } = setup();
+    const line = (n: number) => `Speaker ${n % 3}: point ${n} about the AIS gap report.`;
+    const long = Array.from({ length: 3000 }, (_, n) => line(n)).join('\n'); // ~130k characters
+    fake.add({ id: uuid(1), modified_at: ts(1), transcript: `<<<transcript start>>>\nFrank: Hello.\nSpeaker 1: Hi.\n<<<transcript end>>>` });
+    fake.add({ id: uuid(2), modified_at: ts(1), transcript: long });
+    fake.add({ id: uuid(3), modified_at: ts(1), transcript: null });
+    const item = (n: number) => ({ id: `wispr:${uuid(n)}` }) as Item;
+    const signal = new AbortController().signal;
+    expect(await adapter.transcript(item(1), signal)).toBe('Frank: Hello.\nSpeaker 1: Hi.');
+    const cut = (await adapter.transcript(item(2), signal))!;
+    expect(cut.startsWith(line(0))).toBe(true);
+    expect(cut).toContain(line(1000)); // read across the 40,000-character ranges, seamlessly
+    expect(cut).not.toContain('truncated');
+    expect(cut).toMatch(/\[The transcript goes on: cut at 60,000 characters\.\]$/);
+    expect(cut.length).toBeLessThan(TRANSCRIPT_MAX_CHARS + 40_000);
+    expect(fake.calls.filter((c) => c.tool === 'get_meeting' && c.args.meeting_id === uuid(2))).toHaveLength(2);
+    expect(await adapter.transcript(item(3), signal)).toBeUndefined();
+    expect(await adapter.transcript({ id: 'slack:C1:1.2' } as Item, signal)).toBeUndefined();
   });
 
   it('reads at most three meetings at a time', () => {

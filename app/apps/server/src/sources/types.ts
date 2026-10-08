@@ -29,6 +29,8 @@ export interface SourceAdapter {
   probe(signal: AbortSignal): Promise<DepState>;
   /** Frank's own ID in this source, once known: his own messages don't need triage again (§5.3). */
   identity?(): { id: string; name?: string } | undefined;
+  /** A meeting's transcript, read live for drafting only and never stored (R2.3, R2.7). */
+  transcript?(item: Item, signal: AbortSignal): Promise<string | undefined>;
 }
 
 /** Priority for catch-up after a wake: one source after another, so a wake is not a burst. */

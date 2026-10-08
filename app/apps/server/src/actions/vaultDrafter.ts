@@ -20,6 +20,15 @@ export const VaultAnswer = z.discriminatedUnion('kind', [
 
 export const DRAFT_KEEP_LAST = 20; // more of the thread than triage sees: the note needs the detail
 
+/** What a meeting's draft is told when its transcript couldn't be read (R2.7). */
+export const TRANSCRIPT_MISSING = 'Not available: draft from the summary and notes.';
+
+/** The thread as a draft sees it: more of it than triage, its permalink, and a meeting's transcript. */
+export function draftThread(item: Item, me: Me, transcript?: string) {
+  const thread = { ...threadForTriage(item, me, DRAFT_KEEP_LAST), permalink: item.permalink };
+  return item.kind === 'meeting' ? { ...thread, transcript: transcript ?? TRANSCRIPT_MISSING } : thread;
+}
+
 export interface VaultDraftDeps {
   claude: ClaudeAdapter;
   settings: Settings;
@@ -29,6 +38,8 @@ export interface VaultDraftDeps {
   now: () => Date;
   signal?: AbortSignal;
   onTurn?: (usedTool: boolean) => void;
+  /** A meeting's transcript, read live for this draft (R2.3). */
+  transcript?: string;
 }
 
 export const vaultExists = (root: string) =>
@@ -37,8 +48,8 @@ export const vaultExists = (root: string) =>
     () => false,
   );
 
-export function renderVaultRequest(item: Item, me: Me, conventions: string, now: Date): string {
-  const thread = { ...threadForTriage(item, me, DRAFT_KEEP_LAST), permalink: item.permalink };
+export function renderVaultRequest(item: Item, me: Me, conventions: string, now: Date, transcript?: string): string {
+  const thread = draftThread(item, me, transcript);
   return [
     `Today: ${now.toISOString().slice(0, 10)}`,
     '<vault-conventions>',
@@ -59,7 +70,7 @@ export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Pro
       purpose: 'draft_vault',
       model,
       system: d.prompt.text,
-      prompt: renderVaultRequest(item, me, d.conventions, d.now()),
+      prompt: renderVaultRequest(item, me, d.conventions, d.now(), d.transcript),
       promptVersion: d.prompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,

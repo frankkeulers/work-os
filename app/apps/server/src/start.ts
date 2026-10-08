@@ -320,6 +320,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // Filing guidance: config/vault-conventions.md and config/psg-context-builder.md, or their defaults.
     routing: async () => (await loadPromptFile(config.dataDir, 'confluence-routing')).text,
     conventions: async () => (await loadPromptFile(config.dataDir, 'vault-conventions')).text,
+    transcript: async (item, signal) => buildSources(settings.settings, factories).find((s) => s.id === item.source)?.transcript?.(item, signal),
     notify: (n) => publish(n),
   });
   await actions.recover();
