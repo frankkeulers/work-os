@@ -50,11 +50,12 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 ## Settings (applied)
 
 - Each section is its own view at `/settings/<section>`, with grouped navigation:
+  - **Account:** Profile, Appearance
   - **Inbox:** Triage rules, Slack, Notifications
   - **Actions:** Write targets
   - **Claude:** Models, Prompts, Budgets
   - **System:** Storage & data
-  - **Account:** Profile, Appearance
+- Plain `/settings` still opens Triage rules, the section used most.
 - **Nav badges:**
   - Write targets shows "Dry-run" while dry-run is on.
   - A section with an unsaved invalid field shows a red dot.

@@ -14,7 +14,7 @@ import { usePrefs } from '../store/prefs';
 import { errorToast, toast } from '../store/toasts';
 import { LEGACY_ANCHORS, SECTIONS, type Confirm, type Ctx } from './settings/sections';
 
-const GROUPS = ['Inbox', 'Actions', 'Claude', 'System', 'Account'] as const;
+const GROUPS = ['Account', 'Inbox', 'Actions', 'Claude', 'System'] as const;
 
 function SaveStatus({ st, savedAt, onRetry }: { st: EditorState; savedAt: string; onRetry: () => void }) {
   const now = useNow(60_000);

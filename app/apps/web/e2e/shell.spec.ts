@@ -120,6 +120,10 @@ test('the profile: names show on the account button, as initials until there is 
   const nav = page.getByRole('navigation', { name: 'Main' });
   const account = nav.getByRole('button', { name: /^Account/ });
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible();
+  // Account leads the Settings nav.
+  const sections = page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link');
+  await expect(sections.nth(0)).toHaveText('Profile');
+  await expect(sections.nth(1)).toHaveText('Appearance');
   await expect(account).toHaveAccessibleName('Account');
 
   await page.getByLabel('First name').fill('Ada');
