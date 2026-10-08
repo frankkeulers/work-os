@@ -1,0 +1,158 @@
+{
+  "note": "P0-11 (8 Oct 2026): input schemas of the read tools Work OS uses, as listed by wispr-meetings v1. Descriptions omitted.",
+  "tools": [
+    {
+      "name": "get_account_info",
+      "annotations": {
+        "title": "Get account info",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "search_meetings",
+      "annotations": {
+        "title": "Search meetings",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Keyword matching title, summary, and notes, not transcript. Omit to browse the date window or recent meetings."
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "title",
+              "content",
+              "both"
+            ],
+            "description": "Which field to search: title, content, or both."
+          },
+          "attendee_emails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter by attendee email(s), exact addresses (case-insensitive). One email is the common case; pass several with attendee_match to require all or any of them. Omit to not filter by attendee."
+          },
+          "attendee_match": {
+            "type": "string",
+            "enum": [
+              "any",
+              "all"
+            ],
+            "description": "How to combine multiple attendee_emails: 'any' (default) matches anyone in the list; 'all' matches only items where every listed attendee was present. Ignored for a single email."
+          },
+          "since": {
+            "type": "string",
+            "description": "Only meetings starting at or after this ISO datetime with offset/Z (calendar start, else stored creation time)."
+          },
+          "until": {
+            "type": "string",
+            "description": "Only meetings starting strictly before this ISO datetime with offset/Z. Use the next local midnight for a day filter."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Page size (default 25, max 200)."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor: the next_cursor from a previous response. Omit for the first page."
+          }
+        }
+      }
+    },
+    {
+      "name": "get_meeting",
+      "annotations": {
+        "title": "Get meeting",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "meeting_id": {
+            "type": "string",
+            "description": "The meeting id from search_meetings."
+          },
+          "view_content": {
+            "type": "object",
+            "description": "Select a bounded character range of the normalized markdown content. Omit this object to return the first range. If the response is truncated, call the tool again with start_char set to the exact continuation offset in the appended marker.",
+            "properties": {
+              "start_char": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0,
+                "description": "Zero-based character offset into the normalized markdown content (default 0)."
+              },
+              "char_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 40000,
+                "default": 12000,
+                "description": "Maximum content characters to return (default 12000, server-enforced max 40000)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "view_transcript": {
+            "type": "object",
+            "description": "Request a bounded character range of the normalized plaintext transcript. Omit this object to omit the transcript. If the response is truncated, call the tool again with start_char set to the exact continuation offset in the appended marker.",
+            "properties": {
+              "start_char": {
+                "type": "integer",
+                "minimum": 0,
+                "default": 0,
+                "description": "Zero-based character offset into the normalized plaintext transcript (default 0)."
+              },
+              "char_limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 40000,
+                "default": 12000,
+                "description": "Maximum transcript characters to return (default 12000, server-enforced max 40000)."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "meeting_id"
+        ]
+      }
+    },
+    {
+      "name": "get_meeting_participants_enriched",
+      "annotations": {
+        "title": "Get meeting participants",
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "meeting_id": {
+            "type": "string",
+            "description": "The meeting id from search_meetings."
+          }
+        },
+        "required": [
+          "meeting_id"
+        ]
+      }
+    }
+  ]
+}

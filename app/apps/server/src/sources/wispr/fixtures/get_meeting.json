@@ -1,0 +1,15 @@
+{
+  "id": "0b9e7c2a-5f41-4d8e-9a6b-3c1d2e4f5a60",
+  "title": "Fleet data partner sync",
+  "content": "Ask about their tanker coverage outside the Gulf.",
+  "summary": "### Context and Goals\n- The partner wants earlier warning of AIS gaps on vessels they insure.\n\n### Discussion\n- Their ops team reviews gaps by hand today.\n- Our gap report already flags dark periods over six hours.\n\n### Next Steps\n- Frank to send the AIS gap report sample by Friday.\n- Partner to share three vessels for the trial.\n\n### Decisions Made\n- Trial runs for four weeks from 19 October.",
+  "finalized": true,
+  "has_transcript": true,
+  "attendees": [],
+  "todos": [],
+  "start": "2026-10-07T13:00:12.104512Z",
+  "end": "2026-10-07T13:41:55.830211Z",
+  "modified_at": "2026-10-07T13:44:02.517309Z",
+  "share_link": "https://wisprflow.ai/m/synthetic-0b9e7c2a",
+  "transcript": "<<<transcript start — speaker turns follow>>>\nFrank: Thanks for making time. Shall we start with the gap report?\nSpeaker 1: Yes. Our ops team checks gaps by hand every morning.\nFrank: Our report flags any dark period over six hours.\nSpeaker 1: Could we trial it on three vessels?\n(...truncated, 1200 chars remaining; continue with view_transcript.start_char=240...)\n<<<transcript end>>>"
+}

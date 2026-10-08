@@ -24,6 +24,7 @@
     "agent:uninstall": "npm run agent -w @work-os/server -- uninstall",
     "agent:status": "npm run agent -w @work-os/server -- status",
     "spike:slack": "npm run spike:slack -w @work-os/server",
+    "spike:wispr": "npm run spike:wispr -w @work-os/server --",
     "e2e:server": "npm run e2e:server -w @work-os/web",
     "dev:mock": "npm run dev:mock -w @work-os/web",
     "eval": "npm run eval -w @work-os/server --",

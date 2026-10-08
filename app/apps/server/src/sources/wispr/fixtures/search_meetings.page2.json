@@ -1,0 +1,19 @@
+{
+  "meetings": [
+    {
+      "id": "e5a2c9d1-8f37-4b6a-a0c2-1d4e6f8b9a73",
+      "title": "Untitled meeting",
+      "content_excerpt": "",
+      "finalized": false,
+      "has_transcript": false,
+      "attendees": [],
+      "start": "2026-10-05T15:02:44.009121Z",
+      "end": "2026-10-05T15:20:03.551930Z",
+      "modified_at": "2026-10-05T15:20:09.774410Z",
+      "share_link": null
+    }
+  ],
+  "count": 1,
+  "has_more": false,
+  "note": "Every timestamp is UTC."
+}

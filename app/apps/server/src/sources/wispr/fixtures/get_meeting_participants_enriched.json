@@ -1,0 +1,9 @@
+{
+  "meeting_id": "0b9e7c2a-5f41-4d8e-9a6b-3c1d2e4f5a60",
+  "user": { "name": "Frank Keulers", "email": "frank@example.com", "domain": "example.com" },
+  "participants": [
+    { "name": "Frank", "origin": "self", "is_self": true, "spoke": true, "relationship": "self" },
+    { "name": "Speaker 1", "origin": "llm", "is_self": false, "spoke": true, "relationship": "unknown" }
+  ],
+  "note": "Participants come from the speaker map; no calendar event is linked."
+}

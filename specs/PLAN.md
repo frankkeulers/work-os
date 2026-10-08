@@ -78,6 +78,7 @@ Stop or redesign if any of these hold:
 | P0-8 | Create a personal Atlassian API token for Confluence REST writes, and store it in the macOS Keychain. | Frank | Deterministic writes without an LLM in the loop. |
 | P0-9 | Spike: confirm the claude.ai Microsoft 365 connector loads in a headless Agent SDK run started by launchd, and that a relay call (R2.5) returns the raw `outlook_email_search` result through a `PostToolUse` hook. Record whether the SDK init message reports connector status, and the tokens and latency per relay call. Gates Phase 2 email only. **Done, passed (findings below).** | Claude Code | Our own Graph app registration is unlikely to get admin consent. The connector is already approved for the tenant. |
 | P0-10 | Spike: map Wispr Flow's local database (`~/Library/Application Support/Wispr Flow/flow.sqlite`). Identify the note and meeting tables and columns, choose cursor columns, confirm a read-only reader is safe in WAL mode while the app writes, and capture a schema fingerprint. Gates Phase 2 Wispr Flow only. **Done, passed (findings below).** | Claude Code | Local reads need no network, no tokens and no MCP, but the schema is undocumented. |
+| P0-11 | Spike: sign in to Wispr Flow's official MCP server (`https://api.wisprflow.ai/connect/mcp`) from a headless Node process, list its tools, confirm meetings can be listed incrementally, and confirm the sign-in refreshes with no browser. Gates the Wispr Flow source through the MCP (amended from P0-10's local read, at Frank's choice). **Done, passed (findings below).** | Claude Code | The MCP is the only supported way meeting data leaves Wispr Flow, and it adds attendees and the share link. Its tool contract is undocumented. |
 
 ### Phase 0 findings
 
@@ -120,6 +121,33 @@ Read rules:
 - **Triage input:** triage reads `summary` and `notes` (R2.3). The transcript is read only for vault drafts.
 
 Schema fingerprint: SHA-256 over `PRAGMA table_info` of `Meetings`, `Notes` and `Todos`, prefix `fd93d2789cea77ff`. A concurrent-writer test belongs to the reader's unit tests, against a synthetic database.
+
+**P0-11: Wispr Flow MCP (8 Oct 2026, server `wispr-meetings` v1, MCP SDK 1.32.1, Wispr Flow 1.6.1074).** Passed. The script is `npm run spike:wispr` (`apps/server/src/cli/wispr-spike.ts`); it prints shapes and counts only.
+
+Sign-in:
+- **OAuth 2.1 with dynamic client registration and PKCE** through the SDK's `OAuthClientProvider`. The authorisation server is `mcp-auth.wisprflow.com`. Scopes `openid offline_access`, a public client (no secret) and a loopback redirect to `127.0.0.1` all work.
+- **Tokens:** a bearer access token valid for 7 days (`expires_in` 604800) and a refresh token.
+- **Refresh with no browser works:** `auth()` returned `AUTHORIZED` in 1.3 s. **The refresh token rotates on every refresh**, so the stored copy must be replaced each time, by one writer.
+- **Speed:** connect about 1 s, then about 0.7 s per tool call.
+- **Not measured:** how long an unused refresh token lasts, and the rate limit (docs: wait a minute after "Too many requests").
+
+Tools: 15, all annotated `readOnlyHint: true`. The source uses four of them (schemas in `apps/server/src/sources/wispr/fixtures/tools.json`):
+- `get_account_info()`: the user's name and display-name aliases.
+- `search_meetings(query?, since?, until?, limit?, cursor?, …)`: with no query, meetings **newest-modified first** (checked across 3 pages, 25 meetings). `since`/`until` filter on the meeting's start, not on `modified_at`. Page size up to 200, opaque `next_cursor`, capped at 1000 results per query.
+- `get_meeting(meeting_id, view_content?, view_transcript?)`: everything for one meeting in one call.
+- `get_meeting_participants_enriched(meeting_id)`: the user (with email) and each participant with `is_self`, `spoke`, `origin` and `relationship`.
+
+Results come as `structuredContent` (the same JSON is also in a text block). Every timestamp is UTC ISO 8601 with microseconds, ending in `Z`.
+- **Search result:** `id` (UUID), `title`, `content_excerpt`, `finalized`, `has_transcript`, `attendees`, `start`, `end`, `modified_at`, `share_link` (https, the meeting's notes page in Wispr Flow).
+- **Meeting:** adds `content` (Frank's own notes, markdown), `summary` (markdown with `###` sections; action items are under `### Next Steps`), `todos` (empty so far) and `transcript`.
+- **Transcript:** plain text, one `Speaker: text` turn per line, between two `<<<…>>>` fence lines. Unknown speakers are `Speaker 1`, `Speaker 2`. It is bounded (default 12,000 characters, maximum 40,000) and ends with `(...truncated, N chars remaining; continue with view_transcript.start_char=M...)` when more remains.
+- **Attendees** come only from a linked calendar event: none of the 25 meetings had any. Participants from the speaker map have names but no emails.
+
+Read rules:
+- **Cursor:** `modified_at` plus `id` of the newest meeting seen. A poll pages `search_meetings` with no query until it reaches a meeting at or before the cursor. Meetings are processed oldest first, so the cursor only moves forward.
+- **Filter:** `finalized = true`. A meeting that is not finalised yet is picked up when its `modified_at` changes.
+- **Triage input:** `summary` and `content` (R2.3). The transcript is fetched only when drafting (vault or Confluence).
+- **Permalink:** `share_link`. A meeting without one falls back to `wispr-flow://`, the scheme the app registers.
 
 ---
 
