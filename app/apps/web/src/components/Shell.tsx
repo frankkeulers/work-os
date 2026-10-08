@@ -5,11 +5,13 @@ import { API_MODE, api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
+import { appHealth, type AppHealth } from '../lib/health';
 import { isLive } from '../lib/next';
 import { shownName } from '../lib/profile';
 import { usePrefs, type Scope, type Theme } from '../store/prefs';
 import { Avatar } from './Avatar';
 import { BrandIcon, SourceMark } from './BrandIcon';
+import { problemsOf } from './HealthBanner';
 import { Icon, type IconName } from './icons';
 import { Dot, IconButton, PhaseTag, Segmented, cx, phaseToast, usePopover, type Phase } from './ui';
 
@@ -36,15 +38,25 @@ const SLACK_DOT = {
   paused: 'var(--gray-mid)',
 } as const;
 
+/** Work OS's own health, as a dot on the Usage & health item. */
+const HEALTH_DOT: Record<AppHealth['tone'], string> = {
+  ok: 'var(--green)',
+  info: 'var(--accent)',
+  warn: 'var(--amber)',
+  bad: 'var(--red)',
+  idle: 'var(--gray-mid)',
+};
+
 /** A nav label: visible when expanded, kept for screen readers when the sidebar is collapsed. */
 const Label = ({ collapsed, children }: { collapsed: boolean; children: ReactNode }) => <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{children}</span>;
 
-function NavItem({ to, icon, label, count, end, collapsed }: { to: string; icon: IconName; label: string; count?: number; end?: boolean; collapsed: boolean }) {
+function NavItem({ to, icon, label, count, status, end, collapsed }: { to: string; icon: IconName; label: string; count?: number; status?: AppHealth; end?: boolean; collapsed: boolean }) {
+  const extra = count ?? status?.label;
   return (
     <NavLink
       to={to}
       end={end}
-      title={collapsed ? (count !== undefined ? `${label} · ${count}` : label) : undefined}
+      title={collapsed ? (extra !== undefined ? `${label} · ${extra}` : label) : status?.label}
       className={({ isActive }) =>
         cx(
           'relative flex min-h-10 items-center gap-2.5 rounded-lg px-2.5 no-underline',
@@ -60,6 +72,18 @@ function NavItem({ to, icon, label, count, end, collapsed }: { to: string; icon:
         ) : (
           <span className="font-mono text-xs">{count}</span>
         ))}
+      {status && (
+        <>
+          {collapsed ? (
+            <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-surface box-content" style={{ background: HEALTH_DOT[status.tone] }} />
+          ) : (
+            <Dot color={HEALTH_DOT[status.tone]} />
+          )}
+          <span className="sr-only" data-health={status.tone}>
+            {status.label}
+          </span>
+        </>
+      )}
     </NavLink>
   );
 }
@@ -194,6 +218,8 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const scope = usePrefs((s) => s.scope);
   const collapsed = usePrefs((s) => s.navCollapsed);
   const setCollapsed = usePrefs((s) => s.setNavCollapsed);
+  const health = useApiQuery(() => api.getHealth(), onTopics('health'), []).data;
+  const status = health && appHealth(health, problemsOf(health));
   const full = scope === 'full';
   // Outlook and Teams items are P2: they count only in Full scope, as on the Inbox.
   const count = inbox?.items.filter((i) => (full || isLive(i.source)) && (i.lane === 'now' || i.lane === 'today' || i.lane === 'file')).length;
@@ -230,12 +256,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
       <nav aria-label="Main" className={cx('flex h-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden whitespace-nowrap', API_MODE === 'mock' ? 'pb-16' : 'pb-3', collapsed ? 'px-2.5' : 'px-3.5')}>
         {/* 64px, the height of the Inbox top bar, so the two line up. */}
         <div className={cx('flex h-16 shrink-0 items-center gap-2', collapsed ? 'justify-center' : 'pl-2')}>
-          {!collapsed && (
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <div className="text-[17px] font-semibold tracking-tight">Work OS</div>
-              <div className="font-mono text-[11px] text-muted">local · 127.0.0.1</div>
-            </div>
-          )}
+          {!collapsed && <div className="min-w-0 flex-1 text-[17px] font-semibold tracking-tight">Work OS</div>}
           {toggle}
         </div>
         <div className="flex flex-col gap-0.5">
@@ -246,7 +267,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
               <FutureNavItem icon="briefs" label="Briefs" phase="P4" collapsed={collapsed} />
             </>
           )}
-          <NavItem to="/usage" icon="usage" label="Usage & health" collapsed={collapsed} />
+          <NavItem to="/usage" icon="usage" label="Usage & health" status={status} collapsed={collapsed} />
           <NavItem to="/settings" icon="settings" label="Settings & rules" collapsed={collapsed} />
         </div>
         <div className="flex flex-col gap-2">

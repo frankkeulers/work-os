@@ -44,5 +44,6 @@ See [Dev and prod](dev-and-prod.md) and [Settings › Write targets](/settings/w
 ## Where to look when something is off
 
 The banner at the top of the inbox says when a dependency (Slack, Claude, Confluence, the
-Keychain, the network) has a problem, with what to do about it. [Usage & health](/usage) has the
-detail. [Troubleshooting](troubleshooting.md) covers the common cases.
+Keychain, the network) has a problem, with what to do about it. The dot beside Usage & health in
+the sidebar shows the same at a glance: green when all is well, amber with a problem, red in safe
+mode. Hover it for the reason. [Usage & health](/usage) has the detail. [Troubleshooting](troubleshooting.md) covers the common cases.

@@ -1,4 +1,7 @@
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+
+const APP = join(import.meta.dirname, '../../..');
 
 test('the sidebar collapses to an icon rail and remembers it', async ({ page }) => {
   await page.goto('/');
@@ -11,7 +14,7 @@ test('the sidebar collapses to an icon rail and remembers it', async ({ page }) 
   // Labels become tooltips, but links keep their names and the Inbox count shows as a badge.
   // (The label stays in the DOM for screen readers, visually hidden, so check the link's size.)
   const usage = nav.getByRole('link', { name: /Usage & health/ });
-  await expect(usage).toHaveAttribute('title', 'Usage & health');
+  await expect(usage).toHaveAttribute('title', 'Usage & health · Running normally');
   expect((await usage.boundingBox())!.width).toBeLessThanOrEqual(40);
   await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('11');
   // The account menu still opens from the rail, beside it rather than clipped by it.
@@ -34,6 +37,33 @@ test('the sidebar collapses to an icon rail and remembers it', async ({ page }) 
   await page.keyboard.press('[');
   await expect(sidebar).toHaveCSS('width', '220px');
   await expect(nav.getByText('Work OS')).toBeVisible();
+});
+
+test('the Usage & health item carries a dot for the app’s own health', async ({ page }) => {
+  await page.goto('/');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const usage = nav.getByRole('link', { name: /Usage & health/ });
+  // No address under the name: the header is the name and the toggle.
+  await expect(nav.getByText('127.0.0.1')).toHaveCount(0);
+  await expect(usage.locator('[data-health]')).toHaveAttribute('data-health', 'ok');
+  await expect(usage).toHaveAttribute('title', 'Running normally');
+  await nav.screenshot({ path: join(APP, 'screenshots/sidebar-health-light.png') });
+
+  // A rejected Slack token degrades the app: the dot turns amber and says what the banner says.
+  await page.keyboard.press('Backquote');
+  const drawer = page.getByRole('complementary', { name: 'Scenarios' });
+  await drawer.getByRole('group', { name: 'Scenario tab' }).getByRole('button', { name: 'Controls' }).click();
+  await drawer.getByRole('button', { name: 'Auth failure', exact: true }).click();
+  await drawer.getByRole('button', { name: 'Close scenarios' }).click();
+  await expect(usage.locator('[data-health]')).toHaveAttribute('data-health', 'warn');
+  await expect(usage).toHaveAttribute('title', 'Slack token in Keychain: rejected by Slack');
+  await nav.screenshot({ path: join(APP, 'screenshots/sidebar-health-problem-light.png') });
+
+  // On the rail it sits on the icon's corner, and the tooltip keeps the reason.
+  await page.keyboard.press('[');
+  await expect(usage).toHaveAttribute('title', 'Usage & health · Slack token in Keychain: rejected by Slack');
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await nav.screenshot({ path: join(APP, 'screenshots/sidebar-health-rail-dark.png'), animations: 'disabled' });
 });
 
 test('only the page content scrolls: the sidebar and top bars stay put', async ({ page }) => {
