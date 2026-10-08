@@ -45,6 +45,9 @@ on in [Settings › Wispr Flow](/settings/wispr). **Poll now** in the inbox read
 Wispr Flow needs the network: while you are offline, its meetings wait and arrive on the next poll
 once you are back.
 
+[Usage & health](/usage#health) shows Wispr Flow under Source health, beside Slack: its state,
+when it last read and when it reads next.
+
 ## Reconnecting
 
 Work OS renews the sign-in on its own. If it lapses (you signed out of Wispr

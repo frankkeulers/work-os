@@ -676,6 +676,7 @@ export class MockServer implements WorkOsApi, MockControls {
       budgets,
       byPurpose: [...group.values()].sort((a, b) => b.costEquivalent - a.costEquivalent),
       source: this.sourceHealth(),
+      sources: [this.sourceHealth(), ...this.wisprHealth()],
       criteria: this.criteria(last, budgets),
       lastEval: last,
       evalRunning: this.s.evalRunning,

@@ -214,7 +214,8 @@ export interface UsageView {
   days: { date: string; label: string; triage: number; drafts: number }[];
   budgets: BudgetState;
   byPurpose: UsageRow[];
-  source: SourceHealth;
+  source: SourceHealth; // Slack
+  sources: SourceHealth[]; // every enabled source, Slack first (R2.1)
   criteria: Criterion[];
   lastEval?: EvalReport;
   evalRunning: boolean;

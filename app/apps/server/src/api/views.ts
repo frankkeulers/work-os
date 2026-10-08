@@ -383,6 +383,7 @@ export function usageView(d: ViewDeps): UsageView {
     budgets: b,
     byPurpose: [...groups.values()].sort((x, y) => y.costEquivalent - x.costEquivalent),
     source: slackHealth(d),
+    sources: enabledSources(d),
     criteria: criteria(last, b),
     ...(last && { lastEval: last }),
     evalRunning: d.evals?.running ?? false,

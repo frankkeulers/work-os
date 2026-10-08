@@ -2,7 +2,7 @@ import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, Settings, SettingsView, WorkEvent } from '@work-os/shared';
+import type { ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, Settings, SettingsView, UsageView, WorkEvent } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDataDir, paths } from '../config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
@@ -112,7 +112,7 @@ describe('request guard (FR-3.3)', () => {
     expect((await get('/api/inbox')).statusCode).toBe(200);
   });
 
-  it('lists every enabled source in the inbox health, Slack first (R2.1)', async () => {
+  it('lists every enabled source in the inbox and usage health, Slack first (R2.1)', async () => {
     expect((await get('/api/inbox')).json<InboxView>().sources.map((x) => x.id)).toEqual(['slack']);
     await lifecycle.stop('test');
     await rm(dir, { recursive: true, force: true });
@@ -123,6 +123,7 @@ describe('request guard (FR-3.3)', () => {
     expect(inbox.sources[1]).toMatchObject({ id: 'wispr', status: 'never', message: 'Not polled yet.' });
     expect(inbox.sources[1].mode).toBeUndefined();
     expect(inbox.source).toMatchObject({ id: 'slack', mode: 'search' });
+    expect((await get('/api/usage')).json<UsageView>().sources.map((x) => x.id)).toEqual(['slack', 'wispr']);
   });
 
   it('refuses a foreign Host, which is how DNS rebinding arrives', async () => {

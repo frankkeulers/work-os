@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import type { UsagePurpose } from '@work-os/shared';
+import type { SourceHealth as SourceHealthView, SourceId, UsagePurpose } from '@work-os/shared';
 import { api, type BudgetLine, type Criterion, type UsageView } from '../api';
-import { BrandIcon } from '../components/BrandIcon';
+import { BrandIcon, SourceMark } from '../components/BrandIcon';
 import { HealthBanner } from '../components/HealthBanner';
 import { Banner, Button, MvpTag, PhaseTag, SectionCard, Spinner, cx } from '../components/ui';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
@@ -190,32 +190,50 @@ const SLACK = {
   paused: { label: 'Paused', dot: 'var(--gray-mid)', cls: 'text-muted' },
 } as const;
 
+/** A source's state in words. Slack's sign-in is a token; Wispr Flow's is an account sign-in. */
+const stateOf = (h: SourceHealthView) => (h.status === 'auth_failed' && h.id !== 'slack' ? { ...SLACK.auth_failed, label: 'Signed out' } : h.status === 'backoff' && h.id !== 'slack' ? { ...SLACK.backoff, label: 'Rate-limited, waiting' } : SLACK[h.status]);
+
+const SOURCE_NAME: Partial<Record<SourceId, string>> = { slack: 'Slack', wispr: 'Wispr Flow' };
+
+function SourceRow({ h }: { h: SourceHealthView }) {
+  const st = stateOf(h);
+  const slack = h.id === 'slack';
+  const details = [
+    slack && `mode ${h.mode === 'search' ? 'search.messages' : 'conversations.history'}`,
+    h.lastPollAt && `last ${fmtTime(h.lastPollAt)}`,
+    h.status === 'backoff' && h.retryAt ? `retry ${fmtTime(h.retryAt)}` : h.nextPollAt && `next ${fmtTime(h.nextPollAt)}`,
+    slack && `429s today ${h.rateLimitedToday}`,
+    slack && h.cursor && `cursor ${h.cursor}`,
+  ].filter(Boolean);
+  return (
+    <div className="flex flex-col gap-1 rounded-lg bg-surface-2 px-3 py-2.5" data-testid={`${h.id}-health`}>
+      <div className="flex items-center gap-2">
+        <SourceMark source={h.id} size={16} decorative />
+        <span className="flex-1 font-semibold">{SOURCE_NAME[h.id] ?? h.id}</span>
+        <span className="h-2 w-2 rounded-full" style={{ background: st.dot }} />
+        <span className={cx('text-xs font-medium', st.cls)}>{st.label}</span>
+      </div>
+      {details.length > 0 && <div className="font-mono text-[11px] leading-relaxed text-muted">{details.join(' · ')}</div>}
+      {h.message && h.status !== 'healthy' && <div className="text-xs text-ink-2">{h.message}</div>}
+      {h.id === 'wispr' && h.status === 'auth_failed' && (
+        <Link to="/settings/wispr" className="text-xs font-medium">
+          Reconnect in Settings
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function SourceHealth({ u }: { u: UsageView }) {
   const full = usePrefs((s) => s.scope === 'full');
-  const src = u.source;
-  const st = SLACK[src.status];
-  const details = [
-    `mode ${src.mode === 'search' ? 'search.messages' : 'conversations.history'}`,
-    src.lastPollAt && `last ${fmtTime(src.lastPollAt)}`,
-    src.status === 'backoff' && src.retryAt ? `retry ${fmtTime(src.retryAt)}` : src.nextPollAt && `next ${fmtTime(src.nextPollAt)}`,
-    `429s today ${src.rateLimitedToday}`,
-    src.cursor && `cursor ${src.cursor}`,
-  ].filter(Boolean);
   return (
     <SectionCard className="flex min-w-0 flex-[1_1_320px] scroll-mt-6 flex-col gap-2.5 p-4">
       <h2 id="health" className="m-0 scroll-mt-6 text-[15px] font-semibold">
         Source health
       </h2>
-      <div className="flex flex-col gap-1 rounded-lg bg-surface-2 px-3 py-2.5" data-testid="slack-health">
-        <div className="flex items-center gap-2">
-          <BrandIcon brand="slack" size={16} decorative />
-          <span className="flex-1 font-semibold">Slack</span>
-          <span className="h-2 w-2 rounded-full" style={{ background: st.dot }} />
-          <span className={cx('text-xs font-medium', st.cls)}>{st.label}</span>
-        </div>
-        <div className="font-mono text-[11px] leading-relaxed text-muted">{details.join(' · ')}</div>
-        {src.message && src.status !== 'healthy' && <div className="text-xs text-ink-2">{src.message}</div>}
-      </div>
+      {u.sources.map((h) => (
+        <SourceRow key={h.id} h={h} />
+      ))}
       {full &&
         (
           [

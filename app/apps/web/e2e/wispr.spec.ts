@@ -83,3 +83,19 @@ test('a Wispr Flow meeting lands in the inbox after Connect, with its action ite
   await dismissToasts(page);
   await page.screenshot({ path: join(APP, 'screenshots/inbox-meeting-light.png') });
 });
+
+test('Usage & health lists Wispr Flow under Source health once it is connected (R2.1)', async ({ page }) => {
+  await page.goto('/usage');
+  await expect(page.getByTestId('slack-health')).toBeVisible();
+  await expect(page.getByTestId('wispr-health')).toHaveCount(0);
+
+  await connect(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Usage & health' }).click();
+  const wispr = page.getByTestId('wispr-health');
+  await expect(wispr).toContainText('Wispr Flow');
+  await expect(wispr).toContainText('Healthy');
+  await expect(page.getByTestId('slack-health')).toContainText('mode search.messages'); // Slack's line is unchanged
+  await dismissToasts(page);
+  await page.locator('#health').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(APP, 'screenshots/usage-sources-light.png') });
+});
