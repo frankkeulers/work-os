@@ -253,11 +253,42 @@ test('the Confluence target links to the page, and rich-text edits are saved as 
   await page.keyboard.press('ControlOrMeta+a');
   await action.getByRole('toolbar', { name: 'Formatting' }).getByRole('button', { name: 'Bold' }).click();
   await expect(editor.locator('strong')).toHaveText('Ship it');
-  await action.getByRole('group', { name: 'Editor view' }).getByRole('button', { name: 'Markdown' }).click();
+  await action.getByRole('group', { name: 'Draft view' }).getByRole('button', { name: 'Markdown' }).click();
   await expect(page.getByLabel('Draft text')).toHaveValue('**Ship it**');
   await action.getByRole('button', { name: 'Save edits' }).click();
+  // The view holds after saving; Rich text renders the saved markdown.
+  await expect(action.getByLabel('Draft text preview')).toHaveText('**Ship it**');
+  await action.getByRole('group', { name: 'Draft view' }).getByRole('button', { name: 'Rich text' }).click();
   await expect(action.getByLabel('Draft text preview').locator('strong')).toHaveText('Ship it');
   await expect(action.getByText('Edited', { exact: true })).toBeVisible();
+});
+
+test('a vault append reads as rich text under the note’s lines, with Markdown a click away', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Also file' }).getByRole('button', { name: 'Review' }).click();
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  await expect(action.getByRole('tab', { name: /Vault note/ })).toHaveAttribute('aria-selected', 'true');
+  // The heading is named, not shown as markdown.
+  await expect(action.getByText('under Decisions', { exact: true })).toBeVisible();
+  // Rich text by default: the new lines, and the note's lines above them for where they land.
+  await expect(action.getByLabel('Draft text preview').locator('code').first()).toHaveText('imo_str');
+  await expect(action.getByLabel('Existing lines preview')).toContainText('v2 pagination uses cursors');
+  // The same switch shows the raw text without editing.
+  const view = action.getByRole('group', { name: 'Draft view' });
+  await view.getByRole('button', { name: 'Markdown' }).click();
+  await expect(action.getByLabel('Draft text preview')).toContainText('`imo_str`');
+  await expect(action.getByLabel('Existing lines preview')).toContainText('## Decisions');
+  // Checks and Re-draft sit together under the draft.
+  await expect(action.getByRole('button', { name: 'Checks passed' })).toBeVisible();
+  await expect(action.getByRole('button', { name: 'Re-draft' })).toBeVisible();
+  // Edit keeps the view; Cancel with nothing changed doesn't ask.
+  await action.getByRole('button', { name: 'Edit text' }).click();
+  await expect(page.getByLabel('Draft text')).toBeFocused();
+  await expect(page.getByLabel('Draft text')).toHaveValue(/`imo_str`/);
+  await view.getByRole('button', { name: 'Rich text' }).click();
+  await action.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Discard your edits?' })).toHaveCount(0);
+  await expect(action.getByRole('button', { name: 'Approve and write to sandbox' })).toBeVisible();
 });
 
 test('click the draft text to edit it in place; Save and Cancel sit under the editor', async ({ page }) => {

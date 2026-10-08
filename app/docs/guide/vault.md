@@ -3,7 +3,7 @@ title: Filing to the vault
 group: Filing
 order: 60
 summary: Notes for your Obsidian vault, drafted to follow its conventions.
-updated: 2026-10-07
+updated: 2026-10-08
 ---
 
 Choose **Draft vault note** on an item. Claude reads your vault, read-only, to find where the
@@ -26,7 +26,9 @@ The vault path is set in [Settings › Write targets](/settings/writing).
 
 ## Approving and writing
 
-Review the draft, edit it if you like, and approve.
+Review the draft, edit it if you like, and approve. The draft shows as formatted text; switch to
+**Markdown** in its corner to see the raw lines. An append shows the note's existing lines faded
+above the new ones, so you can see where they land.
 
 - **An append** goes at the end of the heading's section, and the note's `updated:` date is set
   to today. If the note changed since the draft, Work OS re-drafts instead of overwriting.

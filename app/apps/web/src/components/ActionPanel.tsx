@@ -11,7 +11,8 @@ import { BrandIcon } from './BrandIcon';
 import { GuideLink } from './GuideLink';
 import { Icon } from './icons';
 import { itemPath } from './item';
-import { Banner, Button, ConfirmDialog, Spinner, cx } from './ui';
+import type { DocMode } from './MarkdownDoc';
+import { Banner, Button, ConfirmDialog, Segmented, Spinner, cx } from './ui';
 
 // The draft → review → approve panel (FR-9.x, FR-10.x). Used full width on Item detail and,
 // embedded, inside the Next step card of the Inbox item panel.
@@ -66,17 +67,17 @@ function PlainText({ text }: { text: string }) {
   );
 }
 
-type DocProps = { value: string; editing: boolean; onChange: (md: string) => void };
+type DocProps = { value: string; editing: boolean; onChange: (md: string) => void; mode: DocMode };
 
-function Doc(props: DocProps) {
+function Doc({ label = 'Draft text', ...props }: Omit<DocProps, 'onChange'> & { onChange?: DocProps['onChange']; label?: string }) {
   return (
     <Suspense fallback={<PlainText text={props.value} />}>
-      <MarkdownDoc label="Draft text" {...props} />
+      <MarkdownDoc label={label} {...props} />
     </Suspense>
   );
 }
 
-type FrameProps = Omit<Parameters<typeof DraftFrame>[0], 'label' | 'className' | 'children'>;
+type FrameProps = Omit<Parameters<typeof DraftFrame>[0], 'label' | 'className' | 'children' | 'context'>;
 
 function ConfluencePreview({ d, item, doc, frame }: { d: ConfluenceDraft; item: ItemView['item']; doc: DocProps; frame: FrameProps }) {
   return (
@@ -92,30 +93,34 @@ function ConfluencePreview({ d, item, doc, frame }: { d: ConfluenceDraft; item: 
   );
 }
 
-function VaultAppendPreview({ d, frame }: { d: VaultAppendDraft; frame: FrameProps }) {
+/**
+ * The lines an append adds, under the note's existing lines (faded) so you see where they land.
+ * A teal bar marks what's new, in both views and while editing.
+ */
+function VaultAppendDoc({ d, doc, frame }: { d: VaultAppendDraft; doc: DocProps; frame: FrameProps }) {
   return (
-    <DraftFrame {...frame} label="+ new lines" className="rounded-[10px] border border-line bg-surface-3 pb-3 pt-2 [&>div:first-child]:px-4">
-      <div className="overflow-x-auto font-mono text-[13px] leading-relaxed">
-        {d.context.map((l, i) => (
-          <div key={`c${i}`} className="whitespace-pre px-4 text-muted">
-            {'  '}
-            {l}
+    <DraftFrame
+      {...frame}
+      label="+ new lines"
+      className="rounded-[10px] border border-line bg-surface px-5 pb-4 pt-2.5"
+      context={
+        d.context.length > 0 && (
+          <div className="opacity-60">
+            <Doc label="Existing lines" value={d.context.join('\n')} editing={false} mode={doc.mode} />
           </div>
-        ))}
-        {d.content.split('\n').map((l, i) => (
-          <div key={`a${i}`} className="whitespace-pre bg-teal-wash px-4 text-teal-deep">
-            + {l}
-          </div>
-        ))}
+        )
+      }
+    >
+      <div className={cx('border-l-[3px] border-teal pl-3', !doc.editing && 'rounded-r-md bg-teal-wash py-2 pr-3')}>
+        <Doc {...doc} />
       </div>
     </DraftFrame>
   );
 }
 
-/** A vault note, or the lines an append adds while they're being edited. */
-function VaultDoc({ d, doc, frame }: { d: Draft; doc: DocProps; frame: FrameProps }) {
+function VaultDoc({ doc, frame }: { doc: DocProps; frame: FrameProps }) {
   return (
-    <DraftFrame {...frame} label={d.kind === 'vault_append' ? '+ new lines' : '+ new note'} className="rounded-[10px] border border-line bg-surface px-5 pb-4 pt-2.5">
+    <DraftFrame {...frame} label="+ new note" className="rounded-[10px] border border-line bg-surface px-5 pb-4 pt-2.5">
       <Doc {...doc} />
     </DraftFrame>
   );
@@ -138,6 +143,16 @@ function TargetLink({ href, title, children }: { href: string; title: string; ch
   );
 }
 
+/** "under <heading>", kept together so the line wraps before it rather than inside it. The heading's
+ *  markdown hashes are dropped: they're how it's stored, not what it's called. */
+function Under({ heading }: { heading: string }) {
+  return (
+    <span className="min-w-0">
+      <span className="text-muted">under</span> <span className="font-semibold">{heading.replace(/^#+\s*/, '')}</span>
+    </span>
+  );
+}
+
 function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: TargetLinks }) {
   if (d.kind === 'confluence')
     return (
@@ -147,8 +162,7 @@ function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: 
         <TargetLink href={links.page(d.pageId)} title={`Open page ${d.pageId} in Confluence`}>
           {d.pageTitle}
         </TargetLink>
-        <span className="text-muted">under</span>
-        <span className="font-semibold">{d.section}</span>
+        <Under heading={d.section} />
         {!inScope && <span className="sr-only">Excluded from the Confluence scope</span>}
       </div>
     );
@@ -165,12 +179,7 @@ function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: 
           {d.path}
         </span>
       )}
-      {d.kind === 'vault_append' ? (
-        <>
-          <span className="text-muted">under</span>
-          <span className="font-semibold">{d.heading}</span>
-        </>
-      ) : null}
+      {d.kind === 'vault_append' && <Under heading={d.heading} />}
     </div>
   );
 }
@@ -208,7 +217,7 @@ function ChecksToggle({ checks, open, onToggle }: { checks: Check[]; open: boole
       aria-expanded={open}
       aria-controls="draft-checks"
       onClick={onToggle}
-      className={cx('-mr-1.5 inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium cursor-pointer hover:bg-track', failed ? 'text-red-fg' : 'text-teal-ink')}
+      className={cx('-ml-1.5 inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium cursor-pointer hover:bg-track', failed ? 'text-red-fg' : 'text-teal-ink')}
     >
       <Icon name={failed ? 'alert' : 'check'} size={13} strokeWidth={2.5} />
       {failed ? `${failed} check failed` : 'Checks passed'}
@@ -238,8 +247,8 @@ function ChecksDetail({ checks, d }: { checks: Check[]; d: Draft }) {
 }
 
 /**
- * The draft with its edit controls: Edit in the corner (or click the text), and Save / Cancel
- * under the editor. You edit where you read.
+ * The draft with its controls: the Rich text / Markdown view and Edit in the corner (or click the
+ * text), and Save / Cancel under the editor. You read and edit in the same place and the same view.
  */
 function DraftFrame({
   label,
@@ -248,6 +257,9 @@ function DraftFrame({
   canEdit,
   onEdit,
   editActions,
+  mode,
+  setMode,
+  context,
   className,
   children,
 }: {
@@ -257,22 +269,38 @@ function DraftFrame({
   canEdit: boolean;
   onEdit: () => void;
   editActions: ReactNode;
+  mode: DocMode;
+  setMode: (m: DocMode) => void;
+  /** Read-only text above the draft, outside the click-to-edit area. */
+  context?: ReactNode;
   className: string;
   children: ReactNode;
 }) {
   const clickToEdit = canEdit && !editing;
   return (
     <div className={cx('group flex flex-col gap-2', className)}>
-      <div className="flex min-h-8 items-center gap-2">
+      <div className="flex min-h-8 flex-wrap items-center gap-2">
         <span className="font-mono text-[11px] text-teal">{label}</span>
         {edited && <span className="rounded bg-accent-wash px-1.5 py-px text-[10px] font-semibold text-accent-ink">Edited</span>}
         <span className="flex-1" />
+        <Segmented<DocMode>
+          label="Draft view"
+          size="sm"
+          className="gap-0.5 rounded-lg p-0.5 [&>button]:min-h-7 [&>button]:rounded-md [&>button]:px-2.5 [&>button]:text-xs"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'rich', label: 'Rich text' },
+            { value: 'markdown', label: 'Markdown' },
+          ]}
+        />
         {clickToEdit && (
           <Button size="sm" variant="ghost" icon="edit" aria-label="Edit text" title="Edit text" className="-mr-1.5" onClick={onEdit}>
             Edit
           </Button>
         )}
       </div>
+      {context}
       {/* A mouse shortcut for the Edit button: click the text to start editing. Links still open. */}
       <div className={cx(clickToEdit && 'cursor-text')} onClick={clickToEdit ? (e) => !(e.target as HTMLElement).closest('a') && onEdit() : undefined}>
         {children}
@@ -346,6 +374,7 @@ export function ActionPanel({
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [busy, setBusy] = useState(false);
   const [checksOpen, setChecksOpen] = useState(false);
+  const [docMode, setDocMode] = useState<DocMode>('rich');
 
   const newest = view.actions.find((a) => a.type === type);
   // The action the item summary (tabs, rows, next step) stands for too: a filed entry comes back when its next version is discarded.
@@ -540,6 +569,7 @@ export function ActionPanel({
       value: isEditing ? editing.text : draft.content,
       editing: isEditing,
       onChange: (text) => setEditing((e) => (e ? { ...e, text } : e)),
+      mode: docMode,
     };
     const written = action.status === 'done' && !view.dryRun;
     const links: TargetLinks = {
@@ -555,6 +585,8 @@ export function ActionPanel({
       editing: isEditing,
       canEdit: action.status === 'ready' && !editing,
       onEdit: () => setEditing({ actionId: action.id, text: draft.content, original: draft.content }),
+      mode: docMode,
+      setMode: setDocMode,
       editActions: (
         <>
           <Button
@@ -579,14 +611,7 @@ export function ActionPanel({
     };
     body = (
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <TargetLine d={draft} inScope={inScope} links={links} />
-            <span className="flex-1" />
-            <ChecksToggle checks={checks} open={checksOpen} onToggle={() => setChecksOpen(!checksOpen)} />
-          </div>
-          {checksOpen && <ChecksDetail checks={checks} d={draft} />}
-        </div>
+        <TargetLine d={draft} inScope={inScope} links={links} />
         {prev?.failureReason === 'conflict' && action.status === 'ready' && (
           <Banner tone="info" icon="info">
             <strong>Re-drafted after a conflict.</strong> {(view.results[prev.id] ?? prev.error ?? '').replace(/ Re-drafting instead of writing\.$/, '')} Review this new draft before approving.
@@ -612,11 +637,24 @@ export function ActionPanel({
         )}
         {draft.kind === 'confluence' ? (
           <ConfluencePreview d={draft} item={item} doc={doc} frame={frame} />
-        ) : draft.kind === 'vault_append' && !isEditing ? (
-          <VaultAppendPreview d={draft} frame={frame} />
+        ) : draft.kind === 'vault_append' ? (
+          <VaultAppendDoc d={draft} doc={doc} frame={frame} />
         ) : (
-          <VaultDoc d={draft} doc={doc} frame={frame} />
+          <VaultDoc doc={doc} frame={frame} />
         )}
+        {/* About the draft as a whole: whether it's safe to write, and asking for another. */}
+        <div className="-mt-1 flex flex-col gap-2">
+          <div className="flex min-h-8 items-center gap-2">
+            <ChecksToggle checks={checks} open={checksOpen} onToggle={() => setChecksOpen(!checksOpen)} />
+            <span className="flex-1" />
+            {action.status === 'ready' && !editing && (
+              <Button size="sm" variant="ghost" icon="redraft" className="-mr-1.5" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : 'Ask for a fresh draft'}>
+                Re-draft
+              </Button>
+            )}
+          </div>
+          {checksOpen && <ChecksDetail checks={checks} d={draft} />}
+        </div>
         {action.status === 'done' && action.itemRevision < item.revision && !peopleBlocked && (
           <Banner
             tone="info"
@@ -656,7 +694,7 @@ export function ActionPanel({
     );
   }
 
-  // Approve and Discard only: Edit lives on the draft and Re-draft by the tabs. While editing,
+  // Approve and Discard only: Edit lives on the draft and Re-draft under it. While editing,
   // Save and Cancel sit under the editor and this row steps aside.
   const footer =
     action && draft && !editing && (action.status === 'ready' || action.status === 'approved' || action.status === 'executing') ? (
@@ -688,7 +726,7 @@ export function ActionPanel({
   );
 
   const tabs = (
-    <div className={cx('flex items-center gap-2', embedded && 'w-full')}>
+    <div className="flex items-center gap-2">
       <div role="tablist" aria-label="Draft target" className="inline-flex gap-1 rounded-[10px] bg-track-2 p-1">
         {TYPES.map((t) => {
           const on = t === type;
@@ -714,12 +752,6 @@ export function ActionPanel({
           );
         })}
       </div>
-      <span className="flex-1" />
-      {action?.status === 'ready' && !editing && (
-        <Button variant="ghost" icon="redraft" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : 'Ask for a fresh draft'}>
-          Re-draft
-        </Button>
-      )}
     </div>
   );
 
@@ -743,7 +775,7 @@ export function ActionPanel({
                 {versionTag}
               </h3>
               {onClose && (
-                <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-accent hover:bg-accent-wash cursor-pointer" onClick={onClose}>
+                <button type="button" className="-mr-2 inline-flex min-h-7 items-center gap-1 rounded-lg px-2 text-[13px] font-medium text-ink-2 hover:bg-track hover:text-ink cursor-pointer" onClick={onClose}>
                   <Icon name="back" size={14} />
                   Back to filing options
                 </button>

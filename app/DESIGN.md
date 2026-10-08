@@ -114,12 +114,14 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 ## Action panel (applied)
 
 - **Targets are links.** The Confluence page title opens the page (`<site>/wiki/spaces/<key>/pages/<id>`) in a new tab. The vault path opens the note in Obsidian (`obsidian://open?vault=…&file=…`). A new note has no link until it's written, because it doesn't exist yet. After a write, the done banner has Open page or Open note.
-- **Drafts are rich text.** Drafts are stored as markdown. They're rendered as formatted text, and Edit text edits them in place, with a small toolbar (heading, bold, italic, code, bulleted list, numbered list). A Markdown view shows the raw text. Front matter shows as a properties block and is edited in the Markdown view. Obsidian `[[wiki links]]` survive edits.
+- **Drafts are rich text.** Drafts are stored as markdown. They're rendered as formatted text, and Edit text edits them in place, with a small toolbar (heading, bold, italic, code, bulleted list, numbered list). A Rich text / Markdown switch in the draft's corner shows the raw text, while reading or editing; the view holds as you go from one to the other. Front matter shows as a properties block and is edited in the Markdown view. Obsidian `[[wiki links]]` survive edits.
+- **A vault append shows where it lands.** The note's lines above the insertion point show faded, and the new lines sit under them with a teal bar, in both views and while editing. Lines wrap; nothing scrolls sideways.
 - **Every action sits where it acts.**
   - **Edit** is part of the draft: an Edit button in the draft's corner, or click the text. Save and Cancel sit under the editor, and the footer steps aside while you edit.
-  - **Re-draft** is a quiet button by the draft tabs, because it replaces the whole draft.
+  - **About the draft as a whole** is one row under it: "✓ Checks passed" on the left, Re-draft on the right. Re-draft is a quiet button because it replaces the whole draft, and it steps aside while you edit.
   - **The footer** holds only Approve and, at the far end, Discard.
-- **Only what you need to decide.** The target line gives the page or note, then one "✓ Checks passed" toggle, which turns red when a check fails. The individual checks, page ID, base version, dry-run note and model, duration and tokens are behind that toggle. A failed check still raises its own banner. "Edited" is a small tag on the draft.
+  - **Back to filing options** is grey, not accent: it's navigation, and the accent stays for the target link and Approve.
+- **Only what you need to decide.** The target line gives the page or note and the heading it goes under, by name (no `##`). "✓ Checks passed" turns red when a check fails. The individual checks, page ID, base version, dry-run note and model, duration and tokens are behind it. A failed check still raises its own banner. "Edited" is a small tag on the draft.
 
 ## Impact on the other pages (proposed, not yet applied)
 
