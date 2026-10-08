@@ -211,7 +211,43 @@ test('channel fields in Settings › Slack search the channels you’re in', asy
   await expect(saved(page)).toBeVisible();
   await page.reload();
   await expect(page.getByRole('button', { name: 'Remove #insights-api' })).toBeVisible();
-  for (const name of ['Customer channels', 'Include channels', 'Exclude channels']) await expect(page.getByRole('combobox', { name })).toBeVisible();
+  for (const name of ['Customer channels', 'Exclude channels']) await expect(page.getByRole('combobox', { name })).toBeVisible();
+});
+
+test('Slack reads every channel except some, or only the ones you pick: one list at a time', async ({ page }) => {
+  await open(page, 'slack');
+  const mode = page.getByRole('group', { name: 'Channels to read' });
+  const include = page.getByRole('combobox', { name: 'Include channels' });
+  const exclude = page.getByRole('combobox', { name: 'Exclude channels' });
+  await expect(mode.getByRole('button', { name: 'Every channel you’re in' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(exclude).toBeVisible();
+  await expect(include).toHaveCount(0);
+
+  await mode.getByRole('button', { name: 'Only the channels you pick' }).click();
+  await expect(exclude).toHaveCount(0);
+  await expect(page.getByText('Pick at least one channel. Until you do, every channel you’re in is read.')).toBeVisible();
+  await expect(page.getByText('Your 3 never-read channels are kept')).toBeVisible();
+
+  // Picking a never-read channel to read takes it off the never-read list.
+  await include.fill('random');
+  await include.press('Enter');
+  await expect(page.getByRole('button', { name: 'Remove #random' })).toBeVisible();
+  await expect(page.getByText('No other channel is fetched.')).toBeVisible();
+  await expect(page.getByText('Your 2 never-read channels are kept')).toBeVisible();
+  await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
+  await include.press('Escape'); // close the suggestions, so the hints show
+  await page.screenshot({ path: join(APP, 'screenshots/settings-slack-only-channels-light.png') });
+  await page.reload();
+  await expect(mode.getByRole('button', { name: 'Only the channels you pick' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Back to every channel: the pick list is cleared, and the never-read list is back.
+  await mode.getByRole('button', { name: 'Every channel you’re in' }).click();
+  await expect(include).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Remove #alerts-prod' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove #random' })).toHaveCount(0);
+  await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
+  await page.reload();
+  await expect(mode.getByRole('button', { name: 'Every channel you’re in' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('VIPs are picked from a search of people', async ({ page }) => {

@@ -130,6 +130,74 @@ const SLACK_STATUS: Record<SlackStatus, { dot: string; text: string }> = {
   paused: { dot: 'bg-gray-mid', text: 'Paused' },
 };
 
+const sameChannel = (a: string, b: string) => a.trim().replace(/^#/, '').toLowerCase() === b.trim().replace(/^#/, '').toLowerCase();
+
+/**
+ * Which channels Slack is read from. One list is in play at a time: with an include list only those
+ * channels are read, so the exclude list would only matter for a channel on both (see SlackAdapter.fetchSince).
+ */
+function ChannelScope({ s, set }: Pick<Ctx, 's' | 'set'>) {
+  const include = s.slack.includeChannels;
+  const exclude = s.slack.excludeChannels;
+  // An include list means Only mode. With none, Only mode is the choice you just made, waiting for a pick.
+  const [wantOnly, setWantOnly] = useState(false);
+  const only = include.length > 0 || wantOnly;
+  const choose = (mode: 'all' | 'only') => {
+    setWantOnly(mode === 'only');
+    if (mode === 'all' && include.length) set((x) => (x.slack.includeChannels = []));
+  };
+  return (
+    <Row stacked label="Channels to read" help="Direct messages and group DMs are always read.">
+      <div className="flex flex-col gap-3">
+        <Segmented<'all' | 'only'>
+          label="Channels to read"
+          size="sm"
+          className="self-start"
+          value={only ? 'only' : 'all'}
+          onChange={choose}
+          options={[
+            { value: 'all', label: 'Every channel you’re in' },
+            { value: 'only', label: 'Only the channels you pick' },
+          ]}
+        />
+        {only ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-medium">Read only these</span>
+            <ChannelPicker
+              label="Include channels"
+              placeholder="Search channels…"
+              values={include}
+              onChange={(v) =>
+                set((x) => {
+                  x.slack.includeChannels = v;
+                  // A channel you pick to read can't also be one you never read.
+                  x.slack.excludeChannels = x.slack.excludeChannels.filter((c) => !v.some((p) => sameChannel(p, c)));
+                })
+              }
+            />
+            {include.length ? (
+              <span className="text-xs text-muted">No other channel is fetched.</span>
+            ) : (
+              <span className="text-xs text-amber-fg">Pick at least one channel. Until you do, every channel you’re in is read.</span>
+            )}
+            {exclude.length > 0 && (
+              <span className="text-xs text-muted">
+                Your {exclude.length} never-read {exclude.length === 1 ? 'channel is' : 'channels are'} kept, and apply again if you switch back to every channel.
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-medium">Except these</span>
+            <ChannelPicker label="Exclude channels" placeholder="Search channels…" values={exclude} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
+            <span className="text-xs text-muted">Dropped as they’re fetched, and never stored.</span>
+          </div>
+        )}
+      </div>
+    </Row>
+  );
+}
+
 function SlackSection({ s, usage, set, type, flush, err }: Ctx) {
   const status = usage ? SLACK_STATUS[usage.source.status] : undefined;
   return (
@@ -147,12 +215,7 @@ function SlackSection({ s, usage, set, type, flush, err }: Ctx) {
         }
       />
       <Group title="Channels">
-        <Row stacked label="Only read these channels" help="Leave empty to read every channel you can see.">
-          <ChannelPicker label="Include channels" placeholder="Every channel you can see" values={s.slack.includeChannels} onChange={(v) => set((x) => (x.slack.includeChannels = v))} />
-        </Row>
-        <Row stacked label="Never read these channels" help="Dropped as they’re fetched, and never stored.">
-          <ChannelPicker label="Exclude channels" placeholder="Search channels…" values={s.slack.excludeChannels} onChange={(v) => set((x) => (x.slack.excludeChannels = v))} />
-        </Row>
+        <ChannelScope s={s} set={set} />
         <Row stacked label="Read app posts in these channels" help="Posts from apps such as Gong (call recaps, mentions) are read here and dropped everywhere else.">
           <ChannelPicker label="App channels" placeholder="Search channels…" values={s.slack.appChannels ?? []} onChange={(v) => set((x) => (x.slack.appChannels = v))} />
         </Row>
