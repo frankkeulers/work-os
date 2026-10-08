@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { EvalReport, type Attention, type Settings } from '@work-os/shared';
+import { EvalReport, type Attention, type Settings, type SourceId } from '@work-os/shared';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
 import type { Prompt } from '../claude/prompts';
@@ -19,6 +19,7 @@ import { estimateTokens, packBatches, threadTokens } from './truncate';
 const ORDER: Attention[] = ['now', 'today', 'none'];
 
 export interface Scored {
+  source?: SourceId;
   label: LabelRecord['label'];
   predicted: { attention: Attention; confluence: boolean; vault: boolean };
 }
@@ -53,10 +54,13 @@ export interface EvalDeps {
   logger?: Logger;
 }
 
-/** Runs triage over the latest label of each item. Throws ClaudeError when Claude can't be called. */
-export async function runEval(d: EvalDeps, records: LabelRecord[]): Promise<EvalReport> {
-  const labels = latestLabels(records);
-  if (!labels.length) throw new Error('No labelled threads yet.');
+/**
+ * Runs triage over the latest label of each item, or of one source's items (R2.2: a new source goes
+ * live on its own scores). Throws ClaudeError when Claude can't be called.
+ */
+export async function runEval(d: EvalDeps, records: LabelRecord[], o: { source?: SourceId } = {}): Promise<EvalReport> {
+  const labels = latestLabels(records).filter((l) => !o.source || l.source === o.source);
+  if (!labels.length) throw new Error(o.source ? `No labelled threads from ${o.source} yet.` : 'No labelled threads yet.');
   const t = d.settings.triage;
   const model = d.settings.models.triage;
   const batches = packBatches(labels, (l) => threadTokens(l.thread), { maxThreads: t.maxThreadsPerCall, maxInputTokens: t.maxInputTokens, overheadTokens: estimateTokens(d.prompt.text) + 200 });
@@ -93,7 +97,7 @@ export async function runEval(d: EvalDeps, records: LabelRecord[]): Promise<Eval
           failed++;
           continue;
         }
-        rows.push({ label: l.label, predicted: { attention: a.attention, confluence: a.confluence.suggested && !a.containsPeopleObservations, vault: a.vault.suggested } });
+        rows.push({ source: l.source, label: l.label, predicted: { attention: a.attention, confluence: a.confluence.suggested && !a.containsPeopleObservations, vault: a.vault.suggested } });
       }
     } catch (err) {
       if (!(err instanceof ClaudeOutputError)) throw err;
@@ -111,9 +115,18 @@ export async function runEval(d: EvalDeps, records: LabelRecord[]): Promise<Eval
     tokens,
     costEquivalent: Math.round(cost * 10_000) / 10_000,
     ...(failed && { failed }),
+    ...(o.source && { source: o.source }),
+    ...bySource(rows),
   };
   d.logger?.info({ labels: labels.length, failed, tokens, cost: report.costEquivalent }, 'Eval finished');
   return EvalReport.parse(report);
+}
+
+/** Scores per source, when the rows come from more than one. */
+function bySource(rows: Scored[]): Pick<EvalReport, 'bySource'> {
+  const sources = [...new Set(rows.map((r) => r.source).filter((s): s is SourceId => !!s))];
+  if (sources.length < 2) return {};
+  return { bySource: Object.fromEntries(sources.map((s) => { const mine = rows.filter((r) => r.source === s); return [s, { labelCount: mine.length, ...score(mine) }]; })) };
 }
 
 const REPORT_RE = /^eval-.+\.json$/;

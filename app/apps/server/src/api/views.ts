@@ -64,7 +64,7 @@ export interface ViewDeps {
   tokenPersisted: boolean;
   startedAt: string;
   now: () => Date;
-  meId?: () => string | undefined; // the Slack user, once the first poll has asked Slack
+  meId?: (source?: SourceId) => string | undefined; // Frank in a source (Slack by default), once it has polled
   /** Health, wake state and the scheduler. Absent in tests of the HTTP layer alone. */
   runtime?: Runtime;
   /** The last eight days of Claude calls (CL-5), for budgets and the usage view. */
@@ -325,7 +325,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
     dataDir: d.config.dataDir,
     targets: { confluenceSite: s.confluence.siteUrl, spaceKey: s.confluence.spaceKey, vaultPath: s.vaultPath },
     budgets: b,
-    meId: d.meId?.() ?? '',
+    meId: d.meId?.(it.source) ?? '',
     ...(members && { members }),
     ...(pieces && { pieces }),
   };

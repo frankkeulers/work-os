@@ -379,7 +379,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     token,
     tokenPersisted: persisted,
     now,
-    meId: () => runtime.identity('slack'),
+    meId: (source = 'slack') => runtime.identity(source),
     earlier: (item, signal) => earlier.forItem(item, signal),
     // Where the guidance files' sources live (FR-1.7); never the real home folder in tests or fakes.
     promptSources: deps.fakes || process.env.VITEST ? undefined : () => ({ home: homedir(), vault: actions.vaultRoot() }),

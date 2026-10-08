@@ -11,6 +11,8 @@ import { mentionsMe, type EarlierView, type Item, type Me } from '@work-os/share
 export const MESSAGE_MAX_CHARS = 2000;
 /** A meeting's summary or notes (R2.3): about 3 KB, with the action items near the end (P0-11). */
 export const MEETING_MAX_CHARS = 8000;
+/** One email, already without its quoted history and signature (Outlook). */
+export const EMAIL_MAX_CHARS = 4000;
 // Measured on triage JSON (the mock seed threads, 12.9k characters): 2.33 characters a token on
 // Claude Haiku 5.5, whose tokenizer every model here except haiku-4.5 shares. Haiku 4.5 gave 3.3.
 export const CHARS_PER_TOKEN = 2.3;
@@ -20,6 +22,8 @@ export interface TriageMessage {
   at: string;
   text: string;
   thread?: true; // a reply in a Slack thread, in a topic that also has chat outside it
+  to?: string[]; // an email's recipients, "me" for Frank
+  cc?: string[];
 }
 
 export interface TriageThread {
@@ -57,16 +61,19 @@ export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: 
   });
   const inThread = topic?.inThread;
   const names = new Map(item.participants.map((p) => [p.id, p.name]));
+  const who = (id: string) => (me.id && id === me.id ? 'me' : (names.get(id) ?? id));
   // Thread replies are marked only in a topic that also has chat outside the thread.
   const mixed = !!inThread?.size && inThread.size < msgs.length;
   const messages = [...keep]
     .sort((a, b) => a - b)
     .map((i) => msgs[i])
     .map((m): TriageMessage => ({
-      author: me.id && m.authorId === me.id ? 'me' : (names.get(m.authorId) ?? m.authorId),
+      author: who(m.authorId),
       at: m.ts,
-      text: cut(m.text, item.kind === 'meeting' ? MEETING_MAX_CHARS : MESSAGE_MAX_CHARS),
+      text: cut(m.text, item.kind === 'meeting' ? MEETING_MAX_CHARS : item.kind === 'email' ? EMAIL_MAX_CHARS : MESSAGE_MAX_CHARS),
       ...(mixed && inThread.has(m.id) && { thread: true as const }),
+      ...(m.to && { to: m.to.map(who) }),
+      ...(m.cc?.length && { cc: m.cc.map(who) }),
     }));
   const thread: TriageThread = { id: item.id, kind: item.kind, title: item.title, messages, omitted: Math.max(0, item.messageCount - messages.length) };
   const prior = earlier?.messages.slice(-BEFORE_MAX_MESSAGES) ?? [];

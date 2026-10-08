@@ -185,14 +185,14 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.headers(noStore).send(names);
   });
 
-  // People for the VIP search: Slack's list when it answers, plus everyone already in the inbox and
-  // the VIPs themselves. One entry per name; Slack's carries the real name.
+  // People for the VIP search: Slack's list when it answers, plus everyone already in the inbox from
+  // Slack and Outlook, and the VIPs themselves. One entry per name; Slack's carries the real name.
   app.get('/api/people', async (_req, reply) => {
     const live = (await d.people?.().catch(() => undefined)) ?? [];
-    const me = d.meId?.();
+    const me = { slack: d.meId?.('slack'), outlook: d.meId?.('outlook') };
     const known = Object.values(d.store.projection.items)
-      .flatMap((i) => (i.source === 'slack' ? i.participants : []))
-      .filter((p) => p.id !== me && p.name && p.name !== p.id)
+      .flatMap((i) => (i.source === 'slack' || i.source === 'outlook' ? i.participants.filter((p) => p.id !== me[i.source as 'slack' | 'outlook']) : []))
+      .filter((p) => p.name && p.name !== p.id)
       .map((p): PersonOption => ({ name: p.name }));
     const vips = d.settings.editable.settings.people.vips.map((name): PersonOption => ({ name }));
     const byName = new Map<string, PersonOption>();

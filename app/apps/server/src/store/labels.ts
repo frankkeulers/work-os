@@ -14,7 +14,7 @@ export const LabelThread = z.object({
   id: z.string().min(1),
   kind: ItemKind,
   title: z.string(),
-  messages: z.array(z.object({ author: z.string(), at: z.string(), text: z.string() })),
+  messages: z.array(z.object({ author: z.string(), at: z.string(), text: z.string(), to: z.array(z.string()).optional(), cc: z.array(z.string()).optional() })),
   omitted: z.number().int().nonnegative(),
 });
 

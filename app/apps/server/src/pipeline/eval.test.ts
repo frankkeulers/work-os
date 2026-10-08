@@ -3,8 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { EvalReport } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ClaudeAdapter } from '../claude/adapter';
+import { fakeClaude } from '../claude/fakeClaude';
+import { DEFAULT_TRIAGE_PROMPT, promptVersion } from '../claude/prompts';
+import { UsageLog } from '../claude/usage';
+import { defaultSettings } from '../config/defaults';
+import { memoryKeychain } from '../config/keychain';
 import { LabelStore, latestLabels, type LabelRecord } from '../store/labels';
-import { listReports, saveReport, score, type Scored } from './eval';
+import { listReports, runEval, saveReport, score, type Scored } from './eval';
 
 // Scoring, the labelled set and report files (FR-6.1, FR-6.3). Synthetic threads only.
 
@@ -71,6 +77,41 @@ describe('labelled set', () => {
     await writeFile(file, `${JSON.stringify(label('a', 'now'))}\n`);
     await appendFile(file, '{"at":"2026-10-06T1');
     expect((await LabelStore.open(file)).counts.labels).toBe(1);
+  });
+});
+
+describe('runEval by source (R2.2)', () => {
+  const at = '2026-10-08T09:00:00.000Z';
+  const labelled = (itemId: string, source: LabelRecord['source'], attention: LabelRecord['label']['attention'], text: string): LabelRecord => ({
+    ...label(itemId, attention, at),
+    source,
+    thread: { id: itemId, kind: source === 'outlook' ? 'email' : 'thread', title: 'Synthetic', messages: [{ author: 'Sam', at, text, ...(source === 'outlook' && { to: ['me'] }) }], omitted: 0 },
+  });
+  const records = [labelled('slack:1', 'slack', 'now', 'urgent: go/no-go'), labelled('outlook:A', 'outlook', 'today', 'Can you review this?'), labelled('outlook:B', 'outlook', 'none', 'FYI only')];
+
+  const run = async (source?: 'outlook') => {
+    const usage = await UsageLog.open(dir);
+    const settings = defaultSettings(dir);
+    const claude = new ClaudeAdapter({ usage, settings: () => settings, secrets: memoryKeychain(), cwd: dir, env: { PATH: '/usr/bin' }, query: fakeClaude().query });
+    try {
+      return await runEval({ claude, settings, prompt: { text: DEFAULT_TRIAGE_PROMPT, version: promptVersion(DEFAULT_TRIAGE_PROMPT) }, now: () => new Date(at) }, records, { source });
+    } finally {
+      await usage.close();
+    }
+  };
+
+  it('scores every source together, and each on its own when there are several', async () => {
+    const r = await run();
+    expect(r.labelCount).toBe(3);
+    expect(r.source).toBeUndefined();
+    expect(Object.keys(r.bySource ?? {}).sort()).toEqual(['outlook', 'slack']);
+    expect(r.bySource?.outlook).toMatchObject({ labelCount: 2 });
+  });
+
+  it("runs on one source's labels alone, and says so", async () => {
+    const r = await run('outlook');
+    expect(r).toMatchObject({ labelCount: 2, source: 'outlook' });
+    expect(r.bySource).toBeUndefined();
   });
 });
 

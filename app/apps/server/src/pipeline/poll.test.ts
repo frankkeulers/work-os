@@ -11,7 +11,7 @@ import { readLog } from '../store/recover';
 import { Store } from '../store/store';
 import { cmpCursor, CursorFile } from './cursors';
 import { returnSnoozed } from './due';
-import { mergeItem, pollSource, type PollDeps } from './poll';
+import { mergeItem, pollSource, SENT_BY_YOU, type PollDeps } from './poll';
 
 const NOW = new Date('2026-10-06T09:00:00.000Z');
 const ID = 'slack:C1:1791270000.000100';
@@ -254,6 +254,34 @@ describe('rules at ingest (FR-4, §5.3)', () => {
     next = { items: [item([{ ...msg('1', 30), text: 'Can <@UFRANK> confirm the ETA?' }])], nextCursor: '5' };
     expect(await pollSource(d, source, 'first', signal())).toMatchObject({ changed: 1, ruleDecided: 0 });
     expect(store.projection.items[ID]).toMatchObject({ triageState: 'pending' });
+  });
+});
+
+describe('emails Frank sent (Outlook)', () => {
+  const ME = 'frank@example.com';
+  const EID = 'outlook:AAQkC1=';
+  const outlook: SourceAdapter = { ...source, id: 'outlook', deps: ['network', 'claude', 'ms365'], identity: () => ({ id: ME, name: 'Frank Keulers' }) };
+  const email = (messages: Message[]) => item(messages, { id: EID, source: 'outlook', kind: 'email', title: 'Renewal terms', permalink: 'https://outlook.office365.com/owa/?ItemID=x' });
+
+  it('puts a new conversation of only his own emails in Everything else, and triages the first reply', async () => {
+    next = { items: [email([msg('<a@x>', 30, ME)])], nextCursor: 'c1' };
+    expect(await pollSource(d, outlook, 'first', signal())).toMatchObject({ changed: 1, ruleDecided: 1 });
+    const log = await events();
+    expect(log.map((e) => e.type)).toEqual(['item.upserted', 'triage.decided', 'source.polled']);
+    expect(log[1]).toMatchObject({ itemId: EID, data: { decision: { itemRevision: 1, attention: 'none', decidedBy: 'rule', ruleId: SENT_BY_YOU } } });
+    expect(store.projection.items[EID]).toMatchObject({ triageState: 'triaged', decision: { attention: 'none' } });
+    expect((await d.items.read('outlook', EID))?.text?.reason).toBe('You sent this and nobody has answered yet.');
+
+    next = { items: [email([msg('<a@x>', 30, ME), msg('<b@x>', 5, 'dana@example.com')])], nextCursor: 'c2' };
+    expect(await pollSource(d, outlook, 'scheduled', signal())).toMatchObject({ changed: 1, ruleDecided: 0 });
+    expect(store.projection.items[EID]).toMatchObject({ revision: 2, triageState: 'pending' });
+  });
+
+  it('leaves a conversation someone else started to the model, and Slack as it was', async () => {
+    next = { items: [email([msg('<a@x>', 30, 'dana@example.com'), msg('<b@x>', 20, ME)])], nextCursor: 'c1' };
+    expect(await pollSource(d, outlook, 'first', signal())).toMatchObject({ ruleDecided: 0 });
+    next = { items: [item([msg('1', 30, 'UFRANK')])], nextCursor: '5' };
+    expect(await pollSource(d, source, 'first', signal())).toMatchObject({ ruleDecided: 0 });
   });
 });
 

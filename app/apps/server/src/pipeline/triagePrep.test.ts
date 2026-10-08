@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { triageQueue } from './eligibility';
 import { meFrom, ruleVerdict } from './rules';
-import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
+import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, EMAIL_MAX_CHARS, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
 
 const NOW = new Date('2026-10-06T09:00:00.000Z');
 const ago = (mins: number) => new Date(NOW.getTime() - mins * 60_000).toISOString();
@@ -124,6 +124,37 @@ describe('truncation and batching (§5.3, CL-4)', () => {
     expect(t).toMatchObject({ kind: 'meeting', title: 'Fleet data partner sync', omitted: 0 });
     expect(t.messages.map((m) => m.author)).toEqual(['Wispr Flow summary', 'me']);
     expect(t.messages[0].text).toContain('Frank to send the sample by Friday.');
+  });
+
+  it('sends an email with who it went to, Frank as "me", and a longer cut than chat (Outlook)', () => {
+    const ME = 'frank@example.com';
+    const long = `Points for the renewal:\n${'- a point\n'.repeat(300)}`;
+    const email = thread(
+      [
+        { id: '<a@x>', authorId: 'dana@customer.example', ts: ago(60), text: long, to: [ME], cc: ['sam@example.com'] },
+        { id: '<b@x>', authorId: ME, ts: ago(30), text: 'Thanks, on it.', to: ['dana@customer.example'], cc: [] },
+      ],
+      {
+        id: 'outlook:AAQkC1=',
+        source: 'outlook',
+        kind: 'email',
+        title: 'Renewal terms',
+        participants: [
+          { id: ME, name: 'Frank Keulers' },
+          { id: 'dana@customer.example', name: 'Dana Lee' },
+          { id: 'sam@example.com', name: 'Sam Ray' },
+        ],
+      },
+    );
+    expect(long.length).toBeGreaterThan(MESSAGE_MAX_CHARS);
+    const t = threadForTriage(email, meFrom({ id: ME, name: 'Frank Keulers' }), 3);
+    expect(t.messages.map(({ author, to, cc }) => ({ author, to, cc }))).toEqual([
+      { author: 'Dana Lee', to: ['me'], cc: ['Sam Ray'] },
+      { author: 'me', to: ['Dana Lee'], cc: undefined },
+    ]);
+    expect(t.messages[0].text.length).toBe(Math.min(long.length, EMAIL_MAX_CHARS));
+    // Chat messages carry neither.
+    expect(threadForTriage(thread([msg(1)]), meFrom({ id: 'UFRANK' }), 3).messages[0]).not.toHaveProperty('to');
   });
 
   it('packs threads in order within the thread and token limits; an oversized one goes alone', () => {

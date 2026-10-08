@@ -468,5 +468,9 @@ export const EvalReport = z.object({
   costEquivalent: z.number().nonnegative(),
   /** Labelled threads the model gave no usable answer for; not in the scores. */
   failed: z.number().int().nonnegative().optional(),
+  /** Amendment (R2.2): the same scores for each source's labels, when there are labels from several. */
+  bySource: z.partialRecord(SourceId, z.object({ labelCount: z.number().int().positive(), categories: z.object({ now: PR, today: PR, none: PR, confluence: PR, vault: PR }), confusion: z.array(z.array(z.number().int().nonnegative()).length(3)).length(3) })).optional(),
+  /** Amendment (R2.2): the eval ran on this source's labels only. */
+  source: SourceId.optional(),
 });
 export type EvalReport = z.infer<typeof EvalReport>;

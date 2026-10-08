@@ -1,4 +1,4 @@
-import type { EventDraft, Item, PollReason, Rule, Settings } from '@work-os/shared';
+import type { EventDraft, Item, LoggedDecision, PollReason, Rule, Settings } from '@work-os/shared';
 import type { Logger } from '../log';
 import type { SourceAdapter } from '../sources/types';
 import type { ItemFiles } from '../store/items';
@@ -17,6 +17,12 @@ import { meFrom, ruleDecision, ruleReason, ruleVerdict, type RuleVerdict } from 
 //
 // Rules run on every item with new messages from someone else (FR-4, §5.3): a drop rule keeps a
 // new thread out altogether; a now/today rule logs its decision with the upsert, in the same append.
+//
+// A new email conversation holding only Frank's own emails (Sent Items, Outlook) is decided "none"
+// the same way, by the built-in rule SENT_BY_YOU: nobody has answered, so there is nothing for him
+// to do yet. A reply from someone else is new content from another author, so it is triaged as usual.
+
+export const SENT_BY_YOU = 'sent-by-you';
 
 export const MAX_STORED_MESSAGES = 500;
 
@@ -97,7 +103,7 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   for (const fetched of result.items) {
     const prev = d.store.projection.items[fetched.id];
     // Read, merge and write under the item's lock: triage may be saving its text meanwhile.
-    const r: { item?: Item; fromMeOnly?: boolean; fixed?: Extract<RuleVerdict, { kind: 'fixed' }>; dropped?: boolean } = {};
+    const r: { item?: Item; fromMeOnly?: boolean; fixed?: Extract<RuleVerdict, { kind: 'fixed' }>; sentByYou?: boolean; dropped?: boolean } = {};
     await d.items.update(fetched.source, fetched.id, (stored) => {
       // Without the file (retention, or a crash before it was written) the merge starts afresh.
       const { item, newIds } = mergeItem(stored?.item, fetched, prev?.revision);
@@ -111,14 +117,16 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
         return undefined;
       }
       const fixed = verdict?.kind === 'fixed' ? verdict : undefined;
-      Object.assign(r, { item, fromMeOnly, fixed });
+      const sentByYou = !prev && !fixed && item.kind === 'email' && !!me && item.messages.length > 0 && item.messages.every((m) => m.authorId === me);
+      Object.assign(r, { item, fromMeOnly, fixed, sentByYou });
       // A rule's decision replaces the text of any earlier one, which described older messages.
-      const text = fixed ? { summary: excerpt(item.messages[0]?.text) || item.title, reason: ruleReason(fixed) } : stored?.text;
+      const summary = excerpt(item.messages[0]?.text) || item.title;
+      const text = fixed ? { summary, reason: ruleReason(fixed) } : sentByYou ? { summary, reason: 'You sent this and nobody has answered yet.' } : stored?.text;
       return { item, text, schemaVersion: 1 as const };
     });
     if (r.dropped) dropped++;
     if (!r.item) continue;
-    const { item, fromMeOnly, fixed } = r;
+    const { item, fromMeOnly, fixed, sentByYou } = r;
     changed++;
     drafts.push({
       type: 'item.upserted',
@@ -138,6 +146,9 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
     if (fixed) {
       drafts.push({ type: 'triage.decided', itemId: item.id, data: { decision: ruleDecision(item, fixed, now) } });
       ruleDecided++;
+    } else if (sentByYou) {
+      drafts.push({ type: 'triage.decided', itemId: item.id, data: { decision: sentByYouDecision(item, now) } });
+      ruleDecided++;
     }
   }
   const durationMs = Math.round(performance.now() - t0);
@@ -149,4 +160,18 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   crashPoint('after-cursor');
   d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, dropped, ruleDecided, durationMs }, 'Polled');
   return { fetched: result.items.length, changed, dropped, ruleDecided, cursor: result.nextCursor, durationMs };
+}
+
+function sentByYouDecision(item: Item, at: Date): LoggedDecision {
+  return {
+    itemId: item.id,
+    itemRevision: item.revision,
+    attention: 'none',
+    confluence: { suggested: false },
+    vault: { suggested: false },
+    containsPeopleObservations: false,
+    decidedBy: 'rule',
+    ruleId: SENT_BY_YOU,
+    decidedAt: at.toISOString(),
+  };
 }
