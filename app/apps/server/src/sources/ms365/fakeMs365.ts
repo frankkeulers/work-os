@@ -90,6 +90,15 @@ export class FakeMs365 implements Ms365Api {
   async status(): Promise<DepState> {
     return this.status_ === 'connected' ? 'ok' : this.status_ === 'needs-auth' || this.status_ === 'disabled' ? 'auth_failed' : 'degraded';
   }
+
+  /** The connector with this id: the fake for its own id (or none), else one claude.ai doesn't have. */
+  forId(id?: string): Ms365Api {
+    if (!id || id === FAKE_CONNECTOR_ID) return this;
+    const missing = async (): Promise<never> => {
+      throw new SourceError('ms365', { state: 'auth_failed', reason: 'connector not found' }, `Microsoft 365: no connector ${id}`);
+    };
+    return { search: missing, read: missing, me: missing, discover: () => this.discover(), status: async () => 'auth_failed' };
+  }
 }
 
 let seq = 0;

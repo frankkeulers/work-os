@@ -165,7 +165,8 @@ export class Ms365Relay implements Ms365Api {
   async status(signal: AbortSignal): Promise<DepState> {
     const id = this.o.connectorId();
     if (!id) return 'auth_failed';
-    const servers = await this.mcp(signal, (l) => l.some((s) => s.config?.id === id && s.status !== 'pending'));
+    // Done when this connector has settled, or every one has and it isn't among them (a wrong id).
+    const servers = await this.mcp(signal, (l) => l.some((s) => s.config?.id === id && s.status !== 'pending') || (l.length > 0 && l.every((s) => s.status !== 'pending')));
     const s = servers.find((x) => x.config?.id === id);
     if (!s) return 'auth_failed'; // removed from claude.ai
     if (s.status === 'connected') {

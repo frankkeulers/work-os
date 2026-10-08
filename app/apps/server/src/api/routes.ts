@@ -1,9 +1,10 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type PersonOption, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
 import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writePromptFile, type PromptFile } from '../claude/promptFiles';
 import { SettingsValidationError } from '../config/settingsState';
+import { Ms365LinkError } from '../sources/ms365/link';
 import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
@@ -295,12 +296,57 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(ok ? 200 : 400).headers({ ...noStore, 'content-type': 'text/html; charset=utf-8' }).send(callbackPage(ok, message));
   });
 
+  // Outlook (R2.5): mail is read through the claude.ai Microsoft 365 connector. Connect finds it
+  // (or takes the ID Frank entered), asks it who it reads mail as, saves both, turns the source on
+  // and polls it at once. Disconnect only turns the source off: the connector stays on claude.ai.
+  const CONNECT_MS = 180_000; // finding the connector, its status, then a get_me run
+  const outlookView = (): OutlookStatusView => {
+    const cur = d.settings.editable.settings;
+    const c = cur.connectors?.ms365;
+    return { ...(c && { connectorId: c.id }), ...(c?.account && { account: { name: c.account.name, address: c.account.address } }), enabled: sourceSchedule(cur, 'outlook').enabled };
+  };
+  app.get('/api/sources/outlook', async (_req, reply) => reply.headers(noStore).send(outlookView()));
+  app.post('/api/sources/outlook/connect', async (req, reply) => {
+    if (!d.outlook) throw new HttpError('unavailable', 'Outlook is not available in this run.');
+    const body = OutlookConnect.safeParse(req.body ?? {});
+    if (!body.success) throw new HttpError('validation', 'That isn’t a connector ID: it has only letters, digits, - and _.');
+    // Testing the connector is a (small) Claude run.
+    if (d.runtime && !d.runtime.claudeReady()) throw new HttpError('unavailable', d.runtime.health.get('claude').fix ?? 'Claude can’t be called right now. Try Connect again later.');
+    let found;
+    try {
+      found = await d.outlook.connect(body.data.connectorId, AbortSignal.timeout(CONNECT_MS));
+    } catch (e) {
+      if (e instanceof Ms365LinkError) throw new HttpError('unavailable', e.message);
+      throw e;
+    }
+    const { settings: cur, rules } = d.settings.editable;
+    const saved = await d.settings.save(
+      { settings: { ...cur, connectors: { ...cur.connectors, ms365: found }, sources: { ...cur.sources, outlook: { ...cur.sources?.outlook, enabled: true } } }, rules },
+      d.now(),
+    );
+    if (saved.settingsChanged) {
+      await d.store.append({ type: 'settings.changed', data: { dryRun: saved.settings.dryRun } });
+      d.runtime?.settingsChanged();
+    }
+    d.runtime?.health.ok('ms365');
+    d.runtime?.pollNow(['outlook']);
+    return reply.headers(noStore).send(outlookView());
+  });
+  app.post('/api/sources/outlook/disconnect', async (_req, reply) => {
+    await setSourceEnabled('outlook', false);
+    return reply.code(204).send();
+  });
+
   app.put('/api/settings', async (req, reply) => {
     const body = SettingsSave.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { settings, rules }.');
     let saved;
     try {
-      saved = await d.settings.save(body.data, d.now());
+      // The connector is set by Outlook's Connect alone: a form loaded before it can't undo it.
+      const { connectors } = d.settings.editable.settings;
+      const sent = body.data.settings;
+      const settings = sent && typeof sent === 'object' && !Array.isArray(sent) ? { ...(sent as object), connectors } : sent;
+      saved = await d.settings.save({ ...body.data, settings }, d.now());
     } catch (e) {
       if (e instanceof SettingsValidationError) throw new HttpError('validation', e.message, e.issues);
       throw e;

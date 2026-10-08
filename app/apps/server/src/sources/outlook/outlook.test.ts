@@ -9,6 +9,7 @@ import { memoryKeychain } from '../../config/keychain';
 import { SourceError } from '../errors';
 import { Ms365Relay, searchPage } from '../ms365/client';
 import { FakeMs365, fakeEmail } from '../ms365/fakeMs365';
+import { accountOf, ms365Link, Ms365LinkError } from '../ms365/link';
 import type { EmailDetail } from '../ms365/types';
 import { FIRST_POLL_MS, MAX_READS, OutlookAdapter, OVERLAP_MS, parseCursor, RecentEmails, outlookFactory } from './adapter';
 import { emailText, unwrapUrl } from './html';
@@ -345,5 +346,32 @@ describe('the Microsoft 365 relay client (contract)', () => {
   it('asks get_me with no arguments, and reads the account', async () => {
     const me = await relay(sdk(() => ({ raw: [text({ id: 'u1', displayName: 'Frank Keulers', mail: 'frank@example.com', userPrincipalName: 'frank@example.com', jobTitle: 'x' })] }))).me(signal());
     expect(me).toMatchObject({ displayName: 'Frank Keulers', mail: 'frank@example.com' });
+  });
+});
+
+describe('Outlook Connect: finding and testing the connector (R2.5)', () => {
+  const signal = new AbortController().signal;
+
+  it('reads the account as a lower-case address, the name falling back to it', () => {
+    expect(accountOf({ displayName: ' Frank Keulers ', mail: 'Frank.Keulers@Example.com', userPrincipalName: 'FK@example.onmicrosoft.com' })).toEqual({ name: 'Frank Keulers', address: 'frank.keulers@example.com', upn: 'fk@example.onmicrosoft.com' });
+    expect(accountOf({ mail: null, userPrincipalName: 'fk@example.com' })).toEqual({ name: 'fk@example.com', address: 'fk@example.com' });
+    expect(() => accountOf({ displayName: 'Frank' })).toThrow(Ms365LinkError);
+  });
+
+  it('says where to add the connector when claude.ai has none, and to reconnect a signed-out one', async () => {
+    const fake = new FakeMs365();
+    const none = ms365Link(() => Object.assign(Object.create(fake) as FakeMs365, { discover: async () => undefined }));
+    await expect(none.connect(undefined, signal)).rejects.toThrow(/Couldn’t find the Microsoft 365 connector/);
+    fake.status_ = 'needs-auth';
+    await expect(ms365Link(() => fake).connect(undefined, signal)).rejects.toThrow(/signed out\. Reconnect it on claude\.ai/);
+  });
+
+  it('a Claude failure is named as Claude’s, a connector that doesn’t answer as the connector’s', async () => {
+    const fake = new FakeMs365();
+    const failing = (err: Error) => ms365Link(() => Object.assign(Object.create(fake) as FakeMs365, { me: async () => Promise.reject(err) }));
+    await expect(failing(new SourceError('claude', { state: 'auth_failed', reason: 'login' }, 'Claude: not logged in')).connect(undefined, signal)).rejects.toThrow(/Claude can’t be called right now \(Claude: not logged in\)/);
+    await expect(failing(new SourceError('ms365', { state: 'degraded', reason: 'timeout' }, 'Microsoft 365: timed out')).connect(undefined, signal)).rejects.toThrow(/connector didn’t answer \(Microsoft 365: timed out\)/);
+    // Anything else is a bug: left as it is.
+    await expect(failing(new TypeError('boom')).connect(undefined, signal)).rejects.toThrow(TypeError);
   });
 });

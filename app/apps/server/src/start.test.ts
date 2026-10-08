@@ -1,12 +1,14 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { HealthView } from '@work-os/shared';
+import type { HealthView, ItemView } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { paths } from './config/dataDir';
 import { memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
 import type { Exec } from './runtime/checks';
 import type { Notification, Notifier } from './notify/macos';
+import { fakeWorld } from './fakes';
+import { FAKE_CONNECTOR_ID } from './sources/ms365/fakeMs365';
 import { run, type RunResult } from './start';
 
 let dir: string;
@@ -151,6 +153,38 @@ describe('startup', () => {
       if (f.endsWith('.jsonl')) for (const line of (await readFile(join(dir, 'events', f), 'utf8')).trim().split('\n')) types.push(JSON.parse(line).type);
     }
     expect(types).toContain('system.started');
+  });
+
+  it('Outlook: Connect saves the connector, polls mail and triages it, Frank’s sent reply as “me” (R2.5)', async () => {
+    const world = fakeWorld(new Date());
+    const res = await run({ env: env(), notifier, ...fakes, secrets: world.secrets, fetch: world.fetch, sources: world.sources, claude: world.claude, outlook: world.outlookLink });
+    started.push(res);
+    if (!res.running) throw new Error('expected a start');
+    await res.runtime.settled();
+    const call = (method: string, url: string, body?: object) =>
+      fetch(`${res.url}${url}`, { method, headers: { authorization: `Bearer ${res.token}`, ...(body && { 'content-type': 'application/json' }) }, ...(body && { body: JSON.stringify(body) }) });
+    expect(Object.values(res.store.projection.items).filter((i) => i.source === 'outlook')).toEqual([]);
+
+    const r = await call('POST', '/api/sources/outlook/connect', {});
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ connectorId: FAKE_CONNECTOR_ID, account: { name: 'Frank Keulers', address: 'frank.keulers@polestar.example' }, enabled: true });
+    await res.runtime.settled();
+
+    const mail = Object.values(res.store.projection.items).filter((i) => i.source === 'outlook');
+    expect(mail.map((i) => i.id).sort()).toEqual(['outlook:AAQkFAKECONVNORDICSTAR', 'outlook:AAQkFAKECONVPRICING']);
+    // The fake Claude: Ingrid asks Frank to check something; Dana's note needs nothing.
+    const attention = Object.fromEntries(mail.map((i) => [i.id, [i.triageState, i.decision?.attention]]));
+    expect(attention).toEqual({ 'outlook:AAQkFAKECONVNORDICSTAR': ['triaged', 'today'], 'outlook:AAQkFAKECONVPRICING': ['triaged', 'none'] });
+    const v = (await (await call('GET', '/api/items/outlook%3AAAQkFAKECONVPRICING')).json()) as ItemView;
+    expect(v.item.messages.map((m) => m.authorId)).toEqual(['dana.lee@polestar.example', 'frank.keulers@polestar.example']);
+    expect(v.meId).toBe('frank.keulers@polestar.example');
+    expect(res.runtime.health.get('ms365').state).toBe('ok');
+
+    // A second poll reads nothing again.
+    const reads = world.ms365.reads.flat().length;
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    expect(world.ms365.reads.flat().length).toBe(reads);
   });
 
   it('starts in safe mode after a crash loop, with a notification (robustness §2)', async () => {

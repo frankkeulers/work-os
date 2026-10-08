@@ -154,7 +154,6 @@ export class OutlookAdapter implements SourceAdapter {
 }
 
 /** Builds the adapter from settings; what it has read lately lives as long as the factory. */
-export function outlookFactory(api: Ms365Api, logger?: Logger) {
-  const recent = new RecentEmails();
+export function outlookFactory(api: Ms365Api, logger?: Logger, recent = new RecentEmails()) {
   return (settings: Settings) => new OutlookAdapter({ api, account: () => settings.connectors?.ms365?.account, recent, logger });
 }

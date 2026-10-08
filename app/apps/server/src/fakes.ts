@@ -10,6 +10,9 @@ import type { RuntimeConfig } from './config/env';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
 import { FAKE_CONFLUENCE_CREDS, FakeConfluence } from './actions/fakeConfluence';
 import type { Exec } from './runtime/checks';
+import { FakeMs365, fakeEmail } from './sources/ms365/fakeMs365';
+import { ms365Link } from './sources/ms365/link';
+import { outlookFactory } from './sources/outlook/adapter';
 import { slackFactory } from './sources/slack/adapter';
 import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
@@ -48,6 +51,10 @@ export function fakesRefusal(config: RuntimeConfig): string | undefined {
 }
 
 const PostBody = z.object({ channel: z.string(), text: z.string(), user: z.string().default('U02DANA'), threadTs: z.string().optional() }).strict();
+const Person = z.object({ name: z.string(), address: z.string() });
+const EmailBody = z
+  .object({ subject: z.string(), text: z.string(), conversation: z.string().optional(), from: Person.default({ name: 'Dana Lee', address: 'dana.lee@polestar.example' }) })
+  .strict();
 
 export function fakeWorld(now: Date) {
   const slack = new FakeSlack();
@@ -102,6 +109,28 @@ export function fakeWorld(now: Date) {
     });
   const wisprMcp = new WisprMcp(wispr.connector);
 
+  // Outlook: two conversations, one with Frank's reply in Sent Items. The connector is signed in on
+  // the (fake) claude.ai, but Work OS isn't connected to it until Connect in Settings (R2.5).
+  const ms365 = new FakeMs365({ me: { displayName: 'Frank Keulers', mail: 'frank.keulers@polestar.example', userPrincipalName: 'frank.keulers@polestar.example' } });
+  const frank = { name: 'Frank Keulers', address: 'frank.keulers@polestar.example' };
+  const dana = { name: 'Dana Lee', address: 'dana.lee@polestar.example' };
+  const sam = { name: 'Sam Okafor', address: 'sam.okafor@polestar.example' };
+  const minsAgo = (m: number) => new Date(now.getTime() - m * 60_000).toISOString();
+  ms365.deliver(
+    'Inbox',
+    fakeEmail({
+      conversation: 'AAQkFAKECONVNORDICSTAR',
+      subject: 'Nordic Star port call: revised ETA',
+      from: { name: 'Ingrid Berg', address: 'ingrid.berg@nordicshipping.example' },
+      to: [frank],
+      cc: [sam],
+      at: minsAgo(70),
+      html: '<div><p>Hi Frank,</p><p>The port authority has moved our berth window to Friday 06:00. Could you check the revised ETA shows in MVI?</p><p>Thanks,<br>Ingrid</p></div>',
+    }),
+  );
+  ms365.deliver('Inbox', fakeEmail({ conversation: 'AAQkFAKECONVPRICING', subject: 'MVI V2 pricing tiers', from: dana, to: [frank], at: minsAgo(45), html: '<p>Frank, here are the three pricing tiers we discussed. They are ready for the board pack.</p>' }));
+  ms365.deliver('Sent Items', fakeEmail({ conversation: 'AAQkFAKECONVPRICING', subject: 'RE: MVI V2 pricing tiers', from: frank, to: [dana], at: minsAgo(30), html: '<p>Thanks Dana, these look right. I’ll add them to the pack.</p>' }));
+
   /** POST /api/fake/slack/messages: a new message in the fake workspace, for tests. */
   const routes = (app: FastifyInstance) => {
     app.post('/api/fake/slack/messages', async (req, reply) => {
@@ -110,9 +139,16 @@ export function fakeWorld(now: Date) {
       slack.post(b.channel, { ts, user: b.user, text: b.text, ...(b.threadTs && { thread_ts: b.threadTs }) });
       return reply.code(201).send({ ts });
     });
+    /** POST /api/fake/outlook/messages: a new email in the fake Inbox, for tests. */
+    app.post('/api/fake/outlook/messages', async (req, reply) => {
+      const b = EmailBody.parse(req.body);
+      const e = fakeEmail({ conversation: b.conversation ?? `AAQkFAKECONV${Date.now()}`, subject: b.subject, from: b.from, to: [frank], at: new Date().toISOString(), html: `<p>${b.text.replace(/[<&]/g, (c) => (c === '<' ? '&lt;' : '&amp;'))}</p>` });
+      ms365.deliver('Inbox', e);
+      return reply.code(201).send({ id: e.id, conversation: e.conversationId });
+    });
   };
 
-  return { slack, wispr, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory), wispr: wisprFactory(wisprMcp) }, wisprLink: fakeWisprLink(wispr), claude: fakeClaude().query, routes };
+  return { slack, wispr, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory), outlook: outlookFactory(ms365), wispr: wisprFactory(wisprMcp) }, wisprLink: fakeWisprLink(wispr), ms365, outlookLink: ms365Link((id) => ms365.forId(id)), claude: fakeClaude().query, routes };
 }
 
 /** When the fake world began: the first start in this data dir, kept in fake-world.json. */

@@ -103,6 +103,16 @@ export interface WisprConnectView {
   url?: string;
 }
 
+/** Settings › Sources › Outlook (R2.5): the claude.ai Microsoft 365 connector mail is read through. */
+export interface OutlookStatusView {
+  /** The connector's ID on claude.ai, once found or entered; kept when Outlook is turned off. */
+  connectorId?: string;
+  /** Who the connector reads mail as, from the last Connect. */
+  account?: { name: string; address: string };
+  /** Whether Outlook mail is being polled. */
+  enabled: boolean;
+}
+
 export interface BudgetLine {
   used: number;
   limit: number;

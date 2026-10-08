@@ -1,10 +1,15 @@
 import { z } from 'zod';
+import { Ms365Connector } from './schemas';
 
 // Request bodies for the API's commands. The server checks every body against these (FR-3.3);
 // the settings themselves are checked field by field, so the UI can show each problem in place.
 
 export const SettingsSave = z.object({ settings: z.unknown(), rules: z.unknown() }).strict();
 export type SettingsSave = z.infer<typeof SettingsSave>;
+
+/** POST /api/sources/outlook/connect (R2.5): the connector ID Frank entered, or none to find it. */
+export const OutlookConnect = z.object({ connectorId: Ms365Connector.shape.id.optional() }).strict();
+export type OutlookConnect = z.infer<typeof OutlookConnect>;
 
 /** POST /api/items/:id/snooze (FR-8.2). The UI turns presets into an instant before sending. */
 export const SnoozeInput = z.object({ until: z.iso.datetime() }).strict();

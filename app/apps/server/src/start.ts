@@ -29,6 +29,9 @@ import { CursorFile } from './pipeline/cursors';
 import { returnSnoozed } from './pipeline/due';
 import { pollSource } from './pipeline/poll';
 import { buildSources, type AdapterFactory } from './sources/registry';
+import { Ms365Relay } from './sources/ms365/client';
+import { ms365Link, type Ms365Link } from './sources/ms365/link';
+import { FIRST_POLL_MS, outlookFactory, RecentEmails } from './sources/outlook/adapter';
 import { wisprFactory } from './sources/wispr/adapter';
 import { wisprLink, type WisprLink } from './sources/wispr/link';
 import { httpConnector, WisprMcp } from './sources/wispr/mcp';
@@ -86,6 +89,8 @@ export interface RunDeps {
   claude?: QueryFn;
   /** Wispr Flow's sign-in for Settings; the real one by default, `--fakes` passes its own. */
   wispr?: WisprLink;
+  /** Outlook's Connect for Settings; the real one by default, `--fakes` passes its own. */
+  outlook?: Ms365Link;
 }
 
 export type RunResult =
@@ -146,7 +151,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // The made-up threads are anchored to the first start, so a restart sees the same ones.
     const world = fakeWorld(await fakeAnchor(config.dataDir, now()));
     armCrash(deps.env.WORKOS_CRASH_AT);
-    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude, wispr: world.wisprLink };
+    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude, wispr: world.wisprLink, outlook: world.outlookLink };
     extraRoutes = world.routes;
   }
 
@@ -239,7 +244,6 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Wispr Flow (R2.7): one sign-in store and MCP client for the process, like Slack's directory.
   const wisprAuth = new WisprAuth(secrets, `http://127.0.0.1:${config.port}/oauth/wispr/callback`);
   const wisprMcp = new WisprMcp(httpConnector(wisprAuth, config.version, deps.fetch ?? fetch));
-  const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger), wispr: wisprFactory(wisprMcp, logger) };
   // Claude (M2): one adapter for the process; triage reads the prompt file on every run.
   const claude = new ClaudeAdapter({
     usage,
@@ -252,6 +256,20 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // Belt and braces: a test that forgot its fake fails instead of calling Claude for real.
     query: deps.claude ?? (process.env.VITEST ? noClaude : undefined),
   });
+  // Outlook (R2.5): mail through the claude.ai Microsoft 365 connector, relayed by Claude. The
+  // emails read lately are kept for the process, and seeded at start from the stored threads, so
+  // the poll's overlap doesn't read them again after a restart.
+  const ms365 = (id?: string) => new Ms365Relay({ claude, connectorId: () => id ?? settings.editable.settings.connectors?.ms365?.id, logger });
+  const outlookRecent = new RecentEmails();
+  void (async () => {
+    const since = new Date(now().getTime() - 2 * FIRST_POLL_MS).toISOString();
+    for (const it of Object.values(store.projection.items)) {
+      if (it.source !== 'outlook' || it.lastActivityAt < since) continue;
+      const stored = await items.read(it.source, it.id).catch(() => undefined);
+      for (const m of stored?.item.messages ?? []) outlookRecent.add(m.id);
+    }
+  })();
+  const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger), outlook: outlookFactory(ms365(), logger, outlookRecent), wispr: wisprFactory(wisprMcp, logger) };
   const triageDeps: TriageDeps = {
     store,
     items,
@@ -386,6 +404,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     people: (signal) => slackDirectory.listPeople(signal),
     catalogue: (signal) => buildCatalogue(confluenceApi, settings.editable.settings.confluence, signal),
     wispr: deps.wispr ?? (deps.sources ? undefined : wisprLink(wisprAuth, wisprMcp, deps.fetch ?? fetch)),
+    outlook: deps.outlook ?? (deps.sources ? undefined : ms365Link(ms365)),
     channels: async (signal) => [...(await slackDirectory.conversations(signal)).values()].filter((c) => !c.is_im && !c.is_mpim && c.name).map((c) => `#${c.name}`),
     slackTeamId: () => slackDirectory.identityKnown?.team_id,
     dmTitle: (itemId) => {

@@ -13,6 +13,8 @@ import { SettingsState } from '../config/settingsState';
 import { createLogger } from '../log';
 import { Lifecycle } from '../runtime/lifecycle';
 import { createServer, type WorkOsServer } from '../server';
+import { FAKE_CONNECTOR_ID, FakeMs365 } from '../sources/ms365/fakeMs365';
+import { ms365Link } from '../sources/ms365/link';
 import { ItemFiles, fileNameFor } from '../store/items';
 import { Store } from '../store/store';
 import { bearerMatches, hostAllowed, loadApiToken, tokenAccount } from './auth';
@@ -31,7 +33,7 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; wispr?: ViewDeps['wispr'] } = {}) {
+async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; wispr?: ViewDeps['wispr']; outlook?: ViewDeps['outlook'] } = {}) {
   await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }) }, rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
@@ -56,6 +58,7 @@ async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewD
     earlier: opts.earlier,
     promptSources: opts.promptSources,
     wispr: opts.wispr,
+    outlook: opts.outlook,
     devOrigins: ['http://localhost:5173'],
   });
 }
@@ -610,3 +613,78 @@ describe('Wispr Flow connect (R2.7)', () => {
   });
 });
 
+describe('Outlook connect (R2.5)', () => {
+  const post = (url: string, payload?: object) => server.app.inject({ method: 'POST', url, headers: auth, ...(payload && { payload }) });
+  const saved = async () => (await get('/api/settings')).json<SettingsView>().settings;
+  let ms365: FakeMs365;
+  const link = () => ms365Link((id) => ms365.forId(id));
+  const account = { name: 'Frank Keulers', address: 'frank.keulers@example.com' };
+  beforeEach(() => (ms365 = new FakeMs365({ me: { displayName: 'Frank Keulers', mail: 'Frank.Keulers@example.com', userPrincipalName: 'fk@example.onmicrosoft.com' } })));
+
+  it('Connect finds the connector, saves it with the account it reads, and turns Outlook on', async () => {
+    await build({ outlook: link() });
+    expect((await get('/api/sources/outlook')).json()).toEqual({ enabled: false });
+    const seen: WorkEvent[] = [];
+    store.subscribe((es) => seen.push(...es));
+    const res = await post('/api/sources/outlook/connect', {});
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ connectorId: FAKE_CONNECTOR_ID, account, enabled: true });
+    const s = await saved();
+    expect(s.connectors?.ms365).toEqual({ id: FAKE_CONNECTOR_ID, account: { ...account, upn: 'fk@example.onmicrosoft.com' } });
+    expect(s.sources?.outlook?.enabled).toBe(true);
+    expect(seen.map((e) => e.type)).toEqual(['settings.changed']);
+    expect((await get('/api/sources/outlook')).json()).toEqual({ connectorId: FAKE_CONNECTOR_ID, account, enabled: true });
+  });
+
+  it('Connect takes an entered ID, and says so when claude.ai has no such connector', async () => {
+    await build({ outlook: link() });
+    const wrong = await post('/api/sources/outlook/connect', { connectorId: 'mcpsrv_nosuchconnector' });
+    expect(wrong.statusCode).toBe(503);
+    expect(wrong.json<ApiErrorBody>().message).toMatch(/no connector with that ID/);
+    expect((await saved()).connectors?.ms365).toBeUndefined();
+    expect((await saved()).sources?.outlook?.enabled ?? false).toBe(false);
+
+    const bad = await post('/api/sources/outlook/connect', { connectorId: 'not an id!' });
+    expect(bad.statusCode).toBe(422);
+    expect(bad.json<ApiErrorBody>().code).toBe('validation');
+
+    const ok = await post('/api/sources/outlook/connect', { connectorId: FAKE_CONNECTOR_ID });
+    expect(ok.json()).toEqual({ connectorId: FAKE_CONNECTOR_ID, account, enabled: true });
+  });
+
+  it('a signed-out connector says to reconnect it on claude.ai, and changes nothing', async () => {
+    ms365.status_ = 'needs-auth';
+    await build({ outlook: link() });
+    const res = await post('/api/sources/outlook/connect', {});
+    expect(res.statusCode).toBe(503);
+    expect(res.json<ApiErrorBody>().message).toMatch(/signed out\. Reconnect it on claude\.ai/);
+    expect((await saved()).connectors?.ms365).toBeUndefined();
+  });
+
+  it('Disconnect turns Outlook off and keeps the connector', async () => {
+    await build({ outlook: link() });
+    await post('/api/sources/outlook/connect', {});
+    expect((await post('/api/sources/outlook/disconnect')).statusCode).toBe(204);
+    expect((await get('/api/sources/outlook')).json()).toEqual({ connectorId: FAKE_CONNECTOR_ID, account, enabled: false });
+  });
+
+  it('a Settings save from a form loaded before Connect keeps the connector', async () => {
+    await build({ outlook: link() });
+    const before = (await get('/api/settings')).json<SettingsView>();
+    await post('/api/sources/outlook/connect', {});
+    const res = await put('/api/settings', { settings: { ...before.settings, dryRun: !before.settings.dryRun }, rules: before.rules });
+    expect(res.statusCode).toBe(200);
+    const s = await saved();
+    expect(s.dryRun).toBe(!before.settings.dryRun);
+    expect(s.connectors?.ms365?.id).toBe(FAKE_CONNECTOR_ID);
+    // …and a save can't set one either.
+    await put('/api/settings', { settings: { ...s, connectors: { ms365: { id: 'mcpsrv_other' } } }, rules: before.rules });
+    expect((await saved()).connectors?.ms365?.id).toBe(FAKE_CONNECTOR_ID);
+  });
+
+  it('Connect is unavailable where the server has no Outlook link; the status still reads', async () => {
+    await build();
+    expect((await post('/api/sources/outlook/connect', {})).statusCode).toBe(503);
+    expect((await get('/api/sources/outlook')).json()).toEqual({ enabled: false });
+  });
+});
