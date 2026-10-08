@@ -117,7 +117,7 @@ describe('firstMatchingRule (FR-4.1, FR-4.2)', () => {
 
 describe('ruleSources (sources)', () => {
   it('is every source for a rule without a scope whose conditions work everywhere', () => {
-    expect(ruleSources(rule('k', [{ type: 'keyword', pattern: 'renewal' }]))).toEqual(['slack', 'outlook', 'teams', 'plaud', 'wispr']);
+    expect(ruleSources(rule('k', [{ type: 'keyword', pattern: 'renewal' }]))).toEqual(['slack', 'outlook', 'teams', 'plaud', 'wispr', 'calendar']);
   });
 
   it('narrows to the sources every condition works on', () => {

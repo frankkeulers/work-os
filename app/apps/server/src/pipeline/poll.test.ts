@@ -285,6 +285,53 @@ describe('emails Frank sent (Outlook)', () => {
   });
 });
 
+describe('items a source closes itself (R2.8)', () => {
+  const CID = 'calendar:invite1';
+  const calendar: SourceAdapter = { ...source, id: 'calendar', deps: ['network', 'claude', 'ms365'] };
+  const invite = (messages: Message[]) =>
+    item(messages, { id: CID, source: 'calendar', kind: 'event', title: 'Q4 roadmap review', permalink: 'https://outlook.office365.com/calendar/item/x', meeting: { start: '2026-10-07T13:00:00.000Z', end: '2026-10-07T14:00:00.000Z' } });
+
+  it('closes an open item with the reason, after its update, and only once; the meeting time is kept', async () => {
+    next = { items: [invite([msg('invite', 30, 'dana@example.com')])], nextCursor: 'c1' };
+    await pollSource(d, calendar, 'first', signal());
+    expect((await d.items.read('calendar', CID))?.item.meeting).toEqual({ start: '2026-10-07T13:00:00.000Z', end: '2026-10-07T14:00:00.000Z' });
+
+    next = { items: [], nextCursor: 'c2', resolved: [{ itemId: CID, reason: 'You accepted it in Outlook.' }, { itemId: 'calendar:unknown', reason: 'x' }] };
+    expect(await pollSource(d, calendar, 'scheduled', signal())).toMatchObject({ resolved: 1 });
+    const log = await events();
+    expect(log.map((e) => e.type).slice(-2)).toEqual(['item.done', 'source.polled']);
+    expect(log.at(-2)).toMatchObject({ itemId: CID, data: { by: 'source', reason: 'You accepted it in Outlook.' } });
+    expect(store.projection.items[CID]?.status).toBe('done');
+
+    // Already done: nothing more is logged.
+    expect(await pollSource(d, calendar, 'scheduled', signal())).toMatchObject({ resolved: 0 });
+  });
+
+  it('never closes another source’s item', async () => {
+    next = { items: [item([msg('1', 30)])], nextCursor: '5' };
+    await pollSource(d, source, 'first', signal());
+    next = { items: [], nextCursor: 'c1', resolved: [{ itemId: ID, reason: 'x' }] };
+    expect(await pollSource(d, calendar, 'first', signal())).toMatchObject({ resolved: 0 });
+    expect(store.projection.items[ID]?.status).toBe('open');
+  });
+
+  it('commits the source’s own state only after the events and cursor are saved, and not when the poll is abandoned', async () => {
+    const seen: string[] = [];
+    next = { items: [invite([msg('invite', 30, 'dana@example.com')])], nextCursor: 'c1' };
+    const committing: SourceAdapter = {
+      ...calendar,
+      fetchSince: async () => ({ ...structuredClone(next), commit: async () => void seen.push(`${(await events()).length} events, cursor ${d.cursors.get('calendar', undefined)}`) }),
+    };
+    await pollSource(d, committing, 'first', signal());
+    expect(seen).toEqual(['2 events, cursor c1']);
+
+    const ctrl = new AbortController();
+    const abandoned: SourceAdapter = { ...calendar, fetchSince: async () => (ctrl.abort(), { items: [], nextCursor: 'c2', commit: async () => void seen.push('abandoned') }) };
+    await expect(pollSource(d, abandoned, 'scheduled', ctrl.signal)).rejects.toThrow();
+    expect(seen).toHaveLength(1);
+  });
+});
+
 describe('snooze return (FR-8.3)', () => {
   it('brings snoozed items back once their time has passed, once', async () => {
     next = { items: [item([msg('1', 30)])], nextCursor: '5' };

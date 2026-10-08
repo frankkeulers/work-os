@@ -5,10 +5,10 @@ import { z } from 'zod';
 
 const isoDate = z.iso.datetime();
 
-export const SourceId = z.enum(['slack', 'outlook', 'teams', 'plaud', 'wispr']);
+export const SourceId = z.enum(['slack', 'outlook', 'teams', 'plaud', 'wispr', 'calendar']); // amendment (R2.8): calendar
 export type SourceId = z.infer<typeof SourceId>;
 
-export const ItemKind = z.enum(['thread', 'dm', 'email', 'meeting', 'chat']);
+export const ItemKind = z.enum(['thread', 'dm', 'email', 'meeting', 'chat', 'event']); // amendment (R2.8): event, an invite
 export type ItemKind = z.infer<typeof ItemKind>;
 
 export const Participant = z.object({
@@ -28,6 +28,22 @@ export const Message = z.object({
 });
 export type Message = z.infer<typeof Message>;
 
+/** Amendment (R2.8): when a meeting or invite takes place, and the calendar event it is, once matched. */
+export const ItemMeeting = z.object({
+  start: isoDate,
+  end: isoDate,
+  calendar: z
+    .object({
+      eventId: z.string().min(1),
+      title: z.string(),
+      organizer: Participant.optional(),
+      invitees: z.array(Participant),
+      link: z.url().optional(),
+    })
+    .optional(),
+});
+export type ItemMeeting = z.infer<typeof ItemMeeting>;
+
 export const Item = z.object({
   id: z.string().min(1), // e.g. "slack:C123:1728031234.000100"
   source: SourceId,
@@ -42,6 +58,7 @@ export const Item = z.object({
   revision: z.number().int().positive(),
   contentExpired: z.boolean().optional(), // amendment: raw content removed by retention (FR-12.1)
   thread: z.boolean().optional(), // amendment (topics): a Slack thread with replies, not a stretch of chat or a lone post
+  meeting: ItemMeeting.optional(), // amendment (R2.8): a meeting's or an invite's time, and its calendar event
   schemaVersion: z.literal(1),
 });
 export type Item = z.infer<typeof Item>;
@@ -416,6 +433,7 @@ const SOURCE_DEFAULTS: Record<SourceId, SourceSchedule> = {
   teams: { enabled: false, intervalWorkMinutes: 30, intervalOffMinutes: 120 },
   plaud: { enabled: false, intervalWorkMinutes: 180, intervalOffMinutes: null },
   wispr: { enabled: false, intervalWorkMinutes: 180, intervalOffMinutes: null },
+  calendar: { enabled: false, intervalWorkMinutes: 30, intervalOffMinutes: 120 },
 };
 
 /** A source's schedule with defaults filled in. Slack's defaults are the global schedule. */

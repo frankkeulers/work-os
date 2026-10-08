@@ -6,7 +6,7 @@ import { cardActions, type DraftButton, type DraftState } from './lanes';
 // What the Inbox shows as each item's next step: the triage's suggestion when it made one,
 // otherwise a default from the lane. Rules and older decisions have no next step (no model call).
 
-export const SOURCE_NAME: Record<SourceId, string> = { slack: 'Slack', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud', wispr: 'Wispr Flow' };
+export const SOURCE_NAME: Record<SourceId, string> = { slack: 'Slack', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud', wispr: 'Wispr Flow', calendar: 'Outlook Calendar' };
 
 /** The sources this version reads. The others (Teams, Plaud) are previews, shown only in Full scope. */
 export const LIVE_SOURCES: readonly SourceId[] = ['slack', 'outlook', 'wispr'];

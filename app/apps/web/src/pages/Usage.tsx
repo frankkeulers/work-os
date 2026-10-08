@@ -193,7 +193,7 @@ const SLACK = {
 /** A source's state in words. Slack's sign-in is a token; Outlook's and Wispr Flow's are an account sign-in. */
 const stateOf = (h: SourceHealthView) => (h.status === 'auth_failed' && h.id !== 'slack' ? { ...SLACK.auth_failed, label: 'Signed out' } : h.status === 'backoff' && h.id !== 'slack' ? { ...SLACK.backoff, label: 'Rate-limited, waiting' } : SLACK[h.status]);
 
-const SOURCE_NAME: Partial<Record<SourceId, string>> = { slack: 'Slack', outlook: 'Outlook', wispr: 'Wispr Flow' };
+const SOURCE_NAME: Partial<Record<SourceId, string>> = { slack: 'Slack', outlook: 'Outlook', wispr: 'Wispr Flow', calendar: 'Outlook Calendar' };
 
 function SourceRow({ h }: { h: SourceHealthView }) {
   const st = stateOf(h);

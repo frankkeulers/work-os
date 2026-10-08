@@ -11,7 +11,7 @@ import { Button, MenuItem, Segmented, cx, inputClass } from './ui';
 
 export const itemPath = (id: string, q = '') => `/item/${encodeURIComponent(id)}${q}`;
 
-const KIND_LABEL: Record<ItemSummary['kind'], string> = { thread: 'Thread', dm: 'DM', email: 'Email', meeting: 'Meeting', chat: 'Chat' };
+const KIND_LABEL: Record<ItemSummary['kind'], string> = { thread: 'Thread', dm: 'DM', email: 'Email', meeting: 'Meeting', chat: 'Chat', event: 'Invite' };
 export const kindLabel = (k: ItemSummary['kind']) => KIND_LABEL[k];
 
 /**

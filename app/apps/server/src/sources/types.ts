@@ -16,6 +16,10 @@ export interface FetchContext {
 export interface FetchResult {
   items: Item[];
   nextCursor: string;
+  /** Amendment (R2.8): items the source itself closes (an invite answered or cancelled), with why. */
+  resolved?: { itemId: string; reason: string }[];
+  /** Amendment (R2.8): runs once the items and cursor are saved, e.g. to publish a calendar snapshot. */
+  commit?: () => Promise<void>;
 }
 
 export interface SourceAdapter {
@@ -34,4 +38,4 @@ export interface SourceAdapter {
 }
 
 /** Priority for catch-up after a wake: one source after another, so a wake is not a burst. */
-export const SOURCE_PRIORITY: SourceId[] = ['slack', 'outlook', 'wispr', 'teams', 'plaud'];
+export const SOURCE_PRIORITY: SourceId[] = ['slack', 'outlook', 'calendar', 'wispr', 'teams', 'plaud'];

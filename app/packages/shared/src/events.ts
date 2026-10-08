@@ -47,7 +47,8 @@ export const EventPayloads = {
     messageCount: z.number().int().nonnegative(),
     fromMeOnly: z.boolean(), // the new messages are all the user's own: no re-triage (§5.3)
   }),
-  'item.done': none,
+  // Amendment (R2.8): a source can close an item itself, e.g. an invite Frank answered in Outlook.
+  'item.done': z.object({ by: z.literal('source'), reason: z.string().min(1).max(200) }).strict().optional(),
   'item.reopened': none,
   'item.snoozed': z.object({ until: isoDate }),
   'item.unsnoozed': none, // the snooze time passed (FR-8.3)

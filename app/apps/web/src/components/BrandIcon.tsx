@@ -61,7 +61,7 @@ export function BrandIcon({ brand, size = 18, decorative, className }: { brand: 
   );
 }
 
-/** The mark for an item's source. Plaud and Wispr Flow get neutral glyphs (recorder, voice wave), not their marks. */
+/** The mark for an item's source. Plaud, Wispr Flow and the calendar get neutral glyphs (recorder, voice wave, calendar), not their marks. */
 export function SourceMark({ source, size = 18, decorative }: { source: SourceId; size?: number; decorative?: boolean }) {
   if (source === 'plaud')
     return (
@@ -74,6 +74,13 @@ export function SourceMark({ source, size = 18, decorative }: { source: SourceId
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" role={decorative ? undefined : 'img'} aria-label={decorative ? undefined : 'Wispr Flow'} aria-hidden={decorative || undefined}>
         <path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4" />
+      </svg>
+    );
+  if (source === 'calendar')
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" role={decorative ? undefined : 'img'} aria-label={decorative ? undefined : 'Outlook Calendar'} aria-hidden={decorative || undefined}>
+        <rect x="3" y="5" width="18" height="16" rx="2" />
+        <path d="M3 10h18M8 3v4M16 3v4" />
       </svg>
     );
   return <BrandIcon brand={source} size={size} decorative={decorative} />;

@@ -31,6 +31,7 @@ export interface PollStats {
   changed: number;
   dropped: number; // new threads a drop rule kept out
   ruleDecided: number; // items a now/today rule decided
+  resolved: number; // open items the source closed itself (R2.8)
   cursor?: string;
   durationMs: number;
 }
@@ -151,6 +152,14 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
       ruleDecided++;
     }
   }
+  // Items the source closes itself (an invite answered in Outlook), after their updates above.
+  let resolved = 0;
+  for (const r of result.resolved ?? []) {
+    const it = d.store.projection.items[r.itemId];
+    if (!it || it.status === 'done' || it.source !== source.id) continue;
+    drafts.push({ type: 'item.done', itemId: r.itemId, data: { by: 'source', reason: r.reason } });
+    resolved++;
+  }
   const durationMs = Math.round(performance.now() - t0);
   drafts.push({ type: 'source.polled', data: { source: source.id, reason, fetched: result.items.length, cursor: result.nextCursor, durationMs } });
   crashPoint('after-items');
@@ -158,8 +167,9 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   crashPoint('after-events');
   if (result.nextCursor) await d.cursors.set(source.id, result.nextCursor);
   crashPoint('after-cursor');
-  d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, dropped, ruleDecided, durationMs }, 'Polled');
-  return { fetched: result.items.length, changed, dropped, ruleDecided, cursor: result.nextCursor, durationMs };
+  await result.commit?.(); // the source's own state, only once what it read is saved
+  d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, dropped, ruleDecided, resolved, durationMs }, 'Polled');
+  return { fetched: result.items.length, changed, dropped, ruleDecided, resolved, cursor: result.nextCursor, durationMs };
 }
 
 function sentByYouDecision(item: Item, at: Date): LoggedDecision {

@@ -19,7 +19,7 @@ export type ShellContext = { inbox: QueryState<InboxView> };
 export const useShell = () => useOutletContext<ShellContext>();
 
 /** Short enough for the sidebar beside a source's state. */
-const SOURCE_NAME: Record<SourceId, string> = { slack: 'Slack', wispr: 'Wispr', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud' };
+const SOURCE_NAME: Record<SourceId, string> = { slack: 'Slack', wispr: 'Wispr', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud', calendar: 'Calendar' };
 
 /** A source's state in a few words, or when it last polled. */
 function sourceLabel(id: SourceId, h: SourceHealth, now: Date): string {

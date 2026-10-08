@@ -57,7 +57,7 @@ test('a rule can be limited to Slack or Outlook (every source in Full scope), an
   const mvp = page.getByRole('dialog', { name: 'Add rule' });
   await mvp.getByRole('group', { name: 'Applies to' }).getByRole('button', { name: 'Only these' }).click();
   await expect(mvp.getByRole('button', { name: 'Slack' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(mvp.getByRole('button', { name: 'Outlook' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(mvp.getByRole('button', { name: 'Outlook', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await expect(mvp.getByRole('button', { name: 'Teams' })).toHaveCount(0);
   await mvp.getByLabel('Condition').selectOption('is_dm');
   await expect(mvp.getByLabel('Condition').locator('option[value="is_dm"]')).toHaveText('Is a DM (Slack only)');
@@ -77,10 +77,10 @@ test('a rule can be limited to Slack or Outlook (every source in Full scope), an
   await dialog.getByLabel('Condition').selectOption('channel_in');
   const appliesTo = dialog.getByRole('group', { name: 'Applies to' });
   await appliesTo.getByRole('button', { name: 'Only these' }).click();
-  await dialog.getByRole('button', { name: 'Outlook' }).click();
+  await dialog.getByRole('button', { name: 'Outlook', exact: true }).click();
   await dialog.getByRole('button', { name: 'Slack' }).click();
-  await expect(dialog.getByRole('button', { name: 'Outlook' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(dialog.getByRole('button', { name: 'Outlook' })).toBeDisabled(); // the last one can't be turned off
+  await expect(dialog.getByRole('button', { name: 'Outlook', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByRole('button', { name: 'Outlook', exact: true })).toBeDisabled(); // the last one can't be turned off
   await expect(dialog.getByText('No chosen source can check every condition.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Add rule' }).click();
   await expect(dialog.getByText('None of the chosen sources supports every condition')).toBeVisible();
