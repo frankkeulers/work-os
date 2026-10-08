@@ -3,16 +3,17 @@ title: What Work OS does
 group: Start here
 order: 10
 summary: A local inbox that reads Slack, decides what needs you, and files what is worth keeping.
-updated: 2026-10-07
+updated: 2026-10-08
 ---
 
-Work OS runs on your Mac and reads the Slack conversations you are in. For each one it decides
+Work OS runs on your Mac and reads the Slack conversations you are in, and the meeting notes from
+[Wispr Flow](wispr-flow.md) once you connect it. For each one it decides
 whether it needs you now, today or not at all, and whether it holds something worth keeping in
 Confluence or your Obsidian vault. You get one short list to work through instead of a dozen
 channels, and filing becomes a review-and-approve step rather than a writing job.
 
-Nothing leaves your Mac except the calls Work OS has to make: Slack (read-only), Claude, and
-Confluence when you approve an entry. Tokens live in the macOS Keychain, never in files.
+Nothing leaves your Mac except the calls Work OS has to make: Slack and Wispr Flow (both
+read-only), Claude, and Confluence when you approve an entry. Tokens live in the macOS Keychain, never in files.
 
 ## How a thread flows
 

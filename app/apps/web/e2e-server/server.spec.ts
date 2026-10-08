@@ -8,7 +8,8 @@ import { expect, test, type Page } from '@playwright/test';
 // seeded threads are triaged into their lanes, a poll adds a thread that waits for its quiet
 // window, a correction moves an item, Done sticks, after a server restart the page goes
 // reconnecting, then up, a vault note is drafted and written to the sandbox, and a Confluence entry
-// is drafted and its write logged in dry-run.
+// is drafted and its write logged in dry-run. Wispr Flow (faked) connects from Settings and its
+// meetings are read and triaged.
 
 const APP = resolve(import.meta.dirname, '../../..');
 const PORT = 4399;
@@ -168,7 +169,7 @@ test('the prompt and guidance files are listed from the data directory, and a sa
   await expect(page.getByRole('heading', { name: 'Prompts', level: 2 })).toBeVisible();
   // Written on first run from the built-in defaults.
   await expect(page.locator('[data-prompt="confluence-routing"]')).toContainText('confluence-routing v3#');
-  await expect(page.locator('[data-prompt="pick-confluence"]')).toContainText('pick-confluence v1#');
+  await expect(page.locator('[data-prompt="pick-confluence"]')).toContainText('pick-confluence v2#');
   await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
   await page.screenshot({ path: join(APP, 'screenshots/server-prompts-light.png') });
 
@@ -211,4 +212,35 @@ test('the guide is read live from its folder: an edit shows on focus, without a 
   await page.goto('/guide/new-page');
   await expect(page.getByRole('heading', { name: 'A new page', level: 2 })).toBeVisible();
   await expect(page.getByText('A guide file has a problem.')).toHaveCount(0);
+});
+
+test('Wispr Flow: Connect in Settings, and its finished meetings are read and triaged (R2.7)', async ({ page }) => {
+  await page.goto('/settings/wispr');
+  await expect(page.getByText('Not connected')).toBeVisible();
+  // The fake connects at once, as a stored sign-in does: no browser tab.
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByText('Frank Keulers')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Read Wispr Flow meetings' })).toHaveAttribute('aria-checked', 'true');
+
+  // Connect polls Wispr Flow at once; the launch meeting is quiet, so it is triaged straight away.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  const meeting = page.locator('[data-row]').filter({ hasText: 'MVI V2 launch readiness' });
+  await expect(meeting).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^Wispr/ })).toBeVisible();
+  await meeting.click();
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  await expect(panel.getByRole('heading', { name: 'From the meeting notes' })).toBeVisible();
+  await expect(panel.getByText('Frank to confirm the rollback owner by Wednesday.', { exact: false })).toBeVisible();
+  // The transcript is read only for a draft, never stored with the item.
+  await expect(panel.getByText('Are we still on for Thursday?')).toHaveCount(0);
+  await page.screenshot({ path: join(APP, 'screenshots/server-wispr-meeting-light.png') });
+
+  // Disconnect: the source goes off, and the meeting already read stays.
+  await page.goto('/settings/wispr');
+  await page.getByRole('button', { name: 'Disconnect' }).click();
+  await page.getByRole('dialog', { name: 'Disconnect Wispr Flow?' }).getByRole('button', { name: 'Disconnect' }).click();
+  await expect(page.getByText('Not connected')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Read Wispr Flow meetings' })).toHaveAttribute('aria-checked', 'false');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  await expect(meeting).toBeVisible();
 });

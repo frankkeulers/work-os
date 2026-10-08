@@ -1,5 +1,7 @@
 // Role-based names, apart from people the designs already name. No real observations about anyone.
 export const FRANK = 'U01FRANK';
+/** A Wispr Flow summary's author: Wispr Flow itself, so not a participant (as on the server). */
+export const WISPR_SUMMARY = 'Wispr Flow summary';
 
 export const PEOPLE: Record<string, string> = {
   [FRANK]: 'Frank Keulers',

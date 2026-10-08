@@ -8,6 +8,10 @@ import { cardActions, type DraftButton, type DraftState } from './lanes';
 
 export const SOURCE_NAME: Record<SourceId, string> = { slack: 'Slack', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud', wispr: 'Wispr Flow' };
 
+/** The sources this version reads. The others (Outlook, Teams) are Phase 2 previews, shown only in Full scope. */
+export const LIVE_SOURCES: readonly SourceId[] = ['slack', 'wispr'];
+export const isLive = (source: SourceId) => LIVE_SOURCES.includes(source);
+
 const NEED_LABEL: Record<Need, string> = { reply: 'Reply', approve: 'Approve', decide: 'Decide', prepare: 'Prepare', review: 'Review', actions: 'Actions', file: 'File' };
 
 export function needLabel(n: Pick<NextStep, 'need' | 'actionItems'>): string {

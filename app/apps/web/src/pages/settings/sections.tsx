@@ -1,6 +1,6 @@
 import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { CataloguePageView, ConfluenceCatalogueView, ConfluencePage, ModelId, PromptFileId, Rule, Settings } from '@work-os/shared';
+import { sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceSchedule } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
@@ -8,7 +8,8 @@ import { Icon } from '../../components/icons';
 import { RulesList, newRuleEdit, type RuleEdit } from '../../components/Rules';
 import { Banner, Button, Chip, IconButton, Segmented, Spinner, Switch, cx, inputBase, inputClass } from '../../components/ui';
 import { onTopics, useApiQuery } from '../../hooks/useApiQuery';
-import { fmtMoney, fmtTime } from '../../lib/format';
+import { useNow } from '../../hooks/useNow';
+import { fmtAgo, fmtMoney, fmtTime } from '../../lib/format';
 import { avatarDataUrl } from '../../lib/avatar';
 import { NAME_MAX, shownName } from '../../lib/profile';
 import { confluencePageUrl } from '../../lib/links';
@@ -269,6 +270,155 @@ function SlackSection({ s, usage, set, type, flush, err }: Ctx) {
   );
 }
 
+// ---------- Wispr Flow ----------
+
+/** Sets one field of a source's schedule, keeping the others. */
+const setSchedule = (x: Settings, id: 'wispr', patch: Partial<SourceSchedule>) => {
+  x.sources = { ...x.sources, [id]: { ...x.sources?.[id], ...patch } };
+};
+
+function WisprSection({ s, set, type, flush, err, confirm }: Ctx) {
+  const status = useApiQuery(() => api.getWisprStatus(), onTopics('settings', 'health'), []);
+  const inbox = useApiQuery(() => api.getInbox(), onTopics('inbox'), []);
+  const [busy, setBusy] = useState(false);
+  const now = useNow(60_000);
+  const schedule = sourceSchedule(s, 'wispr');
+  const connected = status.data?.connected;
+  const health = inbox.data?.sources.find((x) => x.id === 'wispr');
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { url } = await api.connectWispr();
+      if (url) {
+        window.open(url, '_blank', 'noopener');
+        toast('Sign in to Wispr Flow in the new tab, then come back here.');
+      } else toast('Wispr Flow is connected.', { tone: 'success' });
+      status.reload();
+    } catch (e) {
+      errorToast(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const disconnect = () =>
+    confirm({
+      title: 'Disconnect Wispr Flow?',
+      body: 'Work OS forgets its Wispr Flow sign-in and stops reading meetings. Meetings already in the inbox stay. You can connect again at any time.',
+      label: 'Disconnect',
+      danger: true,
+      run: () =>
+        void api
+          .disconnectWispr()
+          .then(() => (status.reload(), toast('Wispr Flow is disconnected.')))
+          .catch(errorToast),
+    });
+
+  const state = connected === undefined ? undefined : !connected ? { dot: 'bg-gray-mid', text: 'Not connected' } : health && health.status !== 'healthy' && health.status !== 'never' ? SLACK_STATUS[health.status] : { dot: 'bg-green', text: 'Connected' };
+  return (
+    <>
+      <SectionHeader
+        title="Wispr Flow"
+        description="Meeting notes from Wispr Flow’s Notetaker, read through Wispr Flow’s own connector."
+        action={
+          state && (
+            <Link to="/usage#health" className="inline-flex min-h-9 items-center gap-2 text-[13px] !text-ink-2 no-underline hover:!text-ink">
+              <span className={cx('h-2 w-2 rounded-full', state.dot)} />
+              {state.text}
+            </Link>
+          )
+        }
+      />
+      <Group title="Connection">
+        <Row
+          label="Account"
+          help={
+            connected
+              ? 'Signed in. If the sign-in lapses, the inbox says so and Reconnect fixes it.'
+              : 'Opens Wispr Flow’s sign-in in a new tab. Use the account you sign in to the Wispr Flow app with. Cloud Sync must be on in Wispr Flow for meetings to show.'
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {connected && <span className="text-[13px] text-ink-2">{status.data?.account ?? 'Connected'}</span>}
+            {connected ? (
+              <>
+                <Button size="sm" disabled={busy} onClick={() => void connect()}>
+                  Reconnect
+                </Button>
+                <Button size="sm" variant="ghost" onClick={disconnect}>
+                  Disconnect
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" variant="solid" disabled={busy || connected === undefined} onClick={() => void connect()}>
+                {busy && <Spinner size={12} />}
+                Connect
+              </Button>
+            )}
+          </div>
+        </Row>
+        {health?.message && connected && (
+          <Row label="Last problem">
+            <span className="text-[13px] text-ink-2">{health.message}</span>
+          </Row>
+        )}
+        {health?.lastPollAt && (
+          <Row label="Last read">
+            <span className="text-[13px] text-ink-2">{`${fmtAgo(health.lastPollAt, now)} ago`.replace('now ago', 'just now')}</span>
+          </Row>
+        )}
+      </Group>
+      <Group title="Polling">
+        <Row label="Read meetings" help="Off: Wispr Flow isn’t polled, and its meetings stop arriving.">
+          <Switch label="Read Wispr Flow meetings" checked={schedule.enabled} disabled={!connected} onChange={(v) => set((x) => setSchedule(x, 'wispr', { enabled: v }))} />
+        </Row>
+        <Row
+          label="During work hours"
+          help={
+            <>
+              How often to look for new meetings in your <Link to="/settings/schedule">work hours</Link>.
+            </>
+          }
+          error={err('sources.wispr.intervalWorkMinutes')}
+        >
+          <NumInput
+            label="Wispr Flow: poll every, work hours"
+            prefix="Every"
+            suffix="min"
+            value={schedule.intervalWorkMinutes}
+            invalid={!!err('sources.wispr.intervalWorkMinutes')}
+            onBlur={flush}
+            onChange={(v) => type((x) => setSchedule(x, 'wispr', { intervalWorkMinutes: v ?? NaN }))}
+          />
+        </Row>
+        <Row label="Outside work hours" help="Off: meetings from the evening wait for the next work-hours poll." error={err('sources.wispr.intervalOffMinutes')}>
+          <div className="flex flex-wrap items-center gap-3">
+            <Switch label="Wispr Flow: poll outside work hours" checked={schedule.intervalOffMinutes !== null} onChange={(v) => set((x) => setSchedule(x, 'wispr', { intervalOffMinutes: v ? schedule.intervalWorkMinutes : null }))} />
+            {schedule.intervalOffMinutes !== null && (
+              <NumInput
+                label="Wispr Flow: poll every, off hours"
+                prefix="Every"
+                suffix="min"
+                value={schedule.intervalOffMinutes}
+                invalid={!!err('sources.wispr.intervalOffMinutes')}
+                onBlur={flush}
+                onChange={(v) => type((x) => setSchedule(x, 'wispr', { intervalOffMinutes: v ?? NaN }))}
+              />
+            )}
+          </div>
+        </Row>
+      </Group>
+      <Group title="What’s read">
+        <p className="m-0 py-3 text-[13px] leading-relaxed text-ink-2">
+          Finished meetings only. The inbox keeps each meeting’s summary, your own notes and its action items, and triage reads those. The transcript is never stored: it’s read from Wispr Flow
+          when you draft a vault note or a Confluence entry from the meeting. Work OS only reads; it never changes anything in Wispr Flow.
+        </p>
+        <GuideLink topic="wispr" label="Guide: Wispr Flow" />
+      </Group>
+    </>
+  );
+}
+
 // ---------- More sources ----------
 
 function MoreSourcesSection({ full }: Ctx) {
@@ -283,9 +433,6 @@ function MoreSourcesSection({ full }: Ctx) {
           <FutureRow title="Teams chats and transcripts" phase="P2" cta="Request consent" marks={['teams']}>
             Graph delta on chats, plus transcripts for meetings you attended. Needs admin consent. Retires the daily Teams transcript sweep.
           </FutureRow>
-          <FutureRow title="Wispr Flow" phase="P2" cta="Connect">
-            Meetings and notes from Wispr Flow’s local database, read-only, every 3 hours in work hours. No network or tokens needed.
-          </FutureRow>
           <FutureRow title="Plaud" phase="P2" cta="Connect">
             Meeting transcripts, triaged on their summary. Retires the daily Plaud transcript sweep.
           </FutureRow>
@@ -294,7 +441,7 @@ function MoreSourcesSection({ full }: Ctx) {
           </FutureRow>
         </>
       ) : (
-        <p className="m-0 mt-5 text-[13px] text-muted">Slack is the only source in this version.</p>
+        <p className="m-0 mt-5 text-[13px] text-muted">Slack and Wispr Flow are the sources in this version.</p>
       )}
     </>
   );
@@ -1192,6 +1339,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'schedule', label: 'Schedule', group: 'Inbox', View: ScheduleSection, owns: under('settings.schedule.workHours', 'settings.triage.quietMinutes') },
   { id: 'notifications', label: 'Notifications', group: 'Inbox', View: NotificationsSection, owns: under('settings.notifications') },
   { id: 'slack', label: 'Slack', group: 'Sources', View: SlackSection, owns: under('settings.slack', 'settings.schedule.intervalWorkMinutes', 'settings.schedule.intervalOffMinutes') },
+  { id: 'wispr', label: 'Wispr Flow', group: 'Sources', View: WisprSection, owns: under('settings.sources.wispr') },
   { id: 'sources', label: 'More sources', group: 'Sources', View: MoreSourcesSection, owns: () => false, fullOnly: true },
   { id: 'writing', label: 'Write targets', group: 'Actions', View: WritingSection, owns: under('settings.dryRun', 'settings.vaultPath', 'settings.confluence') },
   { id: 'models', label: 'Models', group: 'Claude', View: ModelsSection, owns: under('settings.models', 'settings.claudeBackend', 'settings.triage.maxThreadsPerCall', 'settings.triage.maxInputTokens', 'settings.triage.keepLastMessages') },

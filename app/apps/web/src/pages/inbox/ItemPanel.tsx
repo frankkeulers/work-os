@@ -12,7 +12,7 @@ import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx,
 import { useNow } from '../../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime, fmtWhen, plural } from '../../lib/format';
 import { TYPE_LABEL, draftButton, draftState } from '../../lib/lanes';
-import { SOURCE_NAME, dueInfo, needLabel, shownStep, suggestedSnooze, topicAsks } from '../../lib/next';
+import { SOURCE_NAME, dueInfo, isLive, needLabel, shownStep, suggestedSnooze, topicAsks } from '../../lib/next';
 import { usePrefs } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { DueChip, LaneChip, NeedTag, StatusChip } from './chips';
@@ -281,7 +281,9 @@ function Messages({ view }: { view: ItemView }) {
     : item.kind === 'email'
       ? 'Email'
       : item.kind === 'meeting'
-        ? 'From the transcript'
+        ? item.source === 'wispr'
+          ? 'From the meeting notes'
+          : 'From the transcript'
         : item.kind === 'dm' || item.kind === 'chat'
           ? item.messages.length === 1
             ? 'Message'
@@ -512,7 +514,7 @@ export function ItemPanel({
               {who}
             </strong>{' '}
             · {group ? 'Group DM' : kindLabel(item.kind)} · {ago === 'now' ? 'just now' : /^\d+[mh]$/.test(ago) ? `${ago} ago` : ago}
-            {item.source !== 'slack' && <PhaseTag phase="P2" className="ml-2" />}
+            {!isLive(item.source) && <PhaseTag phase="P2" className="ml-2" />}
           </span>
           <Button size="sm" icon="external" onClick={() => openInSource(item)}>
             Open in {SOURCE_NAME[item.source]}

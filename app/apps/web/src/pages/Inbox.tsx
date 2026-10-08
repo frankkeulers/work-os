@@ -12,7 +12,7 @@ import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverP
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
-import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, needLabel, sortItems, topicAsks, type InboxSort } from '../lib/next';
+import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, isLive, needLabel, sortItems, topicAsks, type InboxSort } from '../lib/next';
 import { usePrefs } from '../store/prefs';
 import { errorToast, toast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
@@ -596,10 +596,10 @@ export function InboxPage() {
   const sel = search.get('item');
   const filing = parseType(search.get('file'));
 
-  // Outlook and Teams are Phase 2 sources: their items only show in Full scope.
+  // Outlook and Teams are Phase 2 previews: their items only show in Full scope.
   // Holding works on every item, so switching scope never makes items look newly arrived.
   const { held: heldAll, heldIds, showHeld, fresh } = useHeldItems(inbox?.items);
-  const inScope = useCallback((i: ItemSummary) => full || i.source === 'slack', [full]);
+  const inScope = useCallback((i: ItemSummary) => full || isLive(i.source), [full]);
   const all = useMemo(() => (inbox?.items ?? []).filter(inScope), [inbox, inScope]);
   const held = heldAll.filter(inScope);
   const [open, setOpen] = useState<Lower | null>(null);

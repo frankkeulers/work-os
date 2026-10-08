@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useOutletContext } from 'react-router';
+import type { SourceHealth, SourceId } from '@work-os/shared';
 import { API_MODE, api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
+import { isLive } from '../lib/next';
 import { shownName } from '../lib/profile';
 import { usePrefs, type Scope, type Theme } from '../store/prefs';
 import { Avatar } from './Avatar';
-import { BrandIcon } from './BrandIcon';
+import { BrandIcon, SourceMark } from './BrandIcon';
 import { Icon, type IconName } from './icons';
 import { Dot, IconButton, PhaseTag, Segmented, cx, phaseToast, usePopover, type Phase } from './ui';
 
 export type ShellContext = { inbox: QueryState<InboxView> };
 export const useShell = () => useOutletContext<ShellContext>();
+
+/** Short enough for the sidebar beside a source's state. */
+const SOURCE_NAME: Record<SourceId, string> = { slack: 'Slack', wispr: 'Wispr', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud' };
+
+/** A source's state in a few words, or when it last polled. */
+function sourceLabel(id: SourceId, h: SourceHealth, now: Date): string {
+  if (h.status === 'auth_failed') return id === 'slack' ? 'token rejected' : 'signed out';
+  const words: Partial<Record<SourceHealth['status'], string>> = { never: 'not polled', backoff: 'backing off', offline: 'offline', degraded: 'retrying', paused: 'paused' };
+  return words[h.status] ?? (h.lastPollAt ? `${fmtAgo(h.lastPollAt, now)} ago`.replace('now ago', 'just now') : '');
+}
 
 const SLACK_DOT = {
   healthy: 'var(--green)',
@@ -184,11 +196,9 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const setCollapsed = usePrefs((s) => s.setNavCollapsed);
   const full = scope === 'full';
   // Outlook and Teams items are P2: they count only in Full scope, as on the Inbox.
-  const count = inbox?.items.filter((i) => (full || i.source === 'slack') && (i.lane === 'now' || i.lane === 'today' || i.lane === 'file')).length;
-  const slack = inbox?.source;
-  const slackLabel =
-    !slack ? '' : slack.status === 'auth_failed' ? 'token rejected' : slack.status === 'never' ? 'not polled' : slack.status === 'backoff' ? 'backing off' : slack.status === 'offline' ? 'offline' : slack.status === 'degraded' ? 'retrying' : slack.status === 'paused' ? 'paused' : slack.lastPollAt ? `${fmtAgo(slack.lastPollAt, now)} ago`.replace('now ago', 'just now') : '';
-  const slackDot = slack ? SLACK_DOT[slack.status] : 'var(--gray-mid)';
+  const count = inbox?.items.filter((i) => (full || isLive(i.source)) && (i.lane === 'now' || i.lane === 'today' || i.lane === 'file')).length;
+  // Every enabled source (R2.1); Slack shows even before the first inbox load.
+  const sources: { id: SourceId; health?: SourceHealth }[] = inbox?.sources.length ? inbox.sources.map((h) => ({ id: h.id, health: h })) : [{ id: 'slack' }];
 
   // [ collapses and expands the sidebar, as in most tools with a sidebar.
   useEffect(() => {
@@ -241,23 +251,31 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
         </div>
         <div className="flex flex-col gap-2">
           {collapsed ? <div className="mx-2 border-t border-line-soft" /> : <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Sources</div>}
-          <NavLink
-            to="/usage#health"
-            title={collapsed ? `Slack · ${slackLabel}` : undefined}
-            className={cx('flex items-center gap-2.5 rounded-lg !text-ink no-underline hover:bg-surface-2', collapsed ? 'relative min-h-10 justify-center' : 'px-2 py-1.5')}
-          >
-            <BrandIcon brand="slack" size={16} decorative />
-            <Label collapsed={collapsed}>Slack</Label>
-            {collapsed ? (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-surface box-content" style={{ background: slackDot }} />
-            ) : (
-              <>
-                <Dot color={slackDot} />
-                <span className={cx('font-mono text-[11px]', slack?.status === 'auth_failed' ? 'text-red-fg' : slack?.status === 'backoff' ? 'text-amber-fg' : 'text-muted')}>{slackLabel}</span>
-              </>
-            )}
-            {collapsed && <span className="sr-only">{slackLabel}</span>}
-          </NavLink>
+          {sources.map(({ id, health }) => {
+            const name = SOURCE_NAME[id];
+            const label = health ? sourceLabel(id, health, now) : '';
+            const dot = health ? SLACK_DOT[health.status] : 'var(--gray-mid)';
+            return (
+              <NavLink
+                key={id}
+                to="/usage#health"
+                title={collapsed ? `${name} · ${label}` : undefined}
+                className={cx('flex items-center gap-2.5 rounded-lg !text-ink no-underline hover:bg-surface-2', collapsed ? 'relative min-h-10 justify-center' : 'px-2 py-1.5')}
+              >
+                <SourceMark source={id} size={16} decorative />
+                <Label collapsed={collapsed}>{name}</Label>
+                {collapsed ? (
+                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-surface box-content" style={{ background: dot }} />
+                ) : (
+                  <>
+                    <Dot color={dot} />
+                    <span className={cx('font-mono text-[11px]', health?.status === 'auth_failed' ? 'text-red-fg' : health?.status === 'backoff' ? 'text-amber-fg' : 'text-muted')}>{label}</span>
+                  </>
+                )}
+                {collapsed && <span className="sr-only">{label}</span>}
+              </NavLink>
+            );
+          })}
           {full && (
             <div className="flex flex-col gap-0.5 rounded-lg border border-dashed border-violet-line bg-violet-wash py-1.5">
               {(

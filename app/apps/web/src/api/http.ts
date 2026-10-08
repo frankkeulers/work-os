@@ -1,4 +1,4 @@
-import type { Action, ActionType, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -134,8 +134,11 @@ export class HttpApi implements WorkOsApi {
   getUsage = () => this.get<UsageView>('/api/usage');
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');
   getSettings = () => this.get<SettingsView>('/api/settings');
+  getWisprStatus = () => this.get<WisprStatusView>('/api/sources/wispr');
 
   pollNow = () => this.post('/api/poll');
+  connectWispr = () => this.post<WisprConnectView>('/api/sources/wispr/connect');
+  disconnectWispr = () => this.post('/api/sources/wispr/disconnect');
   markDone = (id: string) => this.post(`${this.item(id)}/done`);
   reopen = (id: string) => this.post(`${this.item(id)}/reopen`);
   markDoneMany = (ids: string[]) => this.post<{ count: number }>('/api/items/done', { ids });

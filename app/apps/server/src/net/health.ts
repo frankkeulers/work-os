@@ -6,7 +6,7 @@ import type { Failure } from './classify';
 // Each dependency has its own breaker, so Slack being offline never holds up a source that needs
 // no network. A change of state (not every failure) is reported once, for the event log.
 
-const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal' | 'token_missing', string>>>> = {
+const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal' | 'token_missing' | 'tools_changed', string>>>> = {
   network: { offline: 'Waiting for the network. Work that needs it resumes on its own.', captive_portal: 'Sign in to the Wi-Fi portal in a browser.' },
   slack: {
     token_missing: 'No Slack token in the Keychain yet. Store it (account slack-user-token), then choose Check again.',
@@ -22,7 +22,8 @@ const FIXES: Partial<Record<DepId, Partial<Record<DepState | 'captive_portal' | 
     token_missing: 'Wispr Flow is not connected yet. Connect it in Settings › Sources › Wispr Flow.',
     auth_failed: 'Wispr Flow signed Work OS out. Reconnect it in Settings › Sources › Wispr Flow.',
     rate_limited: 'Wispr Flow asked us to wait. Polling resumes on its own.',
-    degraded: 'Wispr Flow changed its MCP tools. Work OS stopped reading it until the reader is updated.',
+    degraded: 'Wispr Flow is not answering properly. Work OS tries again on its own.',
+    tools_changed: 'Wispr Flow changed its MCP tools. Work OS stopped reading it until the reader is updated.',
   },
 };
 
@@ -108,7 +109,7 @@ export class Health {
     h.state = state;
     h.reason = reason;
     const fixes = FIXES[h.id];
-    h.fix = (reason === 'captive_portal' || reason === 'token_missing' ? fixes?.[reason] : undefined) ?? fixes?.[state];
+    h.fix = (reason === 'captive_portal' || reason === 'token_missing' || reason === 'tools_changed' ? fixes?.[reason] : undefined) ?? fixes?.[state];
     if (changed) this.onChange({ dep: h.id, state, reason });
   }
 }

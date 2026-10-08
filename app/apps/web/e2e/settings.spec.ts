@@ -23,7 +23,7 @@ test('Inbox holds what applies to every source; Sources has a page per source', 
   await open(page, 'rules');
   const group = (name: string) => sectionNav(page).locator('div').filter({ has: page.getByText(name, { exact: true }) });
   await expect(group('Inbox').getByRole('link')).toHaveText(['Triage rules', 'People', 'Schedule', 'Notifications']);
-  await expect(group('Sources').getByRole('link')).toHaveText(['Slack']);
+  await expect(group('Sources').getByRole('link')).toHaveText(['Slack', 'Wispr Flow']);
 
   await sectionNav(page).getByRole('link', { name: 'Schedule' }).click();
   await expect(page.getByLabel('Work hours', { exact: true })).toHaveValue('Mon–Fri 08:00–18:30');
@@ -36,7 +36,7 @@ test('Inbox holds what applies to every source; Sources has a page per source', 
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Account' }).click();
   await page.getByRole('dialog', { name: 'Account' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
   await page.keyboard.press('Escape');
-  await expect(group('Sources').getByRole('link')).toHaveText(['Slack', 'More sources']);
+  await expect(group('Sources').getByRole('link')).toHaveText(['Slack', 'Wispr Flow', 'More sources']);
   await sectionNav(page).getByRole('link', { name: 'More sources' }).click();
   await expect(page.getByText('Outlook mail')).toBeVisible();
 });

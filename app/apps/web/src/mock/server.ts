@@ -23,6 +23,7 @@ import {
   receiveMessages,
   reopen,
   routeTopic,
+  sourceSchedule,
   seenChanges,
   snooze,
   summaryOf,
@@ -56,11 +57,14 @@ import {
   type Rule,
   type Settings,
   type SettingsView,
+  type SourceHealth,
   type StartupCheck,
   type UsagePurpose,
   type UsageRecord,
   type UsageRow,
   type UsageView,
+  type WisprConnectView,
+  type WisprStatusView,
   type WorkEvent,
   type WorkOsApi,
 } from '@work-os/shared';
@@ -73,7 +77,7 @@ import { ME } from './me';
 import { FRANK } from './seed/people';
 import { SEED_CLOCK, STATE_VERSION, buildState, type Preset } from './seed';
 import { SEED_PROMPT_FILES } from './seed/prompts';
-import { BATCH_TWELVE, REPLIES, VIP_DM } from './seed/threads';
+import { BATCH_TWELVE, REPLIES, VIP_DM, WISPR_MEETING } from './seed/threads';
 import type { DraftOutcome, ItemRec, MockState, ReplySeed, ThreadSeed } from './types';
 
 const STORAGE_KEY = 'workos.mock';
@@ -508,7 +512,7 @@ export class MockServer implements WorkOsApi, MockControls {
       items,
       poll: { ...this.s.poll, lastPollAt: this.s.source.lastPollAt, nextPollAt: this.s.source.nextPollAt },
       source: this.sourceHealth(),
-      sources: [this.sourceHealth()],
+      sources: [this.sourceHealth(), ...this.wisprHealth()],
       budgets,
       dryRun: this.s.settings.dryRun,
       notices: { rebuilt: this.s.flags.rebuiltNotice, fileVaultOff: this.s.flags.fileVaultOff },
@@ -536,6 +540,21 @@ export class MockServer implements WorkOsApi, MockControls {
       cursor: src.cursor,
       message: messages[src.status],
     };
+  }
+
+  /** Wispr Flow's line in the inbox health, once it is turned on (R2.7). */
+  private wisprHealth(): SourceHealth[] {
+    if (!sourceSchedule(this.s.settings, 'wispr').enabled) return [];
+    const connected = !!this.s.wispr?.connected;
+    return [
+      {
+        id: 'wispr',
+        status: connected ? 'healthy' : 'auth_failed',
+        lastPollAt: this.s.source.lastPollAt,
+        rateLimitedToday: 0,
+        ...(!connected && { message: 'Not signed in to Wispr Flow. Reconnect in Settings › Sources › Wispr Flow.' }),
+      },
+    ];
   }
 
   async getEarlier(id: string): Promise<EarlierView> {
@@ -729,6 +748,30 @@ export class MockServer implements WorkOsApi, MockControls {
       correctionCount: this.s.correctionCount,
       vaultConventionsLoaded: true,
     };
+  }
+
+  async getWisprStatus(): Promise<WisprStatusView> {
+    await this.gate(QUERY_MS);
+    const w = this.s.wispr;
+    return w?.connected ? { connected: true, ...(w.account && { account: w.account }) } : { connected: false };
+  }
+
+  /** The mock has no sign-in page: Connect signs in at once, like `--fakes`, turns the source on and polls it. */
+  async connectWispr(): Promise<WisprConnectView> {
+    await this.gate(COMMAND_MS);
+    const first = !this.s.wispr?.read;
+    this.s.wispr = { connected: true, account: 'Frank Keulers', read: true };
+    this.s.settings = { ...this.s.settings, sources: { ...this.s.settings.sources, wispr: { ...this.s.settings.sources?.wispr, enabled: true } } };
+    this.emit({ topic: 'settings' }, { topic: 'health' }, { topic: 'inbox' });
+    if (first) void this.runPoll('manual', { threads: [WISPR_MEETING] });
+    return {};
+  }
+
+  async disconnectWispr() {
+    await this.gate(COMMAND_MS);
+    this.s.wispr = { ...this.s.wispr, connected: false };
+    this.s.settings = { ...this.s.settings, sources: { ...this.s.settings.sources, wispr: { ...this.s.settings.sources?.wispr, enabled: false } } };
+    this.emit({ topic: 'settings' }, { topic: 'health' }, { topic: 'inbox' });
   }
 
   // ---------------------------------------------------------------- item commands

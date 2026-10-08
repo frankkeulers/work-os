@@ -1,6 +1,6 @@
 import type { Attention, EventData, EventType, Item, Message, TriageDecision, WorkEvent } from '@work-os/shared';
 import type { ItemRec, ScriptedDecision, SeedMessage, ThreadSeed } from './types';
-import { CHANNELS, PEOPLE } from './seed/people';
+import { CHANNELS, PEOPLE, WISPR_SUMMARY } from './seed/people';
 
 export const MIN = 60_000;
 
@@ -13,6 +13,7 @@ export const permalinkFor = (channelId: string, ts: string) =>
 
 const OUTLOOK = 'https://outlook.office.com/mail/inbox/id/';
 const TEAMS = 'https://teams.microsoft.com/l/';
+const WISPR = 'https://wisprflow.ai/m/';
 
 export const titleFor = (seed: ThreadSeed) => seed.title || CHANNELS[seed.channelId] || seed.channelId;
 
@@ -29,7 +30,7 @@ export function makeItem(seed: ThreadSeed, clock: string, uniq = ''): Item {
   const messages = toMessages(seed.messages, clock, seed.key + uniq);
   const first = messages[0]?.ts ?? clock;
   const ts = slackTs(first);
-  const authorIds = [...new Set(messages.map((m) => m.authorId))];
+  const authorIds = [...new Set(messages.map((m) => m.authorId))].filter((id) => id !== WISPR_SUMMARY);
   const source = seed.source ?? 'slack';
   const ref = `${seed.channelId}-${ts.replace('.', '')}`;
   return {
@@ -37,7 +38,8 @@ export function makeItem(seed: ThreadSeed, clock: string, uniq = ''): Item {
     source,
     kind: seed.kind,
     title: titleFor(seed),
-    permalink: source === 'outlook' ? `${OUTLOOK}${ref}` : source === 'teams' ? `${TEAMS}${seed.kind === 'meeting' ? 'meetingrecap' : 'chat'}/${ref}` : permalinkFor(seed.channelId, ts),
+    permalink:
+      source === 'outlook' ? `${OUTLOOK}${ref}` : source === 'teams' ? `${TEAMS}${seed.kind === 'meeting' ? 'meetingrecap' : 'chat'}/${ref}` : source === 'wispr' ? `${WISPR}${ref}` : permalinkFor(seed.channelId, ts),
     participants: authorIds.map((id) => ({ id, name: PEOPLE[id] ?? id })),
     messages,
     messageCount: seed.messageCount ?? messages.length,

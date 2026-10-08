@@ -228,4 +228,12 @@ describe('fix texts', () => {
     h.fail('slack', { state: 'auth_failed', reason: 'invalid_auth' });
     expect(h.get('slack').fix).toMatch(/^Slack rejected the token/);
   });
+
+  it('only blames changed tools when Wispr Flow’s tools changed (R2.7)', () => {
+    const h = new Health(() => new Date('2026-10-06T08:00:00Z'));
+    h.fail('wisprMcp', { state: 'degraded', reason: 'timeout' });
+    expect(h.get('wisprMcp').fix).toMatch(/^Wispr Flow is not answering properly/);
+    h.fail('wisprMcp', { state: 'degraded', reason: 'tools_changed' });
+    expect(h.get('wisprMcp').fix).toMatch(/^Wispr Flow changed its MCP tools/);
+  });
 });

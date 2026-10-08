@@ -366,6 +366,8 @@ export interface WorkOsApi {
   getUsage(): Promise<UsageView>;
   getEvalReports(): Promise<EvalReport[]>;
   getSettings(): Promise<SettingsView>;
+  /** Whether Wispr Flow is signed in (R2.7). */
+  getWisprStatus(): Promise<WisprStatusView>;
 
   pollNow(): Promise<void>;
   markDone(itemId: string): Promise<void>;
@@ -394,6 +396,10 @@ export interface WorkOsApi {
   runEval(): Promise<void>;
   rebuildState(): Promise<{ events: number }>;
   saveSettings(settings: Settings, rules: Rule[]): Promise<{ savedAt: string }>;
+  /** Starts Wispr Flow's sign-in: open the URL in a new tab. No URL: already signed in, and the source is on. */
+  connectWispr(): Promise<WisprConnectView>;
+  /** Forgets the Wispr Flow sign-in and turns the source off. */
+  disconnectWispr(): Promise<void>;
   getPrompts(): Promise<PromptFileView[]>;
   /** Fails as conflict when the file changed since baseVersion. */
   savePrompt(id: PromptFileId, text: string, baseVersion: string): Promise<PromptFileView>;

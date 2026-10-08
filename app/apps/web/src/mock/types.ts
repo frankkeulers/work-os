@@ -55,7 +55,7 @@ export interface SeedMessage {
 
 export interface ThreadSeed {
   key: string;
-  source?: 'outlook' | 'teams'; // default Slack. Outlook and Teams are P2 sources, shown in Full scope.
+  source?: 'outlook' | 'teams' | 'wispr'; // default Slack. Outlook and Teams are P2 sources, shown in Full scope.
   channelId: string; // Slack channel, or a mailbox folder / Teams chat for the P2 sources
   kind: 'thread' | 'dm' | 'email' | 'meeting' | 'chat';
   title: string;
@@ -137,6 +137,8 @@ export interface MockState {
     cursor?: string;
   };
   poll: PollStatus;
+  /** Settings › Sources › Wispr Flow (R2.7). Unset: never connected. `read`: its meeting has arrived. */
+  wispr?: { connected: boolean; account?: string; read?: boolean };
   pollsSkippedToday: number;
   timeline: TimelineEntry[];
   firstRunSeeds: ThreadSeed[];

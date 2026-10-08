@@ -3,7 +3,7 @@ title: Troubleshooting
 group: Help
 order: 80
 summary: What the health banner means, storing tokens, and what to do when something stops.
-updated: 2026-10-07
+updated: 2026-10-08
 ---
 
 ## Health
@@ -60,6 +60,15 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
 - **Preview catalogue shows nothing**: check the site, space key, root pages and labels in
   [Settings › Write targets](/settings/writing).
 - **A draft fails with "no such section"**: the page changed while drafting. Re-draft.
+
+## Wispr Flow
+
+- **"Wispr Flow rejected the login"**: the sign-in lapsed or was removed. Choose **Reconnect** in
+  [Settings › Wispr Flow](/settings/wispr). See [Reconnecting](wispr-flow.md#reconnecting).
+- **Connected, but no meetings arrive**: check that Cloud Sync is on in the Wispr Flow app, and
+  that the meeting has finished processing there.
+- **"Wispr Flow not working", saying it changed its MCP tools**: Work OS stops reading rather than
+  guess what the new tools mean. It needs an update; reconnecting won't help.
 
 ## Claude
 

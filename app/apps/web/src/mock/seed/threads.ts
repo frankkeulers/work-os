@@ -1,4 +1,5 @@
 import type { ReplySeed, ThreadSeed } from '../types';
+import { FRANK, WISPR_SUMMARY } from './people';
 
 // Seed threads. minsAgo is relative to the seed clock, Mon 5 Oct 2026 09:45 London.
 // Summaries and reasons are what the triage "model" returns for each thread.
@@ -749,3 +750,33 @@ export const BATCH_TWELVE: ThreadSeed[] = (
         ? { attention: 'today', summary, reason: '@-mention with a question for you.' }
         : { attention: 'none', summary, reason: 'Informational.' },
 }));
+
+/** The Wispr Flow meeting (R2.7): it arrives with the poll that follows Connect, since Wispr Flow is off until then. */
+export const WISPR_MEETING: ThreadSeed = {
+  key: 'w1',
+  source: 'wispr',
+  channelId: 'MTG-VOYAGEPRICING',
+  kind: 'meeting',
+  title: 'Voyage Insights pricing workshop',
+  messages: [
+    {
+      by: WISPR_SUMMARY,
+      minsAgo: 2 * H + 30,
+      text: '### Overview\nPricing options for Voyage Insights ahead of the pilot renewals.\n\n### Decisions\n- Pilots renew on the per-vessel tier.\n- Usage-based pricing waits for six months of API data.\n\n### Next Steps\n- Frank to send the tier comparison to Finance by Friday.\n- Commercial to draft the renewal letter.',
+    },
+    { by: FRANK, minsAgo: 2 * H + 29, text: 'Check the per-vessel numbers against the Q3 actuals before sending.' },
+  ],
+  decision: {
+    attention: 'today',
+    vault: 'Work/Meetings/',
+    summary: 'Pilots renew on the per-vessel tier; you owe Finance the tier comparison by Friday.',
+    reason: 'The summary’s next steps name you.',
+    next: {
+      need: 'actions',
+      step: 'Send the tier comparison to Finance',
+      why: 'Assigned to you in the meeting summary.',
+      dueLabel: 'Friday',
+      actionItems: ['Send the tier comparison to Finance · due Fri 9 Oct'],
+    },
+  },
+};

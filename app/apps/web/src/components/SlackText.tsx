@@ -70,9 +70,28 @@ export function SlackText({ text, meId, name, className }: { text: string; meId?
   );
 }
 
-/** A message's text: Slack's formatted, other sources' as written. */
+/** A message's text: Slack's formatted, other sources' as written, line breaks kept (a meeting summary). */
+/** Wispr Flow's summary is Markdown: its "### Next Steps" headings show as headings, the rest as written. */
+function NotesText({ text, className }: { text: string; className?: string }) {
+  return (
+    <div className={cx('whitespace-pre-wrap', className)}>
+      {text.split('\n').map((line, i) => {
+        const h = /^#{1,6}\s+(.*)$/.exec(line);
+        return h ? (
+          <div key={i} className="mt-2 font-semibold text-ink first:mt-0">
+            {h[1]}
+          </div>
+        ) : (
+          <div key={i}>{line || '\u00a0'}</div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function MessageText({ item, meId, text, people = [], className }: { item: Item; meId?: string; text: string; people?: Participant[]; className?: string }) {
-  if (item.source !== 'slack') return <div className={className}>{text}</div>;
+  if (item.source === 'wispr') return <NotesText text={text} className={className} />;
+  if (item.source !== 'slack') return <div className={cx('whitespace-pre-wrap', className)}>{text}</div>;
   const name = (id: string) => [...item.participants, ...(item.mentioned ?? []), ...people].find((p) => p.id === id)?.name ?? (id === meId ? 'you' : undefined);
   return <SlackText text={text} meId={meId} name={name} className={className} />;
 }
