@@ -49,3 +49,46 @@ test('a File rule for two channels picked by search, and it is saved', async ({ 
   await page.reload();
   await expect(page.locator('[data-rule="product-signals"]')).toContainText('File');
 });
+
+test('in Full scope a rule can be limited to sources, and conditions those sources cannot check are caught', async ({ page }) => {
+  await page.goto('/settings/rules');
+  // MVP scope has only Slack, so rules don't mention sources.
+  await page.getByRole('button', { name: 'Add rule' }).click();
+  await expect(page.getByRole('dialog', { name: 'Add rule' }).getByRole('group', { name: 'Applies to' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('rule-sources')).toHaveCount(0);
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Account' }).click();
+  await page.getByRole('dialog', { name: 'Account' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-rule="vip-dm"]').getByTestId('rule-sources')).toHaveText('Slack and Teams only');
+  await expect(page.locator('[data-rule="blockers"]').getByTestId('rule-sources')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Add rule' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add rule' });
+  await dialog.getByLabel('Rule id').fill('outlook-escalations');
+  await dialog.getByLabel('Condition').selectOption('channel_in');
+  const appliesTo = dialog.getByRole('group', { name: 'Applies to' });
+  await appliesTo.getByRole('button', { name: 'Only these' }).click();
+  await dialog.getByRole('button', { name: 'Outlook' }).click();
+  await dialog.getByRole('button', { name: 'Slack' }).click();
+  await expect(dialog.getByRole('button', { name: 'Outlook' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByRole('button', { name: 'Outlook' })).toBeDisabled(); // the last one can't be turned off
+  await expect(dialog.getByText('No chosen source can check every condition.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Add rule' }).click();
+  await expect(dialog.getByText('None of the chosen sources supports every condition')).toBeVisible();
+
+  await dialog.getByLabel('Condition').selectOption('keyword');
+  await dialog.getByLabel('Pattern').fill('/escalat/i');
+  await expect(dialog.getByText('Can match items from Outlook.')).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/rules-applies-to-light.png') });
+  await dialog.getByRole('button', { name: 'Add rule' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const row = page.locator('[data-rule="outlook-escalations"]');
+  await expect(row.getByTestId('rule-sources')).toHaveText('Outlook only');
+  await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
+  await page.reload();
+  await expect(page.locator('[data-rule="outlook-escalations"]').getByTestId('rule-sources')).toHaveText('Outlook only');
+  await page.screenshot({ path: join(APP, 'screenshots/rules-sources-list-light.png') });
+});

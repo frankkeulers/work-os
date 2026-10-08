@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Rule as RuleSchema, isValidRegex, type NamedList, type Rule, type RuleCondition, type RuleOutcome } from '@work-os/shared';
+import { CONDITION_SOURCES, Rule as RuleSchema, SourceId, isValidRegex, ruleSources, type NamedList, type Rule, type RuleCondition, type RuleOutcome } from '@work-os/shared';
+import { SOURCE_NAME } from '../lib/next';
+import { BrandIcon, type Brand } from './BrandIcon';
 import { ChannelPicker } from './LookupPicker';
 import { DragIcon, Icon } from './icons';
 import { Button, ConfirmDialog, Dialog, Field, IconButton, Segmented, Switch, cx, inputBase, inputClass } from './ui';
@@ -37,6 +39,15 @@ export function outcomeText(o: RuleOutcome): string {
   return o.type === 'now' ? 'Now' : o.type === 'today' ? 'Today' : 'Drop';
 }
 
+const ALL_SOURCES = SourceId.options;
+const MARK: Partial<Record<SourceId, Brand>> = { slack: 'slack', outlook: 'outlook', teams: 'teams' };
+
+/** "Slack and Teams", for the sources a rule or condition is limited to. */
+export const sourceList = (ids: readonly SourceId[]) => {
+  const names = ids.map((id) => SOURCE_NAME[id]);
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : (names[0] ?? '');
+};
+
 const OUTCOME_CLS: Record<RuleOutcome['type'], string> = {
   now: 'bg-orange-wash text-orange-fg',
   today: 'bg-accent-wash-3 text-accent-ink',
@@ -52,6 +63,7 @@ function RuleRow({
   n,
   hits,
   error,
+  full,
   onToggle,
   onEdit,
 }: {
@@ -59,10 +71,14 @@ function RuleRow({
   n: number;
   hits: number | undefined;
   error?: string;
+  full: boolean;
   onToggle: (v: boolean) => void;
   onEdit: () => void;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: rule.id });
+  // Only Slack exists in MVP scope, so a rule's sources only say something in Full scope.
+  const sources = ruleSources(rule);
+  const limited = full && sources.length < ALL_SOURCES.length;
   return (
     <div
       ref={setNodeRef}
@@ -97,6 +113,15 @@ function RuleRow({
         <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
           <span className="font-mono">{rule.id}</span>
           <span aria-hidden>·</span>
+          {limited && (
+            <>
+              <span className="inline-flex items-center gap-1" data-testid="rule-sources">
+                {sources.map((id) => MARK[id] && <BrandIcon key={id} brand={MARK[id]} size={12} decorative />)}
+                {sourceList(sources)} only
+              </span>
+              <span aria-hidden>·</span>
+            </>
+          )}
           <span>{!rule.enabled ? 'Off' : hits === undefined ? 'Not run yet' : `${hits} ${hits === 1 ? 'match' : 'matches'} today`}</span>
         </div>
         {error && <span className="text-xs text-red-fg">{error}. Open the rule to fix it.</span>}
@@ -118,9 +143,12 @@ export function RulesList({
   onChange,
   editing,
   setEditing,
+  full,
 }: {
   rules: Rule[];
   hits: Record<string, number>;
+  /** Full scope: rules show and choose the sources they apply to. */
+  full: boolean;
   errorFor: (index: number) => string | undefined;
   onChange: (rules: Rule[]) => void;
   /** The rule dialog, controlled so the section header can hold the Add rule button. */
@@ -146,6 +174,7 @@ export function RulesList({
                 n={i + 1}
                 hits={hits[r.id]}
                 error={errorFor(i)}
+                full={full}
                 onToggle={(v) => onChange(rules.map((x, j) => (j === i ? { ...x, enabled: v } : x)))}
                 onEdit={() => setEditing({ index: i, rule: structuredClone(r) })}
               />
@@ -163,6 +192,7 @@ export function RulesList({
         <RuleDialog
           initial={editing.rule}
           isNew={editing.index === null}
+          full={full}
           otherIds={rules.filter((_, i) => i !== editing.index).map((r) => r.id)}
           onCancel={() => setEditing(null)}
           onDelete={() => {
@@ -196,7 +226,26 @@ function blankCondition(type: RuleCondition['type']): RuleCondition {
   return { type };
 }
 
-function ConditionEditor({ c, onChange, onRemove, error, canRemove, index }: { c: RuleCondition; onChange: (c: RuleCondition) => void; onRemove: () => void; error?: string; canRemove: boolean; index: number }) {
+function ConditionEditor({
+  c,
+  onChange,
+  onRemove,
+  error,
+  canRemove,
+  index,
+  full,
+  scope,
+}: {
+  c: RuleCondition;
+  onChange: (c: RuleCondition) => void;
+  onRemove: () => void;
+  error?: string;
+  canRemove: boolean;
+  index: number;
+  full: boolean;
+  /** The sources the rule is limited to, if any. Conditions none of them can check are greyed out. */
+  scope?: SourceId[];
+}) {
   const listOptions = (c.type === 'sender_in' ? ['vips'] : ['includeChannels', 'excludeChannels', 'customerChannels']) as NamedList[];
   return (
     <div className="flex flex-col gap-2 rounded-[10px] border border-line bg-surface-2 p-3" data-condition={index}>
@@ -204,12 +253,16 @@ function ConditionEditor({ c, onChange, onRemove, error, canRemove, index }: { c
         {index > 0 && <span className="pb-2.5 text-[11px] font-semibold uppercase text-muted">and</span>}
         <label className="flex flex-col gap-1 text-xs font-medium text-ink-2">
           Condition
-          <select className={cx(inputBase, 'w-[180px]')} value={c.type} onChange={(e) => onChange(blankCondition(e.target.value as RuleCondition['type']))}>
-            {COND_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
+          <select className={cx(inputBase, full ? 'w-[260px]' : 'w-[180px]')} value={c.type} onChange={(e) => onChange(blankCondition(e.target.value as RuleCondition['type']))}>
+            {COND_TYPES.map((t) => {
+              const works = CONDITION_SOURCES[t.value];
+              const limited = full && works.length < ALL_SOURCES.length;
+              return (
+                <option key={t.value} value={t.value} disabled={full && !!scope?.length && !scope.some((src) => works.includes(src))}>
+                  {limited ? `${t.label} (${sourceList(works)} only)` : t.label}
+                </option>
+              );
+            })}
           </select>
         </label>
         {(c.type === 'sender_in' || c.type === 'channel_in') && (
@@ -279,6 +332,7 @@ type OutcomeKey = RuleOutcome['type'];
 function RuleDialog({
   initial,
   isNew,
+  full,
   otherIds,
   onCancel,
   onApply,
@@ -286,6 +340,7 @@ function RuleDialog({
 }: {
   initial: Rule;
   isNew: boolean;
+  full: boolean;
   otherIds: string[];
   onCancel: () => void;
   onApply: (r: Rule) => void;
@@ -309,6 +364,16 @@ function RuleDialog({
 
   const condError = (i: number) => Object.entries(errors).find(([k]) => k.startsWith(`conditions.${i}.`))?.[1];
   const outcomeKey: OutcomeKey = rule.outcome.type;
+  const scoped = !!rule.sources?.length;
+  const setScope = (sources: SourceId[] | undefined) => {
+    const { sources: _, ...rest } = rule;
+    setRule(sources ? { ...rest, sources } : rest);
+  };
+  const toggleSource = (id: SourceId) => {
+    const on = rule.sources ?? [];
+    setScope(on.includes(id) ? on.filter((x) => x !== id) : ALL_SOURCES.filter((x) => x === id || on.includes(x)));
+  };
+  const matches = ruleSources(rule);
 
   return (
     <>
@@ -334,6 +399,50 @@ function RuleDialog({
           <Field label="Rule id" error={errors.id} help="Lower-case letters, digits and hyphens. Shown in triage decisions and the event log.">
             <input className={cx(inputClass, 'font-mono')} aria-invalid={!!errors.id} value={rule.id} placeholder="e.g. customer-escalations" onChange={(e) => setRule({ ...rule, id: e.target.value })} />
           </Field>
+          {full && (
+            <div className="flex flex-col gap-2">
+              <span className="text-[13px] font-medium">Applies to</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <Segmented<'any' | 'only'>
+                  label="Applies to"
+                  size="sm"
+                  value={scoped ? 'only' : 'any'}
+                  onChange={(v) => setScope(v === 'any' ? undefined : ['slack'])}
+                  options={[
+                    { value: 'any', label: 'Any source' },
+                    { value: 'only', label: 'Only these' },
+                  ]}
+                />
+                {scoped &&
+                  ALL_SOURCES.map((id) => {
+                    const on = rule.sources!.includes(id);
+                    const last = on && rule.sources!.length === 1;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={last}
+                        title={last ? 'Pick another source first, or choose Any source' : undefined}
+                        onClick={() => toggleSource(id)}
+                        className={cx(
+                          'inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium cursor-pointer disabled:cursor-default',
+                          on ? 'border-teal bg-teal-wash text-ink' : 'border-line-strong bg-surface text-ink-2 hover:text-ink',
+                        )}
+                      >
+                        {MARK[id] && <BrandIcon brand={MARK[id]} size={14} decorative />}
+                        {SOURCE_NAME[id]}
+                      </button>
+                    );
+                  })}
+              </div>
+              {errors.sources && !matches.length ? (
+                <span className="text-xs text-red-fg">{errors.sources}. Change a condition, or pick another source.</span>
+              ) : (
+                <span className="text-xs text-muted">{matches.length ? `Can match items from ${sourceList(matches)}.` : 'No chosen source can check every condition.'}</span>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-2">
             <span className="text-[13px] font-medium">If all of these match</span>
             {rule.conditions.map((c, i) => (
@@ -341,6 +450,8 @@ function RuleDialog({
                 key={i}
                 index={i}
                 c={c}
+                full={full}
+                scope={rule.sources}
                 error={condError(i)}
                 canRemove={rule.conditions.length > 1}
                 onChange={(nc) => setRule({ ...rule, conditions: rule.conditions.map((x, j) => (j === i ? nc : x)) })}

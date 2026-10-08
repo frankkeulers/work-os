@@ -62,14 +62,14 @@ function RulesSection({ rules, view, full, setRules, ruleError }: Ctx) {
           </div>
         }
       />
-      <RulesList rules={rules} hits={view.ruleHits} errorFor={ruleError} editing={edit} setEditing={setEdit} onChange={setRules} />
+      <RulesList rules={rules} hits={view.ruleHits} errorFor={ruleError} editing={edit} setEditing={setEdit} onChange={setRules} full={full} />
       <p className="m-0 mt-4 text-xs text-muted">
         Labelled set: {view.labelCount} examples, {view.correctionCount} from your corrections. <Link to="/usage">Run an eval</Link> after big rule changes.
       </p>
       {full && (
         <>
-          <FutureRow title="More conditions" phase="P2">
-            Sender domain, meeting organiser and source, for Outlook and Teams items.
+          <FutureRow title="More conditions" phase="P2" marks={['outlook', 'teams']}>
+            For email and meetings: sender domain, importance, sent only to you, and meeting organiser.
           </FutureRow>
           <FutureRow title="Learning loop" phase="P4" cta="Review examples">
             Use your corrections as few-shot examples, chosen by similarity. Every prompt change is gated by the eval. {view.correctionCount} corrections available.

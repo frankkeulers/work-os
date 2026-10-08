@@ -22,6 +22,20 @@ A rule matches when all its conditions do.
 | Is a DM | it is a direct message or group DM |
 | Keyword | the text matches a regular expression, e.g. `/blocked\|go\/no-go/i` |
 
+## Sources
+
+Rules are checked for Slack items today. Outlook, Teams and the other sources join as they're
+connected, and the same rules apply to them, so a VIP or keyword rule works everywhere.
+
+- **Conditions** that only make sense in chat, such as Channel in, Mentions me and Is a DM, only
+  match Slack and Teams items. A rule that uses one is labelled "Slack and Teams only".
+- **Applies to** in the rule editor (Full scope, until a second source is live) limits a rule to
+  the sources you pick. If none of them can check one of the rule's conditions, the rule can't be
+  saved until you change one or the other.
+
+Your VIPs are set once, in [Settings › People](/settings/people), and matched by name on every
+source.
+
 ## Outcomes
 
 | Outcome | What happens |
