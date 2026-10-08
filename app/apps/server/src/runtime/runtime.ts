@@ -424,15 +424,16 @@ export class Runtime {
   }
 
   /**
-   * A source's status for the UI, from its dependency's health. Outlook reads through the Microsoft 365
-   * connector and Claude: the connector's trouble shows first, then Claude's.
+   * A source's status for the UI, from its dependency's health. Outlook mail and calendar read through
+   * the Microsoft 365 connector and Claude: the connector's trouble shows first, then Claude's.
    */
   sourceStatus(id: SourceId, dep?: DepId): { status: SlackStatus; retryAt?: string; message?: string } {
     if (this.safeMode || !this.d.settings.settings) return { status: 'paused', message: this.safeMode ? 'Safe mode: polling is off after repeated crashes.' : 'Paused until the settings are fixed.' };
     if (this.health.state('network') === 'offline') return { status: 'offline', message: this.health.get('network').fix };
     const fine = (d: DepId) => ['ok', 'unknown'].includes(this.health.state(d));
-    const own: DepId = dep ?? (id === 'wispr' ? 'wisprMcp' : id === 'outlook' ? 'ms365' : (id as DepId));
-    const h = this.health.get(id === 'outlook' && !dep && fine(own) && !fine('claude') ? 'claude' : own);
+    const ms365 = id === 'outlook' || id === 'calendar';
+    const own: DepId = dep ?? (id === 'wispr' ? 'wisprMcp' : ms365 ? 'ms365' : (id as DepId));
+    const h = this.health.get(ms365 && !dep && fine(own) && !fine('claude') ? 'claude' : own);
     const map: Partial<Record<string, SlackStatus>> = { rate_limited: 'backoff', auth_failed: 'auth_failed', offline: 'offline', degraded: 'degraded', paused: 'paused' };
     const status = map[h.state] ?? (this.d.store.projection.sources[id]?.lastPollAt ? 'healthy' : 'never');
     return { status, retryAt: h.retryAt, message: h.fix ?? (status === 'never' ? 'Not polled yet.' : undefined) };

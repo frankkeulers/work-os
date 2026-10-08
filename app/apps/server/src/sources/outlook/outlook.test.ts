@@ -7,7 +7,7 @@ import { UsageLog } from '../../claude/usage';
 import { defaultSettings } from '../../config/defaults';
 import { memoryKeychain } from '../../config/keychain';
 import { SourceError } from '../errors';
-import { Ms365Relay, searchPage } from '../ms365/client';
+import { eventPage, Ms365Relay, searchPage } from '../ms365/client';
 import { FakeMs365, fakeEmail } from '../ms365/fakeMs365';
 import { accountOf, ms365Link, Ms365LinkError } from '../ms365/link';
 import type { EmailDetail } from '../ms365/types';
@@ -278,7 +278,7 @@ describe('the Microsoft 365 relay client (contract)', () => {
     (answer: (tool: string, input: Record<string, unknown>) => Answer, o: { status?: string; assistantError?: string } = {}): QueryFn =>
     ({ prompt, options }) =>
       (async function* () {
-        yield { type: 'system', subtype: 'init', mcp_servers: [{ name: 'ms365', status: o.status ?? 'connected' }], tools: ['mcp__ms365__outlook_email_search', 'mcp__ms365__read_resource', 'mcp__ms365__get_me'] };
+        yield { type: 'system', subtype: 'init', mcp_servers: [{ name: 'ms365', status: o.status ?? 'connected' }], tools: ['mcp__ms365__outlook_email_search', 'mcp__ms365__outlook_calendar_search', 'mcp__ms365__read_resource', 'mcp__ms365__get_me'] };
         if (o.assistantError) {
           yield { type: 'assistant', error: o.assistantError, message: { content: [] } };
         } else {
@@ -341,6 +341,23 @@ describe('the Microsoft 365 relay client (contract)', () => {
       .catch((e: unknown) => e);
     expect(login).toMatchObject({ dep: 'claude', failure: { state: 'auth_failed' } });
     await expect(relay(sdk(() => undefined), null).me(signal())).rejects.toMatchObject({ dep: 'ms365', failure: { reason: 'token_missing' } });
+  });
+
+  it('searches the calendar by start time, oldest first, and reads its paging block (P0-12)', async () => {
+    const asked: Record<string, unknown>[] = [];
+    const ev = (id: string) => ({ uri: `calendar:///events/${id}`, id, subject: 'Sync', organizer: 'dana@example.com', attendees: null, start: { dateTime: '2026-10-09T14:00:00.0000000', timeZone: 'UTC' }, end: { dateTime: '2026-10-09T15:00:00.0000000', timeZone: 'UTC' }, showAs: 'busy', recurrence: null });
+    const q = sdk((_t, input) => (asked.push(input), { raw: [text(ev('e1')), text(ev('e2')), text({ moreResults: true, nextOffset: 25, totalResultCount: 31 })] }));
+    const pages = await relay(q).events([{ after: '2026-10-06T23:00:00.000Z', before: '2026-10-22T23:00:00.000Z', offset: 0 }], signal());
+    expect(asked).toEqual([{ query: '*', afterDateTime: '2026-10-06T23:00:00.000Z', beforeDateTime: '2026-10-22T23:00:00.000Z', order: 'oldest', limit: 25, offset: 0 }]);
+    expect(pages).toEqual([{ events: [expect.objectContaining({ id: 'e1', attendees: null }), expect.objectContaining({ id: 'e2' })], nextOffset: 25, total: 31 }]);
+    expect(eventPage([text({ moreResults: false, totalResultCount: 0 })])).toEqual({ events: [], total: 0 });
+  });
+
+  it('reads events whole, and tells one that is gone from one that failed', async () => {
+    const detail = { id: 'e1', subject: 'Sync', start: { dateTime: '2026-10-09T14:00:00.0000000', timeZone: 'UTC' }, end: { dateTime: '2026-10-09T15:00:00.0000000', timeZone: 'UTC' }, attendees: [{ name: 'Frank', address: 'frank@example.com', type: 'required', responseStatus: 'none' }] };
+    const q = sdk((_t, input) => (input.uri === 'calendar:///events/e1' ? { raw: [text(detail)] } : { error: 'ErrorItemNotFound' }));
+    const out = await relay(q).readEvents(['calendar:///events/e1', 'calendar:///events/e2'], signal());
+    expect(out).toEqual([{ ok: true, event: expect.objectContaining({ id: 'e1', attendees: [expect.objectContaining({ responseStatus: 'none' })] }) }, { ok: false, error: 'ErrorItemNotFound', gone: true }]);
   });
 
   it('asks get_me with no arguments, and reads the account', async () => {

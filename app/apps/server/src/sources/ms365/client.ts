@@ -5,7 +5,7 @@ import { ClaudeError, ConnectorError } from '../../claude/errors';
 import { relayBatch, RELAY_MAX_CALLS, type BatchOutcome, type Connector } from '../../claude/relay';
 import type { Logger } from '../../log';
 import { SourceError } from '../errors';
-import { EmailDetail, EmailRow, Me, MS365_NAME, MS365_TOOLS, SearchPaging, type Folder, type Ms365Tool, type SearchPage } from './types';
+import { EmailDetail, EmailRow, EventDetail, EventRow, Me, MS365_NAME, MS365_TOOLS, SearchPaging, type EventPage, type Folder, type Ms365Tool, type SearchPage } from './types';
 
 // The claude.ai Microsoft 365 connector, as the Outlook sources use it (R2.5). Every call goes
 // through the relay: one Haiku run per batch of up to RELAY_MAX_CALLS calls of one tool, the raw
@@ -27,6 +27,16 @@ export interface SearchArgs {
 /** A read: the email, a failure (gone: deleted or moved since the search), or never made. */
 export type ReadOutcome = { ok: true; email: EmailDetail } | { ok: false; error: string; gone: boolean } | undefined;
 
+/** Calendar occurrences starting in [after, before), oldest first (P0-12). */
+export interface EventSearchArgs {
+  after: string;
+  before: string;
+  offset: number;
+}
+
+/** A read of an event: the event, a failure (gone: deleted since the search), or never made. */
+export type EventReadOutcome = { ok: true; event: EventDetail } | { ok: false; error: string; gone: boolean } | undefined;
+
 export interface Discovered {
   id: string;
   url?: string;
@@ -39,6 +49,10 @@ export interface Ms365Api {
   search(calls: SearchArgs[], signal: AbortSignal): Promise<(SearchPage | undefined)[]>;
   /** Reads whole emails by URI, RELAY_MAX_CALLS per run; outcomes in the order asked. */
   read(uris: string[], signal: AbortSignal): Promise<ReadOutcome[]>;
+  /** Calendar searches, all in one run where they fit; a page is undefined if never made. */
+  events(calls: EventSearchArgs[], signal: AbortSignal): Promise<(EventPage | undefined)[]>;
+  /** Reads whole events by URI, RELAY_MAX_CALLS per run; outcomes in the order asked. */
+  readEvents(uris: string[], signal: AbortSignal): Promise<EventReadOutcome[]>;
   /** Who the connector is signed in as. */
   me(signal: AbortSignal): Promise<Me>;
   /** Finds the connector among the claude.ai connectors, with no model turn (for setup). */
@@ -85,6 +99,24 @@ export function searchPage(raw: unknown): SearchPage {
     }
   }
   return { emails, ...(nextOffset !== undefined && { nextOffset }) };
+}
+
+/** A calendar search result: the occurrences, the next page's offset and the total, when given. */
+export function eventPage(raw: unknown): EventPage {
+  const events: EventRow[] = [];
+  let nextOffset: number | undefined;
+  let total: number | undefined;
+  for (const v of blocks(raw)) {
+    if (v && typeof v === 'object' && 'uri' in v) events.push(parse(EventRow, v, 'outlook_calendar_search'));
+    else if (v && typeof v === 'object') {
+      const p = SearchPaging.safeParse(v);
+      if (p.success) {
+        if (p.data.moreResults && p.data.nextOffset !== undefined) nextOffset = p.data.nextOffset;
+        total = p.data.totalResultCount ?? total;
+      }
+    }
+  }
+  return { events, ...(nextOffset !== undefined && { nextOffset }), ...(total !== undefined && { total }) };
 }
 
 const chunks = <T>(list: T[], n: number) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
@@ -134,17 +166,36 @@ export class Ms365Relay implements Ms365Api {
   }
 
   async read(uris: string[], signal: AbortSignal): Promise<ReadOutcome[]> {
+    return (await this.readAll(uris, EmailDetail, signal)).map((r) => (r?.ok ? { ok: true, email: r.value } : r));
+  }
+
+  async events(calls: EventSearchArgs[], signal: AbortSignal): Promise<(EventPage | undefined)[]> {
+    const args = calls.map((c) => ({ query: '*', afterDateTime: c.after, beforeDateTime: c.before, order: 'oldest', limit: PAGE_SIZE, offset: c.offset }));
+    const results = await this.relay('outlook_calendar_search', args, signal);
+    return results.map((r) => {
+      if (!r) return undefined;
+      if (!r.ok) throw new SourceError('ms365', { state: 'degraded', reason: 'search_failed' }, `Microsoft 365: calendar search failed: ${r.error}`);
+      return eventPage(r.raw);
+    });
+  }
+
+  async readEvents(uris: string[], signal: AbortSignal): Promise<EventReadOutcome[]> {
+    return (await this.readAll(uris, EventDetail, signal)).map((r) => (r?.ok ? { ok: true, event: r.value } : r));
+  }
+
+  /** Reads resources whole with read_resource: each one parsed, failed (gone or not), or never made. */
+  private async readAll<S extends z.ZodType>(uris: string[], schema: S, signal: AbortSignal) {
     const results = await this.relay(
       'read_resource',
       uris.map((uri) => ({ uri })),
       signal,
     );
-    return results.map((r): ReadOutcome => {
+    return results.map((r): { ok: true; value: z.infer<S> } | { ok: false; error: string; gone: boolean } | undefined => {
       if (!r) return undefined;
       if (!r.ok) return { ok: false, error: r.error, gone: GONE_RE.test(r.error) };
       const v = blocks(r.raw)[0];
       if (typeof v === 'string' && GONE_RE.test(v)) return { ok: false, error: v, gone: true };
-      return { ok: true, email: parse(EmailDetail, v, 'read_resource') };
+      return { ok: true, value: parse(schema, v, 'read_resource') };
     });
   }
 

@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import type { FastifyInstance } from 'fastify';
+import { londonAt } from '@work-os/shared';
 import { z } from 'zod';
 import { tokenAccount } from './api/auth';
 import { fakeClaude } from './claude/fakeClaude';
@@ -10,7 +11,9 @@ import type { RuntimeConfig } from './config/env';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
 import { FAKE_CONFLUENCE_CREDS, FakeConfluence } from './actions/fakeConfluence';
 import type { Exec } from './runtime/checks';
-import { FakeMs365, fakeEmail } from './sources/ms365/fakeMs365';
+import { calendarFactory } from './sources/calendar/adapter';
+import { CalendarStore } from './sources/calendar/store';
+import { FakeMs365, fakeEmail, fakeEvent } from './sources/ms365/fakeMs365';
 import { ms365Link } from './sources/ms365/link';
 import { outlookFactory } from './sources/outlook/adapter';
 import { slackFactory } from './sources/slack/adapter';
@@ -50,6 +53,7 @@ export function fakesRefusal(config: RuntimeConfig): string | undefined {
   return undefined;
 }
 
+const RespondBody = z.object({ eventId: z.string().min(1), response: z.enum(['accepted', 'tentativelyAccepted', 'declined', 'none']) }).strict();
 const PostBody = z.object({ channel: z.string(), text: z.string(), user: z.string().default('U02DANA'), threadTs: z.string().optional() }).strict();
 const Person = z.object({ name: z.string(), address: z.string() });
 const EmailBody = z
@@ -131,6 +135,25 @@ export function fakeWorld(now: Date) {
   ms365.deliver('Inbox', fakeEmail({ conversation: 'AAQkFAKECONVPRICING', subject: 'MVI V2 pricing tiers', from: dana, to: [frank], at: minsAgo(45), html: '<p>Frank, here are the three pricing tiers we discussed. They are ready for the board pack.</p>' }));
   ms365.deliver('Sent Items', fakeEmail({ conversation: 'AAQkFAKECONVPRICING', subject: 'RE: MVI V2 pricing tiers', from: frank, to: [dana], at: minsAgo(30), html: '<p>Thanks Dana, these look right. I’ll add them to the pack.</p>' }));
 
+  // Outlook Calendar (R2.8): the meeting Wispr Flow took notes in, which Frank accepted; an
+  // unanswered invite from a customer for tomorrow; and Frank's own weekly meeting.
+  const ingrid = { name: 'Ingrid Berg', address: 'ingrid.berg@nordicshipping.example' };
+  const calendar = CalendarStore.memory();
+  ms365.calendar.push(
+    fakeEvent({ id: 'AAMkFAKEEVENTLAUNCH', subject: 'MVI V2 launch readiness', organizer: sam, attendees: [{ ...frank, response: 'accepted' }, { ...dana, response: 'accepted' }], start: minsAgo(150), end: minsAgo(120), created: minsAgo(3 * 1440) }),
+    fakeEvent({
+      id: 'AAMkFAKEEVENTNORDIC',
+      subject: 'Nordic Star renewal review',
+      organizer: ingrid,
+      attendees: [{ ...frank }, { ...sam, type: 'optional' }],
+      start: londonAt(now, '14:00', 1),
+      end: londonAt(now, '15:00', 1),
+      created: minsAgo(50),
+      html: '<p>Hi Frank,</p><p>Ahead of the renewal, could we walk through the fleet coverage and the new port-call alerts?</p><p>Ingrid</p><p>________________________________________________________________________________</p><p>Microsoft Teams meeting</p><p>Meeting ID: 123 456 789 0</p><p>Passcode: AbC123</p>',
+    }),
+    fakeEvent({ id: 'AAMkFAKEEVENTWEEKLY', subject: 'Product weekly', organizer: frank, attendees: [{ ...frank, response: 'organizer' }, { ...dana }, { ...sam }], start: londonAt(now, '16:00'), end: londonAt(now, '16:30'), created: minsAgo(30 * 1440) }),
+  );
+
   /** POST /api/fake/slack/messages: a new message in the fake workspace, for tests. */
   const routes = (app: FastifyInstance) => {
     app.post('/api/fake/slack/messages', async (req, reply) => {
@@ -146,9 +169,15 @@ export function fakeWorld(now: Date) {
       ms365.deliver('Inbox', e);
       return reply.code(201).send({ id: e.id, conversation: e.conversationId });
     });
+    /** POST /api/fake/calendar/respond: Frank answers an invite in Outlook, for tests. */
+    app.post('/api/fake/calendar/respond', async (req, reply) => {
+      const b = RespondBody.parse(req.body);
+      ms365.answer(b.eventId, b.response);
+      return reply.code(204).send();
+    });
   };
 
-  return { slack, wispr, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory), outlook: outlookFactory(ms365), wispr: wisprFactory(wisprMcp) }, wisprLink: fakeWisprLink(wispr), ms365, outlookLink: ms365Link((id) => ms365.forId(id)), claude: fakeClaude().query, routes };
+  return { slack, wispr, confluence, secrets, exec, fetch: slack.fetch, confluenceFetch: confluence.fetch, sources: { slack: slackFactory(directory), outlook: outlookFactory(ms365), calendar: calendarFactory(ms365, calendar), wispr: wisprFactory(wisprMcp) }, wisprLink: fakeWisprLink(wispr), ms365, outlookLink: ms365Link((id) => ms365.forId(id)), calendar, claude: fakeClaude().query, routes };
 }
 
 /** When the fake world began: the first start in this data dir, kept in fake-world.json. */

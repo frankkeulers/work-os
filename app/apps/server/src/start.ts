@@ -30,6 +30,8 @@ import { returnSnoozed } from './pipeline/due';
 import { pollSource } from './pipeline/poll';
 import { buildSources, type AdapterFactory } from './sources/registry';
 import { Ms365Relay } from './sources/ms365/client';
+import { calendarFactory } from './sources/calendar/adapter';
+import { CalendarStore } from './sources/calendar/store';
 import { ms365Link, type Ms365Link } from './sources/ms365/link';
 import { FIRST_POLL_MS, outlookFactory, RecentEmails } from './sources/outlook/adapter';
 import { wisprFactory } from './sources/wispr/adapter';
@@ -91,6 +93,8 @@ export interface RunDeps {
   wispr?: WisprLink;
   /** Outlook's Connect for Settings; the real one by default, `--fakes` passes its own. */
   outlook?: Ms365Link;
+  /** The calendar snapshot (R2.8); the fakes keep theirs in memory. */
+  calendar?: CalendarStore;
 }
 
 export type RunResult =
@@ -151,7 +155,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // The made-up threads are anchored to the first start, so a restart sees the same ones.
     const world = fakeWorld(await fakeAnchor(config.dataDir, now()));
     armCrash(deps.env.WORKOS_CRASH_AT);
-    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude, wispr: world.wisprLink, outlook: world.outlookLink };
+    deps = { ...deps, secrets: world.secrets, fetch: world.fetch, confluenceFetch: world.confluenceFetch, exec: world.exec, sources: world.sources, claude: world.claude, wispr: world.wisprLink, outlook: world.outlookLink, calendar: world.calendar };
     extraRoutes = world.routes;
   }
 
@@ -269,7 +273,14 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       for (const m of stored?.item.messages ?? []) outlookRecent.add(m.id);
     }
   })();
-  const factories = deps.sources ?? { slack: slackFactory(slackDirectory, logger), outlook: outlookFactory(ms365(), logger, outlookRecent), wispr: wisprFactory(wisprMcp, logger) };
+  // Outlook Calendar (R2.8): the same connector; the window as last seen lives in state/calendar.json.
+  const calendar = deps.calendar ?? (await CalendarStore.open(paths(config.dataDir).calendar));
+  const factories = deps.sources ?? {
+    slack: slackFactory(slackDirectory, logger),
+    outlook: outlookFactory(ms365(), logger, outlookRecent),
+    calendar: calendarFactory(ms365(), calendar, logger),
+    wispr: wisprFactory(wisprMcp, logger),
+  };
   const triageDeps: TriageDeps = {
     store,
     items,

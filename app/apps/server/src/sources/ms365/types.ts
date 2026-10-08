@@ -25,7 +25,7 @@ export const MS365_TOOLS = [
 ];
 
 /** The only tools the Outlook sources call: all read-only. */
-export type Ms365Tool = 'outlook_email_search' | 'read_resource' | 'get_me';
+export type Ms365Tool = 'outlook_email_search' | 'outlook_calendar_search' | 'read_resource' | 'get_me';
 
 export const Folder = z.enum(['Inbox', 'Sent Items']);
 export type Folder = z.infer<typeof Folder>;
@@ -85,3 +85,59 @@ export const Me = z.looseObject({
   userPrincipalName: z.string().nullish(),
 });
 export type Me = z.infer<typeof Me>;
+
+// ---------- Calendar (P0-12) ----------
+
+/** A wall-clock time in a named zone: UTC for this mailbox, but a mailbox zone is possible. */
+const WallTime = z.looseObject({ dateTime: z.string().min(1), timeZone: z.string().nullish() });
+export type WallTime = z.infer<typeof WallTime>;
+
+/** One occurrence in an outlook_calendar_search result: no response status, no series (P0-12). */
+export const EventRow = z.looseObject({
+  uri: z.string().min(1),
+  id: z.string().min(1),
+  subject: z.string().nullish(),
+  organizer: z.string().nullish(), // an address
+  attendees: z.array(z.string()).nullish(), // addresses
+  start: WallTime,
+  end: WallTime,
+  showAs: z.string().nullish(),
+  isAllDay: z.boolean().nullish(),
+  isCancelled: z.boolean().nullish(),
+  isOrganizer: z.boolean().nullish(),
+  webLink: z.string().nullish(),
+});
+export type EventRow = z.infer<typeof EventRow>;
+
+export interface EventPage {
+  events: EventRow[];
+  nextOffset?: number;
+  /** All the matches across pages, when the connector says. */
+  total?: number;
+}
+
+/** An attendee as read_resource gives it: Frank's own entry carries his answer. */
+export const Attendee = z.looseObject({
+  name: z.string().nullish(),
+  address: z.string().nullish(),
+  type: z.string().nullish(), // required, optional, resource
+  responseStatus: z.string().nullish(), // none, accepted, tentativelyAccepted, declined
+});
+export type Attendee = z.infer<typeof Attendee>;
+
+/** One event read whole with read_resource. */
+export const EventDetail = z.looseObject({
+  id: z.string().min(1),
+  subject: z.string().nullish(),
+  body: z.looseObject({ contentType: z.string().nullish(), content: z.string().nullish() }).nullish(),
+  organizer: Address.nullish(),
+  attendees: z.array(Attendee).nullish(),
+  start: WallTime,
+  end: WallTime,
+  isCancelled: z.boolean().nullish(),
+  isAllDay: z.boolean().nullish(),
+  createdDateTime: z.string().nullish(),
+  lastModifiedDateTime: z.string().nullish(),
+  webLink: z.string().nullish(),
+});
+export type EventDetail = z.infer<typeof EventDetail>;

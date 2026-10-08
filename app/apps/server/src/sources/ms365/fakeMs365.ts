@@ -1,7 +1,7 @@
 import type { DepState } from '@work-os/shared';
 import { SourceError } from '../errors';
-import { PAGE_SIZE, type Discovered, type Ms365Api, type ReadOutcome, type SearchArgs } from './client';
-import { MS365_TOOLS, type EmailDetail, type EmailRow, type Folder, type Me, type SearchPage } from './types';
+import { PAGE_SIZE, type Discovered, type EventReadOutcome, type EventSearchArgs, type Ms365Api, type ReadOutcome, type SearchArgs } from './client';
+import { MS365_TOOLS, type EmailDetail, type EmailRow, type EventDetail, type EventPage, type EventRow, type Folder, type Me, type SearchPage } from './types';
 
 // The Microsoft 365 connector in memory, for tests and --fakes runs: never a live call. A mailbox
 // of Inbox and Sent Items that search pages through (oldest first, PAGE_SIZE at a time, as the real
@@ -24,6 +24,10 @@ export class FakeMs365 implements Ms365Api {
   readFaults = new Map<string, 'gone' | 'skip' | string>();
   searches: SearchArgs[][] = [];
   reads: string[][] = [];
+  /** The calendar, as events read whole; times are UTC, as the connector gives them (P0-12). */
+  calendar: EventDetail[] = [];
+  eventSearches: EventSearchArgs[][] = [];
+  eventReads: string[][] = [];
 
   constructor(o: FakeMs365Options = {}) {
     this.me_ = o.me ?? { displayName: 'Frank Keulers', mail: 'frank.keulers@example.com', userPrincipalName: 'frank.keulers@example.com' };
@@ -31,6 +35,7 @@ export class FakeMs365 implements Ms365Api {
   }
 
   static uri = (id: string) => `mail:///messages/${encodeURIComponent(id)}`;
+  static eventUri = (id: string) => `calendar:///events/${encodeURIComponent(id)}`;
 
   /** Adds an email to a folder. */
   deliver(folder: Folder, e: EmailDetail) {
@@ -78,6 +83,58 @@ export class FakeMs365 implements Ms365Api {
     });
   }
 
+  private eventRow(e: EventDetail): EventRow {
+    const me = (this.me_.mail ?? '').toLowerCase();
+    return {
+      uri: FakeMs365.eventUri(e.id),
+      id: e.id,
+      subject: e.subject,
+      organizer: e.organizer?.address,
+      attendees: e.attendees?.length ? e.attendees.map((a) => a.address ?? '') : null,
+      start: e.start,
+      end: e.end,
+      showAs: 'busy',
+      isAllDay: e.isAllDay ?? false,
+      isCancelled: e.isCancelled ?? false,
+      isOrganizer: (e.organizer?.address ?? '').toLowerCase() === me,
+      webLink: e.webLink,
+    };
+  }
+
+  async events(calls: EventSearchArgs[]): Promise<(EventPage | undefined)[]> {
+    this.check();
+    this.eventSearches.push(calls);
+    const at = (t: string) => Date.parse(/Z$|[+-]\d\d:\d\d$/.test(t) ? t : `${t}Z`);
+    return calls.map((c) => {
+      const all = this.calendar.filter((e) => at(e.start.dateTime) >= Date.parse(c.after) && at(e.start.dateTime) < Date.parse(c.before)).sort((a, b) => at(a.start.dateTime) - at(b.start.dateTime));
+      const page = all.slice(c.offset, c.offset + PAGE_SIZE);
+      const more = c.offset + PAGE_SIZE < all.length;
+      return { events: page.map((e) => this.eventRow(e)), total: all.length, ...(more && { nextOffset: c.offset + PAGE_SIZE }) };
+    });
+  }
+
+  async readEvents(uris: string[]): Promise<EventReadOutcome[]> {
+    this.check();
+    this.eventReads.push(uris);
+    return uris.map((uri): EventReadOutcome => {
+      const fault = this.readFaults.get(uri);
+      if (fault === 'skip') return undefined;
+      if (fault === 'gone') return { ok: false, error: 'ErrorItemNotFound: The specified object was not found in the store.', gone: true };
+      if (fault) return { ok: false, error: fault, gone: false };
+      const e = this.calendar.find((x) => FakeMs365.eventUri(x.id) === uri);
+      return e ? { ok: true, event: structuredClone(e) } : { ok: false, error: 'not found', gone: true };
+    });
+  }
+
+  /** Frank's answer to an event, as he would give it in Outlook. */
+  answer(eventId: string, response: 'accepted' | 'tentativelyAccepted' | 'declined' | 'none') {
+    const me = (this.me_.mail ?? '').toLowerCase();
+    const e = this.calendar.find((x) => x.id === eventId);
+    const a = e?.attendees?.find((x) => (x.address ?? '').toLowerCase() === me);
+    if (!a) throw new Error(`fake: ${eventId} has no attendee ${me}`);
+    a.responseStatus = response;
+  }
+
   async me(): Promise<Me> {
     this.check();
     return this.me_;
@@ -97,7 +154,7 @@ export class FakeMs365 implements Ms365Api {
     const missing = async (): Promise<never> => {
       throw new SourceError('ms365', { state: 'auth_failed', reason: 'connector not found' }, `Microsoft 365: no connector ${id}`);
     };
-    return { search: missing, read: missing, me: missing, discover: () => this.discover(), status: async () => 'auth_failed' };
+    return { search: missing, read: missing, events: missing, readEvents: missing, me: missing, discover: () => this.discover(), status: async () => 'auth_failed' };
   }
 }
 
@@ -131,5 +188,38 @@ export function fakeEmail(o: {
     conversationId: o.conversation,
     internetMessageId: `<${id}@mail.example.com>`,
     webLink: `https://outlook.office365.com/owa/?ItemID=${encodeURIComponent(id)}&exvsurl=1&viewmodel=ReadMessageItem`,
+  };
+}
+
+let eventSeq = 0;
+const wall = (iso: string) => ({ dateTime: iso.replace(/Z$/, '0000'), timeZone: 'UTC' }); // as the connector writes it: 27 characters, no Z
+
+/** A synthetic calendar event for tests and fakes: UTC times, attendees with their answers. */
+export function fakeEvent(o: {
+  subject: string;
+  organizer: { name: string; address: string };
+  attendees?: { name: string; address: string; type?: 'required' | 'optional'; response?: string }[];
+  start: string;
+  end: string;
+  html?: string;
+  id?: string;
+  cancelled?: boolean;
+  allDay?: boolean;
+  created?: string;
+}): EventDetail {
+  const id = o.id ?? `AAMkFAKEEVENT${String(++eventSeq).padStart(4, '0')}`;
+  return {
+    id,
+    subject: o.subject,
+    body: { contentType: 'html', content: o.html ?? '' },
+    organizer: o.organizer,
+    attendees: (o.attendees ?? []).map((a) => ({ name: a.name, address: a.address, type: a.type ?? 'required', responseStatus: a.response ?? 'none' })),
+    start: wall(o.start),
+    end: wall(o.end),
+    isCancelled: o.cancelled ?? false,
+    isAllDay: o.allDay ?? false,
+    createdDateTime: o.created ?? o.start,
+    lastModifiedDateTime: o.created ?? o.start,
+    webLink: `https://outlook.office365.com/owa/?itemid=${encodeURIComponent(id)}&exvsurl=1&path=/calendar/item`,
   };
 }
