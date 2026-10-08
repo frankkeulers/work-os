@@ -103,6 +103,24 @@ describe('a call (CL-3, CL-4, CL-5)', () => {
     expect(usage.records()).toHaveLength(1);
   });
 
+  it('turns thinking off on Haiku, and runs Sonnet 5.5 and Opus 5.5, which refuse that, at low effort', async () => {
+    const a = adapter(fakeQuery(async () => [result('x')]));
+    await a.run(spec);
+    await a.run({ ...spec, model: 'sonnet-5.5' });
+    await a.run({ ...spec, model: 'opus-5.5' });
+    expect(seen.map((s) => [s.options.model, s.options.thinking, s.options.effort])).toEqual([
+      ['claude-haiku-5-5', { type: 'disabled' }, undefined],
+      ['claude-sonnet-5-5', { type: 'adaptive' }, 'low'],
+      ['claude-opus-5-5', { type: 'adaptive' }, 'low'],
+    ]);
+  });
+
+  it('prices the call from the list prices when the SDK only guesses the model’s price', async () => {
+    const guessed = { 'claude-haiku-5-5': { inputTokens: 1000, outputTokens: 150, cacheReadInputTokens: 300, cacheCreationInputTokens: 200, costUSD: 0.33, costBasis: 'unknown' } };
+    const r = await adapter(fakeQuery(async () => [result('x', { total_cost_usd: 0.33, modelUsage: guessed })])).run(spec);
+    expect(r.usage.costEquivalent).toBe(0.0002); // 1000 × $0.10 + 150 × $0.50 + 500 × $0.01 per million
+  });
+
   it('classifies API errors, and still logs the call’s usage', async () => {
     const failing = (error: string) => adapter(fakeQuery(async () => [{ type: 'assistant', error, message: { content: [] } }, result('', { subtype: 'success' })])).run(spec);
     await expect(failing('authentication_failed')).rejects.toMatchObject({ failure: { state: 'auth_failed' } });

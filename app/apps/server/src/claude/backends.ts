@@ -11,12 +11,16 @@ import { ClaudeError } from './errors';
 
 export const API_KEY_ACCOUNT = 'anthropic-api-key';
 
-/** The SDK's model names for the settings' model IDs. */
-export const SDK_MODEL: Record<ModelId, string> = {
-  'haiku-4.5': 'claude-haiku-4-5',
-  'haiku-5.5': 'claude-haiku-5-5',
-  'sonnet-5.5': 'claude-sonnet-5',
-  'opus-5.5': 'claude-opus-5-5',
+/**
+ * How each of the settings' models is called: the SDK's name for it, and thinking as near to off as
+ * the model allows. Sonnet 5.5 and Opus 5.5 refuse thinking: disabled, so they think adaptively at
+ * low effort, the lowest setting the SDK offers them.
+ */
+export const MODEL_CALL: Record<ModelId, { sdk: string; thinking: { type: 'disabled' | 'adaptive' }; effort?: 'low' }> = {
+  'haiku-4.5': { sdk: 'claude-haiku-4-5', thinking: { type: 'disabled' } },
+  'haiku-5.5': { sdk: 'claude-haiku-5-5', thinking: { type: 'disabled' } },
+  'sonnet-5.5': { sdk: 'claude-sonnet-5-5', thinking: { type: 'adaptive' }, effort: 'low' },
+  'opus-5.5': { sdk: 'claude-opus-5-5', thinking: { type: 'adaptive' }, effort: 'low' },
 };
 
 const ACCOUNT_VARS = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX'];
