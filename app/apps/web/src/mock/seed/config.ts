@@ -13,7 +13,7 @@ export const SEED_SETTINGS: Settings = {
   people: { vips: ['Matt M.', 'VP Engineering'] },
   schedule: { workHours: 'Mon–Fri 08:00–18:30', intervalWorkMinutes: 10, intervalOffMinutes: 60 },
   triage: { quietMinutes: 10, maxThreadsPerCall: 25, maxInputTokens: 40000, keepLastMessages: 3 },
-  models: { triage: 'haiku-4.5', draftVault: 'sonnet-5.5', draftConfluence: 'sonnet-5.5' },
+  models: { triage: 'haiku-5.5', draftVault: 'sonnet-5.5', draftConfluence: 'sonnet-5.5' },
   claudeBackend: 'subscription',
   budgets: { triageCallsPerDay: 60, draftsPerDay: 10, costEquivalentPerDay: 2.5 },
   baselineCostPerDay: 1.9,

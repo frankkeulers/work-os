@@ -268,8 +268,12 @@ export const Rules = z.array(Rule).superRefine((rules, ctx) => {
 
 // ---------- Settings (FR-1.3) ----------
 
-export const ModelId = z.enum(['haiku-4.5', 'sonnet-5.5', 'opus-5.5']);
+// haiku-4.5 stays readable for usage and eval records made on it; new calls use haiku-5.5.
+export const ModelId = z.enum(['haiku-4.5', 'haiku-5.5', 'sonnet-5.5', 'opus-5.5']);
 export type ModelId = z.infer<typeof ModelId>;
+
+/** The models Settings offers. A settings file from before Haiku 5.5 loads with haiku-5.5. */
+const SettingsModelId = z.preprocess((v) => (v === 'haiku-4.5' ? 'haiku-5.5' : v), ModelId);
 
 const minutes = z.number({ error: 'Enter a number' }).int('Whole minutes only').positive('Must be more than 0');
 const timeRange = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d[–-]([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM–HH:MM');
@@ -340,10 +344,10 @@ export const Settings = z.object({
     keepLastMessages: z.number().int().min(1, 'At least 1').max(20, 'At most 20'),
   }),
   models: z.object({
-    triage: ModelId,
-    draftVault: ModelId,
-    draftConfluence: ModelId,
-    routing: ModelId.optional(), // amendment (topics): Haiku when unset
+    triage: SettingsModelId,
+    draftVault: SettingsModelId,
+    draftConfluence: SettingsModelId,
+    routing: SettingsModelId.optional(), // amendment (topics): Haiku when unset
   }),
   claudeBackend: z.enum(['subscription', 'api_key', 'bedrock']),
   budgets: z.object({

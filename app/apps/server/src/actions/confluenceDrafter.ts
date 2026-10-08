@@ -168,7 +168,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
   const check = await d.claude.structured(
     {
       purpose: 'people_check',
-      model: 'haiku-4.5',
+      model: 'haiku-5.5',
       system: d.peoplePrompt.text,
       prompt: `<entry>\n${a.title}\n${textOf(entryStorage(a.title, a.content, section.level))}\n</entry>`,
       promptVersion: d.peoplePrompt.version,

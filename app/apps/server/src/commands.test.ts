@@ -411,7 +411,7 @@ describe('corrections, labels and the eval (FR-6, FR-7.2, Story 6.1)', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({
       labelCount: 2,
-      model: 'haiku-4.5',
+      model: 'haiku-5.5',
       confusion: [
         [0, 0, 0],
         [0, 1, 1],
@@ -431,7 +431,7 @@ describe('usage view (FR-7.2)', () => {
   it('counts today’s calls, threads and tokens by purpose and model', async () => {
     const u = (await call<UsageView>('GET', '/api/usage')).body;
     expect(u.today).toMatchObject({ triageCalls: 1, threadsTriaged: 2, tokens: { input: 1200, output: 180, cache: 0, total: 1380 } });
-    expect(u.byPurpose).toEqual([{ purpose: 'triage', model: 'haiku-4.5', calls: 1, tokens: 1380, costEquivalent: 0.0012 }]);
+    expect(u.byPurpose).toEqual([{ purpose: 'triage', model: 'haiku-5.5', calls: 1, tokens: 1380, costEquivalent: 0.0012 }]);
     expect(u.days).toHaveLength(7);
     expect(u.days.at(-1)).toMatchObject({ date: '2026-10-06', triage: 0.0012, drafts: 0 });
     // A poll that leaves nothing eligible makes no call, and counts as skipped; a tick doesn't.
@@ -602,7 +602,7 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v3 -->/);
     expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
     expect(check.system).toMatch(/^<!-- prompt: people-check v1 -->/);
-    expect(check.options.model).toBe('claude-haiku-4-5');
+    expect(check.options.model).toBe('claude-haiku-5-5');
 
     expect((await approve(r.body.id)).status).toBe(202);
     v = await item();

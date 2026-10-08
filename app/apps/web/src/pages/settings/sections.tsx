@@ -645,7 +645,7 @@ function ModelsSection({ s, full, set, type, flush, err, confirm }: Ctx) {
             }
           >
             <select id={`model-${key}`} aria-label={`Model for ${purpose}`} className={cx(inputBase, 'w-[150px] font-mono text-[13px]')} value={s.models[key]} onChange={(e) => set((x) => (x.models[key] = e.target.value as ModelId))}>
-              {(['haiku-4.5', 'sonnet-5.5', 'opus-5.5'] as const).map((m) => (
+              {(['haiku-5.5', 'sonnet-5.5', 'opus-5.5'] as const).map((m) => (
                 <option key={m}>{m}</option>
               ))}
             </select>
@@ -654,7 +654,7 @@ function ModelsSection({ s, full, set, type, flush, err, confirm }: Ctx) {
         {full && (
           <>
             <FutureRow title="Meeting summaries" phase="P2">
-              One call per transcript, on haiku-4.5.
+              One call per transcript, on haiku-5.5.
             </FutureRow>
             <FutureRow title="Briefs and synthesis" phase="P4">
               Daily and weekly, on opus-5.5.

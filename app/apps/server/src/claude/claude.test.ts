@@ -35,7 +35,7 @@ const result = (text: string, over: object = {}) => ({
   num_turns: 1,
   total_cost_usd: 0.0021,
   usage: { input_tokens: 900, output_tokens: 120, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-  modelUsage: { 'claude-haiku-4-5': { inputTokens: 1000, outputTokens: 150, cacheReadInputTokens: 300, cacheCreationInputTokens: 200, costUSD: 0.0021 } },
+  modelUsage: { 'claude-haiku-5-5': { inputTokens: 1000, outputTokens: 150, cacheReadInputTokens: 300, cacheCreationInputTokens: 200, costUSD: 0.0021 } },
   ...over,
 });
 
@@ -55,7 +55,7 @@ function fakeQuery(...scripts: Script[]): QueryFn {
 const adapter = (query: QueryFn, env: NodeJS.ProcessEnv = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'synthetic-should-be-removed' }) =>
   new ClaudeAdapter({ usage, settings: () => settings, secrets: memoryKeychain(), now: () => NOW, cwd: dir, env, query });
 
-const spec = { purpose: 'triage' as const, model: 'haiku-4.5' as const, system: 'Triage these threads.', prompt: 'Threads: […]', promptVersion: 'triage v1', timeoutMs: 5000, itemIds: ['slack:C1:1.000100'] };
+const spec = { purpose: 'triage' as const, model: 'haiku-5.5' as const, system: 'Triage these threads.', prompt: 'Threads: […]', promptVersion: 'triage v1', timeoutMs: 5000, itemIds: ['slack:C1:1.000100'] };
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'workos-claude-'));
@@ -74,7 +74,7 @@ describe('a call (CL-3, CL-4, CL-5)', () => {
     expect(r.text).toBe('{"ok":true}');
     const o = seen[0].options;
     expect(o).toMatchObject({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       systemPrompt: 'Triage these threads.',
       tools: [],
       allowedTools: [],
@@ -96,7 +96,7 @@ describe('a call (CL-3, CL-4, CL-5)', () => {
 
   it('logs usage from the per-model totals, to the day’s file and in memory', async () => {
     const r = await adapter(fakeQuery(async () => [result('x')])).run(spec);
-    expect(r.usage).toMatchObject({ purpose: 'triage', model: 'haiku-4.5', inputTokens: 1000, outputTokens: 150, cacheTokens: 500, costEquivalent: 0.0021, itemIds: ['slack:C1:1.000100'], promptVersion: 'triage v1', at: NOW.toISOString() });
+    expect(r.usage).toMatchObject({ purpose: 'triage', model: 'haiku-5.5', inputTokens: 1000, outputTokens: 150, cacheTokens: 500, costEquivalent: 0.0021, itemIds: ['slack:C1:1.000100'], promptVersion: 'triage v1', at: NOW.toISOString() });
     const lines = (await readFile(join(dir, 'usage-2026-10-06.jsonl'), 'utf8')).trim().split('\n');
     expect(lines).toHaveLength(1);
     expect(JSON.parse(lines[0]).id).toBe(r.usage.id);
@@ -211,7 +211,7 @@ describe('connector relay (CL-9)', () => {
     expect(r.run.usage.purpose).toBe('fetch');
     const o = seen[0].options;
     expect(o).toMatchObject({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-5-5',
       tools: [],
       allowedTools: [],
       strictMcpConfig: true,

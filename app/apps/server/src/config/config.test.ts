@@ -87,6 +87,16 @@ describe('data directory and settings', () => {
     expect(load.settings.slack).not.toHaveProperty('vips');
   });
 
+  it('loads a settings file from before Haiku 5.5 with haiku-5.5 in place of haiku-4.5', async () => {
+    await init();
+    const s = JSON.parse(await readFile(paths(dir).settings, 'utf8'));
+    s.models = { triage: 'haiku-4.5', draftVault: 'sonnet-5.5', draftConfluence: 'haiku-4.5', routing: 'haiku-4.5' };
+    await writeFile(paths(dir).settings, JSON.stringify(s));
+    const load = await loadSettings(dir);
+    if (load.status !== 'ok') throw new Error(load.status);
+    expect(load.settings.models).toEqual({ triage: 'haiku-5.5', draftVault: 'sonnet-5.5', draftConfluence: 'haiku-5.5', routing: 'haiku-5.5' });
+  });
+
   it('never overwrites existing config', async () => {
     await init();
     await writeFile(paths(dir).settings, '{"edited": true}');

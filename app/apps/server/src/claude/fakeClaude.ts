@@ -134,7 +134,7 @@ export function fakeClaude(): FakeClaude {
           result: text,
           num_turns: 1,
           total_cost_usd: 0.0012,
-          modelUsage: { 'claude-haiku-4-5': { inputTokens: 1200, outputTokens: 180, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.0012 } },
+          modelUsage: { 'claude-haiku-5-5': { inputTokens: 1200, outputTokens: 180, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.0012 } },
         };
       })();
     },

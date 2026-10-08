@@ -850,7 +850,7 @@ export class MockServer implements WorkOsApi, MockControls {
     if (this.budgets().triage.hit) throw new ApiError('budget', 'Triage budget reached for today, so topics can’t be regrouped until tomorrow.');
     const open = Object.values(this.s.items).filter((r) => !r.topicOf && r.status !== 'done' && conversationOf(r.item) === conversation);
     await sleep(900);
-    this.recordUsage('routing', 'haiku-4.5', 900 + open.length * 400, 40 + open.length * 20, open.map((r) => r.item.id), 'topics v1', 1400);
+    this.recordUsage('routing', 'haiku-5.5', 900 + open.length * 400, 40 + open.length * 20, open.map((r) => r.item.id), 'topics v1', 1400);
     // As scripted by the seed: a piece with regroupWith joins that seed's topic.
     const topics = new Set<ItemRec>();
     let merged = 0;
@@ -954,7 +954,7 @@ export class MockServer implements WorkOsApi, MockControls {
       const draft = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
       if (action.type === 'confluence_entry') this.recordUsage('confluence_pick', model, 9000, 90, [rec.item.id], 'pick-confluence v1', 9000);
       this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
-      if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-4.5', 2100, 60, [rec.item.id], 'people-check v1', 1900);
+      if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-5.5', 2100, 60, [rec.item.id], 'people-check v1', 1900);
       if (outcome === 'people_check') {
         action.error = 'The people check found observations about named people in the draft. Nothing will be written to Confluence.';
         this.s.results[actionId] = action.error;

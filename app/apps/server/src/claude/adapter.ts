@@ -13,7 +13,7 @@ import type { UsageLog } from './usage';
 
 // The only module that talks to the Agent SDK (CL-1; ESLint enforces it). Every call states its
 // model, system prompt, tools, MCP servers, setting sources and turns (CL-3), checked against the
-// SDK 0.3.291 types and the P0-9 spike. Triage gets no tools, no MCP servers, no filesystem
+// SDK 0.3.293 types and the P0-9 spike. Triage gets no tools, no MCP servers, no filesystem
 // settings and no Claude Code prompt (CL-4); a vault draft may read inside the vault only (FR-9.1,
 // readGuard.ts); a relay call (relay.ts) gets exactly one connector tool, gated by canUseTool (CL-9). Sessions are not saved to ~/.claude, so message text
 // never lands there. The SDK is loaded on the first call, not at startup (NF-11).

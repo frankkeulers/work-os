@@ -248,7 +248,7 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
   if (d.budgetHit()) return { ...run, paused: true }; // triage waits on the budget too; the pieces are routed once it lifts
 
   const prompt = await d.topicsPrompt();
-  const model = settings.models.routing ?? 'haiku-4.5';
+  const model = settings.models.routing ?? 'haiku-5.5';
   const by = regroup ? 'regroup' : 'model';
   const batches = packBatches(convs, (x) => estimateTokens(JSON.stringify(x.conv.topics)) + x.conv.pieces.reduce((n, v) => n + threadTokens(v), 0), {
     maxThreads: t.maxThreadsPerCall,

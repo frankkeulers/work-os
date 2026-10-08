@@ -14,6 +14,7 @@ export const API_KEY_ACCOUNT = 'anthropic-api-key';
 /** The SDK's model names for the settings' model IDs. */
 export const SDK_MODEL: Record<ModelId, string> = {
   'haiku-4.5': 'claude-haiku-4-5',
+  'haiku-5.5': 'claude-haiku-5-5',
   'sonnet-5.5': 'claude-sonnet-5',
   'opus-5.5': 'claude-opus-5-5',
 };
