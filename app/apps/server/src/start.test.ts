@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { HealthView } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { paths } from './config/dataDir';
@@ -37,7 +37,7 @@ const health = async (res: RunResult) => {
 };
 afterEach(async () => {
   for (const r of started.splice(0)) if (r.running) await r.lifecycle.stop('test');
-  await rm(dir, { recursive: true, force: true });
+  await rm(dirname(dir), { recursive: true, force: true }); // the temp folder, not just data/ in it
 });
 
 describe('startup', () => {

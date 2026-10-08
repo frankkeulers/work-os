@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initDataDir, paths } from './dataDir';
 import { DEFAULT_RULES, defaultSettings } from './defaults';
@@ -44,7 +44,7 @@ describe('data directory and settings', () => {
   beforeEach(async () => {
     dir = join(await mkdtemp(join(tmpdir(), 'workos-cfg-')), 'data');
   });
-  afterEach(() => rm(dir, { recursive: true, force: true }));
+  afterEach(() => rm(dirname(dir), { recursive: true, force: true })); // the temp folder, not just data/ in it
 
   const init = () => initDataDir(dir, { settings: defaultSettings(dir), rules: DEFAULT_RULES });
 

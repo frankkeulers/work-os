@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { Action, ApiErrorBody, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
@@ -92,7 +92,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await res.lifecycle.stop('test');
-  await rm(dir, { recursive: true, force: true });
+  await rm(dirname(dir), { recursive: true, force: true }); // the temp folder, not just data/ in it
 });
 
 describe('poll to inbox', () => {

@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { InboxView, ItemView, WorkEvent } from '@work-os/shared';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FAKE_API_TOKEN } from './fakes';
 import type { CrashPoint } from './runtime/crash';
 
@@ -90,9 +90,18 @@ async function checkConsistent(data: string) {
 
 let reference: string[];
 
+/** A data directory in a fresh temp folder, removed after the file's tests. */
+const temps: string[] = [];
+async function tempData() {
+  const t = await mkdtemp(join(tmpdir(), 'workos-crash-'));
+  temps.push(t);
+  return join(t, 'data');
+}
+afterAll(() => Promise.all(temps.map((t) => rm(t, { recursive: true, force: true }))));
+
 beforeAll(async () => {
   // A clean run: what one poll of the made-up Slack should give.
-  const s = start(join(await mkdtemp(join(tmpdir(), 'workos-crash-')), 'data'));
+  const s = start(await tempData());
   reference = (await polled(s)).items.map((i) => i.title).sort();
   await stop(s);
   expect(reference.length).toBeGreaterThan(2);
@@ -101,7 +110,7 @@ beforeAll(async () => {
 describe('a crash in the middle of a poll (FR-2.8)', () => {
   for (const point of ['after-items', 'after-events', 'after-cursor'] as const) {
     it(`recovers from a kill ${point.replace('-', ' ')}`, async () => {
-      const data = join(await mkdtemp(join(tmpdir(), 'workos-crash-')), 'data');
+      const data = await tempData();
       await killed(start(data, point));
       const s = start(data);
       const inbox = await polled(s);
@@ -115,7 +124,7 @@ describe('a crash in the middle of a poll (FR-2.8)', () => {
 describe('a crash in the middle of an approved write (FR-14.5, NF-5)', () => {
   for (const point of ['before-write', 'after-write'] as const) {
     it(`writes the vault note exactly once after a kill ${point.replace('-', ' ')}`, async () => {
-      const data = join(await mkdtemp(join(tmpdir(), 'workos-crash-')), 'data');
+      const data = await tempData();
       let s = start(data);
       const inbox = await polled(s);
       const item = inbox.items[0];

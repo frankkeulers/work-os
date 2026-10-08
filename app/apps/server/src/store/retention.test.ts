@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, readFile, stat, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Item, Settings } from '@work-os/shared';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultSettings } from '../config/defaults';
 import { DraftStore } from './drafts';
 import { ItemFiles } from './items';
@@ -58,6 +58,7 @@ beforeEach(async () => {
   settings = defaultSettings(dir);
   now = NOW;
 });
+afterEach(() => rm(dir, { recursive: true, force: true }));
 
 describe('retention (FR-12.1)', () => {
   it('removes item files, finished drafts, sandbox files and app logs past retentionDays', async () => {

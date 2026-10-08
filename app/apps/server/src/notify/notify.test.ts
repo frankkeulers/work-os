@@ -1,5 +1,5 @@
 import type { DepId, DependencyHealth } from '@work-os/shared';
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -26,11 +26,15 @@ describe('terminal-notifier arguments', () => {
 
   it('uses terminal-notifier where installed, else osascript', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'workos-notify-'));
-    const bin = join(dir, 'terminal-notifier');
-    await writeFile(bin, '#!/bin/sh\n');
-    await chmod(bin, 0o755);
-    expect((await systemNotifier('', [join(dir, 'missing'), bin])).kind).toBe('terminal-notifier');
-    expect((await systemNotifier('', [join(dir, 'missing')])).kind).toBe('osascript');
+    try {
+      const bin = join(dir, 'terminal-notifier');
+      await writeFile(bin, '#!/bin/sh\n');
+      await chmod(bin, 0o755);
+      expect((await systemNotifier('', [join(dir, 'missing'), bin])).kind).toBe('terminal-notifier');
+      expect((await systemNotifier('', [join(dir, 'missing')])).kind).toBe('osascript');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
