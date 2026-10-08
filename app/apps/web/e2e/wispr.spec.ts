@@ -28,6 +28,7 @@ test('Settings › Wispr Flow connects, sets its own schedule, and disconnects a
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.getByText('Frank Keulers')).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Read Wispr Flow meetings' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByText('New meetings are read on the schedule below.')).toBeVisible(); // the help follows the switch
   await expect(page.getByRole('button', { name: 'Reconnect' })).toBeVisible();
 
   // Every 3 hours in work hours, and not outside them, until Frank says otherwise.
@@ -37,6 +38,7 @@ test('Settings › Wispr Flow connects, sets its own schedule, and disconnects a
   await expect(page.getByLabel('Wispr Flow: poll every, off hours')).toHaveCount(0);
   await offHours.click();
   await expect(page.getByLabel('Wispr Flow: poll every, off hours')).toHaveValue('180');
+  await expect(page.getByText('Also polled in the evenings and at weekends.')).toBeVisible();
   await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
   await offHours.click();
   await expect(page.getByLabel('Wispr Flow: poll every, off hours')).toHaveCount(0);
@@ -53,6 +55,7 @@ test('Settings › Wispr Flow connects, sets its own schedule, and disconnects a
   await dialog.getByRole('button', { name: 'Disconnect' }).click();
   await expect(page.getByText('Not connected')).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Read Wispr Flow meetings' })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByText('Wispr Flow isn’t polled, so new meetings don’t arrive.')).toBeVisible();
 });
 
 test('a Wispr Flow meeting lands in the inbox after Connect, with its action items and no P2 tag', async ({ page }) => {

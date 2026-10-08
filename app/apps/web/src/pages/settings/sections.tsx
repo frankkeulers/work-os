@@ -369,7 +369,7 @@ function WisprSection({ s, set, type, flush, err, confirm }: Ctx) {
         )}
       </Group>
       <Group title="Polling">
-        <Row label="Read meetings" help="Off: Wispr Flow isn’t polled, and its meetings stop arriving.">
+        <Row label="Read meetings" help={schedule.enabled ? 'New meetings are read on the schedule below.' : 'Wispr Flow isn’t polled, so new meetings don’t arrive.'}>
           <Switch label="Read Wispr Flow meetings" checked={schedule.enabled} disabled={!connected} onChange={(v) => set((x) => setSchedule(x, 'wispr', { enabled: v }))} />
         </Row>
         <Row
@@ -391,7 +391,10 @@ function WisprSection({ s, set, type, flush, err, confirm }: Ctx) {
             onChange={(v) => type((x) => setSchedule(x, 'wispr', { intervalWorkMinutes: v ?? NaN }))}
           />
         </Row>
-        <Row label="Outside work hours" help="Off: meetings from the evening wait for the next work-hours poll." error={err('sources.wispr.intervalOffMinutes')}>
+        <Row
+          label="Outside work hours"
+          help={schedule.intervalOffMinutes !== null ? 'Also polled in the evenings and at weekends.' : 'Meetings from the evening wait for the next work-hours poll.'}
+          error={err('sources.wispr.intervalOffMinutes')}>
           <div className="flex flex-wrap items-center gap-3">
             <Switch label="Wispr Flow: poll outside work hours" checked={schedule.intervalOffMinutes !== null} onChange={(v) => set((x) => setSchedule(x, 'wispr', { intervalOffMinutes: v ? schedule.intervalWorkMinutes : null }))} />
             {schedule.intervalOffMinutes !== null && (
