@@ -1,5 +1,8 @@
 import type { Item, Message, Participant } from '@work-os/shared';
+import { fixedTs } from '../time';
 import type { WisprMeeting, WisprMeetingRow, WisprParticipants } from './types';
+
+export { fixedTs };
 
 // One Wispr Flow meeting as one inbox item (R2.3, R2.7). The item holds what triage reads: Wispr's
 // summary (its "Next Steps" section holds the action items) and Frank's own notes. The transcript
@@ -19,11 +22,6 @@ export const APP_LINK = 'wispr-flow://';
 export const itemId = (meetingId: string) => `${ITEM_PREFIX}${meetingId}`;
 export const meetingIdOf = (itemId: string) => (itemId.startsWith(ITEM_PREFIX) ? itemId.slice(ITEM_PREFIX.length) : undefined);
 
-/** A UTC timestamp with exactly six fraction digits, so timestamps sort as text. */
-export function fixedTs(t: string): string {
-  const m = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?(?:Z|\+00:00)$/.exec(t);
-  return m ? `${m[1]}.${(m[2] ?? '').padEnd(6, '0').slice(0, 6)}Z` : t;
-}
 
 /** The cursor key: modified_at, then id. It sorts as text (amendment R2.7). */
 export const cursorKey = (m: Pick<WisprMeetingRow, 'modified_at' | 'id'>) => `${fixedTs(m.modified_at)}|${m.id}`;
