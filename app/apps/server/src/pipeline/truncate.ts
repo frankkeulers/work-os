@@ -5,11 +5,13 @@ import { mentionsMe, type EarlierView, type Item, type Me } from '@work-os/share
 // A long thread keeps its first message, its last `keepLastMessages` and any message that mentions
 // Frank; the rest are counted, not sent. A very long message is cut. Threads are then packed in
 // order into calls of at most `maxThreadsPerCall` threads and `maxInputTokens` tokens, the prompt
-// included. Tokens are estimated at four characters each: the real count comes back in the usage
-// log, and the limit has headroom.
+// included. Tokens are estimated from characters: the real count comes back in the usage log, and
+// the limit has headroom.
 
 export const MESSAGE_MAX_CHARS = 2000;
-export const CHARS_PER_TOKEN = 4;
+// Measured on triage JSON (the mock seed threads, 12.9k characters): 2.33 characters a token on
+// Claude Haiku 5.5, whose tokenizer every model here except haiku-4.5 shares. Haiku 4.5 gave 3.3.
+export const CHARS_PER_TOKEN = 2.3;
 
 export interface TriageMessage {
   author: string; // "me" for Frank, otherwise the display name

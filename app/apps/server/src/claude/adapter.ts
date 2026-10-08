@@ -5,7 +5,7 @@ import type { z } from 'zod';
 import type { SecretStore } from '../config/keychain';
 import type { Logger } from '../log';
 import { deadline } from '../net/http';
-import { backendEnv, SDK_MODEL } from './backends';
+import { backendEnv, MODEL_CALL } from './backends';
 import { ClaudeError, ClaudeOutputError, failureFromAssistantError, failureFromThrown } from './errors';
 import { parseJsonOutput } from './outputs';
 import { READ_TOOLS, readVerdict } from './readGuard';
@@ -76,7 +76,7 @@ type Msg = {
   num_turns?: number;
   total_cost_usd?: number;
   usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
-  modelUsage?: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number }>;
+  modelUsage?: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number; costBasis?: string }>;
 };
 
 const loadQuery = async (): Promise<QueryFn> => (await import('@anthropic-ai/claude-agent-sdk')).query as QueryFn;
@@ -145,8 +145,9 @@ export class ClaudeAdapter {
       const hooks: Options['hooks'] = {};
       if (postToolUse.length) hooks.PostToolUse = postToolUse;
       if (preToolUse.length) hooks.PreToolUse = preToolUse;
+      const call = MODEL_CALL[spec.model];
       const options: Options = {
-        model: SDK_MODEL[spec.model],
+        model: call.sdk,
         systemPrompt: spec.system,
         tools: ro ? [...READ_TOOLS] : [],
         allowedTools: [],
@@ -163,7 +164,8 @@ export class ClaudeAdapter {
           return { behavior: 'deny', message: 'Not allowed' };
         },
         hooks,
-        thinking: { type: 'disabled' },
+        thinking: call.thinking,
+        ...(call.effort && { effort: call.effort }),
         persistSession: false,
         cwd: ro?.root ?? this.o.cwd,
         env,
@@ -228,7 +230,8 @@ export class ClaudeAdapter {
     const inputTokens = per.length ? sum((x) => x.inputTokens) : (u.input_tokens ?? 0);
     const outputTokens = per.length ? sum((x) => x.outputTokens) : (u.output_tokens ?? 0);
     const cacheTokens = per.length ? sum((x) => x.cacheReadInputTokens + x.cacheCreationInputTokens) : (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-    const reported = m.total_cost_usd ?? 0;
+    // The SDK prices a model it doesn't know at a guess (costBasis "unknown"); our list prices beat that.
+    const reported = per.some((x) => x.costBasis === 'unknown') ? 0 : (m.total_cost_usd ?? 0);
     const record: UsageRecord = {
       id: randomUUID(),
       at,
