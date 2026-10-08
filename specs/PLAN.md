@@ -100,6 +100,15 @@ Findings that change the design (R2.5, CL-9):
 - **Result shape:** an array of text blocks, one JSON email per block, plus a final paging item (`nextOffset`). Each email has `uri`, `id`, `subject`, `sender`, `recipients`, `receivedDateTime`, `sentDateTime`, `summary` (a short preview), `hasAttachments`, `importance`, `isRead`, `webLink` and `internetMessageId`. That is enough for triage. Full bodies need a second tool, `read_resource`, only when drafting.
 - **Pagination:** at most 25 per page. Use `afterDateTime` with `folderName: 'Inbox'` (no `query`) and page with `offset`. Dedupe on `internetMessageId`.
 
+**P0-9 addendum: the Outlook spike (8 Oct 2026, `npm run spike:outlook`, Agent SDK 0.3.293).** Passed. It changes R2.5 and answers open question 6.
+- **Discovery:** `query().mcpServerStatus()` in streaming-input mode, with nothing sent, lists every claude.ai connector with its `config.id`, status and tools in 2–4 s. There is no model turn and no tokens, so setup needs no debug log.
+- **Cost is far below P0-9:** with the other 49 tools hidden, a search run is about 1.2k input tokens, $0.0005–0.0011 and 5–6 s. P0-9's $0.009 was measured with the full tool list.
+- **Batching works:** one run read 10 emails with `read_resource`: 10 of 10 read, none refused, 11 turns (Haiku made the calls one after another, not in parallel), $0.0027 and 10 s. So `maxTurns` is n + 1.
+- **Search shape:** a preview only (`summary`, 255 chars, including the external-sender banner), the sender as a bare address, recipients as a flat address list, and **no `conversationId`**. With `folderName` and `order: 'oldest'` the results come oldest first and the paging item is `{moreResults, nextOffset, totalResultCount}`, or `{totalResultCount}` on the last page.
+- **Read shape:** `body` (HTML, up to 33k chars seen), `sender {name, address}`, `toRecipients`, `ccRecipients`, `attachments[{name, isInline, …}]`, `flag`, `categories`, `conversationId` (80 chars, `[A-Za-z0-9=_-]`), `internetMessageId` (up to 242 chars) and `parentFolderId`.
+- **No `/O=` senders** among 11 Inbox and Sent Items emails, though the tool documents them.
+- **`get_me`** returns `{id, displayName, userPrincipalName, mail, jobTitle}`. A call with no arguments must be asked for in words: shown `{}`, Haiku sent `{"arguments":"{}"}`, which the argument gate refused.
+
 **P0-10: Wispr Flow database (6 Oct 2026, Wispr Flow 1.6.1034).** Passed.
 
 Database:
@@ -933,7 +942,7 @@ Each phase starts only when the previous phase meets its success criteria. Each 
 
 | Source | Approach | Approval needed | Retires |
 |---|---|---|---|
-| Outlook mail | Relay call (R2.5) to `outlook_email_search` on the claude.ai Microsoft 365 connector, every 30 min in work hours and 120 min outside. Our own Graph app registration is unlikely to get consent, and the connector is already approved for the tenant. Local reads are not viable: new Outlook for Mac caches mail in an undocumented binary store (`HxStore.hxd`) that only refreshes while Outlook runs. Fallback if P0-9 fails: add the account to Apple Mail and read its local store, which needs Full Disk Access. | P0-9 passes. Tell IT the approved connector will be polled automatically. | Daily Outlook digest |
+| Outlook mail | Relay calls (R2.5) on the claude.ai Microsoft 365 connector, every 30 min in work hours and 120 min outside: `outlook_email_search` on Inbox and Sent Items, then `read_resource` for each new email, batched up to 10 per run, for the body, names, To/Cc and `conversationId` (one item per conversation). Sent Items is context only: triage sees Frank's replies as "me" and lanes don't move on their own. Go-live gate: three working days alongside the digest, at least 30 corrected emails, and S1/S2 on Outlook alone (`npm run eval -- --source outlook`). Our own Graph app registration is unlikely to get consent, and the connector is already approved for the tenant. Local reads are not viable: new Outlook for Mac caches mail in an undocumented binary store (`HxStore.hxd`) that only refreshes while Outlook runs. Fallback if P0-9 fails: add the account to Apple Mail and read its local store, which needs Full Disk Access. | P0-9 passes. Tell IT the approved connector will be polled automatically. | Daily Outlook digest |
 | Wispr Flow meetings | Wispr Flow's official MCP server, called from code with an MCP client and no model in the loop (R2.7), every 3 h in work hours. Amended from local reads of `flow.sqlite` (R2.6, P0-10) at Frank's choice: the MCP is the only supported way out and adds attendees and a share link. The local read stays the documented fallback if the MCP is withdrawn or its sign-in can't be kept. | P0-11 passes (P0-10 for the fallback) | Whichever scheduled task covers Wispr Flow notes, if any |
 | Teams chats | Graph delta on chats Frank is in | `Chat.Read` delegated, admin consent | Part of the daily Teams transcript sweep |
 | Teams meeting transcripts | Graph online meeting transcripts for meetings Frank organised or attended | `OnlineMeetingTranscript.Read.All` (admin-level; may be refused) | Daily Teams transcript sweep |
@@ -945,12 +954,13 @@ Requirements:
 - **R2.2** Triage prompts gain per-source sections. The eval set gains labelled examples per source before the source goes live.
 - **R2.3** Meeting items are triaged on the transcript summary, not the full transcript. Summarise with Haiku, or use Plaud's own summary.
 - **R2.4** If a Graph permission is refused, the source stays on the existing scheduled task. No workarounds that bypass IT. Using a connector IT has already approved is not a workaround, but tell IT before polling through it.
-- **R2.5** Relay fetch: for a source only reachable through a claude.ai connector, `claude/relay.ts` runs one Haiku call that may use exactly one connector tool (CL-9).
-  - **The call:** the connector is declared explicitly by its server id (`settings.sources.<id>.connectorId`), because claude.ai connectors load asynchronously in headless runs. Code captures the raw tool result through a `PostToolUse` hook, and the model sees only "ok".
+- **R2.5** Relay fetch: for a source only reachable through a claude.ai connector, `claude/relay.ts` runs one Haiku call that may use exactly one connector tool (CL-9), up to 10 times with argument sets given by code (`relayBatch`).
+  - **The call:** the connector is declared explicitly by its server id, because claude.ai connectors load asynchronously in headless runs. Amended (8 Oct 2026): the id lives in `settings.connectors.ms365`, shared by Outlook mail and calendar, and Settings finds it with `mcpServerStatus()` (P0-9 addendum), with a pasted id as the fallback. Code captures each raw tool result through a `PostToolUse` hook, and the model sees only "ok".
+  - **The gate:** `canUseTool` allows each argument set asked for once, and refuses any other arguments or a repeat. Calls the model leaves out get one more run; any still missing go back to the source, which doesn't move its cursor past them.
   - **The adapter:** still normalises, dedupes and advances its cursor only after persisting.
-  - **Failures:** a connector that is not `connected` in the init message, or needs re-authentication, shows as `auth_failed`, with the fix "reconnect it on claude.ai".
+  - **Failures:** connector trouble goes to its own dependency (`ms365`), not to `claude`. `needs-auth` or `disabled` in the init message shows as `auth_failed`, with the fix "reconnect it on claude.ai"; `pending` or `failed` is `degraded`; the tool missing from the init tool list is `tools_changed`.
   - **When:** built and tested on fixtures in the MVP, first used in Phase 2.
-  - **Measured cost** (P0-9): about $0.009 and 6 s per call.
+  - **Measured cost** (P0-9 addendum): about $0.001 and 5–6 s per search run; about $0.003 and 10 s for 10 reads in one run.
 - **R2.6** Local reads: a source that keeps its data in a local database is read directly, read-only.
   - **Access:** `node:sqlite` with `readOnly`, `query_only`, a 2 s busy timeout and one short transaction per run.
   - **Tables:** allow-listed tables only. For Wispr Flow: `Meetings` (plus `Notes` and `Todos`, empty today), never the dictation `History`. Transcripts are read from `meetings/<id>/refined.ndjson` for vault drafts only; audio files are never read (P0-10 findings).
@@ -1010,5 +1020,5 @@ Requirements:
 3. Is the Obsidian MCP server usable from the Agent SDK, or should vault reads use scoped file tools?
 4. How does Haiku usage weigh against plan limits compared with Sonnet and Opus? Measure from the usage log.
 5. ~~Which Confluence pages go on the initial allow-list (P0-6)?~~ Answered (7 Oct 2026): none. The scope is a live catalogue of the PSG context tree (FR-10.2, amended).
-6. ~~Do claude.ai connectors load in a headless Agent SDK run under launchd, and what does one relay call cost?~~ Answered by P0-9: yes, if declared explicitly; about $0.009 per call. Still open: does `mcpServerStatus()` expose the connector id, so setup needs no debug log?
+6. ~~Do claude.ai connectors load in a headless Agent SDK run under launchd, and what does one relay call cost?~~ Answered by P0-9: yes, if declared explicitly; about $0.009 per call. ~~Still open: does `mcpServerStatus()` expose the connector id, so setup needs no debug log?~~ Answered (8 Oct 2026, P0-9 addendum): yes, as `config.id`, with no model turn.
 7. ~~Does Node's `fsync` on macOS issue `F_FULLFSYNC`?~~ Answered (6 Oct 2026): libuv's macOS `fsync` and `fdatasync` both use `F_FULLFSYNC`, falling back to `F_BARRIERFSYNC`. Measured on this Mac (Node 24.16, libuv 1.52.1, APFS): `datasync` and `sync` both take 3.0 ms p50 and under 4 ms p95, which is drive-flush time, not the ~0.1 ms of a plain `fsync`. Group commit keeps this to one sync per batch, well inside the 30 ms command budget (NF-11).
