@@ -379,6 +379,8 @@ export interface WorkOsApi {
   getSettings(): Promise<SettingsView>;
   /** Whether Wispr Flow is signed in (R2.7). */
   getWisprStatus(): Promise<WisprStatusView>;
+  /** The Microsoft 365 connector Outlook reads through, and whether Outlook is on (R2.5). */
+  getOutlookStatus(): Promise<OutlookStatusView>;
 
   pollNow(): Promise<void>;
   markDone(itemId: string): Promise<void>;
@@ -411,6 +413,10 @@ export interface WorkOsApi {
   connectWispr(): Promise<WisprConnectView>;
   /** Forgets the Wispr Flow sign-in and turns the source off. */
   disconnectWispr(): Promise<void>;
+  /** Finds the Microsoft 365 connector (or uses the entered ID), tests it, turns Outlook on and polls it. */
+  connectOutlook(connectorId?: string): Promise<OutlookStatusView>;
+  /** Turns Outlook off; the connector is kept. */
+  disconnectOutlook(): Promise<void>;
   getPrompts(): Promise<PromptFileView[]>;
   /** Fails as conflict when the file changed since baseVersion. */
   savePrompt(id: PromptFileId, text: string, baseVersion: string): Promise<PromptFileView>;

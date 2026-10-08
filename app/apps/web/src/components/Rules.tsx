@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { CONDITION_SOURCES, Rule as RuleSchema, SourceId, isValidRegex, ruleSources, type NamedList, type Rule, type RuleCondition, type RuleOutcome } from '@work-os/shared';
-import { SOURCE_NAME } from '../lib/next';
+import { CONDITION_SOURCES, RULE_SOURCES, Rule as RuleSchema, SourceId, isValidRegex, ruleSources, type NamedList, type Rule, type RuleCondition, type RuleOutcome } from '@work-os/shared';
+import { SOURCE_NAME, isLive } from '../lib/next';
 import { BrandIcon, type Brand } from './BrandIcon';
 import { ChannelPicker } from './LookupPicker';
 import { DragIcon, Icon } from './icons';
@@ -42,6 +42,10 @@ export function outcomeText(o: RuleOutcome): string {
 const ALL_SOURCES = SourceId.options;
 const MARK: Partial<Record<SourceId, Brand>> = { slack: 'slack', outlook: 'outlook', teams: 'teams' };
 
+/** The sources a rule can be limited to: the live ones rules check (Slack, Outlook), or every one in Full scope. */
+const shownSources = (full: boolean): readonly SourceId[] => (full ? ALL_SOURCES : RULE_SOURCES.filter(isLive));
+const within = (ids: readonly SourceId[], full: boolean) => ids.filter((id) => shownSources(full).includes(id));
+
 /** "Slack and Teams", for the sources a rule or condition is limited to. */
 export const sourceList = (ids: readonly SourceId[]) => {
   const names = ids.map((id) => SOURCE_NAME[id]);
@@ -76,9 +80,9 @@ function RuleRow({
   onEdit: () => void;
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: rule.id });
-  // Only Slack exists in MVP scope, so a rule's sources only say something in Full scope.
-  const sources = ruleSources(rule);
-  const limited = full && sources.length < ALL_SOURCES.length;
+  // Only the sources in scope: in MVP scope, a rule that works on Slack alone says "Slack only".
+  const sources = within(ruleSources(rule), full);
+  const limited = sources.length < shownSources(full).length;
   return (
     <div
       ref={setNodeRef}
@@ -255,10 +259,10 @@ function ConditionEditor({
           Condition
           <select className={cx(inputBase, full ? 'w-[260px]' : 'w-[180px]')} value={c.type} onChange={(e) => onChange(blankCondition(e.target.value as RuleCondition['type']))}>
             {COND_TYPES.map((t) => {
-              const works = CONDITION_SOURCES[t.value];
-              const limited = full && works.length < ALL_SOURCES.length;
+              const works = within(CONDITION_SOURCES[t.value], full);
+              const limited = works.length < shownSources(full).length;
               return (
-                <option key={t.value} value={t.value} disabled={full && !!scope?.length && !scope.some((src) => works.includes(src))}>
+                <option key={t.value} value={t.value} disabled={!!scope?.length && !scope.some((src) => works.includes(src))}>
                   {limited ? `${t.label} (${sourceList(works)} only)` : t.label}
                 </option>
               );
@@ -373,7 +377,9 @@ function RuleDialog({
     const on = rule.sources ?? [];
     setScope(on.includes(id) ? on.filter((x) => x !== id) : ALL_SOURCES.filter((x) => x === id || on.includes(x)));
   };
-  const matches = ruleSources(rule);
+  const matches = within(ruleSources(rule), full);
+  // A source chosen in Full scope stays listed in MVP scope, so it can be turned off.
+  const choices = ALL_SOURCES.filter((id) => shownSources(full).includes(id) || rule.sources?.includes(id));
 
   return (
     <>
@@ -399,50 +405,48 @@ function RuleDialog({
           <Field label="Rule id" error={errors.id} help="Lower-case letters, digits and hyphens. Shown in triage decisions and the event log.">
             <input className={cx(inputClass, 'font-mono')} aria-invalid={!!errors.id} value={rule.id} placeholder="e.g. customer-escalations" onChange={(e) => setRule({ ...rule, id: e.target.value })} />
           </Field>
-          {full && (
-            <div className="flex flex-col gap-2">
-              <span className="text-[13px] font-medium">Applies to</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <Segmented<'any' | 'only'>
-                  label="Applies to"
-                  size="sm"
-                  value={scoped ? 'only' : 'any'}
-                  onChange={(v) => setScope(v === 'any' ? undefined : ['slack'])}
-                  options={[
-                    { value: 'any', label: 'Any source' },
-                    { value: 'only', label: 'Only these' },
-                  ]}
-                />
-                {scoped &&
-                  ALL_SOURCES.map((id) => {
-                    const on = rule.sources!.includes(id);
-                    const last = on && rule.sources!.length === 1;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        aria-pressed={on}
-                        disabled={last}
-                        title={last ? 'Pick another source first, or choose Any source' : undefined}
-                        onClick={() => toggleSource(id)}
-                        className={cx(
-                          'inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium cursor-pointer disabled:cursor-default',
-                          on ? 'border-teal bg-teal-wash text-ink' : 'border-line-strong bg-surface text-ink-2 hover:text-ink',
-                        )}
-                      >
-                        {MARK[id] && <BrandIcon brand={MARK[id]} size={14} decorative />}
-                        {SOURCE_NAME[id]}
-                      </button>
-                    );
-                  })}
-              </div>
-              {errors.sources && !matches.length ? (
-                <span className="text-xs text-red-fg">{errors.sources}. Change a condition, or pick another source.</span>
-              ) : (
-                <span className="text-xs text-muted">{matches.length ? `Can match items from ${sourceList(matches)}.` : 'No chosen source can check every condition.'}</span>
-              )}
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-medium">Applies to</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented<'any' | 'only'>
+                label="Applies to"
+                size="sm"
+                value={scoped ? 'only' : 'any'}
+                onChange={(v) => setScope(v === 'any' ? undefined : ['slack'])}
+                options={[
+                  { value: 'any', label: 'Any source' },
+                  { value: 'only', label: 'Only these' },
+                ]}
+              />
+              {scoped &&
+                choices.map((id) => {
+                  const on = rule.sources!.includes(id);
+                  const last = on && rule.sources!.length === 1;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={on}
+                      disabled={last}
+                      title={last ? 'Pick another source first, or choose Any source' : undefined}
+                      onClick={() => toggleSource(id)}
+                      className={cx(
+                        'inline-flex min-h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium cursor-pointer disabled:cursor-default',
+                        on ? 'border-teal bg-teal-wash text-ink' : 'border-line-strong bg-surface text-ink-2 hover:text-ink',
+                      )}
+                    >
+                      {MARK[id] && <BrandIcon brand={MARK[id]} size={14} decorative />}
+                      {SOURCE_NAME[id]}
+                    </button>
+                  );
+                })}
             </div>
-          )}
+            {errors.sources && !matches.length ? (
+              <span className="text-xs text-red-fg">{errors.sources}. Change a condition, or pick another source.</span>
+            ) : (
+              <span className="text-xs text-muted">{matches.length ? `Can match items from ${sourceList(matches)}.` : 'No chosen source can check every condition.'}</span>
+            )}
+          </div>
           <div className="flex flex-col gap-2">
             <span className="text-[13px] font-medium">If all of these match</span>
             {rule.conditions.map((c, i) => (

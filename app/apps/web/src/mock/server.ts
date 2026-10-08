@@ -63,6 +63,7 @@ import {
   type UsageRecord,
   type UsageRow,
   type UsageView,
+  type OutlookStatusView,
   type WisprConnectView,
   type WisprStatusView,
   type WorkEvent,
@@ -77,7 +78,7 @@ import { ME } from './me';
 import { FRANK } from './seed/people';
 import { SEED_CLOCK, STATE_VERSION, buildState, type Preset } from './seed';
 import { SEED_PROMPT_FILES } from './seed/prompts';
-import { BATCH_TWELVE, REPLIES, VIP_DM, WISPR_MEETING } from './seed/threads';
+import { BATCH_TWELVE, OUTLOOK_THREADS, REPLIES, VIP_DM, WISPR_MEETING } from './seed/threads';
 import type { DraftOutcome, ItemRec, MockState, ReplySeed, ThreadSeed } from './types';
 
 const STORAGE_KEY = 'workos.mock';
@@ -93,6 +94,9 @@ const DRAFT_STAGES: Record<ActionType, string[]> = {
 
 const ACTIVE: Action['status'][] = ['drafting', 'ready', 'approved', 'executing'];
 const RANK = { none: 0, today: 1, now: 2 } as const;
+
+/** The Microsoft 365 connector's ID on the mock's claude.ai. */
+export const MOCK_CONNECTOR_ID = 'mcpsrv_01MockMicrosoft365';
 
 export class MockServer implements WorkOsApi, MockControls {
   private s: MockState;
@@ -512,7 +516,7 @@ export class MockServer implements WorkOsApi, MockControls {
       items,
       poll: { ...this.s.poll, lastPollAt: this.s.source.lastPollAt, nextPollAt: this.s.source.nextPollAt },
       source: this.sourceHealth(),
-      sources: [this.sourceHealth(), ...this.wisprHealth()],
+      sources: [this.sourceHealth(), ...this.outlookHealth(), ...this.wisprHealth()],
       budgets,
       dryRun: this.s.settings.dryRun,
       notices: { rebuilt: this.s.flags.rebuiltNotice, fileVaultOff: this.s.flags.fileVaultOff },
@@ -540,6 +544,12 @@ export class MockServer implements WorkOsApi, MockControls {
       cursor: src.cursor,
       message: messages[src.status],
     };
+  }
+
+  /** Outlook's line in the inbox health, once it is turned on (R2.5). */
+  private outlookHealth(): SourceHealth[] {
+    if (!sourceSchedule(this.s.settings, 'outlook').enabled) return [];
+    return [{ id: 'outlook', status: 'healthy', lastPollAt: this.s.source.lastPollAt, rateLimitedToday: 0 }];
   }
 
   /** Wispr Flow's line in the inbox health, once it is turned on (R2.7). */
@@ -676,7 +686,7 @@ export class MockServer implements WorkOsApi, MockControls {
       budgets,
       byPurpose: [...group.values()].sort((a, b) => b.costEquivalent - a.costEquivalent),
       source: this.sourceHealth(),
-      sources: [this.sourceHealth(), ...this.wisprHealth()],
+      sources: [this.sourceHealth(), ...this.outlookHealth(), ...this.wisprHealth()],
       criteria: this.criteria(last, budgets),
       lastEval: last,
       evalRunning: this.s.evalRunning,
@@ -772,6 +782,35 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(COMMAND_MS);
     this.s.wispr = { ...this.s.wispr, connected: false };
     this.s.settings = { ...this.s.settings, sources: { ...this.s.settings.sources, wispr: { ...this.s.settings.sources?.wispr, enabled: false } } };
+    this.emit({ topic: 'settings' }, { topic: 'health' }, { topic: 'inbox' });
+  }
+
+  private outlookView(): OutlookStatusView {
+    const o = this.s.outlook;
+    return { ...(o && { connectorId: o.connectorId, account: o.account }), enabled: sourceSchedule(this.s.settings, 'outlook').enabled };
+  }
+
+  async getOutlookStatus(): Promise<OutlookStatusView> {
+    await this.gate(QUERY_MS);
+    return this.outlookView();
+  }
+
+  /** Finds the mock's connector, or takes the one entered if it is that one; the first Connect brings the mail in. */
+  async connectOutlook(connectorId?: string): Promise<OutlookStatusView> {
+    await this.gate(COMMAND_MS);
+    if (connectorId !== undefined && !/^[A-Za-z0-9_-]{1,100}$/.test(connectorId)) throw new ApiError('validation', 'That isn’t a connector ID: it has only letters, digits, - and _.');
+    if (connectorId && connectorId !== MOCK_CONNECTOR_ID) throw new ApiError('unavailable', 'claude.ai has no connector with that ID, or it is signed out. Check the ID, or leave it empty to find the connector.');
+    const first = !this.s.outlook?.read;
+    this.s.outlook = { connectorId: MOCK_CONNECTOR_ID, account: { name: 'Frank Keulers', address: 'frank.keulers@polestarglobal.example' }, read: true };
+    this.s.settings = { ...this.s.settings, sources: { ...this.s.settings.sources, outlook: { ...this.s.settings.sources?.outlook, enabled: true } } };
+    this.emit({ topic: 'settings' }, { topic: 'health' }, { topic: 'inbox' });
+    if (first) void this.runPoll('manual', { threads: OUTLOOK_THREADS });
+    return this.outlookView();
+  }
+
+  async disconnectOutlook() {
+    await this.gate(COMMAND_MS);
+    this.s.settings = { ...this.s.settings, sources: { ...this.s.settings.sources, outlook: { ...this.s.settings.sources?.outlook, enabled: false } } };
     this.emit({ topic: 'settings' }, { topic: 'health' }, { topic: 'inbox' });
   }
 

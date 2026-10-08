@@ -50,13 +50,20 @@ test('a File rule for two channels picked by search, and it is saved', async ({ 
   await expect(page.locator('[data-rule="product-signals"]')).toContainText('File');
 });
 
-test('in Full scope a rule can be limited to sources, and conditions those sources cannot check are caught', async ({ page }) => {
+test('a rule can be limited to Slack or Outlook (every source in Full scope), and conditions those sources cannot check are caught', async ({ page }) => {
   await page.goto('/settings/rules');
-  // MVP scope has only Slack, so rules don't mention sources.
+  // MVP scope: the rules apply to Slack and Outlook, so those are the sources a rule can be limited to.
   await page.getByRole('button', { name: 'Add rule' }).click();
-  await expect(page.getByRole('dialog', { name: 'Add rule' }).getByRole('group', { name: 'Applies to' })).toHaveCount(0);
+  const mvp = page.getByRole('dialog', { name: 'Add rule' });
+  await mvp.getByRole('group', { name: 'Applies to' }).getByRole('button', { name: 'Only these' }).click();
+  await expect(mvp.getByRole('button', { name: 'Slack' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(mvp.getByRole('button', { name: 'Outlook' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(mvp.getByRole('button', { name: 'Teams' })).toHaveCount(0);
+  await mvp.getByLabel('Condition').selectOption('is_dm');
+  await expect(mvp.getByLabel('Condition').locator('option[value="is_dm"]')).toHaveText('Is a DM (Slack only)');
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByTestId('rule-sources')).toHaveCount(0);
+  await expect(page.locator('[data-rule="vip-dm"]').getByTestId('rule-sources')).toHaveText('Slack only');
+  await expect(page.locator('[data-rule="blockers"]').getByTestId('rule-sources')).toHaveCount(0);
 
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Account' }).click();
   await page.getByRole('dialog', { name: 'Account' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: 'Full' }).click();

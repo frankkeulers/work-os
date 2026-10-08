@@ -56,7 +56,8 @@ export const JOURNEYS: Journey[] = [
   {
     id: 'J40',
     group: 'Inbox basics',
-    title: 'Outlook and Teams (P2)',
-    start: (c) => (fresh(c), usePrefs.getState().setScope('full'), `/?item=${encodeURIComponent(c.itemIdForKey('o1') ?? '')}`),
+    title: 'Teams (P2)',
+    start: (c) => (fresh(c), usePrefs.getState().setScope('full'), `/?item=${encodeURIComponent(c.itemIdForKey('m1') ?? '')}`),
   },
+  { id: 'J44', group: 'Settings', title: 'Connect Outlook', start: (c) => (fresh(c), '/settings/outlook') },
 ];

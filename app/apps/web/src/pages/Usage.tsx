@@ -190,10 +190,10 @@ const SLACK = {
   paused: { label: 'Paused', dot: 'var(--gray-mid)', cls: 'text-muted' },
 } as const;
 
-/** A source's state in words. Slack's sign-in is a token; Wispr Flow's is an account sign-in. */
+/** A source's state in words. Slack's sign-in is a token; Outlook's and Wispr Flow's are an account sign-in. */
 const stateOf = (h: SourceHealthView) => (h.status === 'auth_failed' && h.id !== 'slack' ? { ...SLACK.auth_failed, label: 'Signed out' } : h.status === 'backoff' && h.id !== 'slack' ? { ...SLACK.backoff, label: 'Rate-limited, waiting' } : SLACK[h.status]);
 
-const SOURCE_NAME: Partial<Record<SourceId, string>> = { slack: 'Slack', wispr: 'Wispr Flow' };
+const SOURCE_NAME: Partial<Record<SourceId, string>> = { slack: 'Slack', outlook: 'Outlook', wispr: 'Wispr Flow' };
 
 function SourceRow({ h }: { h: SourceHealthView }) {
   const st = stateOf(h);
@@ -215,8 +215,8 @@ function SourceRow({ h }: { h: SourceHealthView }) {
       </div>
       {details.length > 0 && <div className="font-mono text-[11px] leading-relaxed text-muted">{details.join(' · ')}</div>}
       {h.message && h.status !== 'healthy' && <div className="text-xs text-ink-2">{h.message}</div>}
-      {h.id === 'wispr' && h.status === 'auth_failed' && (
-        <Link to="/settings/wispr" className="text-xs font-medium">
+      {(h.id === 'wispr' || h.id === 'outlook') && h.status === 'auth_failed' && (
+        <Link to={`/settings/${h.id}`} className="text-xs font-medium">
           Reconnect in Settings
         </Link>
       )}
@@ -237,7 +237,6 @@ function SourceHealth({ u }: { u: UsageView }) {
       {full &&
         (
           [
-            ['Outlook mail', 'retires Outlook digest', 'P2', ['outlook']],
             ['Teams chats + transcripts', 'retires transcript sweep', 'P2', ['teams']],
             ['Gong · Salesforce · HubSpot', 'new, read-only', 'P4', ['salesforce', 'hubspot']],
           ] as const

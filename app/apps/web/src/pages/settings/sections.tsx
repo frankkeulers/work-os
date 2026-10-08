@@ -1,7 +1,7 @@
 import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceSchedule } from '@work-os/shared';
-import { api, isApiError, type CheckStatus, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
+import { sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
+import { api, isApiError, type CheckStatus, type OutlookStatusView, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
 import { Icon } from '../../components/icons';
@@ -121,15 +121,31 @@ function ScheduleSection({ s, type, flush, err }: Ctx) {
 
 // ---------- Slack ----------
 
-const SLACK_STATUS: Record<SlackStatus, { dot: string; text: string }> = {
+/** A source's state in words: whose errors they are, and what a rejected sign-in is called. */
+const statusText = (who: string, signedOut: string): Record<SlackStatus, { dot: string; text: string }> => ({
   healthy: { dot: 'bg-green', text: 'Connected' },
   backoff: { dot: 'bg-amber', text: 'Rate-limited, retrying' },
-  auth_failed: { dot: 'bg-red', text: 'Token rejected' },
+  auth_failed: { dot: 'bg-red', text: signedOut },
   never: { dot: 'bg-gray-mid', text: 'Not polled yet' },
   offline: { dot: 'bg-gray-mid', text: 'Offline, polls when the network is back' },
-  degraded: { dot: 'bg-amber', text: 'Slack errors, retrying' },
+  degraded: { dot: 'bg-amber', text: `${who} errors, retrying` },
   paused: { dot: 'bg-gray-mid', text: 'Paused' },
-};
+});
+const SLACK_STATUS = statusText('Slack', 'Token rejected');
+const WISPR_STATUS = statusText('Wispr Flow', 'Signed out');
+const OUTLOOK_STATUS = statusText('Microsoft 365', 'Connector signed out');
+
+/** The state dot and words in a source page's header, linking to Usage & health. */
+function StatusLink({ state }: { state?: { dot: string; text: string } }) {
+  return (
+    state && (
+      <Link to="/usage#health" className="inline-flex min-h-9 items-center gap-2 text-[13px] !text-ink-2 no-underline hover:!text-ink">
+        <span className={cx('h-2 w-2 rounded-full', state.dot)} />
+        {state.text}
+      </Link>
+    )
+  );
+}
 
 const sameChannel = (a: string, b: string) => a.trim().replace(/^#/, '').toLowerCase() === b.trim().replace(/^#/, '').toLowerCase();
 
@@ -203,18 +219,7 @@ function SlackSection({ s, usage, set, type, flush, err }: Ctx) {
   const status = usage ? SLACK_STATUS[usage.source.status] : undefined;
   return (
     <>
-      <SectionHeader
-        title="Slack"
-        description="Which channels are read, how often Work OS polls, and where Slack links open."
-        action={
-          status && (
-            <Link to="/usage#health" className="inline-flex min-h-9 items-center gap-2 text-[13px] !text-ink-2 no-underline hover:!text-ink">
-              <span className={cx('h-2 w-2 rounded-full', status.dot)} />
-              {status.text}
-            </Link>
-          )
-        }
-      />
+      <SectionHeader title="Slack" description="Which channels are read, how often Work OS polls, and where Slack links open." action={<StatusLink state={status} />} />
       <Group title="Channels">
         <ChannelScope s={s} set={set} />
         <Row stacked label="Read app posts in these channels" help="Posts from apps such as Gong (call recaps, mentions) are read here and dropped everywhere else.">
@@ -273,16 +278,92 @@ function SlackSection({ s, usage, set, type, flush, err }: Ctx) {
 // ---------- Wispr Flow ----------
 
 /** Sets one field of a source's schedule, keeping the others. */
-const setSchedule = (x: Settings, id: 'wispr', patch: Partial<SourceSchedule>) => {
+const setSchedule = (x: Settings, id: 'outlook' | 'wispr', patch: Partial<SourceSchedule>) => {
   x.sources = { ...x.sources, [id]: { ...x.sources?.[id], ...patch } };
 };
+
+/** What a source's Polling group says: its name, what it reads, and the help that follows the switches. */
+interface PollingWords {
+  id: 'outlook' | 'wispr';
+  name: string;
+  read: string; // "Read meetings"
+  switch: string; // "Read Wispr Flow meetings"
+  what: string; // "new meetings"
+  on: string;
+  off: string;
+  evening: string;
+}
+
+/** A source's own schedule (R2.1): on or off, and how often in and outside work hours. */
+function SourcePolling({ words: w, s, set, type, flush, err, disabled }: Pick<Ctx, 's' | 'set' | 'type' | 'flush' | 'err'> & { words: PollingWords; disabled: boolean }) {
+  const schedule = sourceSchedule(s, w.id);
+  return (
+    <Group title="Polling">
+      <Row label={w.read} help={schedule.enabled ? w.on : w.off}>
+        <Switch label={w.switch} checked={schedule.enabled} disabled={disabled} onChange={(v) => set((x) => setSchedule(x, w.id, { enabled: v }))} />
+      </Row>
+      <Row
+        label="During work hours"
+        help={
+          <>
+            How often to look for {w.what} in your <Link to="/settings/schedule">work hours</Link>.
+          </>
+        }
+        error={err(`sources.${w.id}.intervalWorkMinutes`)}
+      >
+        <NumInput
+          label={`${w.name}: poll every, work hours`}
+          prefix="Every"
+          suffix="min"
+          value={schedule.intervalWorkMinutes}
+          invalid={!!err(`sources.${w.id}.intervalWorkMinutes`)}
+          onBlur={flush}
+          onChange={(v) => type((x) => setSchedule(x, w.id, { intervalWorkMinutes: v ?? NaN }))}
+        />
+      </Row>
+      <Row label="Outside work hours" help={schedule.intervalOffMinutes !== null ? 'Also polled in the evenings and at weekends.' : w.evening} error={err(`sources.${w.id}.intervalOffMinutes`)}>
+        <div className="flex flex-wrap items-center gap-3">
+          <Switch label={`${w.name}: poll outside work hours`} checked={schedule.intervalOffMinutes !== null} onChange={(v) => set((x) => setSchedule(x, w.id, { intervalOffMinutes: v ? schedule.intervalWorkMinutes : null }))} />
+          {schedule.intervalOffMinutes !== null && (
+            <NumInput
+              label={`${w.name}: poll every, off hours`}
+              prefix="Every"
+              suffix="min"
+              value={schedule.intervalOffMinutes}
+              invalid={!!err(`sources.${w.id}.intervalOffMinutes`)}
+              onBlur={flush}
+              onChange={(v) => type((x) => setSchedule(x, w.id, { intervalOffMinutes: v ?? NaN }))}
+            />
+          )}
+        </div>
+      </Row>
+    </Group>
+  );
+}
+
+/** When the source last read, and its last problem. */
+function LastRead({ health, now, problem }: { health?: SourceHealth; now: Date; problem: boolean }) {
+  return (
+    <>
+      {problem && health?.message && (
+        <Row label="Last problem">
+          <span className="text-[13px] text-ink-2">{health.message}</span>
+        </Row>
+      )}
+      {health?.lastPollAt && (
+        <Row label="Last read">
+          <span className="text-[13px] text-ink-2">{`${fmtAgo(health.lastPollAt, now)} ago`.replace('now ago', 'just now')}</span>
+        </Row>
+      )}
+    </>
+  );
+}
 
 function WisprSection({ s, set, type, flush, err, confirm }: Ctx) {
   const status = useApiQuery(() => api.getWisprStatus(), onTopics('settings', 'health'), []);
   const inbox = useApiQuery(() => api.getInbox(), onTopics('inbox'), []);
   const [busy, setBusy] = useState(false);
   const now = useNow(60_000);
-  const schedule = sourceSchedule(s, 'wispr');
   const connected = status.data?.connected;
   const health = inbox.data?.sources.find((x) => x.id === 'wispr');
 
@@ -314,20 +395,13 @@ function WisprSection({ s, set, type, flush, err, confirm }: Ctx) {
           .catch(errorToast),
     });
 
-  const state = connected === undefined ? undefined : !connected ? { dot: 'bg-gray-mid', text: 'Not connected' } : health && health.status !== 'healthy' && health.status !== 'never' ? SLACK_STATUS[health.status] : { dot: 'bg-green', text: 'Connected' };
+  const state = connected === undefined ? undefined : !connected ? { dot: 'bg-gray-mid', text: 'Not connected' } : health && health.status !== 'healthy' && health.status !== 'never' ? WISPR_STATUS[health.status] : { dot: 'bg-green', text: 'Connected' };
   return (
     <>
       <SectionHeader
         title="Wispr Flow"
         description="Meeting notes from Wispr Flow’s Notetaker, read through Wispr Flow’s own connector."
-        action={
-          state && (
-            <Link to="/usage#health" className="inline-flex min-h-9 items-center gap-2 text-[13px] !text-ink-2 no-underline hover:!text-ink">
-              <span className={cx('h-2 w-2 rounded-full', state.dot)} />
-              {state.text}
-            </Link>
-          )
-        }
+        action={<StatusLink state={state} />}
       />
       <Group title="Connection">
         <Row
@@ -357,66 +431,191 @@ function WisprSection({ s, set, type, flush, err, confirm }: Ctx) {
             )}
           </div>
         </Row>
-        {health?.message && connected && (
-          <Row label="Last problem">
-            <span className="text-[13px] text-ink-2">{health.message}</span>
-          </Row>
-        )}
-        {health?.lastPollAt && (
-          <Row label="Last read">
-            <span className="text-[13px] text-ink-2">{`${fmtAgo(health.lastPollAt, now)} ago`.replace('now ago', 'just now')}</span>
-          </Row>
-        )}
+        <LastRead health={health} now={now} problem={!!connected} />
       </Group>
-      <Group title="Polling">
-        <Row label="Read meetings" help={schedule.enabled ? 'New meetings are read on the schedule below.' : 'Wispr Flow isn’t polled, so new meetings don’t arrive.'}>
-          <Switch label="Read Wispr Flow meetings" checked={schedule.enabled} disabled={!connected} onChange={(v) => set((x) => setSchedule(x, 'wispr', { enabled: v }))} />
-        </Row>
-        <Row
-          label="During work hours"
-          help={
-            <>
-              How often to look for new meetings in your <Link to="/settings/schedule">work hours</Link>.
-            </>
-          }
-          error={err('sources.wispr.intervalWorkMinutes')}
-        >
-          <NumInput
-            label="Wispr Flow: poll every, work hours"
-            prefix="Every"
-            suffix="min"
-            value={schedule.intervalWorkMinutes}
-            invalid={!!err('sources.wispr.intervalWorkMinutes')}
-            onBlur={flush}
-            onChange={(v) => type((x) => setSchedule(x, 'wispr', { intervalWorkMinutes: v ?? NaN }))}
-          />
-        </Row>
-        <Row
-          label="Outside work hours"
-          help={schedule.intervalOffMinutes !== null ? 'Also polled in the evenings and at weekends.' : 'Meetings from the evening wait for the next work-hours poll.'}
-          error={err('sources.wispr.intervalOffMinutes')}>
-          <div className="flex flex-wrap items-center gap-3">
-            <Switch label="Wispr Flow: poll outside work hours" checked={schedule.intervalOffMinutes !== null} onChange={(v) => set((x) => setSchedule(x, 'wispr', { intervalOffMinutes: v ? schedule.intervalWorkMinutes : null }))} />
-            {schedule.intervalOffMinutes !== null && (
-              <NumInput
-                label="Wispr Flow: poll every, off hours"
-                prefix="Every"
-                suffix="min"
-                value={schedule.intervalOffMinutes}
-                invalid={!!err('sources.wispr.intervalOffMinutes')}
-                onBlur={flush}
-                onChange={(v) => type((x) => setSchedule(x, 'wispr', { intervalOffMinutes: v ?? NaN }))}
-              />
-            )}
-          </div>
-        </Row>
-      </Group>
+      <SourcePolling
+        words={{
+          id: 'wispr',
+          name: 'Wispr Flow',
+          read: 'Read meetings',
+          switch: 'Read Wispr Flow meetings',
+          what: 'new meetings',
+          on: 'New meetings are read on the schedule below.',
+          off: 'Wispr Flow isn’t polled, so new meetings don’t arrive.',
+          evening: 'Meetings from the evening wait for the next work-hours poll.',
+        }}
+        s={s}
+        set={set}
+        type={type}
+        flush={flush}
+        err={err}
+        disabled={!connected}
+      />
       <Group title="What’s read">
         <p className="m-0 py-3 text-[13px] leading-relaxed text-ink-2">
           Finished meetings only. The inbox keeps each meeting’s summary, your own notes and its action items, and triage reads those. The transcript is never stored: it’s read from Wispr Flow
           when you draft a vault note or a Confluence entry from the meeting. Work OS only reads; it never changes anything in Wispr Flow.
         </p>
         <GuideLink topic="wispr" label="Guide: Wispr Flow" />
+      </Group>
+    </>
+  );
+}
+
+// ---------- Outlook ----------
+
+/** The claude.ai Microsoft 365 connector Outlook reads through (R2.5): found, or entered, then tested. */
+function Ms365ConnectorGroup({ status, reload, confirm }: { status?: OutlookStatusView; reload: () => void; confirm: Ctx['confirm'] }) {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const [manual, setManual] = useState(false);
+  const [id, setId] = useState('');
+  const account = status?.connectorId ? status.account : undefined;
+
+  const connect = async (connectorId?: string) => {
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const r = await api.connectOutlook(connectorId);
+      toast(`Outlook is connected as ${r.account?.address ?? 'your account'}.`, { tone: 'success' });
+      setManual(false);
+      setId('');
+      reload();
+    } catch (e) {
+      if (isApiError(e)) setProblem(e.message);
+      else errorToast(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const disconnect = () =>
+    confirm({
+      title: 'Disconnect Outlook?',
+      body: 'Work OS stops reading your mail. Email already in the inbox stays. The connector stays on claude.ai, so Connect turns Outlook back on at once.',
+      label: 'Disconnect',
+      danger: true,
+      run: () =>
+        void api
+          .disconnectOutlook()
+          .then(() => (reload(), toast('Outlook is disconnected.')))
+          .catch(errorToast),
+    });
+
+  return (
+    <>
+      <Row
+        label="Microsoft 365 connector"
+        error={problem}
+        help={
+          !account
+            ? 'Finds the Microsoft 365 connector among your claude.ai connectors and asks it which account it reads. Add it on claude.ai first (Settings → Connectors).'
+            : status?.enabled
+              ? 'Mail is read as this account. If the connector is signed out on claude.ai, the inbox says so: sign it in again there, then choose Check again.'
+              : 'Outlook is off. Connect checks the connector again and turns it back on.'
+        }
+      >
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {account && (
+            <span className="text-[13px] text-ink-2" data-testid="outlook-account">
+              {account.name} · {account.address}
+            </span>
+          )}
+          {account && status?.enabled ? (
+            <>
+              <Button size="sm" disabled={busy} onClick={() => void connect()}>
+                {busy && <Spinner size={12} />}
+                Reconnect
+              </Button>
+              <Button size="sm" variant="ghost" onClick={disconnect}>
+                Disconnect
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="solid" disabled={busy || !status} onClick={() => void connect()}>
+              {busy && <Spinner size={12} />}
+              Connect
+            </Button>
+          )}
+        </div>
+      </Row>
+      {manual ? (
+        <Row
+          label="Connector ID"
+          htmlFor="ms365-connector-id"
+          help={
+            <>
+              Only needed if Connect can’t find the connector. <code className="font-mono text-[12px]">npm run spike:outlook -- status</code> prints its ID.
+            </>
+          }
+        >
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <input id="ms365-connector-id" className={cx(inputBase, 'w-[260px] font-mono')} placeholder="mcpsrv_…" value={id} onChange={(e) => setId(e.target.value.trim())} />
+            <Button size="sm" disabled={busy || !id} onClick={() => void connect(id)}>
+              Connect with ID
+            </Button>
+          </div>
+        </Row>
+      ) : (
+        !account && (
+          <div className="py-2">
+            <button type="button" className="cursor-pointer border-0 bg-transparent p-0 text-xs font-medium text-accent hover:underline" onClick={() => setManual(true)}>
+              Enter the connector ID instead
+            </button>
+          </div>
+        )
+      )}
+    </>
+  );
+}
+
+function OutlookSection({ s, set, type, flush, err, confirm }: Ctx) {
+  const status = useApiQuery(() => api.getOutlookStatus(), onTopics('settings', 'health'), []);
+  const inbox = useApiQuery(() => api.getInbox(), onTopics('inbox'), []);
+  const now = useNow(60_000);
+  const v = status.data;
+  const linked = !!v?.connectorId && !!v.account;
+  const health = inbox.data?.sources.find((x) => x.id === 'outlook');
+  const state = !v
+    ? undefined
+    : !linked
+      ? { dot: 'bg-gray-mid', text: 'Not connected' }
+      : !v.enabled
+        ? { dot: 'bg-gray-mid', text: 'Off' }
+        : health && health.status !== 'healthy' && health.status !== 'never'
+          ? OUTLOOK_STATUS[health.status]
+          : { dot: 'bg-green', text: 'Connected' };
+  return (
+    <>
+      <SectionHeader title="Outlook" description="Your Inbox and Sent Items, read through the Microsoft 365 connector you use on claude.ai." action={<StatusLink state={state} />} />
+      <Group title="Connection">
+        <Ms365ConnectorGroup status={v} reload={status.reload} confirm={confirm} />
+        <LastRead health={health} now={now} problem={linked && !!v?.enabled} />
+      </Group>
+      <SourcePolling
+        words={{
+          id: 'outlook',
+          name: 'Outlook',
+          read: 'Read mail',
+          switch: 'Read Outlook mail',
+          what: 'new email',
+          on: 'New email is read on the schedule below.',
+          off: 'Outlook isn’t polled, so new email doesn’t arrive.',
+          evening: 'Email from the evening waits for the next work-hours poll.',
+        }}
+        s={s}
+        set={set}
+        type={type}
+        flush={flush}
+        err={err}
+        disabled={!linked}
+      />
+      <Group title="What’s read">
+        <p className="m-0 py-3 text-[13px] leading-relaxed text-ink-2">
+          New email in your Inbox, one item per conversation, and your replies from Sent Items, so triage knows what you’ve already answered. Quoted history, signatures and the external-sender
+          banner are cut; attachments show by name only. Receipts and automatic replies are skipped. Each poll is a short Claude Haiku run that relays the connector’s calls, so it shows on Usage.
+          Work OS only reads; it never sends, moves or flags anything in Outlook.
+        </p>
+        <GuideLink topic="outlook" label="Guide: Outlook" />
       </Group>
     </>
   );
@@ -430,9 +629,6 @@ function MoreSourcesSection({ full }: Ctx) {
       <SectionHeader title="More sources" description="Each new source gets its own page here and retires the scheduled task it replaces." />
       {full ? (
         <>
-          <FutureRow title="Outlook mail" phase="P2" cta="Connect" marks={['outlook']}>
-            Your Inbox, read through the Microsoft 365 connector IT has already approved, every 30 minutes in work hours. Retires the daily Outlook digest.
-          </FutureRow>
           <FutureRow title="Teams chats and transcripts" phase="P2" cta="Request consent" marks={['teams']}>
             Graph delta on chats, plus transcripts for meetings you attended. Needs admin consent. Retires the daily Teams transcript sweep.
           </FutureRow>
@@ -444,7 +640,7 @@ function MoreSourcesSection({ full }: Ctx) {
           </FutureRow>
         </>
       ) : (
-        <p className="m-0 mt-5 text-[13px] text-muted">Slack and Wispr Flow are the sources in this version.</p>
+        <p className="m-0 mt-5 text-[13px] text-muted">Slack, Outlook and Wispr Flow are the sources in this version.</p>
       )}
     </>
   );
@@ -1342,6 +1538,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'schedule', label: 'Schedule', group: 'Inbox', View: ScheduleSection, owns: under('settings.schedule.workHours', 'settings.triage.quietMinutes') },
   { id: 'notifications', label: 'Notifications', group: 'Inbox', View: NotificationsSection, owns: under('settings.notifications') },
   { id: 'slack', label: 'Slack', group: 'Sources', View: SlackSection, owns: under('settings.slack', 'settings.schedule.intervalWorkMinutes', 'settings.schedule.intervalOffMinutes') },
+  { id: 'outlook', label: 'Outlook', group: 'Sources', View: OutlookSection, owns: under('settings.sources.outlook') },
   { id: 'wispr', label: 'Wispr Flow', group: 'Sources', View: WisprSection, owns: under('settings.sources.wispr') },
   { id: 'sources', label: 'More sources', group: 'Sources', View: MoreSourcesSection, owns: () => false, fullOnly: true },
   { id: 'writing', label: 'Write targets', group: 'Actions', View: WritingSection, owns: under('settings.dryRun', 'settings.vaultPath', 'settings.confluence') },

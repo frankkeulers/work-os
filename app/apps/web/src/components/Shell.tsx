@@ -221,7 +221,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []).data;
   const status = health && appHealth(health, problemsOf(health));
   const full = scope === 'full';
-  // Outlook and Teams items are P2: they count only in Full scope, as on the Inbox.
+  // Teams items are P2: they count only in Full scope, as on the Inbox.
   const count = inbox?.items.filter((i) => (full || isLive(i.source)) && (i.lane === 'now' || i.lane === 'today' || i.lane === 'file')).length;
   // Every enabled source (R2.1); Slack shows even before the first inbox load.
   const sources: { id: SourceId; health?: SourceHealth }[] = inbox?.sources.length ? inbox.sources.map((h) => ({ id: h.id, health: h })) : [{ id: 'slack' }];
@@ -301,7 +301,6 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
             <div className="flex flex-col gap-0.5 rounded-lg border border-dashed border-violet-line bg-violet-wash py-1.5">
               {(
                 [
-                  ['Outlook', 'P2', 'outlook'],
                   ['Teams', 'P2', 'teams'],
                   ['Gong · CRM', 'P4', undefined],
                 ] as const

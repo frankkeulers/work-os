@@ -24,14 +24,14 @@ A rule matches when all its conditions do.
 
 ## Sources
 
-Rules are checked for Slack items today. Outlook, Teams and the other sources join as they're
-connected, and the same rules apply to them, so a VIP or keyword rule works everywhere.
+Rules are checked for Slack and [Outlook](outlook.md) items. The same rules apply to both, so a
+VIP or keyword rule works on email too. Wispr Flow meetings go straight to triage.
 
 - **Conditions** that only make sense in chat, such as Channel in, Mentions me and Is a DM, only
-  match Slack and Teams items. A rule that uses one is labelled "Slack and Teams only".
-- **Applies to** in the rule editor (Full scope, until a second source is live) limits a rule to
-  the sources you pick. If none of them can check one of the rule's conditions, the rule can't be
-  saved until you change one or the other.
+  match Slack items (and Teams, in Full scope). A rule that uses one is labelled "Slack only".
+- **Applies to** in the rule editor limits a rule to the sources you pick: Slack, Outlook or both.
+  If none of them can check one of the rule's conditions, the rule can't be saved until you change
+  one or the other.
 
 Your VIPs are set once, in [Settings › People](/settings/people), and matched by name on every
 source.

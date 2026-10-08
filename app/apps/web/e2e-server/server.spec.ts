@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 // The built web app against the real server, Slack and Claude faked (M1 step 11, M2 step 15): the
 // seeded threads are triaged into their lanes, a poll adds a thread that waits for its quiet
@@ -214,7 +214,11 @@ test('the guide is read live from its folder: an edit shows on focus, without a 
   await expect(page.getByText('A guide file has a problem.')).toHaveCount(0);
 });
 
-test('Wispr Flow: Connect in Settings, and its finished meetings are read and triaged (R2.7)', async ({ page }) => {
+/** The inbox's items, as the API has them. */
+const inboxItems = async (request: APIRequestContext) => ((await (await request.get(`${BASE}/api/inbox`, { headers: auth })).json()) as { items: { title: string; lane: string }[] }).items;
+const TRIAGED = ['now', 'today', 'file', 'else'];
+
+test('Wispr Flow: Connect in Settings, and its finished meetings are read and triaged (R2.7)', async ({ page, request }) => {
   await page.goto('/settings/wispr');
   await expect(page.getByText('Not connected')).toBeVisible();
   // The fake connects at once, as a stored sign-in does: no browser tab.
@@ -223,9 +227,10 @@ test('Wispr Flow: Connect in Settings, and its finished meetings are read and tr
   await expect(page.getByRole('switch', { name: 'Read Wispr Flow meetings' })).toHaveAttribute('aria-checked', 'true');
 
   // Connect polls Wispr Flow at once; the launch meeting is quiet, so it is triaged straight away.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  await expect.poll(async () => (await inboxItems(request)).some((i) => i.title === 'MVI V2 launch readiness' && TRIAGED.includes(i.lane)), { timeout: 20_000 }).toBe(true);
+  await page.goto('/'); // a fresh list, not the "new items" pill of one already open
   const meeting = page.locator('[data-row]').filter({ hasText: 'MVI V2 launch readiness' });
-  await expect(meeting).toBeVisible({ timeout: 20_000 });
+  await expect(meeting).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^Wispr/ })).toBeVisible();
   await meeting.click();
   const panel = page.getByRole('complementary', { name: 'Item panel' });
@@ -243,4 +248,41 @@ test('Wispr Flow: Connect in Settings, and its finished meetings are read and tr
   await expect(page.getByRole('switch', { name: 'Read Wispr Flow meetings' })).toHaveAttribute('aria-checked', 'false');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
   await expect(meeting).toBeVisible();
+});
+
+test('Outlook: Connect in Settings finds the connector, and its mail is read and triaged, your reply as “You” (R2.5)', async ({ page, request }) => {
+  await page.goto('/settings/outlook');
+  await expect(page.getByText('Not connected')).toBeVisible();
+  // The fake claude.ai has the Microsoft 365 connector signed in: Connect finds it and tests it.
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByTestId('outlook-account')).toHaveText('Frank Keulers · frank.keulers@polestar.example');
+  await expect(page.getByRole('switch', { name: 'Read Outlook mail' })).toHaveAttribute('aria-checked', 'true');
+
+  // Connect polls Outlook at once; both conversations are quiet, so they are triaged straight away.
+  await expect.poll(async () => (await inboxItems(request)).filter((i) => i.title.includes('Nordic Star') && TRIAGED.includes(i.lane)).length, { timeout: 20_000 }).toBe(1);
+  await page.goto('/'); // a fresh list, not the "new items" pill of one already open
+  const email = page.locator('[data-row^="outlook:"]').filter({ hasText: 'Nordic Star' });
+  await expect(email).toBeVisible();
+  await expect(email).toHaveAttribute('data-lane', 'today');
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^Outlook/ })).toBeVisible();
+  await email.click();
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  await expect(panel.getByRole('heading', { name: 'Email' })).toBeVisible();
+  await expect(panel.getByTestId('recipients')).toHaveText('To You · Cc Sam Okafor');
+  await expect(panel.getByText('Could you check the revised ETA shows in MVI?', { exact: false })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Reply in Outlook' })).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/server-outlook-email-light.png') });
+
+  // Frank's reply from Sent Items shows as his, and the thread asks nothing of him (the fake model files it).
+  const tiers = page.locator('[data-row^="outlook:"]').filter({ hasText: 'pricing tiers' });
+  await expect(tiers).toHaveAttribute('data-lane', 'file');
+  await tiers.click();
+  await expect(panel.getByText('You', { exact: true })).toBeVisible();
+  await expect(panel.getByText('Thanks Dana, these look right.', { exact: false })).toBeVisible();
+
+  // A new email, then Poll now: it is read and joins the inbox.
+  const posted = await request.post(`${BASE}/api/fake/outlook/messages`, { headers: auth, data: { subject: 'Port call data feed', text: 'Is the port call feed live yet?' } });
+  expect(posted.status()).toBe(201);
+  await page.getByRole('button', { name: 'Poll now' }).click();
+  await expect.poll(async () => (await inboxItems(request)).some((i) => i.title === 'Port call data feed'), { timeout: 20_000 }).toBe(true);
 });

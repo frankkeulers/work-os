@@ -51,11 +51,13 @@ export interface SeedMessage {
   by: string; // person id
   minsAgo: number; // relative to the seed clock
   text: string;
+  to?: string[]; // an email's recipients, by person id
+  cc?: string[];
 }
 
 export interface ThreadSeed {
   key: string;
-  source?: 'outlook' | 'teams' | 'wispr'; // default Slack. Outlook and Teams are P2 sources, shown in Full scope.
+  source?: 'outlook' | 'teams' | 'wispr'; // default Slack. Teams is a P2 source, shown in Full scope.
   channelId: string; // Slack channel, or a mailbox folder / Teams chat for the P2 sources
   kind: 'thread' | 'dm' | 'email' | 'meeting' | 'chat';
   title: string;
@@ -139,6 +141,8 @@ export interface MockState {
   poll: PollStatus;
   /** Settings › Sources › Wispr Flow (R2.7). Unset: never connected. `read`: its meeting has arrived. */
   wispr?: { connected: boolean; account?: string; read?: boolean };
+  /** Settings › Sources › Outlook (R2.5). Unset: never connected. `read`: its mail has arrived. */
+  outlook?: { connectorId: string; account: { name: string; address: string }; read?: boolean };
   pollsSkippedToday: number;
   timeline: TimelineEntry[];
   firstRunSeeds: ThreadSeed[];

@@ -7,7 +7,7 @@ import { BrandIcon, SourceMark } from '../../components/BrandIcon';
 import { CorrectForm, ItemMarkers, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
 import { Icon, MoreIcon } from '../../components/icons';
 import { useEarlierToggle } from '../../components/Earlier';
-import { MessageText } from '../../components/SlackText';
+import { MessageText, Recipients } from '../../components/SlackText';
 import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime, fmtWhen, plural } from '../../lib/format';
@@ -307,6 +307,7 @@ function Messages({ view }: { view: ItemView }) {
       <span className="text-xs">
         <strong className="font-semibold">{name(m.authorId)}</strong> <span className="font-mono text-[11px] text-muted">{fmtWhen(m.ts, now)}</span>
       </span>
+      <Recipients m={m} name={name} />
       <MessageText item={item} meId={meId} people={people} text={m.text} className={cx('text-[13px] leading-normal', muted ? 'text-ink-2' : 'text-ink-strong')} />
     </div>
   );

@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from 'react';
-import type { Item, Participant } from '@work-os/shared';
+import type { Item, Message, Participant } from '@work-os/shared';
 import { parseMrkdwn, type Inline } from '../lib/mrkdwn';
 import { cx } from './ui';
 
@@ -89,9 +89,39 @@ function NotesText({ text, className }: { text: string; className?: string }) {
   );
 }
 
+const URL_RE = /https?:\/\/[^\s<>()]+/g;
+
+/** An email's text as written, its web addresses clickable. */
+export function EmailText({ text, className }: { text: string; className?: string }) {
+  const parts: ReactNode[] = [];
+  let at = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    const url = m[0].replace(/[.,;:!?'"’”]+$/, ''); // a sentence's full stop isn't part of the address
+    parts.push(text.slice(at, m.index), (
+      <a key={m.index} href={url} target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">
+        {url}
+      </a>
+    ));
+    at = m.index + url.length;
+  }
+  parts.push(text.slice(at));
+  return <div className={cx('whitespace-pre-wrap [overflow-wrap:anywhere]', className)}>{parts}</div>;
+}
+
 export function MessageText({ item, meId, text, people = [], className }: { item: Item; meId?: string; text: string; people?: Participant[]; className?: string }) {
   if (item.source === 'wispr') return <NotesText text={text} className={className} />;
+  if (item.source === 'outlook') return <EmailText text={text} className={className} />;
   if (item.source !== 'slack') return <div className={cx('whitespace-pre-wrap', className)}>{text}</div>;
   const name = (id: string) => [...item.participants, ...(item.mentioned ?? []), ...people].find((p) => p.id === id)?.name ?? (id === meId ? 'you' : undefined);
   return <SlackText text={text} meId={meId} name={name} className={className} />;
+}
+
+/** An email's To and Cc, by name: "To You, Dana Lee · Cc Sam Okafor". Nothing for other messages. */
+export function Recipients({ m, name }: { m: Pick<Message, 'to' | 'cc'>; name: (id: string) => string }) {
+  const parts = [m.to?.length && `To ${m.to.map(name).join(', ')}`, m.cc?.length && `Cc ${m.cc.map(name).join(', ')}`].filter(Boolean);
+  return parts.length ? (
+    <span className="text-[11px] text-muted" data-testid="recipients">
+      {parts.join(' · ')}
+    </span>
+  ) : null;
 }

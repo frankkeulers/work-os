@@ -1,4 +1,4 @@
-import type { Action, ActionType, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -135,10 +135,13 @@ export class HttpApi implements WorkOsApi {
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');
   getSettings = () => this.get<SettingsView>('/api/settings');
   getWisprStatus = () => this.get<WisprStatusView>('/api/sources/wispr');
+  getOutlookStatus = () => this.get<OutlookStatusView>('/api/sources/outlook');
 
   pollNow = () => this.post('/api/poll');
   connectWispr = () => this.post<WisprConnectView>('/api/sources/wispr/connect');
   disconnectWispr = () => this.post('/api/sources/wispr/disconnect');
+  connectOutlook = (connectorId?: string) => this.post<OutlookStatusView>('/api/sources/outlook/connect', connectorId ? { connectorId } : {});
+  disconnectOutlook = () => this.post('/api/sources/outlook/disconnect');
   markDone = (id: string) => this.post(`${this.item(id)}/done`);
   reopen = (id: string) => this.post(`${this.item(id)}/reopen`);
   markDoneMany = (ids: string[]) => this.post<{ count: number }>('/api/items/done', { ids });

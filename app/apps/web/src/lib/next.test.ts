@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
-import { dueInfo, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
+import { dueInfo, isLive, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
 
 // Mon 5 Oct 2026, 09:45 London (BST).
 const now = new Date('2026-10-05T08:45:00.000Z');
@@ -32,6 +32,12 @@ const item = (over: Partial<ItemSummary>): ItemSummary => ({
   pieces: 1,
   asksDone: [],
   ...over,
+});
+
+describe('isLive', () => {
+  it('reads Slack, Outlook and Wispr Flow in this version; Teams and Plaud are previews', () => {
+    expect((['slack', 'outlook', 'wispr', 'teams', 'plaud'] as const).map(isLive)).toEqual([true, true, true, false, false]);
+  });
 });
 
 describe('dueInfo', () => {

@@ -173,27 +173,7 @@ export const SEED_THREADS: ThreadSeed[] = [
     },
   },
 
-  // ---------- P2 sources (Outlook, Teams), shown in Full scope ----------
-  {
-    key: 'o1',
-    source: 'outlook',
-    channelId: 'INBOX',
-    kind: 'email',
-    title: '[Customer] account lead',
-    messages: [
-      {
-        by: 'X01ACCOUNT',
-        minsAgo: 18,
-        text: 'Ahead of this afternoon: 1) Is v2 priced per vessel or per call? 2) Does historical backfill cost extra? 3) Can we keep v1 pricing until we migrate?',
-      },
-    ],
-    decision: {
-      attention: 'now',
-      summary: 'Three questions on Insights APIs v2 pricing to answer before the renewal call.',
-      reason: 'External sender, linked to a meeting at 14:00.',
-      next: { need: 'prepare', step: 'Answer the three pricing questions', why: 'They’re on the agenda for the [Customer] renewal call at 14:00.', dueAt: london(5, '14:00') },
-    },
-  },
+  // ---------- Teams (P2), shown in Full scope ----------
   {
     key: 'm1',
     source: 'teams',
@@ -780,3 +760,45 @@ export const WISPR_MEETING: ThreadSeed = {
     },
   },
 };
+
+/** Outlook mail (R2.5): arrives with the poll that follows Connect, since Outlook is off until then. */
+export const OUTLOOK_THREADS: ThreadSeed[] = [
+  {
+    key: 'o1',
+    source: 'outlook',
+    channelId: 'INBOX',
+    kind: 'email',
+    title: 'Insights APIs v2 pricing',
+    messages: [
+      {
+        by: 'X01ACCOUNT',
+        minsAgo: 18,
+        to: [FRANK],
+        cc: ['U16CS'],
+        text: 'Hi Frank,\n\nAhead of this afternoon:\n1) Is v2 priced per vessel or per call?\n2) Does historical backfill cost extra?\n3) Can we keep v1 pricing until we migrate?\n\nThe draft schedule is here: https://example.com/pricing/v2-draft\n\n📎 Renewal schedule.pdf',
+      },
+    ],
+    decision: {
+      attention: 'now',
+      summary: 'Three questions on Insights APIs v2 pricing to answer before the renewal call.',
+      reason: 'External sender, linked to a meeting at 14:00.',
+      next: { need: 'prepare', step: 'Answer the three pricing questions', why: 'They’re on the agenda for the [Customer] renewal call at 14:00.', dueAt: london(5, '14:00') },
+    },
+  },
+  {
+    key: 'o2',
+    source: 'outlook',
+    channelId: 'INBOX',
+    kind: 'email',
+    title: 'Q4 tier comparison',
+    messages: [
+      { by: 'U14FINANCE', minsAgo: 95, to: [FRANK], cc: ['U09SALES'], text: 'Frank, could you send the per-vessel tier comparison when it’s ready? No rush before Friday.' },
+      { by: FRANK, minsAgo: 60, to: ['U14FINANCE'], cc: ['U09SALES'], text: 'Will do. I’ll check it against the Q3 actuals first and send it Thursday.' },
+    ],
+    decision: {
+      attention: 'none',
+      summary: 'Finance asked for the tier comparison; you replied that it comes on Thursday.',
+      reason: 'You wrote last and said when you’ll send it.',
+    },
+  },
+];

@@ -61,6 +61,18 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
   [Settings › Write targets](/settings/writing).
 - **A draft fails with "no such section"**: the page changed while drafting. Re-draft.
 
+## Outlook
+
+- **"Microsoft 365 rejected the login"**: the connector is signed out on claude.ai. Sign it in
+  again there (Settings → Connectors), then choose **Check again**. See
+  [Reconnecting](outlook.md#reconnecting).
+- **Connect says it can't find the connector**: add the Microsoft 365 connector on claude.ai first,
+  or enter its ID in [Settings › Outlook](/settings/outlook).
+- **"Microsoft 365 not working", saying it changed its tools**: Work OS stops reading Outlook
+  rather than guess what the new tools mean. It needs an update; reconnecting won't help.
+- **An email you expected isn't in the inbox**: receipts and automatic replies are skipped, and a
+  poll reads at most 60 emails; the rest come on the next poll.
+
 ## Wispr Flow
 
 - **"Wispr Flow rejected the login"**: the sign-in lapsed or was removed. Choose **Reconnect** in

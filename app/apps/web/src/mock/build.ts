@@ -23,6 +23,8 @@ export function toMessages(seedMsgs: SeedMessage[], clock: string, idPrefix: str
     authorId: m.by,
     ts: addMins(clock, -m.minsAgo),
     text: m.text,
+    ...(m.to && { to: m.to }),
+    ...(m.cc && { cc: m.cc }),
   }));
 }
 
@@ -30,7 +32,8 @@ export function makeItem(seed: ThreadSeed, clock: string, uniq = ''): Item {
   const messages = toMessages(seed.messages, clock, seed.key + uniq);
   const first = messages[0]?.ts ?? clock;
   const ts = slackTs(first);
-  const authorIds = [...new Set(messages.map((m) => m.authorId))].filter((id) => id !== WISPR_SUMMARY);
+  // Authors first, then an email's recipients, so To and Cc show names.
+  const authorIds = [...new Set(messages.flatMap((m) => [m.authorId, ...(m.to ?? []), ...(m.cc ?? [])]))].filter((id) => id !== WISPR_SUMMARY);
   const source = seed.source ?? 'slack';
   const ref = `${seed.channelId}-${ts.replace('.', '')}`;
   return {

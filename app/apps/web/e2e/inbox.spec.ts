@@ -203,23 +203,19 @@ test('a filed entry with new replies offers a v2 draft, and discarding it goes b
   await expect(action.getByRole('button', { name: 'Draft v2' })).toBeVisible();
 });
 
-test('Full scope adds the Outlook and Teams items with their brand marks', async ({ page }) => {
+// Outlook is live (R2.5): its mail arrives after Connect, checked in outlook.spec.ts.
+test('Full scope adds the Teams items with their brand mark, tagged P2', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('11');
-  await expect(page.locator('[data-row^="outlook:"]')).toHaveCount(0);
+  await expect(page.locator('[data-row^="teams:"]')).toHaveCount(0);
 
   await setScope(page, 'Full');
-  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('14');
-  await expect(rows(page, 'Now')).toHaveCount(4);
-  const email = page.locator('[data-row^="outlook:"]');
-  await expect(email.getByRole('img', { name: 'Outlook' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('13');
+  await expect(rows(page, 'Now')).toHaveCount(3);
   await expect(page.locator('[data-row^="teams:"]').first().getByRole('img', { name: 'Teams' })).toBeVisible();
 
-  await email.click();
-  await expect(itemPanel(page).getByText('P2', { exact: true })).toBeVisible();
-  await expect(itemPanel(page).getByRole('button', { name: 'Reply in Outlook' })).toBeVisible();
-
   await page.locator('[data-row^="teams:MTG-MVIREADY"]').click();
+  await expect(itemPanel(page).getByText('P2', { exact: true })).toBeVisible();
   await expect(itemPanel(page).getByRole('region', { name: 'Action items for you' }).getByRole('checkbox')).toHaveCount(2);
 });
 

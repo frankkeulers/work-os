@@ -7,7 +7,7 @@ import { SourceMark } from '../components/BrandIcon';
 import { CorrectForm, SnoozeMenu, kindLabel, markDoneWithUndo, openInSource } from '../components/item';
 import { Icon, type IconName } from '../components/icons';
 import { useEarlierToggle } from '../components/Earlier';
-import { MessageText } from '../components/SlackText';
+import { MessageText, Recipients } from '../components/SlackText';
 import { Banner, Button, ConfirmDialog, IconButton, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
@@ -242,6 +242,7 @@ function Thread({ view }: { view: ItemView }) {
             <span className="text-[13px] font-semibold">{n}</span>
             <span className="font-mono text-[11px] text-muted">{fmtWhen(m.ts, now)}</span>
           </div>
+          <Recipients m={m} name={name} />
           <MessageText item={item} meId={meId} people={people} text={m.text} className="text-[13px] leading-normal text-ink-2" />
         </div>
       </div>
