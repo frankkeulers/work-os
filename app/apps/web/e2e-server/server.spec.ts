@@ -286,3 +286,53 @@ test('Outlook: Connect in Settings finds the connector, and its mail is read and
   await page.getByRole('button', { name: 'Poll now' }).click();
   await expect.poll(async () => (await inboxItems(request)).some((i) => i.title === 'Port call data feed'), { timeout: 20_000 }).toBe(true);
 });
+
+/** Scope lives in the account menu at the foot of the sidebar. */
+async function setScope(page: Page, scope: 'MVP' | 'Full') {
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Account' }).click();
+  await page.getByRole('dialog', { name: 'Account' }).getByRole('group', { name: 'Scope' }).getByRole('button', { name: scope }).click();
+  await page.keyboard.press('Escape');
+}
+
+test('Outlook Calendar: the agenda, an invite as an item that answering in Outlook closes, and the Wispr meeting joined to its event (R2.8)', async ({ page, request }) => {
+  // Outlook is connected by the test above; the calendar is a switch of its own.
+  await page.goto('/settings/outlook');
+  await expect(page.getByRole('switch', { name: 'Read Outlook mail' })).toHaveAttribute('aria-checked', 'true');
+  const calendar = page.getByRole('switch', { name: 'Read Outlook Calendar' });
+  await calendar.click();
+  await expect(calendar).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
+
+  type Row = { id: string; title: string; lane: string; status: string };
+  const invite = async () => ((await inboxItems(request)) as Row[]).find((i) => i.title === 'Nordic Star renewal review');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  await page.getByRole('button', { name: 'Poll now' }).click();
+  await expect.poll(async () => (await invite())?.lane, { timeout: 30_000 }).toBe('today');
+
+  await page.goto('/'); // a fresh list, not the "new items" pill of one already open
+  await setScope(page, 'Full'); // the calendar shows in Full scope until it goes live (B7)
+  const agenda = page.getByRole('region', { name: 'Agenda' });
+  // The launch meeting Wispr Flow recorded is joined to its event: its notes are a click away.
+  const launch = agenda.locator('[data-agenda-event]').filter({ hasText: 'MVI V2 launch readiness' });
+  await expect(launch).toHaveAttribute('data-phase', 'past');
+  await launch.getByRole('button', { name: 'Notes' }).click();
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  await expect(panel.getByTestId('on-calendar')).toHaveText(/^On your calendar: MVI V2 launch readiness · organised by Sam Okafor/);
+
+  const row = page.locator('[data-row^="calendar:"]').filter({ hasText: 'Nordic Star renewal review' });
+  await row.click();
+  await expect(panel.getByRole('button', { name: 'Respond in Outlook' })).toBeVisible();
+  await expect(panel.getByText('Ahead of the renewal, could we walk through the fleet coverage', { exact: false })).toBeVisible();
+  await expect(panel.getByText(/Passcode|Meeting ID/)).toHaveCount(0); // the Teams block is cut
+  await expect(panel.getByRole('region', { name: /File it|Also file/ })).toHaveCount(0);
+  await agenda.getByRole('button', { name: 'Tomorrow' }).click();
+  await expect(agenda.locator('[data-agenda-event]').filter({ hasText: 'Nordic Star renewal review' }).getByRole('button', { name: 'Not answered' })).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/server-calendar-light.png'), animations: 'disabled' });
+
+  // Frank accepts in Outlook: the next poll closes the item, and the agenda no longer asks.
+  const answered = await request.post(`${BASE}/api/fake/calendar/respond`, { headers: auth, data: { eventId: 'AAMkFAKEEVENTNORDIC', response: 'accepted' } });
+  expect(answered.status()).toBe(204);
+  await page.getByRole('button', { name: 'Poll now' }).click();
+  await expect.poll(async () => (await invite())?.status, { timeout: 30_000 }).toBe('done');
+  await expect(agenda.locator('[data-agenda-event]').filter({ hasText: 'Nordic Star renewal review' }).getByText('Not answered')).toHaveCount(0);
+});

@@ -1,5 +1,7 @@
 import type { DepState, Ms365Connector, Settings } from '@work-os/shared';
 import type { Logger } from '../../log';
+import { isMeetingMail } from '../calendar/mail';
+import type { CalendarSnapshot } from '../calendar/store';
 import { SourceError } from '../errors';
 import type { Ms365Api, SearchArgs } from '../ms365/client';
 import type { EmailDetail, EmailRow, Folder } from '../ms365/types';
@@ -58,6 +60,8 @@ export interface OutlookOptions {
   /** The account the connector reads (settings.connectors.ms365.account), set when it was connected. */
   account: () => Ms365Connector['account'];
   recent: RecentEmails;
+  /** The calendar as last read, while it is on: its meetings' own mail is left to it (R2.8). */
+  calendar?: () => CalendarSnapshot | undefined;
   logger?: Logger;
 }
 
@@ -129,7 +133,10 @@ export class OutlookAdapter implements SourceAdapter {
         if (markOf(e.row) > next[folder]) next[folder] = markOf(e.row);
       }
     }
-    return { items: buildItems(emails, me), nextCursor: formatCursor(next) };
+    const snap = this.o.calendar?.();
+    const mail = snap ? emails.filter((x) => !isMeetingMail(x.email, snap)) : emails;
+    if (mail.length < emails.length) this.o.logger?.info({ meetingMail: emails.length - mail.length }, 'Outlook: meeting mail left to the calendar');
+    return { items: buildItems(mail, me), nextCursor: formatCursor(next) };
   }
 
   /** Each folder's emails since its mark, oldest first; both folders' pages share a relay run. */
@@ -153,6 +160,6 @@ export class OutlookAdapter implements SourceAdapter {
 }
 
 /** Builds the adapter from settings; what it has read lately lives as long as the factory. */
-export function outlookFactory(api: Ms365Api, logger?: Logger, recent = new RecentEmails()) {
-  return (settings: Settings) => new OutlookAdapter({ api, account: () => settings.connectors?.ms365?.account, recent, logger });
+export function outlookFactory(api: Ms365Api, logger?: Logger, recent = new RecentEmails(), calendar?: () => CalendarSnapshot | undefined) {
+  return (settings: Settings) => new OutlookAdapter({ api, account: () => settings.connectors?.ms365?.account, recent, calendar, logger });
 }

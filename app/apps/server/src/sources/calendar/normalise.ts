@@ -17,7 +17,7 @@ const FALLBACK_LINK = 'https://outlook.office.com/calendar/';
 export const INVITE_MAX_CHARS = 4000;
 
 /** Where the Teams or Zoom block in an invite starts: everything after it is joining details. */
-const JOIN_BLOCK_RE = /^.*(?:_{20,}|Microsoft Teams (?:meeting|Need help)|Join (?:on your computer|the meeting now|Zoom Meeting)|Meeting ID:|Passcode:).*$/im;
+export const JOIN_BLOCK_RE = /^.*(?:_{20,}|Microsoft Teams (?:meeting|Need help)|Join (?:on your computer|the meeting now|Zoom Meeting)|Meeting ID:|Passcode:).*$/im;
 
 /** The text of an invite's body, without its joining details. */
 export function inviteBody(body: EventDetail['body']): string {
@@ -105,7 +105,18 @@ export function inviteItemId(e: SnapEvent): string {
   return `${ITEM_PREFIX}${createHash('sha1').update(key).digest('hex').slice(0, 20)}`;
 }
 
-const asAddress = (p: SnapPerson | undefined) => (p ? { name: p.name ?? null, address: p.address ?? null } : undefined);
+/**
+ * A name for someone known only by address, as search gives them on an event that hasn't been read
+ * (one that has started, or was answered before the first poll): "sam.okafor@…" is "Sam Okafor".
+ */
+export function nameFromAddress(address: string | undefined): string | undefined {
+  const local = address?.split('@')[0];
+  if (!local || address!.startsWith('/o=')) return undefined;
+  const words = local.split(/[._-]+/).filter(Boolean);
+  return words.length ? words.map((w) => w[0].toUpperCase() + w.slice(1)).join(' ') : undefined;
+}
+
+const asAddress = (p: SnapPerson | undefined) => (p ? { name: p.name ?? nameFromAddress(p.address) ?? null, address: p.address ?? null } : undefined);
 
 /** The organiser and invitees as people; rooms and other resources are left out. */
 export function peopleOf(e: SnapEvent, me: MeInfo): { organizer?: Participant; required: Participant[]; optional: Participant[] } {

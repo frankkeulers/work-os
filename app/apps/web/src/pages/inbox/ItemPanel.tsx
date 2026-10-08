@@ -11,7 +11,7 @@ import { MessageText, Recipients } from '../../components/SlackText';
 import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime, fmtWhen, plural } from '../../lib/format';
-import { TYPE_LABEL, draftButton, draftState } from '../../lib/lanes';
+import { TYPE_LABEL, canFile, draftButton, draftState } from '../../lib/lanes';
 import { SOURCE_NAME, dueInfo, isLive, needLabel, shownStep, suggestedSnooze, topicAsks } from '../../lib/next';
 import { usePrefs } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
@@ -83,7 +83,7 @@ function NextStepCard({ item, draftsBudgetHit, onFile, workflow }: { item: ItemS
   const now = useNow(30_000);
   const step = shownStep(item, draftsBudgetHit, now);
   const hint = suggestedSnooze(item, now);
-  if (!step) return <StatusCard item={item}>{workflow ?? <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} />}</StatusCard>;
+  if (!step) return <StatusCard item={item}>{workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} />)}</StatusCard>;
   const p = step.primary;
   // A draft as the primary action leaves the filing options; once a draft is open, its tabs take over.
   const draft = p.kind === 'draft' && !workflow ? p.button : undefined;
@@ -126,7 +126,7 @@ function NextStepCard({ item, draftsBudgetHit, onFile, workflow }: { item: ItemS
         </div>
         {draftHint && <div className="-mt-1 text-xs text-muted">{draftHint}</div>}
       </div>
-      {workflow ?? <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} skip={draft?.type} />}
+      {workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} skip={draft?.type} />)}
     </section>
   );
 }

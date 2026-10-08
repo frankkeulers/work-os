@@ -818,3 +818,40 @@ export const OUTLOOK_THREADS: ThreadSeed[] = [
     },
   },
 ];
+
+/** An Outlook Calendar invite you haven't answered (R2.8): arrives with the poll after the calendar is turned on. */
+export const CALENDAR_INVITE: ThreadSeed = {
+  key: 'c1',
+  source: 'calendar',
+  channelId: 'AAMkMOCKQ4',
+  kind: 'event',
+  title: 'Q4 roadmap review',
+  meeting: {
+    start: london(6, '10:00'),
+    end: london(6, '11:00'),
+    calendar: {
+      eventId: 'AAMkMOCKQ4',
+      title: 'Q4 roadmap review',
+      organizer: { id: 'U02MATT', name: 'Matt M.' },
+      invitees: [
+        { id: FRANK, name: 'Frank Keulers' },
+        { id: 'U03VPENG', name: 'VP Engineering' },
+        { id: 'U09SALES', name: 'Head of Sales' },
+      ],
+      link: 'https://outlook.office365.com/owa/?itemid=AAMkMOCKQ4&exvsurl=1&path=/calendar/item',
+    },
+  },
+  messages: [
+    {
+      by: 'U02MATT',
+      minsAgo: 50,
+      text: 'Invitation: Q4 roadmap review\nWhen: Tue 6 Oct, 10:00–11:00\nOrganiser: Matt M.\nRequired: you, VP Engineering, Head of Sales\n\nAgenda:\n1. What shipped in Q3\n2. Q4 bets: Insights APIs v2, MVI V2 rollout\n3. What we drop\n\nFrank, please bring the Insights APIs usage numbers.',
+    },
+  ],
+  decision: {
+    attention: 'today',
+    summary: 'Matt invited you to the Q4 roadmap review tomorrow at 10:00 and asked for the Insights APIs usage numbers.',
+    reason: 'Unanswered invite for tomorrow, with a request for you.',
+    next: { need: 'decide', step: 'Accept or decline the invitation', why: 'It’s tomorrow at 10:00 and Matt wants your usage numbers.', dueAt: london(5, '17:30') },
+  },
+};

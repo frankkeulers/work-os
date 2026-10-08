@@ -128,3 +128,26 @@ test('a Wispr Flow meeting says nothing of the calendar while the calendar is of
   await expect(page.getByRole('complementary', { name: 'Item panel' }).getByRole('heading', { level: 2 })).toBeVisible();
   await expect(page.getByTestId('on-calendar')).toHaveCount(0);
 });
+
+test('an invite you haven’t answered is an item to answer in Outlook, with nothing to file (R2.8)', async ({ page }) => {
+  await turnOn(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  await setScope(page, 'Full'); // the calendar shows in Full scope until it goes live (B7)
+  const row = page.locator('[data-row^="calendar:"]');
+  await expect(row).toContainText('Q4 roadmap review', { timeout: 10_000 });
+
+  await agenda(page).getByRole('button', { name: 'Tomorrow' }).click();
+  await meeting(page, 'Q4 roadmap review').getByRole('button', { name: 'Not answered' }).click();
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  await expect(panel.getByRole('heading', { level: 2 })).toHaveText(/^Matt invited you to the Q4 roadmap review/);
+  await expect(panel.getByText('Accept or decline the invitation')).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Respond in Outlook' })).toBeVisible();
+  await expect(panel.getByRole('region', { name: /File it|Also file/ })).toHaveCount(0);
+  await expect(panel.getByText('Frank, please bring the Insights APIs usage numbers.')).toBeVisible();
+  await dismissToasts(page);
+  // The desktop notification for the Outlook mail stays up 9 s; the screenshot is of the page under it.
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-invite-light.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
+
+  await setScope(page, 'MVP');
+  await expect(row).toHaveCount(0);
+});

@@ -71,8 +71,12 @@ export interface CardActions {
   overflowDrafts: DraftButton[];
 }
 
+/** An invitation holds nothing to file: Frank answers it in Outlook (R2.8). */
+export const canFile = (item: Pick<ItemSummary, 'kind'>) => item.kind !== 'event';
+
 /** Design guide §3: one primary per card chosen by lane, at most one secondary, the rest in the overflow. */
 export function cardActions(item: ItemSummary, draftsBudgetHit: boolean): CardActions {
+  if (!canFile(item)) return { primary: { kind: 'slack' }, overflowDrafts: [] };
   const all: ActionType[] = ['confluence_entry', 'vault_note'];
   const suggested = suggestedTypes(item);
   const btn = (t: ActionType) => draftButton(item, t, draftsBudgetHit);

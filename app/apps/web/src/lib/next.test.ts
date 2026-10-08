@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
 import { dueInfo, isLive, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
+import { canFile, cardActions } from './lanes';
 
 // Mon 5 Oct 2026, 09:45 London (BST).
 const now = new Date('2026-10-05T08:45:00.000Z');
@@ -138,6 +139,13 @@ describe('next step', () => {
     expect(openLabel({ source: 'outlook', kind: 'email' })).toBe('Reply in Outlook');
     expect(openLabel({ source: 'teams', kind: 'meeting' })).toBe('Open transcript in Teams');
     expect(openLabel({ source: 'slack', kind: 'thread' })).toBe('Open thread in Slack');
+    expect(openLabel({ source: 'calendar', kind: 'event' })).toBe('Respond in Outlook');
+  });
+  it('asks for an answer to an invitation, with nothing to draft or file (R2.8)', () => {
+    const invite = item({ source: 'calendar', kind: 'event', title: 'Q4 roadmap review', triage: { attention: 'today', confluence: true, vault: true, by: 'model' } });
+    expect(shownStep(invite, false, now)).toMatchObject({ need: 'Decide', step: 'Accept or decline the invitation', primary: { kind: 'open', label: 'Respond in Outlook' } });
+    expect(cardActions(invite, false)).toEqual({ primary: { kind: 'slack' }, overflowDrafts: [] });
+    expect(canFile(invite)).toBe(false);
   });
   it('finds the next deadline still ahead', () => {
     const items = [

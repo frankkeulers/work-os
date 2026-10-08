@@ -107,6 +107,17 @@ describe('joining a meeting to its event', () => {
     });
   });
 
+  it('names the people of an event known only by address, as search gives one that was never read', () => {
+    const unread = ev('e1', 'MVI V2 launch readiness', -60, -15, { organizer: { address: 'dana.lee@customer.example' }, attendees: [{ address: 'frank@example.com' }, { address: 'sam.okafor@example.com' }], response: undefined });
+    expect(withCalendar(wispr(), snap([unread]), ME).meeting?.calendar).toMatchObject({
+      organizer: { id: 'dana.lee@customer.example', name: 'Dana Lee' },
+      invitees: [
+        { id: ME.id, name: 'Frank Keulers' },
+        { id: 'sam.okafor@example.com', name: 'Sam Okafor' },
+      ],
+    });
+  });
+
   it('leaves alone what isn’t a timed Wispr meeting, or has no event', () => {
     const s = snap([ev('e1', 'Launch readiness', -60, -15)]);
     const slack = wispr({ source: 'slack', id: 'slack:x' });

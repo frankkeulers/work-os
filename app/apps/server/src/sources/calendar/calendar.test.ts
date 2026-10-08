@@ -9,10 +9,12 @@ import { pollSource } from '../../pipeline/poll';
 import { ItemFiles } from '../../store/items';
 import { Store } from '../../store/store';
 import { SourceError } from '../errors';
-import { FakeMs365, fakeEvent } from '../ms365/fakeMs365';
+import { FakeMs365, fakeEmail, fakeEvent } from '../ms365/fakeMs365';
+import { OutlookAdapter, RecentEmails } from '../outlook/adapter';
 import type { EventDetail } from '../ms365/types';
 import type { MeInfo } from '../outlook/normalise';
 import { CalendarAdapter, MAX_READS } from './adapter';
+import { isMeetingMail } from './mail';
 import { inviteBody, inviteItemId, responseOf, snapFromRow } from './normalise';
 import { CalendarStore } from './store';
 import { wallToUtc, whenText } from './time';
@@ -308,3 +310,30 @@ describe('the calendar through the poll (R2.8)', () => {
 function move(e: EventDetail, hours: number) {
   Object.assign(e, { start: wall(at(hours)), end: wall(at(hours + 1)) });
 }
+
+describe('meeting mail while the calendar is on (R2.8)', () => {
+  const snap = { schemaVersion: 1 as const, polledAt: NOW.toISOString(), from: at(-36), to: at(14 * 24), invites: [], events: [snapFromRow({ uri: 'u', id: 'e1', subject: 'Q4 roadmap review', organizer: DANA.address, attendees: [FRANK.address], start: wall(at(26)), end: wall(at(27)) }, ME)!] };
+  const mail = (subject: string, html = `<p>Can we agree the Q4 priorities?</p>${TEAMS}`, from = DANA) => fakeEmail({ conversation: 'C1', subject, from, to: [FRANK], at: at(-1), html });
+
+  it('is the invitation, an update or the cancellation of an event the calendar has', () => {
+    expect(isMeetingMail(mail('Q4 roadmap review'), snap)).toBe(true); // the invitation: its joining details
+    expect(isMeetingMail(mail('Canceled: Q4 roadmap review', '<p>Sorry, cancelling.</p>'), snap)).toBe(true);
+    expect(isMeetingMail(mail('Updated: Q4 roadmap review', '<p>Moved to Friday.</p>'), snap)).toBe(true);
+  });
+
+  it('leaves a conversation about the meeting, other senders and other subjects to the mail', () => {
+    expect(isMeetingMail(mail('RE: Q4 roadmap review'), snap)).toBe(false);
+    expect(isMeetingMail(mail('Q4 roadmap review', '<p>Notes from today attached.</p>'), snap)).toBe(false); // no joining details: an email
+    expect(isMeetingMail(mail('Q4 roadmap review', undefined, SAM), snap)).toBe(false);
+    expect(isMeetingMail(mail('Q4 roadmap'), snap)).toBe(false);
+  });
+
+  it('keeps meeting mail out of the inbox only while the calendar is on', async () => {
+    const box = new FakeMs365({ me: { displayName: FRANK.name, mail: FRANK.address, userPrincipalName: FRANK.address } });
+    box.deliver('Inbox', mail('Q4 roadmap review'));
+    box.deliver('Inbox', fakeEmail({ conversation: 'C2', subject: 'Pricing', from: DANA, to: [FRANK], at: at(-1), html: '<p>Hi</p>' }));
+    const poll = (calendar?: () => typeof snap | undefined) => new OutlookAdapter({ api: box, account: () => FRANK, recent: new RecentEmails(), calendar }).fetchSince(undefined, { signal: new AbortController().signal, now: NOW, reason: 'scheduled' });
+    expect((await poll(() => snap)).items.map((i) => i.title)).toEqual(['Pricing']);
+    expect((await poll(() => undefined)).items.map((i) => i.title)).toEqual(['Q4 roadmap review', 'Pricing']);
+  });
+});

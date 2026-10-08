@@ -291,7 +291,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   });
   const factories = deps.sources ?? {
     slack: slackFactory(slackDirectory, logger),
-    outlook: outlookFactory(ms365(), logger, outlookRecent),
+    outlook: outlookFactory(ms365(), logger, outlookRecent, () => (calendarMe() ? calendar.snapshot : undefined)),
     calendar: calendarFactory(ms365(), calendar, logger),
     wispr: wisprFactory(wisprMcp, logger),
   };

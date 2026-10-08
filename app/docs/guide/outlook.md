@@ -65,7 +65,7 @@ first.
   **Tomorrow** shows the next day's. Cancelled meetings and ones you declined are left out. Choose
   a meeting to open it in Outlook.
 - **Not answered** marks a meeting someone else invited you to that you haven't accepted or
-  declined yet.
+  declined yet. Choose it to open the invite's item.
 - **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,
   who organised it and who is invited, and your answer. Never a meeting's description, its Teams
   link or its passcode.
@@ -75,6 +75,23 @@ The calendar polls on its own schedule, every 30 minutes in work hours and every
 them; change either under **Calendar** in [Settings › Outlook](/settings/outlook). Each poll is a
 short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it reads; it shows on
 [Usage](/usage). If the last read is old, the strip says when it was.
+
+### Invites
+
+- **An invite you haven't answered is an item**, labelled **Invite**, and is triaged like any
+  other: one starting within about two hours goes to Needs you as Now; one in the next two working
+  days, from a customer or a VIP, or asking only a few people, as Today; an invite sent to a crowd
+  goes to Low priority. Its next step is to accept or decline; **Respond in Outlook** opens the
+  meeting. There's nothing to draft or file.
+- **One item per meeting**: a weekly series, or the same meeting sent again, is one item, not one
+  per week. The invite's agenda is kept; its Teams joining details are not.
+- **It closes itself.** Once you accept, decline or answer tentatively in Outlook, the next poll
+  marks the item done. So does the meeting being cancelled, deleted, or starting. If the organiser
+  moves it, the item says when to and is triaged again.
+- **Invite emails stay out of mail.** While the calendar is on, the invitation, update and
+  cancellation emails for a meeting on your calendar aren't read as mail, so a meeting doesn't
+  arrive twice. With the calendar off, they come in as email, as before.
+- Until the calendar has had a trial week, invites show in Full scope only.
 
 ## Rules
 

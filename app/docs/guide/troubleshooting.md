@@ -71,7 +71,15 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
 - **"Microsoft 365 not working", saying it changed its tools**: Work OS stops reading Outlook
   rather than guess what the new tools mean. It needs an update; reconnecting won't help.
 - **An email you expected isn't in the inbox**: receipts and automatic replies are skipped, and a
-  poll reads at most 60 emails; the rest come on the next poll.
+  poll reads at most 60 emails; the rest come on the next poll. With the calendar on, invitation,
+  update and cancellation emails are left to the calendar: look for the invite's item instead.
+- **The agenda says "Read 2 h ago"**: the calendar hasn't been read for three polls in a row.
+  Check the health banner for Microsoft 365, or choose **Poll now** at the top of the inbox.
+- **An invite you answered is still open**: it closes on the calendar's next poll, up to 30 minutes
+  in work hours. One you never answered closes when the meeting starts.
+- **An invite closed though you never answered it**: it was moved more than two weeks ahead, which
+  looks the same as deleted. Once it is within two weeks again and still unanswered, it is triaged
+  again.
 
 ## Wispr Flow
 

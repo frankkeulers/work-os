@@ -81,7 +81,7 @@ import { ME } from './me';
 import { FRANK } from './seed/people';
 import { SEED_CLOCK, STATE_VERSION, buildState, type Preset } from './seed';
 import { SEED_PROMPT_FILES } from './seed/prompts';
-import { BATCH_TWELVE, OUTLOOK_THREADS, REPLIES, VIP_DM, WISPR_MEETING } from './seed/threads';
+import { BATCH_TWELVE, CALENDAR_INVITE, OUTLOOK_THREADS, REPLIES, VIP_DM, WISPR_MEETING } from './seed/threads';
 import type { DraftOutcome, ItemRec, MockState, ReplySeed, ThreadSeed } from './types';
 
 const STORAGE_KEY = 'workos.mock';
@@ -810,6 +810,16 @@ export class MockServer implements WorkOsApi, MockControls {
     return this.outlookView();
   }
 
+  /** The first calendar poll, once Outlook is connected and the calendar on, brings the invite you haven't answered. */
+  private readCalendarOnce() {
+    if (!this.s.outlook || this.s.outlook.calendarRead || !sourceSchedule(this.s.settings, 'calendar').enabled) return;
+    this.s.outlook = { ...this.s.outlook, calendarRead: true };
+    // On the timeline, and polled once the poll that Connect started is over, so it isn't lost.
+    this.s.timeline.push({ at: this.iso(), thread: CALENDAR_INVITE });
+    const poll = () => (this.polling ? void setTimeout(poll, 200) : void this.runPoll('manual'));
+    poll();
+  }
+
   /** A meeting's calendar event shows only while the calendar is read, as on the server (R2.8). */
   private withCalendarShown(item: Item): Item {
     if (!item.meeting?.calendar || (this.s.outlook && sourceSchedule(this.s.settings, 'calendar').enabled)) return item;
@@ -821,9 +831,13 @@ export class MockServer implements WorkOsApi, MockControls {
   async getAgenda(): Promise<AgendaView> {
     await this.gate(QUERY_MS);
     if (!this.s.outlook || !sourceSchedule(this.s.settings, 'calendar').enabled) return { state: 'off', events: [] };
-    // A Wispr Flow meeting joined to an event is its notes.
-    const notes = new Map(Object.values(this.s.items).flatMap((r) => (r.item.meeting?.calendar ? [[r.item.meeting.calendar.eventId, r.item.id] as const] : [])));
-    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events: CALENDAR.map((e) => (notes.has(e.id) ? { ...e, notesItemId: notes.get(e.id) } : e)) };
+    // A Wispr Flow meeting joined to an event is its notes; an open invite item is its "Not answered".
+    const joined = (source: Item['source'], open: boolean) =>
+      new Map(Object.values(this.s.items).flatMap((r) => (r.item.source === source && r.item.meeting?.calendar && (!open || r.status === 'open') ? [[r.item.meeting.calendar.eventId, r.item.id] as const] : [])));
+    const notes = joined('wispr', false);
+    const invites = joined('calendar', true);
+    const events = CALENDAR.map((e) => ({ ...e, ...(notes.has(e.id) && { notesItemId: notes.get(e.id) }), ...(invites.has(e.id) && { inviteItemId: invites.get(e.id) }) }));
+    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events };
   }
 
   /** Turns Outlook mail and calendar off: both read through the connector. */
@@ -1263,6 +1277,7 @@ export class MockServer implements WorkOsApi, MockControls {
     }
     this.s.savedAt = this.iso();
     this.emit({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
+    this.readCalendarOnce();
     return { savedAt: this.s.savedAt };
   }
 

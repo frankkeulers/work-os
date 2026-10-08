@@ -117,6 +117,7 @@ export function groupByChannel(items: ItemSummary[]): ItemSummary[] {
 export function openLabel(i: Pick<ItemSummary, 'source' | 'kind'>): string {
   const app = SOURCE_NAME[i.source];
   if (i.source === 'outlook') return 'Reply in Outlook';
+  if (i.kind === 'event') return 'Respond in Outlook';
   if (i.kind === 'meeting') return `Open transcript in ${app}`;
   if (i.kind === 'dm' || i.kind === 'chat') return `Reply in ${app}`;
   return `Open thread in ${app}`;
@@ -155,6 +156,7 @@ export function shownStep(item: ItemSummary, draftsBudgetHit: boolean, now: Date
     const step = primary.kind === 'draft' ? FILE_STEP[primary.button.state](primary.button.type === 'vault_note' ? 'vault note' : 'Confluence entry') : 'File it';
     return { need: 'File', step, why: item.reason, actionItems: [], primary };
   }
+  if (item.kind === 'event') return { need: 'Decide', step: 'Accept or decline the invitation', why: item.reason, actionItems: [], primary };
   const step = item.kind === 'email' ? 'Reply to the email' : item.kind === 'dm' || item.kind === 'chat' ? `Reply to ${item.title}` : 'Reply in the thread';
   return { need: 'Reply', step, why: item.reason, actionItems: [], primary };
 }

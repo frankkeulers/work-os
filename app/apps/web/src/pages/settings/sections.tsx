@@ -568,7 +568,7 @@ function Ms365ConnectorGroup({ status, reload, confirm }: { status?: OutlookStat
   );
 }
 
-function OutlookSection({ s, set, type, flush, err, confirm }: Ctx) {
+function OutlookSection({ s, set, type, flush, err, confirm, full }: Ctx) {
   const status = useApiQuery(() => api.getOutlookStatus(), onTopics('settings', 'health'), []);
   const inbox = useApiQuery(() => api.getInbox(), onTopics('inbox'), []);
   const now = useNow(60_000);
@@ -641,6 +641,11 @@ function OutlookSection({ s, set, type, flush, err, confirm }: Ctx) {
         </p>
         <GuideLink topic="outlook" label="Guide: Outlook" />
       </Group>
+      {full && (
+        <FutureRow title="Pre-meeting briefs" phase="P4" marks={['outlook']}>
+          Before a customer meeting, a short brief: the account, open threads with the people invited, and what was said last time.
+        </FutureRow>
+      )}
     </>
   );
 }

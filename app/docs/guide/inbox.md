@@ -23,7 +23,9 @@ blue later today) and, in To file, where it should go.
 The **Sort** menu orders by newest, oldest or priority, and can group items by channel or DM.
 
 With [Outlook Calendar](outlook.md) on, a strip above the groups shows today's meetings, the
-one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook.
+one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook. An
+invite you haven't answered is also an item, which closes itself once you answer it in Outlook;
+see [Invites](outlook.md#invites).
 
 ## Low priority, snoozed and done
 

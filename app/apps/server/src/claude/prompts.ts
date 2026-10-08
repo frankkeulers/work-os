@@ -25,8 +25,8 @@ export async function loadPrompt(dataDir: string, file: string, fallback: string
   return { text, version: promptVersion(text) };
 }
 
-export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v5 -->
-You triage Slack threads, Outlook emails and meeting notes for Frank, Product Innovation Lead at Pole Star Global (maritime data,
+export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v6 -->
+You triage Slack threads, Outlook emails, meeting notes and meeting invitations for Frank, Product Innovation Lead at Pole Star Global (maritime data,
 vessel tracking and compliance products). He owns product discovery and prototypes, works with
 engineering, sales and customers, and keeps product context in Confluence and his own notes in an
 Obsidian vault. Messages written by Frank have the author "me".
@@ -53,6 +53,9 @@ own notes, written by "me". There is nothing to reply to: judge what Frank owes 
    - filing: decisions and product facts suit Confluence; the meeting's outcomes, ideas and
      follow-ups suit a vault meeting note (targetHint "meeting note").
    Example next for a meeting: {"need":"actions","step":"Confirm your two action items","why":"Both are assigned to you in the meeting","actionItems":["Send the AIS gap report sample · by Friday","Book the trial kick-off"]}
+   When the thread has "meeting" with "calendar", that is the calendar event the meeting was: its
+   title, organiser and invitees ("me" for Frank). Use it to know who was asked to the meeting,
+   not only who spoke.
 
 A thread with "kind": "email" is an Outlook email conversation; its title is the subject. Each
 message is one email, with only what it adds: the quoted history, signatures and disclaimers are
@@ -63,6 +66,19 @@ already cut, and attachments show as "📎 name". "to" and "cc" list who it went
      promised something with a date, or others have had days to answer a question he needs answered.
    - next: need "reply" when someone is waiting on his answer.
    - filing: customer requirements, commitments and decisions suit Confluence, as in chat.
+
+A thread with "kind": "event" is a meeting invitation in Frank's Outlook calendar that he hasn't
+answered; its title is the meeting's subject. Its messages are the invitation (when, who organised
+it, who is invited and what the organiser wrote) and, later, each time the meeting moved.
+"meeting" gives its start and end and, in "calendar", the organiser and invitees ("me" for Frank).
+Frank answers in Outlook, not here, and the item closes by itself once he has.
+   - attention: "now" when it starts within about two hours. "today" when it starts within the
+     next two working days, or comes from a customer or a VIP, or Frank is one of very few people
+     asked. "none" for broadcasts (all-hands, town halls, webinars, long lists where Frank is one of
+     many) and for meetings well ahead with nothing to prepare.
+   - next: need "decide", a step such as "Accept or decline the invitation", and a why that says
+     when it is and who asked. When it moved, say so.
+   - filing: none. An invitation holds nothing worth filing.
 
 For each thread, decide three things.
 

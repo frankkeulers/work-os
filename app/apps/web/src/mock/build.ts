@@ -14,6 +14,7 @@ export const permalinkFor = (channelId: string, ts: string) =>
 const OUTLOOK = 'https://outlook.office.com/mail/inbox/id/';
 const TEAMS = 'https://teams.microsoft.com/l/';
 const WISPR = 'https://wisprflow.ai/m/';
+const CALENDAR = 'https://outlook.office.com/calendar/';
 
 export const titleFor = (seed: ThreadSeed) => seed.title || CHANNELS[seed.channelId] || seed.channelId;
 
@@ -42,7 +43,15 @@ export function makeItem(seed: ThreadSeed, clock: string, uniq = ''): Item {
     kind: seed.kind,
     title: titleFor(seed),
     permalink:
-      source === 'outlook' ? `${OUTLOOK}${ref}` : source === 'teams' ? `${TEAMS}${seed.kind === 'meeting' ? 'meetingrecap' : 'chat'}/${ref}` : source === 'wispr' ? `${WISPR}${ref}` : permalinkFor(seed.channelId, ts),
+      source === 'outlook'
+        ? `${OUTLOOK}${ref}`
+        : source === 'teams'
+          ? `${TEAMS}${seed.kind === 'meeting' ? 'meetingrecap' : 'chat'}/${ref}`
+          : source === 'wispr'
+            ? `${WISPR}${ref}`
+            : source === 'calendar'
+              ? (seed.meeting?.calendar?.link ?? CALENDAR)
+              : permalinkFor(seed.channelId, ts),
     participants: authorIds.map((id) => ({ id, name: PEOPLE[id] ?? id })),
     messages,
     messageCount: seed.messageCount ?? messages.length,
