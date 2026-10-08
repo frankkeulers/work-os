@@ -733,6 +733,16 @@ describe('the agenda (R2.8)', () => {
     expect(view.events[3]).not.toHaveProperty('inviteItemId'); // its item is done
   });
 
+  it('links today’s meetings to their Wispr Flow notes', async () => {
+    await build({ connectors, sources, calendar: () => snap() });
+    const notes: Item = { ...storedItem(), id: 'wispr:m1', source: 'wispr', kind: 'meeting', title: 'Stand-up', lastActivityAt: '2026-10-05T08:20:00.000Z', meeting: { start: '2026-10-05T08:00:00.000Z', end: '2026-10-05T08:16:00.000Z', calendar: { eventId: 'Stand-up', title: 'Stand-up', invitees: [] } } };
+    await items.write({ item: notes, schemaVersion: 1 });
+    await store.append({ ...upsert({ source: 'wispr', kind: 'meeting', title: 'Stand-up', lastActivityAt: notes.lastActivityAt }), itemId: 'wispr:m1' });
+    const view = (await get('/api/calendar/agenda')).json<AgendaView>();
+    expect(view.events.find((e) => e.id === 'Stand-up')?.notesItemId).toBe('wispr:m1');
+    expect(view.events.filter((e) => e.notesItemId)).toHaveLength(1);
+  });
+
   it('is off while the calendar is off, or Outlook was never connected', async () => {
     await build({ connectors, calendar: () => snap() });
     expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'off', events: [] });

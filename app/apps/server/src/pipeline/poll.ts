@@ -46,6 +46,8 @@ export interface PollDeps {
   rules?: () => { rules: Rule[]; settings: Settings };
   /** Items to read again whole on this source's next poll (taken once). */
   refetch?: (source: string) => string[];
+  /** Adds what other sources know to fetched items before they are merged: a meeting's calendar event (R2.8). */
+  enrich?: (items: Item[]) => Item[];
 }
 
 const EXCERPT_MAX = 110;
@@ -66,6 +68,9 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
   for (const p of fetched.participants) if (!participants.some((q) => q.id === p.id)) participants.push(p);
   const mentioned = [...(fetched.mentioned ?? [])];
   for (const p of stored?.mentioned ?? []) if (!mentioned.some((q) => q.id === p.id)) mentioned.push(p);
+  // A meeting joined to its calendar event stays joined, though the source doesn't say so (R2.8).
+  const calendar = fetched.meeting?.calendar ?? stored?.meeting?.calendar;
+  const meeting = fetched.meeting ? { ...fetched.meeting, ...(calendar && { calendar }) } : stored?.meeting;
   const lastActivityAt = [stored?.lastActivityAt, fetched.lastActivityAt]
     .filter((x): x is string => !!x)
     .sort()
@@ -80,6 +85,7 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
       messages,
       messageCount: Math.max(stored?.messageCount ?? 0, fetched.messageCount, messages.length),
       lastActivityAt,
+      ...(meeting && { meeting }),
       // A file ahead of the log (a crash between the two) keeps its revision, so the poll logs it.
       revision: newIds.length || filled || prevRevision === undefined ? (prevRevision ?? 0) + 1 : Math.max(prevRevision, stored?.revision ?? 0),
     },
@@ -101,7 +107,7 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   let changed = 0;
   let dropped = 0;
   let ruleDecided = 0;
-  for (const fetched of result.items) {
+  for (const fetched of d.enrich ? d.enrich(result.items) : result.items) {
     const prev = d.store.projection.items[fetched.id];
     // Read, merge and write under the item's lock: triage may be saving its text meanwhile.
     const r: { item?: Item; fromMeOnly?: boolean; fixed?: Extract<RuleVerdict, { kind: 'fixed' }>; sentByYou?: boolean; dropped?: boolean } = {};

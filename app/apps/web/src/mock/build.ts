@@ -48,6 +48,7 @@ export function makeItem(seed: ThreadSeed, clock: string, uniq = ''): Item {
     messageCount: seed.messageCount ?? messages.length,
     lastActivityAt: messages[messages.length - 1]?.ts ?? clock,
     ...(seed.thread && { thread: true }),
+    ...(seed.meeting && { meeting: seed.meeting }),
     revision: 1,
     schemaVersion: 1,
   };

@@ -5,7 +5,7 @@ import type { Ms365Api, SearchArgs } from '../ms365/client';
 import type { EmailDetail, EmailRow, Folder } from '../ms365/types';
 import { fixedTs } from '../time';
 import type { FetchContext, FetchResult, SourceAdapter } from '../types';
-import { buildItems, isNoise, type MeInfo } from './normalise';
+import { buildItems, isNoise, meOf, type MeInfo } from './normalise';
 
 // The Outlook mail source (Phase 2, R2.5, P0-9 addendum). One poll:
 //   1. searches Inbox and Sent Items for emails received since each folder's high-water mark (less
@@ -74,10 +74,9 @@ export class OutlookAdapter implements SourceAdapter {
   }
 
   private me(): MeInfo {
-    const a = this.o.account();
-    if (!a) throw new SourceError('ms365', { state: 'auth_failed', reason: 'token_missing' }, 'Outlook: not connected');
-    const id = a.address.toLowerCase();
-    return { id, name: a.name || a.address, aliases: [...new Set([id, (a.upn ?? '').toLowerCase()].filter(Boolean))] };
+    const me = meOf(this.o.account());
+    if (!me) throw new SourceError('ms365', { state: 'auth_failed', reason: 'token_missing' }, 'Outlook: not connected');
+    return me;
   }
 
   async probe(signal: AbortSignal): Promise<DepState> {

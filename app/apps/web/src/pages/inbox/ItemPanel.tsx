@@ -4,7 +4,7 @@ import type { ActionType, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
-import { CorrectForm, ItemMarkers, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
+import { CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
 import { Icon, MoreIcon } from '../../components/icons';
 import { useEarlierToggle } from '../../components/Earlier';
 import { MessageText, Recipients } from '../../components/SlackText';
@@ -556,6 +556,7 @@ export function ItemPanel({
             {item.reason && <span>{item.reason}</span>}
           </div>
           <ItemMarkers item={item} />
+          {item.source === 'wispr' && view?.item.meeting?.calendar && <OnCalendar calendar={view.item.meeting.calendar} />}
         </div>
 
         {correcting && (
@@ -585,8 +586,8 @@ export function ItemPanel({
         />
         <Asks key={`asks:${item.id}`} item={item} />
 
-        {item.next?.actionItems?.length ? <ActionItems key={item.id} items={item.next.actionItems} /> : null}
-        {view ? <Messages key={item.id} view={view} /> : <div className="text-[13px] text-muted">Loading…</div>}
+        {item.next?.actionItems?.length ? <ActionItems key={`actions:${item.id}`} items={item.next.actionItems} /> : null}
+        {view ? <Messages key={`messages:${item.id}`} view={view} /> : <div className="text-[13px] text-muted">Loading…</div>}
 
 
         {view && <MetaLine view={view} />}

@@ -46,6 +46,8 @@ describe('normalise (R2.3, P0-11)', () => {
     expect(item.messages[0].text).toContain('### Next Steps');
     expect(JSON.stringify(item)).not.toContain('Speaker 1: Yes');
     expect(item.lastActivityAt).toBe('2026-10-07T13:44:02.517Z');
+    expect(item.meeting).toEqual({ start: '2026-10-07T13:00:12.104Z', end: '2026-10-07T13:41:55.830Z' }); // for the calendar join (R2.8)
+    expect(buildItem({ ...meeting, start: null, end: null } as never, people).meeting).toBeUndefined();
   });
 
   it('names Frank once and keeps the other speakers', () => {

@@ -1,4 +1,4 @@
-import type { Item, Message, Participant } from '@work-os/shared';
+import type { Item, Message, Ms365Connector, Participant } from '@work-os/shared';
 import type { Address, EmailDetail, Folder } from '../ms365/types';
 import { emailText } from './html';
 
@@ -17,6 +17,13 @@ export interface MeInfo {
   id: string;
   name: string;
   aliases: string[];
+}
+
+/** Frank as the account the connector reads, once Outlook is connected. */
+export function meOf(a: Ms365Connector['account']): MeInfo | undefined {
+  if (!a) return undefined;
+  const id = a.address.toLowerCase();
+  return { id, name: a.name || a.address, aliases: [...new Set([id, (a.upn ?? '').toLowerCase()].filter(Boolean))] };
 }
 
 /** Replies, forwards and the receipts Outlook sends about them: reading them adds nothing. */

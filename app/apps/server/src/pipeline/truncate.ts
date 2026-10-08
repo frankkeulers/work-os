@@ -37,7 +37,12 @@ export interface TriageThread {
   before?: TriageMessage[];
   /** A topic's asks Frank has ticked off: not to be listed again (topics). */
   done?: string[];
+  /** When a meeting ran or an invite is for, and its calendar event (R2.8). */
+  meeting?: { start: string; end: string; calendar?: { title: string; organizer?: string; invitees: string[]; more?: number } };
 }
+
+/** Enough invitees to tell a one-to-one from a team meeting from an all-hands. */
+export const INVITEES_MAX = 15;
 
 /** How much of a DM's earlier conversation triage sees: enough for the question a reply answers. */
 export const BEFORE_MAX_MESSAGES = 5;
@@ -76,6 +81,22 @@ export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: 
       ...(m.cc?.length && { cc: m.cc.map(who) }),
     }));
   const thread: TriageThread = { id: item.id, kind: item.kind, title: item.title, messages, omitted: Math.max(0, item.messageCount - messages.length) };
+  if (item.meeting) {
+    const cal = item.meeting.calendar;
+    const invitees = cal?.invitees ?? [];
+    thread.meeting = {
+      start: item.meeting.start,
+      end: item.meeting.end,
+      ...(cal && {
+        calendar: {
+          title: cal.title,
+          ...(cal.organizer && { organizer: who(cal.organizer.id) === 'me' ? 'me' : cal.organizer.name }),
+          invitees: invitees.slice(0, INVITEES_MAX).map((p) => (who(p.id) === 'me' ? 'me' : p.name)),
+          ...(invitees.length > INVITEES_MAX && { more: invitees.length - INVITEES_MAX }),
+        },
+      }),
+    };
+  }
   const prior = earlier?.messages.slice(-BEFORE_MAX_MESSAGES) ?? [];
   if (prior.length) {
     const known = new Map([...names, ...(earlier?.people ?? []).map((p): [string, string] => [p.id, p.name])]);

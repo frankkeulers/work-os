@@ -48,6 +48,7 @@ export type CalendarSnapshot = z.infer<typeof CalendarSnapshot>;
 
 export class CalendarStore {
   private current?: CalendarSnapshot;
+  private listeners: ((s: CalendarSnapshot) => void | Promise<void>)[] = [];
 
   private constructor(private readonly file?: string) {}
 
@@ -78,5 +79,11 @@ export class CalendarStore {
   async publish(next: CalendarSnapshot) {
     if (this.file) await writeJsonAtomic(this.file, next);
     this.current = next;
+    for (const fn of this.listeners) await fn(next);
+  }
+
+  /** Runs after each published snapshot, e.g. to join Wispr Flow meetings to it. */
+  onPublish(fn: (s: CalendarSnapshot) => void | Promise<void>) {
+    this.listeners.push(fn);
   }
 }

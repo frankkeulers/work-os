@@ -64,6 +64,7 @@ import {
   type UsageRow,
   type UsageView,
   type AgendaView,
+  type Item,
   type OutlookStatusView,
   type WisprConnectView,
   type WisprStatusView,
@@ -618,7 +619,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const results = Object.fromEntries(actions.filter((a) => this.s.results[a.id]).map((a) => [a.id, this.s.results[a.id]]));
     return {
       summary,
-      item: structuredClone(topicItem(rec.item, parts).item),
+      item: this.withCalendarShown(structuredClone(topicItem(rec.item, parts).item)),
       ...(pieces && { pieces }),
       decision: rec.decision,
       correction: rec.correction,
@@ -809,11 +810,20 @@ export class MockServer implements WorkOsApi, MockControls {
     return this.outlookView();
   }
 
+  /** A meeting's calendar event shows only while the calendar is read, as on the server (R2.8). */
+  private withCalendarShown(item: Item): Item {
+    if (!item.meeting?.calendar || (this.s.outlook && sourceSchedule(this.s.settings, 'calendar').enabled)) return item;
+    const { calendar: _hidden, ...meeting } = item.meeting;
+    return { ...item, meeting };
+  }
+
   /** The seed week's calendar, once Outlook is connected and the calendar is on (R2.8). */
   async getAgenda(): Promise<AgendaView> {
     await this.gate(QUERY_MS);
     if (!this.s.outlook || !sourceSchedule(this.s.settings, 'calendar').enabled) return { state: 'off', events: [] };
-    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events: CALENDAR };
+    // A Wispr Flow meeting joined to an event is its notes.
+    const notes = new Map(Object.values(this.s.items).flatMap((r) => (r.item.meeting?.calendar ? [[r.item.meeting.calendar.eventId, r.item.id] as const] : [])));
+    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events: CALENDAR.map((e) => (notes.has(e.id) ? { ...e, notesItemId: notes.get(e.id) } : e)) };
   }
 
   /** Turns Outlook mail and calendar off: both read through the connector. */

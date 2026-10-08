@@ -29,6 +29,8 @@ async function turnOn(page: Page) {
   await expect(calendar).toBeDisabled(); // nothing to read through until Outlook is connected
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.getByTestId('outlook-account')).toBeVisible();
+  // The form has caught up with Connect: a save from it before then would turn mail back off.
+  await expect(page.getByRole('switch', { name: 'Read Outlook mail' })).toHaveAttribute('aria-checked', 'true');
   await expect(calendar).toHaveAttribute('aria-checked', 'false'); // connecting turns on mail only
   await calendar.click();
   await expect(calendar).toHaveAttribute('aria-checked', 'true');
@@ -90,4 +92,39 @@ test('Disconnect takes the calendar off with the mail, and Full scope says how t
   await expect(agenda(page).getByRole('button', { name: /Meeting briefs/ })).toBeVisible();
   await agenda(page).getByRole('link', { name: 'Turn it on' }).click();
   await expect(page).toHaveURL(/\/settings\/outlook$/);
+});
+
+test('a Wispr Flow meeting shows its calendar event, and the agenda opens its notes (R2.8)', async ({ page }) => {
+  await page.goto('/settings/wispr');
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByText('Frank Keulers')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  await expect(page.locator('[data-row^="wispr:"]')).toBeVisible({ timeout: 10_000 }); // the poll after Connect, before a reload could cut it short
+  await turnOn(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+
+  const workshop = meeting(page, 'Voyage Insights pricing workshop');
+  await expect(workshop).toHaveAttribute('data-phase', 'past');
+  await workshop.getByRole('button', { name: 'Notes' }).click();
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  const onCalendar = panel.getByTestId('on-calendar');
+  await expect(onCalendar).toHaveText('On your calendar: Voyage Insights pricing workshop · organised by Head of Sales · 3 invited');
+  await expect(panel.getByRole('heading', { name: 'Action items for you' })).toHaveCount(1);
+  await expect(onCalendar.getByRole('link', { name: 'Voyage Insights pricing workshop' })).toHaveAttribute('href', /itemid=AAMkMOCKPRICING/);
+  await dismissToasts(page);
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-meeting-on-calendar-light.png') });
+  // Only the meeting with notes offers them.
+  await expect(meeting(page, 'Product stand-up').getByRole('button', { name: 'Notes' })).toHaveCount(0);
+});
+
+test('a Wispr Flow meeting says nothing of the calendar while the calendar is off', async ({ page }) => {
+  await page.goto('/settings/wispr');
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByText('Frank Keulers')).toBeVisible();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  const row = page.locator('[data-row^="wispr:"]');
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await row.click();
+  await expect(page.getByRole('complementary', { name: 'Item panel' }).getByRole('heading', { level: 2 })).toBeVisible();
+  await expect(page.getByTestId('on-calendar')).toHaveCount(0);
 });

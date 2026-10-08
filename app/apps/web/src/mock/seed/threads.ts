@@ -738,6 +738,22 @@ export const WISPR_MEETING: ThreadSeed = {
   channelId: 'MTG-VOYAGEPRICING',
   kind: 'meeting',
   title: 'Voyage Insights pricing workshop',
+  // Joined to its calendar event (seed/calendar.ts) once Outlook Calendar is on (R2.8).
+  meeting: {
+    start: london(5, '06:45'),
+    end: london(5, '07:15'),
+    calendar: {
+      eventId: 'AAMkMOCKPRICING',
+      title: 'Voyage Insights pricing workshop',
+      organizer: { id: 'U09SALES', name: 'Head of Sales' },
+      invitees: [
+        { id: FRANK, name: 'Frank Keulers' },
+        { id: 'U14FINANCE', name: 'Finance partner' },
+        { id: 'U18PMM', name: 'Product marketing manager' },
+      ],
+      link: 'https://outlook.office365.com/owa/?itemid=AAMkMOCKPRICING&exvsurl=1&path=/calendar/item',
+    },
+  },
   messages: [
     {
       by: WISPR_SUMMARY,

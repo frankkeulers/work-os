@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { Attention, SourceId } from '@work-os/shared';
+import type { Attention, ItemMeeting, SourceId } from '@work-os/shared';
 import { API_MODE, api, type ItemSummary } from '../api';
 import { SOURCE_NAME } from '../lib/next';
 import { snoozeOptions } from '../lib/snooze';
@@ -65,6 +65,31 @@ export async function markDoneWithUndo(item: ItemSummary) {
 }
 
 /** Markers that explain why a card looks the way it does. */
+/** A Wispr Flow meeting's calendar event (R2.8): its title, opening Outlook, who organised it and how many were asked. */
+export function OnCalendar({ calendar: c }: { calendar: NonNullable<ItemMeeting['calendar']> }) {
+  const invited = c.invitees.map((p) => p.name).join(', ');
+  return (
+    <p data-testid="on-calendar" className="m-0 text-[13px] leading-relaxed text-ink-2">
+      <Icon name="calendar" size={14} className="mr-1.5 inline-block align-[-2px] text-muted" />
+      On your calendar:{' '}
+      {c.link ? (
+        <a href={c.link} target="_blank" rel="noreferrer" className="font-medium">
+          {c.title}
+        </a>
+      ) : (
+        <span className="font-medium text-ink">{c.title}</span>
+      )}
+      {c.organizer && ` · organised by ${c.organizer.name}`}
+      {c.invitees.length > 0 && (
+        <>
+          {' · '}
+          <span title={invited}>{c.invitees.length} invited</span>
+        </>
+      )}
+    </p>
+  );
+}
+
 export function ItemMarkers({ item }: { item: ItemSummary }) {
   const m: ReactNode[] = [];
   if (item.backFromSnooze) m.push(<Marker key="snz" tone="accent" icon="clock">Back from snooze</Marker>);

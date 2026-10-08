@@ -38,6 +38,20 @@ reading; meetings already in the inbox stay.
 
 The first time you connect, Work OS reads the last seven days of meetings.
 
+## With your calendar
+
+With [Outlook Calendar](outlook.md) on, each meeting is matched to the calendar event it was:
+the one the recording ran in, picked by time first, then by title and who was there. When two
+events overlap and neither is clearly it, the meeting is left unmatched rather than guessed.
+
+- The item panel says **On your calendar** with the event's title (it opens in Outlook), who
+  organised it and how many were invited.
+- Triage reads the event too, so it knows who was asked to the meeting, not only who spoke.
+- On the inbox's agenda, the meeting shows **Notes**, which opens this item.
+
+A meeting recorded before the calendar had read its event is matched after the next calendar
+poll; that doesn't triage it again.
+
 ## When it polls
 
 Every 3 hours in your [work hours](/settings/schedule), and not outside them unless you turn that

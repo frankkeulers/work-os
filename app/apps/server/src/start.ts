@@ -27,12 +27,14 @@ import { Runtime } from './runtime/runtime';
 import { followSystemZone } from './runtime/tz';
 import { CursorFile } from './pipeline/cursors';
 import { returnSnoozed } from './pipeline/due';
+import { relinkMeetings, withCalendar } from './pipeline/meetings';
 import { pollSource } from './pipeline/poll';
 import { buildSources, type AdapterFactory } from './sources/registry';
 import { Ms365Relay } from './sources/ms365/client';
 import { calendarFactory } from './sources/calendar/adapter';
 import { CalendarStore } from './sources/calendar/store';
 import { ms365Link, type Ms365Link } from './sources/ms365/link';
+import { meOf } from './sources/outlook/normalise';
 import { FIRST_POLL_MS, outlookFactory, RecentEmails } from './sources/outlook/adapter';
 import { wisprFactory } from './sources/wispr/adapter';
 import { wisprLink, type WisprLink } from './sources/wispr/link';
@@ -43,7 +45,7 @@ import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
 import { EarlierMessages } from './sources/slack/earlier';
 import { createServer, type WorkOsServer } from './server';
-import { budgetsOf, type SourceId } from '@work-os/shared';
+import { budgetsOf, sourceSchedule, type Item, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
 import { loadPromptFile, PROMPT_FILES } from './claude/promptFiles';
@@ -275,6 +277,18 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   })();
   // Outlook Calendar (R2.8): the same connector; the window as last seen lives in state/calendar.json.
   const calendar = deps.calendar ?? (await CalendarStore.open(paths(config.dataDir).calendar));
+  // Wispr Flow meetings joined to their calendar events (R2.8): as Wispr reads them, and after each
+  // calendar poll for those the calendar didn't have yet. Nothing changes while the calendar is off.
+  const calendarMe = () => (sourceSchedule(settings.editable.settings, 'calendar').enabled ? meOf(settings.editable.settings.connectors?.ms365?.account) : undefined);
+  const joinCalendar = (fetched: Item[]) => {
+    const me = calendarMe();
+    const snap = calendar.snapshot;
+    return me && snap ? fetched.map((i) => withCalendar(i, snap, me)) : fetched;
+  };
+  calendar.onPublish(async (snap) => {
+    const me = calendarMe();
+    if (me) await relinkMeetings({ store, items, logger }, snap, me).catch((err: unknown) => logger.warn({ err }, 'Joining Wispr Flow meetings to the calendar failed'));
+  });
   const factories = deps.sources ?? {
     slack: slackFactory(slackDirectory, logger),
     outlook: outlookFactory(ms365(), logger, outlookRecent),
@@ -385,7 +399,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),
     onHealthChange: (c) => alerts.onChange(c),
-    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }), refetch: takeRefetch }, s, reason, signal),
+    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }), refetch: takeRefetch, enrich: joinCalendar }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
     checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings), claude: () => runtime.health.get('claude') }),

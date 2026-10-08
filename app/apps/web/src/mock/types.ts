@@ -69,6 +69,7 @@ export interface ThreadSeed {
   thread?: boolean; // a Slack thread with replies (topics), not a stretch of DM chat
   topic?: string; // routing puts this piece in that seed's topic
   regroupWith?: string; // on its own until Regroup merges it into that seed's topic
+  meeting?: Item['meeting']; // a meeting's time and its calendar event (R2.8)
 }
 
 export interface ReplySeed {

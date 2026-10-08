@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { triageQueue } from './eligibility';
 import { meFrom, ruleVerdict } from './rules';
-import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, EMAIL_MAX_CHARS, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
+import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, EMAIL_MAX_CHARS, INVITEES_MAX, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
 
 const NOW = new Date('2026-10-06T09:00:00.000Z');
 const ago = (mins: number) => new Date(NOW.getTime() - mins * 60_000).toISOString();
@@ -124,6 +124,24 @@ describe('truncation and batching (§5.3, CL-4)', () => {
     expect(t).toMatchObject({ kind: 'meeting', title: 'Fleet data partner sync', omitted: 0 });
     expect(t.messages.map((m) => m.author)).toEqual(['Wispr Flow summary', 'me']);
     expect(t.messages[0].text).toContain('Frank to send the sample by Friday.');
+    expect(t.meeting).toBeUndefined();
+  });
+
+  it('sends a meeting’s time and its calendar event: title, organiser, and invitees up to a cap (R2.8)', () => {
+    const invitees = Array.from({ length: INVITEES_MAX + 3 }, (_, i) => ({ id: `p${i}@example.com`, name: `Person ${i}` }));
+    const meeting = thread([{ id: 'summary', authorId: 'Wispr Flow summary', ts: ago(30), text: 'Summary' }], {
+      id: 'wispr:m1',
+      source: 'wispr',
+      kind: 'meeting',
+      title: 'Partner sync',
+      participants: [{ id: 'wispr:me', name: 'Frank Keulers' }],
+      meeting: { start: ago(90), end: ago(30), calendar: { eventId: 'e1', title: 'Fleet data partner sync', organizer: { id: 'dana@customer.example', name: 'Dana Lee' }, invitees } },
+    });
+    const t = threadForTriage(meeting, meFrom({ id: 'wispr:me', name: 'Frank Keulers' }), 3);
+    expect(t.meeting).toEqual({ start: ago(90), end: ago(30), calendar: { title: 'Fleet data partner sync', organizer: 'Dana Lee', invitees: invitees.slice(0, INVITEES_MAX).map((p) => p.name), more: 3 } });
+    // An invite: Frank is "me" wherever he is on it.
+    const invite = { ...meeting, source: 'calendar' as const, kind: 'event' as const, meeting: { ...meeting.meeting!, calendar: { ...meeting.meeting!.calendar!, invitees: [{ id: 'frank@example.com', name: 'Frank Keulers' }] } } };
+    expect(threadForTriage(invite, meFrom({ id: 'frank@example.com', name: 'Frank Keulers' }), 3).meeting?.calendar?.invitees).toEqual(['me']);
   });
 
   it('sends an email with who it went to, Frank as "me", and a longer cut than chat (Outlook)', () => {

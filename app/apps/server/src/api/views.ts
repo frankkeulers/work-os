@@ -173,8 +173,19 @@ export const slackHealth = (d: ViewDeps): SourceHealth => sourceHealth(d, 'slack
 /** A calendar read older than this many polls is stale on the agenda. */
 const STALE_POLLS = 3;
 
+/** Today's Wispr Flow meetings joined to a calendar event, by event (R2.8). */
+async function notesByEvent(d: ViewDeps, since: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const it of Object.values(d.store.projection.items)) {
+    if (it.source !== 'wispr' || it.lastActivityAt < since) continue;
+    const eventId = (await d.items.read(it.source, it.id).catch(() => undefined))?.item.meeting?.calendar?.eventId;
+    if (eventId) out.set(eventId, it.id);
+  }
+  return out;
+}
+
 /** Today's and tomorrow's meetings from the calendar snapshot (R2.8): not cancelled, not declined. */
-export function agendaView(d: ViewDeps): AgendaView {
+export async function agendaView(d: ViewDeps): Promise<AgendaView> {
   const settings = d.settings.editable.settings;
   const schedule = sourceSchedule(settings, 'calendar');
   if (!schedule.enabled || !settings.connectors?.ms365) return { state: 'off', events: [] };
@@ -184,12 +195,14 @@ export function agendaView(d: ViewDeps): AgendaView {
   const from = londonAt(now, '00:00');
   const to = londonAt(now, '00:00', 2);
   const inviteOf = new Map(snap.invites.flatMap((g) => g.eventIds.map((id) => [id, g.itemId] as const)));
+  const notes = await notesByEvent(d, from);
   const events = snap.events
     .filter((e) => !e.cancelled && e.response !== 'declined' && e.end > from && e.start < to)
     .map((e): AgendaEvent => {
       const invite = inviteOf.get(e.id);
       const open = invite && d.store.projection.items[invite]?.status === 'open' ? invite : undefined;
       const organizer = e.organizer?.name ?? e.organizer?.address;
+      const notesItemId = notes.get(e.id);
       return {
         id: e.id,
         title: e.subject || '(no title)',
@@ -201,6 +214,7 @@ export function agendaView(d: ViewDeps): AgendaView {
         ...(e.link && { link: e.link }),
         ...((e.isOrganizer || e.response) && { response: e.isOrganizer ? 'organizer' : e.response }),
         ...(open && { inviteItemId: open }),
+        ...(notesItemId && { notesItemId }),
       };
     });
   const status = d.runtime?.sourceStatus('calendar').status;

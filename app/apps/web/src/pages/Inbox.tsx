@@ -585,7 +585,7 @@ const keyOf = (q: URLSearchParams) => `${q.get('item')}:${parseType(q.get('file'
  * (Poll, Usage, Scope) work alongside it; and layers (toasts, dialogs, menus, the scenario drawer)
  * sit above it.
  */
-const NOT_OUTSIDE = '[data-row], [data-row-action], a[href], [data-inbox-header] button, nav button, [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
+const NOT_OUTSIDE = '[data-row], [data-row-action], [data-agenda-event] button, a[href], [data-inbox-header] button, nav button, [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
 
 export function InboxPage() {
   const { inbox: q } = useShell();

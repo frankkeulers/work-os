@@ -154,7 +154,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   });
 
   app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));
-  app.get('/api/calendar/agenda', async (_req, reply) => reply.headers(noStore).send(agendaView(d)));
+  app.get('/api/calendar/agenda', async (_req, reply) => reply.headers(noStore).send(await agendaView(d)));
 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {
     const view = await itemView(d, req.params.id);

@@ -55,8 +55,15 @@ export function participantsOf(p: WisprParticipants | undefined, me: string | un
 /** Whether a meeting has anything to triage yet: finalised, with a summary or notes. */
 export const ready = (m: WisprMeeting) => m.finalized && !!(m.summary?.trim() || m.content?.trim() || m.todos?.length);
 
+/** When the meeting ran, if Wispr says: the calendar join needs it (R2.8). */
+function meetingTimes(m: WisprMeeting): Item['meeting'] {
+  const [start, end] = [m.start, m.end].map((t) => (t && !Number.isNaN(Date.parse(t)) ? new Date(Date.parse(t)).toISOString() : undefined));
+  return start && end && end >= start ? { start, end } : undefined;
+}
+
 export function buildItem(m: WisprMeeting, participants: Participant[]): Item {
   const at = iso(m.end ?? m.modified_at, m.modified_at);
+  const meeting = meetingTimes(m);
   const later = (n: number) => new Date(Date.parse(at) + n).toISOString();
   const messages: Message[] = [];
   if (m.summary?.trim()) messages.push({ id: 'summary', authorId: SUMMARY_AUTHOR, ts: at, text: m.summary.trim() });
@@ -75,5 +82,6 @@ export function buildItem(m: WisprMeeting, participants: Participant[]): Item {
     lastActivityAt: iso(m.modified_at, at),
     revision: 1,
     schemaVersion: 1,
+    ...(meeting && { meeting }),
   };
 }

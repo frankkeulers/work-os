@@ -4,7 +4,7 @@ import { SourceError } from '../errors';
 import type { EventSearchArgs, Ms365Api } from '../ms365/client';
 import { PAGE_SIZE } from '../ms365/client';
 import type { EventDetail, EventRow } from '../ms365/types';
-import type { MeInfo } from '../outlook/normalise';
+import { meOf, type MeInfo } from '../outlook/normalise';
 import { fixedTs } from '../time';
 import type { FetchContext, FetchResult, SourceAdapter } from '../types';
 import { inviteBody, inviteItem, inviteItemId, inviteMessage, isCandidate, movedMessage, rowHash, snapFromDetail, snapFromRow, wantsAnswer } from './normalise';
@@ -58,10 +58,9 @@ export class CalendarAdapter implements SourceAdapter {
   }
 
   private me(): MeInfo {
-    const a = this.o.account();
-    if (!a) throw new SourceError('ms365', { state: 'auth_failed', reason: 'token_missing' }, 'Outlook Calendar: not connected');
-    const id = a.address.toLowerCase();
-    return { id, name: a.name || a.address, aliases: [...new Set([id, (a.upn ?? '').toLowerCase()].filter(Boolean))] };
+    const me = meOf(this.o.account());
+    if (!me) throw new SourceError('ms365', { state: 'auth_failed', reason: 'token_missing' }, 'Outlook Calendar: not connected');
+    return me;
   }
 
   async probe(signal: AbortSignal): Promise<DepState> {
