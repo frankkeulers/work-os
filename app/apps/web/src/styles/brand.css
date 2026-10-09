@@ -1,0 +1,45 @@
+/* The Work OS mark's motion (specs/WORKOS-IDENTITY.md §6), ported from specs/brand-workos/motion/motion-preview.html.
+   Checking keeps the preview's 4.8s loop. Needs you and Filed play once, so their idle lead-in is trimmed
+   (needs you: the first 18% of 3.6s; filed: the first 40% of 4s) and the keyframes are re-based to match.
+   The light starts and ends at --light-rest, its resting fill, which BrandMark sets: needs you ends orange.
+   --bm-pop is the light's pop; small marks (32px or less) only change colour (§5.1). */
+
+.bm { overflow: visible; }
+.bm-body { transform-box: view-box; }
+.bm-light, .bm-ring { transform-box: fill-box; transform-origin: center; }
+.bm-ring { opacity: 0; }
+.bm-small { --bm-pop: 1; }
+.bm-small .bm-ring2, .bm-fl .bm-ring2 { display: none; }
+
+/* ---------- Checking sources: 4.8s, loops ---------- */
+.bm-ck .bm-body { transform-origin: 32px 56px; animation: ckHop 4.8s ease-in-out infinite; }
+@keyframes ckHop{0%,20%{transform:translate(0px,0px) scale(1,1)}25%{transform:translate(0px,0px) scale(1.06,.9)}31%{transform:translate(0px,-8px) scale(.97,1.05)}37%{transform:translate(0px,0px) scale(1.06,.9)}42%,100%{transform:translate(0px,0px) scale(1,1)}}
+/* The light looks left, then right, then blinks (it grows to fill the socket). */
+.bm-ck .bm-light { animation: ckLook 4.8s ease-in-out infinite; }
+@keyframes ckLook{0%,45%{transform:translate(0px,0px) scale(1)}50%,62%{transform:translate(-1.8px,0px) scale(1)}68%,80%{transform:translate(1.8px,0px) scale(1)}86%{transform:translate(0px,0px) scale(1)}88%{transform:translate(0px,0px) scale(1.6)}90%,100%{transform:translate(0px,0px) scale(1)}}
+
+/* ---------- Needs you: 2.95s, once per trigger ---------- */
+.bm-nd .bm-body { transform-origin: 8px 56px; animation: ndTilt 2.95s cubic-bezier(.3,1.6,.5,1) both; }
+.bm-small.bm-nd .bm-body { animation: none; }
+@keyframes ndTilt{0%{transform:rotate(0deg)}7.3%{transform:rotate(-8deg)}12.2%{transform:rotate(-3deg)}17.1%{transform:rotate(-6deg)}22%,63.4%{transform:rotate(-5deg)}78%,100%{transform:rotate(0deg)}}
+.bm-nd .bm-light { animation: ndLight 2.95s ease-out both; }
+@keyframes ndLight{0%,2.4%{fill:var(--light-rest);transform:scale(1)}8.5%{fill:var(--mark-attention);transform:scale(var(--bm-pop,1.7))}15.9%,65.9%{fill:var(--mark-attention);transform:scale(1)}80.5%,100%{fill:var(--light-rest);transform:scale(1)}}
+.bm-nd .bm-ring { stroke: var(--mark-attention); animation: ndRing 2.95s ease-out both; }
+.bm-nd .bm-ring2 { animation-delay: .28s; }
+@keyframes ndRing{0%,4.9%{transform:scale(1);opacity:0}8.5%{opacity:1}45.1%,100%{transform:scale(4.5);opacity:0}}
+
+/* ---------- Filed: 2.4s, once per trigger ---------- */
+.bm-fl .bm-light { animation: flLight 2.4s ease-out both; }
+@keyframes flLight{0%{fill:var(--light-rest);transform:scale(1)}8.3%{fill:var(--mark-filed);transform:scale(var(--bm-pop,1.7))}18.3%,60%{fill:var(--mark-filed);transform:scale(1)}76.7%,100%{fill:var(--light-rest);transform:scale(1)}}
+.bm-fl .bm-ring { stroke: var(--mark-filed); animation: flRing 2.4s ease-out both; }
+@keyframes flRing{0%,3.3%{transform:scale(1);opacity:0}8.3%{opacity:1}50%,100%{transform:scale(4.5);opacity:0}}
+
+/* Reduced motion: nothing moves. Needs you shows orange at once; filed shows teal for 1.5s, then the resting
+   colour. Both still run a fill-only animation so animationend fires and BrandMark clears the class. */
+@media (prefers-reduced-motion: reduce) {
+  .bm-ck .bm-body, .bm-ck .bm-light, .bm-nd .bm-body, .bm-ring { animation: none; }
+  .bm-nd .bm-light { animation: ndLightStill 1ms both; }
+  .bm-fl .bm-light { animation: flLightStill 1.5s steps(1) both; }
+}
+@keyframes ndLightStill{0%,100%{fill:var(--mark-attention)}}
+@keyframes flLightStill{0%{fill:var(--mark-filed)}100%{fill:var(--light-rest)}}

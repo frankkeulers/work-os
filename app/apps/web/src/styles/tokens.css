@@ -36,6 +36,8 @@
   --muted:#5B6270;
   --off:#C3C8D1;
   --on-solid:#FFFFFF;
+  --mark-attention:#C2410C;
+  --mark-filed:#0F766E;
   --orange:#C2410C;
   --orange-fg:#9A3412;
   --orange-line:#F3C3A1;
@@ -117,6 +119,8 @@
   --muted:#9AA1AD;
   --off:#4B5563;
   --on-solid:#FFFFFF;
+  --mark-attention:#F97316;
+  --mark-filed:#2DD4BF;
   --orange:#C2410C;
   --orange-fg:#FDBA74;
   --orange-line:#5A3320;
@@ -199,6 +203,8 @@
     --muted:#9AA1AD;
     --off:#4B5563;
     --on-solid:#FFFFFF;
+    --mark-attention:#F97316;
+    --mark-filed:#2DD4BF;
     --orange:#C2410C;
     --orange-fg:#FDBA74;
     --orange-line:#5A3320;
@@ -282,6 +288,8 @@
   --color-muted: var(--muted);
   --color-off: var(--off);
   --color-on-solid: var(--on-solid);
+  --color-mark-attention: var(--mark-attention);
+  --color-mark-filed: var(--mark-filed);
   --color-orange: var(--orange);
   --color-orange-fg: var(--orange-fg);
   --color-orange-line: var(--orange-line);
