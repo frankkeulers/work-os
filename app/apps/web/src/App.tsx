@@ -10,6 +10,7 @@ import { EvalReportPage } from './pages/EvalReport';
 import { InboxPage } from './pages/Inbox';
 import { ItemDetailPage } from './pages/ItemDetail';
 import { SettingsPage } from './pages/Settings';
+import { SourcePage } from './pages/Source';
 import { StartupFailedScreen, UnreachableScreen } from './pages/SystemScreens';
 import { UsagePage } from './pages/Usage';
 import { ScenarioDrawer } from './scenarios/ScenarioDrawer';
@@ -106,6 +107,7 @@ const router = createBrowserRouter([
         element: <Shell />,
         children: [
           { index: true, element: <InboxPage /> },
+          { path: 'source/:id', element: <SourcePage /> },
           { path: 'usage', element: <UsagePage /> },
           { path: 'usage/eval/:id', element: <EvalReportPage /> },
           { path: 'settings', element: <SettingsPage /> },
