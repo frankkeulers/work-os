@@ -120,6 +120,15 @@ describe('poll to inbox', () => {
     expect(slack.count('search.messages')).toBe(searches + 1); // one scheduled poll in 10 minutes
   });
 
+  it('names the source polling now, for the sidebar, until the poll ends', async () => {
+    expect((await call('POST', '/api/poll')).status).toBe(202);
+    expect((await inbox()).poll).toMatchObject({ phase: 'polling', polling: 'slack', queued: [] });
+    await res.runtime.settled();
+    const after = (await inbox()).poll;
+    expect(after.polling).toBeUndefined();
+    expect(after.queued).toBeUndefined();
+  });
+
   it('refuses "Poll now" while Slack rejects the token', async () => {
     slack.token = 'rotated';
     await call('POST', '/api/poll');

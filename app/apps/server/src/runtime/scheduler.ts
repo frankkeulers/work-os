@@ -17,6 +17,8 @@ export interface SchedulerDeps {
   canPoll: (s: SourceAdapter) => boolean;
   poll: (s: SourceAdapter, reason: PollReason) => Promise<void>;
   onError?: (id: SourceId, err: unknown) => void;
+  /** A source started or finished polling, or joined the queue: the sidebar shows which. */
+  onChange?: () => void;
 }
 
 const MIN = 60_000;
@@ -91,6 +93,15 @@ export class Scheduler {
     this.kick();
   }
 
+  /** The sources waiting their turn, in the order they will poll. */
+  queued(): SourceId[] {
+    const order = this.d.sources().map((s) => s.id);
+    return this.queue
+      .map((q) => q.id)
+      .filter((id) => order.includes(id))
+      .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  }
+
   /** Resolves when nothing is queued or running. */
   async idle() {
     while (this.running) await this.running;
@@ -105,6 +116,7 @@ export class Scheduler {
       return;
     }
     this.queue.push({ id, reason });
+    this.d.onChange?.();
   }
 
   private kick() {
@@ -117,8 +129,12 @@ export class Scheduler {
       this.queue.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
       const next = this.queue.shift()!;
       const source = this.d.sources().find((s) => s.id === next.id);
-      if (!source || !this.d.canPoll(source)) continue;
+      if (!source || !this.d.canPoll(source)) {
+        this.d.onChange?.();
+        continue;
+      }
       this.current = next;
+      this.d.onChange?.();
       try {
         await this.d.poll(source, next.reason);
       } catch (err) {
@@ -127,6 +143,7 @@ export class Scheduler {
         // Counted from the attempt, success or not: the breaker decides when to try again.
         this.lastMono.set(next.id, this.d.clock.mono());
         this.current = undefined;
+        this.d.onChange?.();
       }
     }
   }

@@ -262,9 +262,13 @@ export class MockServer implements WorkOsApi, MockControls {
     if (this.polling) return;
     this.polling = true;
     try {
-      this.s.poll = { ...this.s.poll, phase: 'polling', reason };
-      this.emit({ topic: 'inbox' });
-      await sleep(reason === 'wake' ? 1600 : 1100);
+      // Each enabled source in turn, as the scheduler polls them; Slack's turn takes longest.
+      const round = [this.sourceHealth(), ...this.outlookHealth(), ...this.wisprHealth()].filter((h) => h.status !== 'auth_failed').map((h) => h.id);
+      for (const [i, id] of round.entries()) {
+        this.s.poll = { ...this.s.poll, phase: 'polling', reason, polling: id, queued: round.slice(i + 1) };
+        this.emit({ topic: 'inbox' });
+        await sleep(id !== 'slack' ? 600 : reason === 'wake' ? 1600 : 1100);
+      }
       const now = this.iso();
       let fetched = 0;
 
@@ -297,7 +301,7 @@ export class MockServer implements WorkOsApi, MockControls {
       let triaged = 0;
       let calls = 0;
       if (eligible.length && !this.budgets().triage.hit) {
-        this.s.poll = { ...this.s.poll, phase: 'triaging', triagingCount: eligible.length };
+        this.s.poll = { ...this.s.poll, phase: 'triaging', triagingCount: eligible.length, polling: undefined, queued: undefined };
         this.emit({ topic: 'inbox' });
         await sleep(1400);
         const res = this.triageBatch(eligible);

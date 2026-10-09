@@ -50,6 +50,8 @@ export interface RuntimeDeps {
   onTriaged?: (catchUp: boolean) => Promise<unknown>;
   /** Every health change, after it is logged: health alerts. */
   onHealthChange?: (c: HealthChange) => void;
+  /** A source started or finished polling, or joined the queue. */
+  onPollChange?: () => void;
   /** Model triage of what is due, or of `only` those items. Throws ClaudeError for health. */
   triage?: (signal: AbortSignal, only?: string[]) => Promise<TriageRun>;
   /** Regroup (topics): routing merges a conversation's open topics. Throws ClaudeError for health. */
@@ -110,6 +112,7 @@ export class Runtime {
       lastPollAt: (id) => d.store.projection.sources[id]?.lastPollAt,
       canPoll: (s) => this.canPoll(s),
       poll: (s, reason) => this.pollOne(s, reason),
+      onChange: () => d.onPollChange?.(),
     });
     if (d.tokenPersisted === false) this.health.set('keychain', 'degraded', 'unreadable');
   }
@@ -418,6 +421,8 @@ export class Runtime {
     return {
       phase: cur ? 'polling' : this.triaging ? 'triaging' : 'idle',
       reason: cur?.reason,
+      polling: cur?.id,
+      queued: cur ? this.scheduler.queued() : undefined,
       lastPollAt: this.d.store.projection.sources[id]?.lastPollAt,
       nextPollAt: this.scheduler.nextPollAt(id),
     };

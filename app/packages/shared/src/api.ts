@@ -74,6 +74,8 @@ export interface PollStatus {
   phase: PollPhase;
   triagingCount?: number;
   reason?: PollReason;
+  polling?: SourceId; // the source polling now; sources poll one at a time
+  queued?: SourceId[]; // the sources waiting their turn, in the order they will poll
   lastPollAt?: string;
   nextPollAt?: string;
   lastResult?: { at: string; fetched: number; triaged: number; calls: number; reason: PollStatus['reason'] };

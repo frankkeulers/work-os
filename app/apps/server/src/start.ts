@@ -399,6 +399,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),
     onHealthChange: (c) => alerts.onChange(c),
+    // The sidebar shows which sources are polling (FR-2.6).
+    onPollChange: () => publish({ topic: 'inbox' }),
     poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }), refetch: takeRefetch, enrich: joinCalendar }, s, reason, signal),
     due: (at) => returnSnoozed(store, at),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),

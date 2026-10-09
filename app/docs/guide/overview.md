@@ -18,7 +18,8 @@ read-only; Outlook through the Microsoft 365 connector on claude.ai), Claude, an
 ## How a thread flows
 
 1. **Poll.** Every 10 minutes in work hours (60 outside them), Work OS asks Slack for new
-   messages. A wake from sleep polls straight away. You can also choose **Poll now**.
+   messages. A wake from sleep polls straight away. You can also choose **Poll now**. Sources poll
+   one at a time: in the sidebar, a spinner marks the one polling and the others say "queued".
 2. **Quiet window.** A conversation that is still going is left alone until it has been quiet for
    10 minutes, so it is read once, not after every message. These show as "N still active" in the
    inbox header.

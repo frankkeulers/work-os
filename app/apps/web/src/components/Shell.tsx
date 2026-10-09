@@ -14,7 +14,7 @@ import { BrandIcon, SourceMark } from './BrandIcon';
 import { problemsOf } from './HealthBanner';
 import { Icon, type IconName } from './icons';
 import { MeetingCues } from './MeetingCues';
-import { Dot, IconButton, PhaseTag, Segmented, cx, phaseToast, usePopover, type Phase } from './ui';
+import { Dot, IconButton, PhaseTag, Segmented, Spinner, cx, phaseToast, usePopover, type Phase } from './ui';
 
 export type ShellContext = { inbox: QueryState<InboxView> };
 export const useShell = () => useOutletContext<ShellContext>();
@@ -23,10 +23,19 @@ export const useShell = () => useOutletContext<ShellContext>();
 const SOURCE_NAME: Record<SourceId, string> = { slack: 'Slack', wispr: 'Wispr', outlook: 'Outlook', teams: 'Teams', plaud: 'Plaud', calendar: 'Calendar' };
 
 /** A source's state in a few words, or when it last polled. */
-function sourceLabel(id: SourceId, h: SourceHealth, now: Date): string {
+function sourceLabel(id: SourceId, h: SourceHealth, now: Date, turn?: PollTurn): string {
   if (h.status === 'auth_failed') return id === 'slack' ? 'token rejected' : 'signed out';
+  if (turn) return turn === 'polling' ? 'polling…' : 'queued';
   const words: Partial<Record<SourceHealth['status'], string>> = { never: 'not polled', backoff: 'backing off', offline: 'offline', degraded: 'retrying', paused: 'paused' };
   return words[h.status] ?? (h.lastPollAt ? `${fmtAgo(h.lastPollAt, now)} ago`.replace('now ago', 'just now') : '');
+}
+
+/** Where a source is in the poll under way: polling now, or waiting its turn. */
+type PollTurn = 'polling' | 'queued';
+
+function pollTurn(id: SourceId, poll: InboxView['poll'] | undefined): PollTurn | undefined {
+  if (poll?.polling === id) return 'polling';
+  if (poll?.queued?.includes(id)) return 'queued';
 }
 
 const SLACK_DOT = {
@@ -276,7 +285,8 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
           {collapsed ? <div className="mx-2 border-t border-line-soft" /> : <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Sources</div>}
           {sources.map(({ id, health }) => {
             const name = SOURCE_NAME[id];
-            const label = health ? sourceLabel(id, health, now) : '';
+            const turn = pollTurn(id, inbox?.poll);
+            const label = health ? sourceLabel(id, health, now, turn) : '';
             const dot = health ? SLACK_DOT[health.status] : 'var(--gray-mid)';
             return (
               <NavLink
@@ -288,10 +298,22 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
                 <SourceMark source={id} size={16} decorative />
                 <Label collapsed={collapsed}>{name}</Label>
                 {collapsed ? (
-                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-surface box-content" style={{ background: dot }} />
+                  turn === 'polling' ? (
+                    <span className="absolute right-1 top-1 flex rounded-full bg-surface text-accent" data-polling>
+                      <Spinner size={11} />
+                    </span>
+                  ) : (
+                    <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-surface box-content" style={{ background: dot }} />
+                  )
                 ) : (
                   <>
-                    <Dot color={dot} />
+                    {turn === 'polling' ? (
+                      <span className="flex shrink-0 text-accent" data-polling>
+                        <Spinner size={11} />
+                      </span>
+                    ) : (
+                      <Dot color={dot} />
+                    )}
                     <span className={cx('font-mono text-[11px]', health?.status === 'auth_failed' ? 'text-red-fg' : health?.status === 'backoff' ? 'text-amber-fg' : 'text-muted')}>{label}</span>
                   </>
                 )}

@@ -84,6 +84,30 @@ test('a Wispr Flow meeting lands in the inbox after Connect, with its action ite
   await page.screenshot({ path: join(APP, 'screenshots/inbox-meeting-light.png') });
 });
 
+test('Poll now shows a spinner on the source polling, and the others queued, in the sidebar (FR-2.6)', async ({ page }) => {
+  await connect(page);
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  const slack = nav.getByRole('link', { name: /^Slack/ });
+  const wispr = nav.getByRole('link', { name: /^Wispr/ });
+  await nav.getByRole('link', { name: /Inbox/ }).click();
+  await expect(wispr).toContainText('just now', { timeout: 10_000 }); // the poll after Connect is over
+
+  await page.getByRole('button', { name: 'Poll now' }).click();
+  // One source at a time: Slack first, Wispr waiting its turn.
+  await expect(slack).toContainText('polling…');
+  await expect(slack.locator('[data-polling]')).toBeVisible();
+  await expect(wispr).toContainText('queued');
+  await expect(wispr.locator('[data-polling]')).toHaveCount(0);
+  await dismissToasts(page);
+  await page.screenshot({ path: join(APP, 'screenshots/sidebar-polling-light.png'), clip: { x: 0, y: 0, width: 400, height: 520 } });
+
+  await expect(wispr).toContainText('polling…');
+  await expect(slack.locator('[data-polling]')).toHaveCount(0);
+  await expect(slack).toContainText('just now');
+  await expect(wispr).toContainText('just now');
+  await expect(nav.locator('[data-polling]')).toHaveCount(0);
+});
+
 test('Usage & health lists Wispr Flow under Source health once it is connected (R2.1)', async ({ page }) => {
   await page.goto('/usage');
   await expect(page.getByTestId('slack-health')).toBeVisible();
