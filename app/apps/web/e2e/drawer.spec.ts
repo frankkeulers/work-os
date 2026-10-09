@@ -127,14 +127,16 @@ test('revision collisions: replies on done, snoozed, corrected and drafted items
   // Past the quiet window the scheduled poll re-triages all four in one batch.
   await ctl(page, '+10 min').click();
   await expect(poll).toContainText(/4 triaged|1 call/, { timeout: 15_000 });
-  const pill = page.getByRole('button', { name: /new items?$/ });
-  if (await pill.isVisible()) await pill.click();
+  // Rows held while the panel is open wait behind a "N new" pill (CK-1.2), which the drawer covers.
+  const pills = page.locator('[data-new-pill]');
+  await expect(rows(page, 'Now').filter({ hasText: 'needed by 15:00' }).or(pills).first()).toBeVisible();
+  await page.keyboard.press('Backquote');
+  for (const pill of await pills.all()) if (await pill.isVisible()) await pill.click();
 
   await expect(rows(page, 'Today').filter({ hasText: 'logo swapped' })).toContainText('New replies');
   await expect(rows(page, 'Now').filter({ hasText: 'needed by 15:00' })).toBeVisible();
   await expect(page.getByText(/Re-triaged after new replies · you had set None/)).toBeVisible();
 
-  await page.keyboard.press('Backquote');
   await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
   await page.getByRole('complementary', { name: 'Item panel' }).getByRole('button', { name: 'Review Confluence entry' }).click();
   await expect(page.getByText('New replies since this draft')).toBeVisible();

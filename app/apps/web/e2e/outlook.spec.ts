@@ -1,5 +1,12 @@
 import { join } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+/** Rows that arrive while the item panel is open wait behind a "N new" pill (CK-1.2): show them. */
+async function showNew(page: Page, row: Locator) {
+  const pills = page.locator('[data-new-pill]');
+  await expect(row.or(pills).first()).toBeVisible({ timeout: 10_000 });
+  for (const p of await pills.all()) if (await p.isVisible()) await p.click();
+}
 
 const APP = join(import.meta.dirname, '../../..');
 
@@ -79,7 +86,8 @@ test('Outlook mail lands in the inbox after Connect: To and Cc, “You” on you
   await connect(page);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
   const pricing = emailRow(page, 'v2 pricing');
-  await expect(pricing).toBeVisible({ timeout: 10_000 }); // the poll after Connect, then triage
+  await showNew(page, pricing); // the poll after Connect, then triage
+  await expect(pricing).toBeVisible();
   await expect(pricing).toHaveAttribute('data-lane', 'now');
   await expect(pricing.getByRole('img', { name: 'Outlook' })).toBeVisible();
 

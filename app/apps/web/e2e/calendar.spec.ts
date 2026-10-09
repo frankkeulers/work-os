@@ -1,5 +1,12 @@
 import { join } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+/** Rows that arrive while the item panel is open wait behind a "N new" pill (CK-1.2): show them. */
+async function showNew(page: Page, row: Locator) {
+  const pills = page.locator('[data-new-pill]');
+  await expect(row.or(pills).first()).toBeVisible({ timeout: 10_000 });
+  for (const p of await pills.all()) if (await p.isVisible()) await p.click();
+}
 
 const APP = join(import.meta.dirname, '../../..');
 
@@ -230,7 +237,8 @@ test('a Wispr Flow meeting shows its calendar event, and the agenda opens its no
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.getByText('Frank Keulers')).toBeVisible();
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
-  await expect(page.locator('[data-row^="wispr:"]')).toBeVisible({ timeout: 10_000 }); // the poll after Connect, before a reload could cut it short
+  await showNew(page, page.locator('[data-row^="wispr:"]')); // the poll after Connect, before a reload could cut it short
+  await expect(page.locator('[data-row^="wispr:"]')).toBeVisible();
   await turnOn(page);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
 
@@ -255,7 +263,8 @@ test('a Wispr Flow meeting says nothing of the calendar while the calendar is of
   await expect(page.getByText('Frank Keulers')).toBeVisible();
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
   const row = page.locator('[data-row^="wispr:"]');
-  await expect(row).toBeVisible({ timeout: 10_000 });
+  await showNew(page, row);
+  await expect(row).toBeVisible();
   await row.click();
   await expect(page.getByRole('complementary', { name: 'Item panel' }).getByRole('heading', { level: 2 })).toBeVisible();
   await expect(page.getByTestId('on-calendar')).toHaveCount(0);
@@ -266,6 +275,7 @@ test('an invite you haven’t answered is an item to answer in Outlook, with not
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
   await setScope(page, 'Full'); // the calendar shows in Full scope until it goes live (B7)
   const row = page.locator('[data-row^="calendar:"]');
+  await showNew(page, row);
   await expect(row).toContainText('Q4 roadmap review', { timeout: 10_000 });
   // A dot for each of its Outlook categories beside its title; nothing else in the inbox is on the calendar.
   await expect(row.locator('[data-row-categories]')).toHaveAttribute('data-row-categories', 'Planning, Product');

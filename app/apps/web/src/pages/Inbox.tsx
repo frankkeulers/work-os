@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useBlocker, useNavigate, useSearchParams, type BlockerFunction } from 'react-router';
 import type { ActionType } from '@work-os/shared';
 import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
@@ -11,10 +11,13 @@ import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
 import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
 import { useApiQuery } from '../hooks/useApiQuery';
+import { useLookedAt } from '../hooks/useLookedAt';
+import { useStableGroups, type ShownRow } from '../hooks/useStableGroups';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
 import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
-import { usePrefs } from '../store/prefs';
+import { NEW_FOR_MS, usePrefs } from '../store/prefs';
+import { useUserMoves } from '../store/userMoves';
 import { errorToast, toast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
 import { ItemPanel } from './inbox/ItemPanel';
@@ -348,32 +351,6 @@ function InboxZero({ inbox }: { inbox: InboxView }) {
   );
 }
 
-// ---------- "N new" holding ----------
-
-/** Holds newly arrived top-lane items behind a pill so lanes don't reflow under the cursor. */
-function useHeldItems(items: ItemSummary[] | undefined) {
-  const [ack, setAck] = useState<Set<string> | null>(null);
-  const [seenItems, setSeenItems] = useState<ItemSummary[] | undefined>(undefined);
-  const [fresh, setFresh] = useState<Set<string>>(new Set());
-  let seen = ack;
-  if (items && items !== seenItems) {
-    // First load acknowledges everything; later loads acknowledge items outside the top lanes,
-    // and everything when no card is on screen (nothing would reflow).
-    const next = new Set(ack ?? items.map((i) => i.id));
-    items.forEach((i) => !isTop(i) && next.add(i.id));
-    if (!items.some((i) => isTop(i) && next.has(i.id))) items.forEach((i) => next.add(i.id));
-    setAck(next);
-    setSeenItems(items);
-    seen = next;
-  }
-  const held = (items ?? []).filter((i) => isTop(i) && seen && !seen.has(i.id));
-  const showHeld = () => {
-    setAck(new Set([...(seen ?? []), ...held.map((i) => i.id)]));
-    setFresh(new Set(held.map((i) => i.id)));
-  };
-  return { held, heldIds: new Set(held.map((i) => i.id)), showHeld, fresh };
-}
-
 // ---------- Rows ----------
 
 type Group = 'needs' | 'file';
@@ -455,7 +432,7 @@ function lowerMeta(i: ItemSummary, now: Date): string | undefined {
   return undefined;
 }
 
-function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary; selected: boolean; fresh: boolean; divide?: boolean; onPick: () => void }) {
+function QueueRow({ item, selected, isNew, leaving, divide, onPick }: { item: ItemSummary; selected: boolean; isNew: boolean; leaving?: boolean; divide?: boolean; onPick: () => void }) {
   const now = useNow(30_000);
   const top = isTop(item);
   const failed = item.lane === 'failed';
@@ -467,7 +444,7 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
   const moreAsks = topicAsks(item).filter((a) => !a.done).length - 1;
   // The row opens the item; Done sits beside it (a button can't hold another), for items you
   // already know are finished or don't matter.
-  return (
+  const row = (
     <div
       className={cx(
         'group/row flex items-center border-t pr-3',
@@ -479,6 +456,8 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
         type="button"
         data-row={item.id}
         data-lane={item.lane}
+        data-new={isNew || undefined}
+        data-leaving={leaving || undefined}
         data-activity={item.lastActivityAt}
         aria-current={selected ? 'true' : undefined}
         onClick={onPick}
@@ -503,15 +482,18 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
           <span className="text-[11px] text-muted">
             {kindLabel(item.kind)} · {ago}
             {item.pieces > 1 && <span data-pieces={item.pieces}> · {plural(item.pieces, 'part')}</span>}
+            {isNew && (
+              <span data-new-dot className="ml-1.5 inline-flex items-center gap-1 font-medium text-accent">
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
+                New
+              </span>
+            )}
           </span>
         </span>
         {/* Chips sit at the right edge, or wrap under the summary when the list is narrow. */}
         <span className="flex min-w-0 flex-[1_1_260px] flex-wrap items-center gap-x-3.5 gap-y-1.5">
           <span className={cx('flex min-w-0 flex-[1_1_240px] flex-col gap-1 text-[13px] leading-[1.4]', top ? 'font-medium text-ink' : 'text-ink-2')}>
-            <span>
-              {item.summary}
-              {fresh && <span className="ml-1.5 rounded bg-accent-bg px-1.5 py-px align-[1px] text-[10px] font-semibold text-on-solid">New</span>}
-            </span>
+            <span>{item.summary}</span>
             <ItemMarkers item={item} />
           </span>
           <span className="flex flex-wrap gap-1">
@@ -537,6 +519,14 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
         <span aria-hidden="true" className="w-8 shrink-0" />
       )}
     </div>
+  );
+  // A row that left collapses where it was (CK-1.2).
+  return leaving ? (
+    <div className="row-leave" inert>
+      <div>{row}</div>
+    </div>
+  ) : (
+    row
   );
 }
 
@@ -587,6 +577,35 @@ function ChannelHead({ item, items, topics }: { item: ItemSummary; items: ItemSu
           <Icon name="check" size={12} /> Mark all done
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * "1 new Now item above" (CK-1.2): rows held back while the panel is open, or that landed above the
+ * view while Frank was scrolled down. A click shows them.
+ */
+function NewPill({ items, above, group, onGo }: { items: ItemSummary[]; above: boolean; group: Group; onGo: () => void }) {
+  if (!items.length) return null;
+  const lanes = new Set(items.map((i) => i.lane));
+  const n = items.length;
+  const where = above ? ' above' : '';
+  const label =
+    group === 'file'
+      ? `${n} new ${n === 1 ? 'item' : 'items'} to file${where}`
+      : `${n} new${lanes.size === 1 && lanes.has('now') ? ' Now' : lanes.size === 1 && lanes.has('today') ? ' Today' : ''} ${n === 1 ? 'item' : 'items'}${where}`;
+  return (
+    // At the left, so the open item panel never covers it.
+    <div className="sticky top-2 z-10 flex px-6">
+      <button
+        type="button"
+        data-new-pill={group}
+        onClick={onGo}
+        className="inline-flex min-h-8 items-center gap-1.5 rounded-full bg-accent-wash px-3.5 text-[13px] font-semibold text-accent-ink shadow-[0_6px_18px_rgba(20,23,28,0.14)] cursor-pointer hover:bg-accent-tonal"
+      >
+        <Icon name="arrow" size={13} className="-rotate-90" />
+        {label}
+      </button>
     </div>
   );
 }
@@ -650,11 +669,8 @@ export function InboxPage() {
   const filing = parseType(search.get('file'));
 
   // Outlook and Teams are Phase 2 previews: their items only show in Full scope.
-  // Holding works on every item, so switching scope never makes items look newly arrived.
-  const { held: heldAll, heldIds, showHeld, fresh } = useHeldItems(inbox?.items);
   const inScope = useCallback((i: ItemSummary) => full || isLive(i.source), [full]);
   const all = useMemo(() => (inbox?.items ?? []).filter(inScope), [inbox, inScope]);
-  const held = heldAll.filter(inScope);
   const [open, setOpen] = useState<Lower | null>(null);
   const toggle = (g: Lower) => setOpen(open === g ? null : g);
   const now = useNow(60_000);
@@ -662,15 +678,14 @@ export function InboxPage() {
   const grouped = usePrefs((s) => s.groupByChannel);
 
   const by = useMemo(() => {
-    const shown = all.filter((i) => !heldIds.has(i.id));
-    const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(shown, sort, true, now), file: [], else: [], waiting: [], snoozed: [], done: [] };
-    for (const i of shown) if (i.lane in m) m[i.lane as Group | Lower].push(i);
+    const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(all, sort, true, now), file: [], else: [], waiting: [], snoozed: [], done: [] };
+    for (const i of all) if (i.lane in m) m[i.lane as Group | Lower].push(i);
     for (const g of ['file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
     if (grouped) for (const g of ['needs', 'file', 'else', 'waiting'] as const) m[g] = groupByChannel(m[g]);
     m.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
     return m;
-  }, [all, heldIds, now, sort, grouped]);
+  }, [all, now, sort, grouped]);
   // Open topics per conversation, across every group: Regroup is offered where there are two or more.
   const openTopics = useMemo(() => {
     const m = new Map<string, number>();
@@ -680,9 +695,32 @@ export function InboxPage() {
     }
     return m;
   }, [all]);
-  // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open.
-  const order = useMemo(() => [...by.needs, ...by.file, ...(open ? by[open] : [])].map((i) => i.id), [by, open]);
+  // Rows hold their place (CK-1.2): the order on screen changes only where it must, and not under
+  // the open panel. The first load, and changing the sort, the grouping or the scope, start afresh.
+  const listRef = useRef<HTMLElement>(null);
   const selItem = sel ? all.find((i) => i.id === sel) : undefined;
+  const topGroups = useMemo(() => ({ needs: by.needs, file: by.file }), [by]);
+  // Rows that land even under the panel: those Frank moved himself, the open item, and those he
+  // asked to see from the pill (until the panel closes).
+  const userMoves = useUserMoves((s) => s.ids);
+  const [released, setReleased] = useState<ReadonlySet<string>>(() => new Set());
+  if (!selItem && released.size) setReleased(new Set());
+  const exempt = useMemo(() => new Set([...Object.keys(userMoves), ...released, ...(sel ? [sel] : [])]), [userMoves, released, sel]);
+  const stable = useStableGroups(topGroups, listRef, { resetKey: `${sort}:${grouped}:${full}:${inbox ? 'loaded' : 'loading'}`, frozen: !!selItem, exempt });
+  // The pill's target, scrolled to once it's on screen.
+  const goTo = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const id = goTo.current;
+    const el = id ? listRef.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`) : undefined;
+    if (!el) return;
+    goTo.current = undefined;
+    el.scrollIntoView({ block: 'center' });
+  });
+  // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open.
+  const order = useMemo(
+    () => [...stable.rows.needs, ...stable.rows.file].filter((r) => !r.leaving).map((r) => r.item.id).concat(open ? by[open].map((i) => i.id) : []),
+    [stable.rows, by, open],
+  );
   const idx = sel ? order.indexOf(sel) : -1;
   // Where the cursor was, so j/k carry on from there after the item leaves the list.
   const [anchor, setAnchor] = useState(0);
@@ -719,16 +757,28 @@ export function InboxPage() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
+  // The New dot (CK-1.3): items that entered a group since Frank last looked.
+  const newItems = usePrefs((s) => s.newItems);
+  const markNew = usePrefs((s) => s.markNew);
+  const clearNew = usePrefs((s) => s.clearNew);
+  useEffect(() => {
+    if (stable.entered.ids.length) markNew(stable.entered.ids, api.now());
+  }, [stable.entered, markNew]);
+  const isNew = (id: string) => id in newItems && now.getTime() - Date.parse(newItems[id]) < NEW_FOR_MS;
+  const unseen = useMemo(() => [...stable.rows.needs, ...stable.rows.file].filter((r) => !r.leaving && r.item.id in newItems).map((r) => r.item.id), [stable.rows, newItems]);
+  useLookedAt(listRef, unseen);
+
   const pick = useCallback(
     (id: string | undefined) => {
       if (!id) return;
+      clearNew(id);
       setPanelOpen(true);
       setSearch({ item: id }, { replace: true });
       const el = document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
       el?.focus({ preventScroll: true });
       el?.scrollIntoView({ block: 'nearest' });
     },
-    [setPanelOpen, setSearch],
+    [setPanelOpen, setSearch, clearNew],
   );
   const step = useCallback(
     (d: 1 | -1) => {
@@ -814,13 +864,34 @@ export function InboxPage() {
   const counts = laneCounts(all);
   // Under Priority, a darker hairline closes the Now block at the top of Needs you. Grouped by
   // channel, each Slack channel's run of rows opens with its name.
-  const row = (i: ItemSummary, n: number, list: ItemSummary[]) => {
+  const row = (r: ShownRow, n: number, list: ShownRow[]) => {
+    const i = r.item;
     const key = grouped ? channelKey(i) : undefined;
-    const head = key && (n === 0 || channelKey(list[n - 1]) !== key);
+    const head = key && (n === 0 || channelKey(list[n - 1].item) !== key);
     return [
-      head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => channelKey(x) === key)} topics={openTopics.get(key) ?? 0} />,
-      <QueueRow key={i.id} item={i} selected={i.id === sel} fresh={fresh.has(i.id)} divide={!grouped && sort === 'priority' && n > 0 && list[n - 1].lane === 'now' && i.lane !== 'now'} onPick={() => pick(i.id)} />,
+      head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => !x.leaving && channelKey(x.item) === key).map((x) => x.item)} topics={openTopics.get(key) ?? 0} />,
+      <QueueRow
+        key={i.id}
+        item={i}
+        selected={i.id === sel}
+        isNew={!r.leaving && isNew(i.id)}
+        leaving={r.leaving}
+        divide={!grouped && sort === 'priority' && n > 0 && list[n - 1].item.lane === 'now' && i.lane !== 'now'}
+        onPick={() => pick(i.id)}
+      />,
     ];
+  };
+  const lowerRow = (i: ItemSummary, n: number, list: ItemSummary[]) => row({ item: i }, n, list.map((item) => ({ item })));
+  const pillItems = (g: Group) => [...stable.pending[g].map((p) => p.id), ...stable.above[g]].flatMap((id) => all.filter((i) => i.id === id));
+  const goNew = (g: Group) => {
+    const held = stable.pending[g].map((p) => p.id);
+    if (held.length) setReleased(new Set([...released, ...held]));
+    goTo.current = held[0] ?? stable.above[g][0];
+    const el = goTo.current ? listRef.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(goTo.current)}"]`) : undefined;
+    if (el) {
+      goTo.current = undefined;
+      el.scrollIntoView({ block: 'center' });
+    }
   };
   const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
   if (selItem && (shown?.item !== selItem || shown.view !== view || shown.pos !== idx + 1)) setShown({ item: selItem, view, pos: idx + 1 });
@@ -862,33 +933,24 @@ export function InboxPage() {
       <Banners inbox={inbox} />
 
       <div className="relative flex min-h-0 flex-1">
-        <section aria-label="Inbox list" className="min-w-0 flex-[1_1_480px] overflow-y-auto pb-6 pt-2">
-          {held.length > 0 && (
-            <div className="sticky top-2 z-10 flex justify-center">
-              <button
-                type="button"
-                onClick={showHeld}
-                className="inline-flex min-h-9 items-center gap-2 rounded-full bg-accent-bg px-4 text-[13px] font-semibold text-on-solid shadow-[0_8px_24px_rgba(20,23,28,0.2)] cursor-pointer hover:brightness-110"
-              >
-                <Icon name="arrow" size={14} className="-rotate-90" />
-                {held.length} new {held.length === 1 ? 'item' : 'items'}
-              </button>
-            </div>
-          )}
+        <section ref={listRef} aria-label="Inbox list" className="min-w-0 flex-[1_1_480px] overflow-y-auto pb-6 pt-2 [overflow-anchor:none]">
 
           {inbox.firstRun ? (
             <FirstRun inbox={inbox} />
           ) : (
             <>
-              {topCount === 0 && held.length === 0 ? (
+              {topCount === 0 ? (
                 <InboxZero inbox={inbox} />
               ) : (
                 GROUPS.map((g) => (
                   <section key={g.id} aria-label={g.title} data-group={g.id} className="flex flex-col pb-3">
+                    <NewPill group={g.id} items={pillItems(g.id)} above={stable.pending[g.id].every((p) => p.above)} onGo={() => goNew(g.id)} />
                     <div className="flex items-baseline gap-2 px-6 pb-2 pt-3">
                       <GroupHead dot={g.dot} title={g.title} count={by[g.id].length} />
                     </div>
-                    <div className="border-b border-line-soft">{by[g.id].length ? by[g.id].flatMap(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
+                    <div className="border-b border-line-soft">
+                      {stable.rows[g.id].length ? stable.rows[g.id].flatMap(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
+                    </div>
                   </section>
                 ))
               )}
@@ -906,7 +968,7 @@ export function InboxPage() {
                       </Button>
                     )}
                   </div>
-                  <div className="border-b border-line-soft">{by[open].length ? by[open].flatMap(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
+                  <div className="border-b border-line-soft">{by[open].length ? by[open].flatMap(lowerRow) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
                 </section>
               )}
             </>

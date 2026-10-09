@@ -100,6 +100,12 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J38 | Inbox zero | Start J38. | Does the empty state feel finished? | — | |
 | J39 | Retention-expired item | Start J39. | Is "content removed, permalink kept" clear? | FR-12.1 | |
 
+### Cockpit (specs/cockpit/SPEC.md)
+
+| ID | Journey | Steps | Watch for | FR | Notes |
+|---|---|---|---|---|---|
+| J50 | Still list | Start J50: the panel is open on the Head of Sales walkthrough (a Today row). A VIP DM arrives a moment later. Nothing in the list moves; a "1 new Now item" pill appears over Needs you, and the top bar's count reads 4 now. Close the panel (`Esc`): the DM lands at the top of Now with a blue New dot, and the rows you were looking at stay where they were. Leave it in view for two seconds: the New dot goes. Scroll down, Scenarios › Controls › VIP DM again: "1 new Now item above" appears, and clicking it scrolls up to it. | Does the list ever move under you while you read? Is the pill noticeable without being loud? Is the New dot enough to spot what arrived? | CK-1.2, CK-1.3 | |
+
 ## Open product questions
 
 The prototype shows one default for each question. Decide each one in the UX round.

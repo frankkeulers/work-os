@@ -17,6 +17,10 @@ interface Prefs extends Profile {
   avatar?: string; // the profile picture, a small square data: URL (lib/avatar.ts); initials or a person icon until set
   /** Meetings dismissed from the sidebar (R2.8), by meetingKey, each kept until its meeting ends. */
   dismissedMeetings: Record<string, string>;
+  /** Items that entered Needs you or To file since Frank last looked (cockpit CK-1.3): id → when. */
+  newItems: Record<string, string>;
+  /** The panel's Triage details row is open (CK-1.6). */
+  triageDetailsOpen: boolean;
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
@@ -28,7 +32,13 @@ interface Prefs extends Profile {
   /** Hides a meeting from the sidebar until it ends; dismissals of meetings that have ended are dropped. */
   dismissMeeting: (m: { id: string; start: string; end: string }, now: Date) => void;
   undismissMeeting: (m: { id: string; start: string }) => void;
+  markNew: (ids: string[], at: Date) => void;
+  clearNew: (id: string) => void;
+  setTriageDetailsOpen: (open: boolean) => void;
 }
+
+/** How long the New dot lasts without being looked at (CK-1.3). */
+export const NEW_FOR_MS = 30 * 60_000;
 
 /** One occurrence of a meeting: moved to another time, it is a new one and shows again. */
 export const meetingKey = (m: { id: string; start: string }) => `${m.id}@${m.start}`;
@@ -45,6 +55,8 @@ export const usePrefs = create<Prefs>()(
       inboxSort: 'priority',
       groupByChannel: false,
       dismissedMeetings: {},
+      newItems: {},
+      triageDetailsOpen: false,
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       setScope: (scope) => set({ scope }),
@@ -62,6 +74,20 @@ export const usePrefs = create<Prefs>()(
           const { [meetingKey(m)]: _gone, ...rest } = s.dismissedMeetings;
           return { dismissedMeetings: rest };
         }),
+      markNew: (ids, at) =>
+        set((s) => ({
+          newItems: {
+            ...Object.fromEntries(Object.entries(s.newItems).filter(([, when]) => at.getTime() - Date.parse(when) < NEW_FOR_MS)),
+            ...Object.fromEntries(ids.map((id) => [id, at.toISOString()])),
+          },
+        })),
+      clearNew: (id) =>
+        set((s) => {
+          if (!(id in s.newItems)) return s;
+          const { [id]: _seen, ...rest } = s.newItems;
+          return { newItems: rest };
+        }),
+      setTriageDetailsOpen: (triageDetailsOpen) => set({ triageDetailsOpen }),
     }),
     { name: 'workos.prefs' },
   ),

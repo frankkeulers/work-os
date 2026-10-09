@@ -1,5 +1,12 @@
 import { join } from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+/** Rows that arrive while the item panel is open wait behind a "N new" pill (CK-1.2): show them. */
+async function showNew(page: Page, row: Locator) {
+  const pills = page.locator('[data-new-pill]');
+  await expect(row.or(pills).first()).toBeVisible({ timeout: 10_000 });
+  for (const p of await pills.all()) if (await p.isVisible()) await p.click();
+}
 
 const APP = join(import.meta.dirname, '../../..');
 
@@ -65,7 +72,8 @@ test('a Wispr Flow meeting lands in the inbox after Connect, with its action ite
   await connect(page);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
   const row = meetingRow(page);
-  await expect(row).toBeVisible({ timeout: 10_000 }); // the poll after Connect, then triage
+  await showNew(page, row); // the poll after Connect, then triage
+  await expect(row).toBeVisible();
   await expect(row).toHaveAttribute('data-lane', 'today');
   await expect(row.getByRole('img', { name: 'Wispr Flow' })).toBeVisible();
 

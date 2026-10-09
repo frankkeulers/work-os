@@ -61,4 +61,10 @@ export const JOURNEYS: Journey[] = [
   },
   { id: 'J44', group: 'Settings', title: 'Connect Outlook', start: (c) => (fresh(c), '/settings/outlook') },
   { id: 'J45', group: 'Settings', title: 'Outlook Calendar', start: (c) => (fresh(c), '/settings/outlook') },
+  {
+    id: 'J50',
+    group: 'Cockpit',
+    title: 'Still list',
+    start: (c) => (fresh(c), later(() => c.simulatePoll('vip_dm'), 2500), `/?item=${encodeURIComponent(c.itemIdForKey('t3') ?? '')}`),
+  },
 ];

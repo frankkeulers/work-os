@@ -27,6 +27,16 @@ The **Sort** menu starts on **Priority**: Now first, then failed triage, then To
 can also order by newest or oldest, and **Group by channel** gathers items under their channel or
 DM. Your choice is kept in this browser.
 
+The list stays still while you read it. A row whose item gets a new reply keeps its place; a new
+item, or one that moved lane, goes in at its sorted place. While the item panel is open, new rows
+wait behind a pill over the group, such as **1 new Now item**: click it to show them, or they land
+when you close the panel. If you have scrolled down, rows that land above you don't push the list
+down; a pill says **1 new Now item above** and takes you there. Rows you bring back yourself, with
+Undo or Reopen, appear at once.
+
+A new arrival carries a blue **New** dot until you have looked at it: two seconds in view while
+the window is in front, or opening it. The dot also goes after 30 minutes.
+
 With [Outlook Calendar](outlook.md) on, a strip above the groups shows today's meetings, the
 one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook. An
 invite you haven't answered is also an item, which closes itself once you answer it in Outlook;

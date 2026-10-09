@@ -94,14 +94,14 @@ test('J06 keyboard: j/k move the panel, e and ⇧E mark done, Esc closes', async
 
 test('J04 correct triage in the panel moves the item and grows the labelled set', async ({ page }) => {
   const row = rows(page, 'Today').first();
-  const summary = (await row.textContent())!.slice(0, 40);
+  const id = (await row.getAttribute('data-row'))!;
   await row.click();
   await itemPanel(page).getByRole('button', { name: 'More actions' }).click();
   await page.getByRole('menuitem', { name: /Correct triage/ }).click();
   await itemPanel(page).getByRole('group', { name: 'Attention' }).getByRole('button', { name: 'Now' }).click();
   await itemPanel(page).getByRole('button', { name: 'Save correction' }).click();
   await expect(page.getByText('Correction saved · moved to Now · labelled set now 201')).toBeVisible();
-  const moved = rows(page, 'Now').filter({ hasText: summary });
+  const moved = group(page, 'Needs you').locator(`[data-row="${id}"][data-lane="now"]`);
   await expect(moved).toBeVisible();
   await expect(moved.getByText('Corrected by you')).toBeVisible();
   await expect(rows(page, 'Today')).toHaveCount(3);
@@ -408,6 +408,74 @@ test('the top bar counts Now, Today and To file, and a pill scrolls to its rows 
   await expect(fileGroup).not.toBeInViewport();
   await pills.locator('[data-pill="file"]').click();
   await expect(fileGroup).toBeInViewport();
+});
+
+test('J50 still list: a new Now item waits while the panel is open, then lands marked New (CK-1.2, CK-1.3)', async ({ page }) => {
+  await rows(page, 'Today').filter({ hasText: 'walkthrough' }).click();
+  // What was there on load isn't new.
+  await expect(page.locator('[data-new-dot]')).toHaveCount(0);
+  const ids = () => group(page, 'Needs you').locator('[data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')!));
+  const before = await ids();
+
+  await openControls(page);
+  await page.getByRole('complementary', { name: 'Scenarios' }).getByRole('button', { name: 'VIP DM', exact: true }).click();
+  await closeDrawer(page);
+  // Nothing moves under the panel: a pill says what's waiting, and the count already has it.
+  const pill = page.locator('[data-new-pill="needs"]');
+  await expect(pill).toHaveText('1 new Now item', { timeout: 10_000 });
+  expect(await ids()).toEqual(before);
+  await expect(page.getByTestId('count-pills').locator('[data-pill="now"]')).toHaveText('4now');
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-new-pill-light.png') });
+
+  // The panel closes: the DM lands at its place, and every other row keeps its order.
+  await page.keyboard.press('Escape');
+  await expect(pill).toHaveCount(0);
+  const after = await ids();
+  const added = after.filter((id) => !before.includes(id));
+  expect(added).toHaveLength(1);
+  expect(after.filter((id) => id !== added[0])).toEqual(before);
+  const row = page.locator(`[data-row="${added[0]}"]`);
+  await expect(row).toHaveAttribute('data-lane', 'now');
+  // New until it has been in view for 2 s with the window focused.
+  await expect(row.locator('[data-new-dot]')).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-new-dot-light.png') });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-new-dot-dark.png'), animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+  await expect(row.locator('[data-new-dot]')).toHaveCount(0, { timeout: 6_000 });
+});
+
+test('scrolled down with the panel closed, a new row lands above without moving what’s in view (CK-1.2)', async ({ page }) => {
+  await page.keyboard.press('Escape');
+  await expect(itemPanel(page)).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 620 });
+  const list = page.getByRole('region', { name: 'Inbox list' });
+  await list.evaluate((el) => (el.scrollTop = 260));
+  const watched = rows(page, 'Today').last();
+  await expect(watched).toBeInViewport();
+  const y = (await watched.boundingBox())!.y;
+
+  await openControls(page);
+  await page.getByRole('complementary', { name: 'Scenarios' }).getByRole('button', { name: 'VIP DM', exact: true }).click();
+  await closeDrawer(page);
+  const pill = page.locator('[data-new-pill="needs"]');
+  await expect(pill).toHaveText('1 new Now item above', { timeout: 10_000 });
+  expect(Math.abs((await watched.boundingBox())!.y - y)).toBeLessThan(2);
+
+  await pill.click();
+  await expect(rows(page, 'Now').locator('[data-new-dot]').first()).toBeInViewport();
+  await expect(pill).toHaveCount(0);
+});
+
+test('a row Frank brings back himself lands at once, even under the open panel (CK-1.2)', async ({ page }) => {
+  const first = rows(page, 'Now').first();
+  const id = (await first.getAttribute('data-row'))!;
+  await first.click();
+  await itemPanel(page).getByRole('button', { name: /^Done/ }).first().click();
+  await expect(page.locator(`[data-group="needs"] [data-row="${id}"]`)).toHaveCount(0);
+  await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator(`[data-group="needs"] [data-row="${id}"]`)).toBeVisible();
+  await expect(page.locator('[data-new-pill]')).toHaveCount(0);
 });
 
 test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {

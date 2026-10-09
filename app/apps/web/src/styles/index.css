@@ -296,11 +296,32 @@ select:not([multiple]) {
   transform-origin: left;
   animation: toast-countdown linear forwards;
 }
+/* An Inbox row that left (Done, Snooze, closed by itself) collapses where it was (cockpit CK-1.2).
+   With reduced motion the Inbox doesn't keep the row at all. */
+@keyframes row-leave {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+.row-leave {
+  display: grid;
+  animation: row-leave 200ms ease-in forwards;
+}
+.row-leave > * {
+  min-height: 0;
+  overflow: hidden;
+}
 @media (prefers-reduced-motion: reduce) {
   .item-panel,
   .item-panel[data-state='closed'],
   .item-panel-backdrop,
-  .item-panel-backdrop[data-state='closed'] {
+  .item-panel-backdrop[data-state='closed'],
+  .row-leave {
     animation-duration: 1ms;
   }
 }
