@@ -31,7 +31,8 @@
     "dev:mock": "npm run dev:mock -w @work-os/web",
     "eval": "npm run eval -w @work-os/server --",
     "gen-data": "npm run gen-data -w @work-os/server --",
-    "perf": "npm run perf -w @work-os/server --"
+    "perf": "npm run perf -w @work-os/server --",
+    "cockpit:baseline": "npm run cockpit:baseline -w @work-os/server --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

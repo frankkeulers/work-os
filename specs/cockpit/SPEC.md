@@ -89,6 +89,19 @@ It reports:
 **Gate to Stage 2:** auto-close potential ≥ 20%. Below that, Stage 2 drops behind Stage 3.
 **Gate to Stage 3:** none. A low deadline coverage instead triggers the prompt change in CK-3.9 before the timeline ships.
 
+**First run, 9 Oct 2026.** The dev data directory was the only one with history: there's no `~/WorkOS-data` yet. It covers 6–9 Oct, about three working days, including a clear-out day with 51 Dones.
+
+| Measure | Result |
+|---|---|
+| Auto-close potential | 5 of 77 Dones on Needs you came after Frank's own reply: **6.5%**, median gap 78 min |
+| Deadline coverage | 32 of 134 Needs you decisions set `dueAt`: **23.9%** (Slack 24%, decide 55%, review 41%, reply 33%) |
+| Time to done, median | Now 160 min, Today 627 min |
+| Needs you at 18:00 | 4 (7 Oct), 17 (8 Oct) |
+
+- **Gate result.** 6.5% is under 20%, so by the gate **Stage 2 moves behind Stage 3**: the order is 1 → 3 → 2 → 4.
+- **Treat it as a floor.** Frank's replies only count when a poll fetched them, and Outlook was connected for a day or two.
+- **Rerun** the baseline after a full fortnight on the autostarted instance (`WORKOS_INSTANCE=prod npm run cockpit:baseline`) before Stage 2 starts.
+
 ---
 
 ## 4. Stage 1: quick wins on today's layout (about 1–2 days)

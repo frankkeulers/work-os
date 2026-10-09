@@ -52,6 +52,7 @@ Follow the milestones: M1 → M2 → M3 → M4. Do not start a milestone until t
 - `npm run e2e` (UX tests against the mock) and `npm run e2e:server` (against the built server with fakes).
 - `npm run perf`: performance budgets (NF-11) against fresh synthetic data; `-- --data <dir>` reuses a `gen-data` folder. Exits 1 on a breach.
 - `npm run gen-data -- [--days 90] [--dir <new folder>]`: synthetic data directory for performance work.
+- `npm run cockpit:baseline -- [--data <dir>] [--days 14]`: the cockpit's Stage 0 baseline (specs/cockpit/SPEC.md CK-0.1). Read-only, no lock, so it runs beside the server. Writes `app/logs/cockpit-baseline-<date>.json`.
 - `npm run eval`: triage eval over `labels/triage.jsonl` (FR-6.1), with live Claude calls on the subscription. It takes the lock, so it runs only while the server is stopped; while the server runs, use Usage › Run eval.
 - `npm run rebuild-state`: rebuild the snapshot from the event log.
 - `npm run deploy`: build and install a release for the autostarted instance.
