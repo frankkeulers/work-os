@@ -50,13 +50,25 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
 - **Collapsing:** the sidebar folds to a 60px icon rail and back (200 ms width transition; with reduced motion it just snaps). Use the button in its header or the `[` key. The choice is a per-browser preference, like theme and scope, so it survives a reload.
 - **Rail contents:** the same items in the same order, as icons only. Each label moves to a tooltip and stays available to screen readers. The Inbox count becomes a small badge on the icon. App health shows as a dot on the Usage & health icon, and Slack's health shows as a dot on its mark. The account button shows only the avatar. Placeholders keep their dashed style.
-- **Header:** 64px tall in both states, so it stays level with the page top bars. It holds the name and the toggle, nothing else. Collapsing hides the name and leaves only the toggle.
+- **Header:** 64px tall in both states, so it stays level with the page top bars. It holds the mark, the name and the toggle, nothing else. On the rail the mark alone is the Expand button.
 - **App health:** a dot on the Usage & health item: green when running normally, blue while catching up after sleep, amber when running with a problem, red in safe mode, grey while stopping. Its tooltip names the state, or the first problem in the same words as the health banner. On the rail it sits on the icon's corner, like a source's dot. A problem the banner leaves to the inbox, such as Slack rate-limiting, shows only on that source's dot.
 - **Fixed height:** the app is one screen high. The sidebar never scrolls with the page, and pages with a 64px top bar (Inbox, Settings, Usage, Guide) keep the bar fixed and scroll only their body.
 - **Account menu:** the foot of the sidebar is an account button: the avatar, your display name ("Account" until a name is set) and a small MVP / Full chip, since scope changes what every page shows. It opens a menu above the button (beside the rail when collapsed) with a Light / Dark / System theme switch, the Scope switch, and an Edit profile link to Settings › Profile.
 - **Avatar:** the profile picture from Settings › Profile. Without one it shows your initials from the first and last name (or the display name), and a person icon when no name is set. The picture is cropped to a centred square, scaled down and kept in this browser, like the theme. It never goes to the server.
 - **Profile:** first name, last name, display name and the profile picture, in Settings › Profile. The display name is what the account button shows; when it's empty, the first and last name are used instead. Like the picture, the names stay in this browser and aren't part of `settings.json`.
 - **Icons:** Settings & rules uses a gear. The old sun-like glyph read as a light-mode control.
+
+## Brand (applied, from `specs/WORKOS-IDENTITY.md`)
+
+- **The mark:** the status tile, a rounded card with two text lines and a status light in the top-right socket. It's drawn in `currentColor`; the socket and the lines are holes (`fill-rule="evenodd"`), so it works on any background. Only the light uses brand colour. The name stays "Work OS". Geometry, components and motion are in `components/brand/` and `styles/brand.css`; the design source is `specs/brand-workos/`.
+- **The light:** quiet matches the tile (nothing needs you); attention is `--mark-attention`, orange, while a live item is in Now; filed is `--mark-filed`, teal, briefly after a vault or Confluence write, dry-run included. No other badges go on the mark.
+- **Where it shows:** the sidebar header at 26px (beside the name, or alone as the rail's Expand button), the browser tab (`favicon.svg` or `favicon-attention.svg`; filed never shows there), the OS notification tile at 22px in attention, Inbox zero at 88px and the first-run card at 72px.
+- **Motion:** checking sources (4.8s loop while a poll runs, on the empty states only, at 48px and up), needs you (2.95s, once, when the Now count rises; never on first load) and filed (2.4s, once). They're CSS keyframes animating only `transform`, `opacity` and `fill`, one at a time per mark. Checking finishes its cycle before it stops. Below 32px the tile doesn't tilt and the light doesn't pop: only its colour changes, with one ring.
+- **Reduced motion:** nothing moves. Attention shows orange at once; filed shows teal for 1.5s, then the resting colour.
+- **Where this differs from the spec:**
+  - The viewBox depends on size alone: the tight crop `6 6 52 52` at 32px and below, `-4 -8 72 72` above. Swapping it when an animation starts would make the tile jump.
+  - The play-once animations drop the motion preview's idle lead-in, so the pop starts at once (needs you 3.6s becomes 2.95s, filed 4s becomes 2.4s).
+  - Filed is detected by comparing each inbox load with the one before, not in ActionPanel, so a batch that moves on before its write lands still plays it. The item page has no sidebar, so a filing made there doesn't play.
 
 ## Settings (applied)
 
