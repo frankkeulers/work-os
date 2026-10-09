@@ -33,12 +33,12 @@ describe('runSettleEval (cockpit CK-2.6)', () => {
       label('slack:C1:1', 'Ship it', false), // the fake closes it: still a false close
       label('slack:C1:2', 'Will look later', false), // now right
       label('slack:C1:3', 'Will check tomorrow', true), // the fake still holds it: a missed close
-      label('slack:C1:4', 'Done, sent', true), // now right
+      label('slack:C1:4', 'Done, sent', true, 'manual_done_unchecked'), // now right, though no check ran at the time
       label('slack:C1:2', 'Will look later', false), // the same item again: its latest label counts once
     ];
     const r = await runSettleEval({ claude, settings: defaultSettings('/tmp/x'), prompt: { text: 'settle', version: 'settle v1#abc' }, now: () => NOW }, records);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ purpose: 'eval', system: 'settle' });
-    expect(r).toMatchObject({ labelCount: 4, failed: 0, correct: 2, falseCloses: 1, missedCloses: 1, bySource: { slack: { labelCount: 4, correct: 2 } }, tokens: 1100, costEquivalent: 0.001 });
+    expect(r).toMatchObject({ labelCount: 4, failed: 0, correct: 2, falseCloses: 1, missedCloses: 1, bySource: { slack: { labelCount: 4, correct: 2 } }, byOrigin: { undo: { labelCount: 2, correct: 1 }, manual_done: { labelCount: 1, correct: 0 }, manual_done_unchecked: { labelCount: 1, correct: 1 } }, tokens: 1100, costEquivalent: 0.001 });
   });
 });

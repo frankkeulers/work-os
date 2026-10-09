@@ -56,7 +56,7 @@ import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
 import { routeTopics } from './pipeline/topics';
 import { meetingsToday, runTriage, type TriageDeps } from './pipeline/triage';
-import { runSettle, type SettleDeps } from './pipeline/settle';
+import { runSettle, settleCheckOf, type SettleDeps } from './pipeline/settle';
 import { confirmTriage, correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
 import { LabelStore } from './store/labels';
@@ -468,6 +468,10 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     usage: () => usage.records(),
     labels,
     settleLabels,
+    settleCheck: async (it) => {
+      const c = await settleCheckOf(settleDeps, it, settleDeps.me(it.source), settleDeps.config().settings.triage.keepLastMessages);
+      return c?.messageId && c.revision === it.revision ? c.check : undefined;
+    },
     correct,
     confirm,
     evals,

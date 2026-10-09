@@ -29,6 +29,7 @@ import {
   type HealthView,
   type InboxView,
   type Item,
+  type ItemState,
   type ItemSummary,
   type Participant,
   type PersonOption,
@@ -89,6 +90,8 @@ export interface ViewDeps {
   confirm?: (id: string) => Promise<{ labelCount: number }>;
   /** What the settle check got wrong, from Frank's Undo or a Done soon after it (cockpit CK-2.6). */
   settleLabels?: SettleLabelStore;
+  /** The settle check on an item's reply as it stands, for a Done no check saw (CK-2.6). */
+  settleCheck?: (it: ItemState) => Promise<object | undefined>;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */
   evals?: Evals;
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */

@@ -275,6 +275,33 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     ]);
   });
 
+  it('labels a Done that no check saw as a missed close, with the check built as the model would get it (CK-2.6)', async () => {
+    const labels = async () =>
+      (await readFile(join(dir, 'labels/settle.jsonl'), 'utf8').catch(() => ''))
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as { origin: string; settled: boolean; itemId: string; was?: unknown; check: { reply: { text: string }[]; asks: unknown[] } });
+    // Slack replies go unchecked, as Outlook's do by default.
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    const triage = { ...view.settings.triage, closeOnReply: { enabled: true, sources: { slack: false } } };
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, triage }, rules: view.rules })).status).toBe(200);
+
+    // Done on an item Frank hasn't written on since triage: nothing to learn.
+    await call('POST', `/api/items/${encodeURIComponent(PROD)}/done`);
+    await call('POST', `/api/items/${encodeURIComponent(PROD)}/reopen`);
+    expect(await labels()).toEqual([]);
+
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'UFRANK', text: 'ETA wording is fine, ship it' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ lane: 'today' }); // no check, so still open
+    await call('POST', `/api/items/${encodeURIComponent(PROD)}/done`);
+    const [label] = await labels();
+    expect(label).toMatchObject({ origin: 'manual_done_unchecked', settled: true, itemId: PROD, check: { reply: [{ text: 'ETA wording is fine, ship it' }] } });
+    expect(label.check.asks.length).toBeGreaterThan(0);
+    expect(label.was).toBeUndefined();
+  });
+
   it('reads the thread again 2 and 6 minutes after Reply in Slack, without waiting for the poll (CK-2.4)', async () => {
     const replied = await call<{ scheduled: boolean }>('POST', `/api/items/${encodeURIComponent(PROD)}/replied`);
     expect(replied).toEqual({ status: 200, body: { scheduled: true } });

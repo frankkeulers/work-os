@@ -115,6 +115,10 @@ channel message telling someone the fix is in.
 - **Settled:** the item closes by itself and goes to Done. If the check got it wrong, reopen it
   from Done. Each reopen is kept as a label, as corrections are for triage, so a change to the
   settle prompt can be measured (`npm run eval -- --purpose settle`, once there are 30).
+- **Done by you, after a reply that settled it:** when you answered an item and then pressed
+  Done yourself, because no check ran (Outlook replies are unchecked by default) or the check
+  said not settled, that Done is kept as a label too: a close the check should have made. Nothing
+  extra to press. A Done on an item you haven't written on since triage is not labelled.
 - **Partly settled:** in a topic, the asks your reply settled are ticked off, and the next open
   one becomes the next step.
 - **Not settled**, such as "will look later" or a question back: the item stays where it is.

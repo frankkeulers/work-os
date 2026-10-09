@@ -88,6 +88,22 @@ export function openAsks(text: { summary?: string; next?: NextStep } | undefined
   return list.map((a, index) => ({ index, need: a.need, step: a.step }));
 }
 
+/**
+ * The check on an item's reply, as the model gets it, built from the topic's content now: no
+ * `messageId` when Frank hasn't written after the others. Undefined when the content is gone.
+ */
+export async function settleCheckOf(d: Pick<SettleDeps, 'store' | 'items'>, it: ItemState, me: Me, keepLast: number): Promise<{ revision: number; messageId?: string; check: SettleCheck } | undefined> {
+  const topic = await topicForTriage(d.store.projection, d.items, it.id, me, keepLast);
+  if (!topic) return undefined;
+  const reply = trailingReply(topic.view.messages);
+  const last = topic.item.messages.findLast((m) => m.authorId === me.id);
+  return {
+    revision: topic.anchor.item.revision,
+    ...(reply.length > 0 && last && { messageId: last.id }),
+    check: { itemId: it.id, itemRevision: it.revision, thread: topic.view, asks: openAsks(topic.anchor.text, it.asksDone), reply: reply.map((m) => ({ at: m.at, text: m.text })) },
+  };
+}
+
 /** Frank's reply: his messages after the last one from anyone else. */
 export function trailingReply(messages: readonly TriageMessage[]): TriageMessage[] {
   let i = messages.length;
@@ -136,25 +152,17 @@ export async function runSettle(d: SettleDeps, signal: AbortSignal): Promise<Set
   const checks: { it: ItemState; check: SettleCheck; through: string; messageId: string }[] = [];
   const unusable: EventDraft[] = [];
   for (const it of queue) {
-    const me = d.me(it.source);
-    const topic = await topicForTriage(d.store.projection, d.items, it.id, me, settings.triage.keepLastMessages);
-    if (!topic) {
+    const c = await settleCheckOf(d, it, d.me(it.source), settings.triage.keepLastMessages);
+    if (!c) {
       unusable.push(failed(it, 'content missing', SETTLE_MAX_ATTEMPTS));
       continue;
     }
-    if (topic.anchor.item.revision !== it.revision) continue; // a poll is between its file and its log entry
-    const reply = trailingReply(topic.view.messages);
-    const last = topic.item.messages.findLast((m) => m.authorId === me.id);
-    if (!reply.length || !last) {
+    if (c.revision !== it.revision) continue; // a poll is between its file and its log entry
+    if (!c.messageId) {
       unusable.push(failed(it, 'no reply from you after the others', SETTLE_MAX_ATTEMPTS));
       continue;
     }
-    checks.push({
-      it,
-      through: it.settlePending!,
-      messageId: last.id,
-      check: { itemId: it.id, itemRevision: it.revision, thread: topic.view, asks: openAsks(topic.anchor.text, it.asksDone), reply: reply.map((m) => ({ at: m.at, text: m.text })) },
-    });
+    checks.push({ it, through: it.settlePending!, messageId: c.messageId, check: c.check });
   }
   if (unusable.length) {
     await d.store.append(...unusable);

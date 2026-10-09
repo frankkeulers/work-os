@@ -48,6 +48,8 @@ function printSettle(r: SettleEvalReport, file: string) {
   console.log(`  false closes    ${String(r.falseCloses).padStart(4)}   (an ask you still owed, closed)`);
   console.log(`  missed closes   ${String(r.missedCloses).padStart(4)}   (left open after your reply settled it)`);
   for (const [source, s] of Object.entries(r.bySource)) console.log(`  ${source.padEnd(8)} ${s.correct} of ${s.labelCount} right`);
+  const ORIGIN = { undo: 'your Undo', manual_done: 'Done after "not settled"', manual_done_unchecked: 'Done, no check ran' } as const;
+  for (const [origin, s] of Object.entries(r.byOrigin)) console.log(`  ${ORIGIN[origin as keyof typeof ORIGIN].padEnd(26)} ${s.correct} of ${s.labelCount} right`);
   console.log('');
   console.log(`Tokens ${r.tokens.toLocaleString('en-GB')} · cost-equivalent $${r.costEquivalent.toFixed(4)}`);
   console.log(`Saved ${file}`);
@@ -102,7 +104,7 @@ async function main(): Promise<number> {
       const settle = await readSettleLabels(p.settleLabels);
       const n = latestSettleLabels(settle).length;
       if (n < SETTLE_EVAL_MIN_LABELS) {
-        console.error(`The settle eval runs once ${p.settleLabels} holds ${SETTLE_EVAL_MIN_LABELS} labelled checks; it has ${n}. Undo a wrong close, or press Done soon after a reply the check missed, to add one.`);
+        console.error(`The settle eval runs once ${p.settleLabels} holds ${SETTLE_EVAL_MIN_LABELS} labelled checks; it has ${n}. Undo a wrong close, or press Done on an item your reply settled, to add one.`);
         return EXIT.config;
       }
       const settings = (await SettingsState.create(config.dataDir, await loadSettings(config.dataDir), config.forceDryRun)).editable.settings;

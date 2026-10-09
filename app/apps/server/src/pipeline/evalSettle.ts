@@ -32,6 +32,8 @@ export interface SettleEvalReport {
   /** Scored checks the model now gets right. */
   correct: number;
   bySource: Partial<Record<SourceId, { labelCount: number; correct: number }>>;
+  /** By how the label came: an Undo, a Done after "not settled", or a Done no check saw. */
+  byOrigin: Partial<Record<SettleLabelRecord['origin'], { labelCount: number; correct: number }>>;
   tokens: number;
   costEquivalent: number;
 }
@@ -57,7 +59,7 @@ export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecor
     maxInputTokens: t.maxInputTokens,
     overheadTokens: estimateTokens(d.prompt.text) + 200,
   });
-  const r: Pick<SettleEvalReport, 'failed' | 'falseCloses' | 'missedCloses' | 'correct' | 'bySource' | 'tokens'> = { failed: 0, falseCloses: 0, missedCloses: 0, correct: 0, bySource: {}, tokens: 0 };
+  const r: Pick<SettleEvalReport, 'failed' | 'falseCloses' | 'missedCloses' | 'correct' | 'bySource' | 'byOrigin' | 'tokens'> = { failed: 0, falseCloses: 0, missedCloses: 0, correct: 0, bySource: {}, byOrigin: {}, tokens: 0 };
   let cost = 0;
   for (const batch of batches) {
     try {
@@ -87,10 +89,13 @@ export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecor
         }
         const closes = judge(check(l), a).allSettled;
         const src = (r.bySource[l.source] ??= { labelCount: 0, correct: 0 });
+        const how = (r.byOrigin[l.origin] ??= { labelCount: 0, correct: 0 });
         src.labelCount++;
+        how.labelCount++;
         if (closes === l.settled) {
           r.correct++;
           src.correct++;
+          how.correct++;
         } else if (closes) r.falseCloses++;
         else r.missedCloses++;
       }

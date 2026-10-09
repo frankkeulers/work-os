@@ -1,20 +1,22 @@
 import { readFile } from 'node:fs/promises';
-import { SettleDecision, SourceId, type ItemState } from '@work-os/shared';
+import { SettleDecision, SourceId, awaitsReply, type ItemState } from '@work-os/shared';
 import { z } from 'zod';
 import type { ItemFiles } from './items';
 import { JsonlAppender } from './jsonl';
 
 // labels/settle.jsonl: what the settle check got wrong (cockpit CK-2.6). Undoing a close on reply
 // says it shouldn't have closed; pressing Done soon after a check that said "not settled" says it
-// should have. Each line carries the check as the model got it, so the settle eval can re-run it
-// after the item's raw content has gone to retention.
+// should have. So does pressing Done on an item Frank wrote on since its triage that no check saw
+// (it was off for the source, failed, or never ran): the check is built at Done, as it would have
+// gone to the model. Each line carries the check, so the settle eval can re-run it after the
+// item's raw content has gone to retention.
 
 /** How soon after a "not settled" check a Done counts as a missed close. */
 export const MISSED_CLOSE_MS = 30 * 60_000;
 
 export const SettleLabelRecord = z.object({
   at: z.iso.datetime(),
-  origin: z.enum(['undo', 'manual_done']),
+  origin: z.enum(['undo', 'manual_done', 'manual_done_unchecked']),
   itemId: z.string().min(1),
   itemRevision: z.number().int().positive(),
   source: SourceId,
@@ -22,10 +24,10 @@ export const SettleLabelRecord = z.object({
   settled: z.boolean(),
   /** The check as sent: the thread, the open asks and Frank's reply. */
   check: z.record(z.string(), z.unknown()),
-  /** What the model answered. */
-  was: SettleDecision,
-  model: z.string(),
-  promptVersion: z.string(),
+  /** What the model answered. None for `manual_done_unchecked`: no check ran. */
+  was: SettleDecision.optional(),
+  model: z.string().optional(),
+  promptVersion: z.string().optional(),
 });
 export type SettleLabelRecord = z.infer<typeof SettleLabelRecord>;
 
@@ -56,7 +58,12 @@ export function latestSettleLabels(records: SettleLabelRecord[]): SettleLabelRec
 export function settleLabelOrigin(it: ItemState, kind: 'done' | 'reopened', now: Date): SettleLabelRecord['origin'] | undefined {
   if (kind === 'reopened') return it.status === 'done' && it.doneBy === 'reply' ? 'undo' : undefined;
   const c = it.replyCheck;
-  return it.status === 'open' && c && !c.allSettled && now.getTime() - Date.parse(c.at) <= MISSED_CLOSE_MS ? 'manual_done' : undefined;
+  if (it.status === 'open' && c && !c.allSettled && now.getTime() - Date.parse(c.at) <= MISSED_CLOSE_MS) return 'manual_done';
+  // Still waiting on Frank, he wrote since its triage (a revision, or a piece of his joined), and
+  // no check saw it: a close the check never got to make.
+  const d = it.decision;
+  const wroteSince = !!d && (it.revision > d.itemRevision || it.topicVersion > (d.topicVersion ?? 0));
+  return awaitsReply(it) && wroteSince && (!c || c.revision < it.revision) ? 'manual_done_unchecked' : undefined;
 }
 
 export class SettleLabelStore {
@@ -84,13 +91,21 @@ export class SettleLabelStore {
 
   /**
    * Labels the items Frank is about to mark done or reopen, from their state before the event, if
-   * the check got them wrong. Needs the check's snapshot in the item's file; without it, nothing.
+   * the check got them wrong. Needs the check's snapshot in the item's file, or for a check that
+   * never ran, `settleCheck` to build it; without either, nothing.
    */
-  async label(d: { items: ItemFiles; now: () => Date }, before: readonly ItemState[], kind: 'done' | 'reopened'): Promise<number> {
+  async label(d: { items: ItemFiles; now: () => Date; settleCheck?: (it: ItemState) => Promise<object | undefined> }, before: readonly ItemState[], kind: 'done' | 'reopened'): Promise<number> {
     let n = 0;
     for (const it of before) {
       const origin = settleLabelOrigin(it, kind, d.now());
       if (!origin) continue;
+      if (origin === 'manual_done_unchecked') {
+        const check = await d.settleCheck?.(it);
+        if (!check) continue;
+        await this.append({ at: d.now().toISOString(), origin, itemId: it.id, itemRevision: it.revision, source: it.source, settled: true, check: { ...check } });
+        n++;
+        continue;
+      }
       const snap = (await d.items.read(it.source, it.id))?.settle;
       if (!snap) continue;
       await this.append({

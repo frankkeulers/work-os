@@ -224,6 +224,7 @@ When a new revision's messages are all Frank's own (`fromMeOnly`), the projectio
 **CK-2.6 Undo and reopening.**
 - **Undo** (the toast, or Reopen from Done) appends `item.reopened` and a negative label line in `labels/settle.jsonl` (the thread as the model saw it, the asks, the decision). The eval then measures the settle prompt against those labels, as FR-6.1 does for triage.
 - **A manual Done** within 30 min of a `fromMeOnly` revision whose check said "not settled" writes a positive label: the check missed it.
+- **A manual Done that no check saw** (amended) writes a positive label too, origin `manual_done_unchecked`. It applies when the item still waits on Frank, he wrote on it since its triage (a newer revision, or a piece of his own joined the topic), and no check ran on that revision: the check was off for the source, failed, or never got the reply. The check is built at Done, as it would have gone to the model, so the settle eval can score it; there is no model answer to keep. A Done with nothing written since triage is not labelled. `npm run eval -- --purpose settle` reports right answers by origin as well as by source.
 - **A new message from someone else** after an auto-close re-triages the item as today (JOURNEYS open question 1 default: it comes back with "New replies").
 
 **CK-2.7 Settings.** Settings › Inbox › Triage rules gains "Close items when your reply settles them", with **On** as the default, and a per-source list (Slack, Outlook). Off means the check still runs and shows "You replied · Mark done?" on the row, but nothing closes.
