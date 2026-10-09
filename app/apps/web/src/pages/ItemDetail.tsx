@@ -4,7 +4,7 @@ import type { ActionType, Message } from '@work-os/shared';
 import { api, isApiError, type ItemView } from '../api';
 import { ActionPanel, defaultType, parseType } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
-import { CategoryTags, CorrectForm, OnCalendar, SnoozeMenu, kindLabel, markDoneWithUndo, openInSource } from '../components/item';
+import { CategoryTags, CorrectForm, OnCalendar, SnoozeMenu, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../components/item';
 import { Icon, type IconName } from '../components/icons';
 import { useEarlierToggle } from '../components/Earlier';
 import { MessageText, Recipients } from '../components/SlackText';
@@ -162,7 +162,7 @@ function TriageBand({ view }: { view: ItemView }) {
   if (t.by === 'user' && correction) meta = `corrected by you ${fmtWhen(correction.correctedAt, now)} · in the labelled set · revision ${correction.itemRevision}`;
   else if (decision?.decidedBy === 'rule') meta = `rule ${decision.ruleId} · no model call · revision ${decision.itemRevision}`;
   else if (decision)
-    meta = [decision.model, decision.promptVersion?.replace('triage-', 'triage '), batch && `batch ${fmtTime(batch.at)} (${plural(batch.threads, 'thread')}, ${plural(batch.calls, 'call')})`, `revision ${decision.itemRevision}`]
+    meta = [ruleOverride(decision), decision.model, decision.promptVersion?.replace('triage-', 'triage '), batch && `batch ${fmtTime(batch.at)} (${plural(batch.threads, 'thread')}, ${plural(batch.calls, 'call')})`, `revision ${decision.itemRevision}`]
       .filter(Boolean)
       .join(' · ');
   else meta = '';

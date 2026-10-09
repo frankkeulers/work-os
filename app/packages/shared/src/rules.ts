@@ -55,3 +55,21 @@ export function firstMatchingRule(item: Item, rules: Rule[], settings: Settings,
   if (!RULE_SOURCES.includes(item.source)) return undefined;
   return rules.find((r) => r.enabled && ruleSources(r).includes(item.source) && r.conditions.every((c) => matches(c, item, settings, me)));
 }
+
+/** The item with only the messages after Frank's last one: what can still ask something of him. */
+export function sinceMyLastMessage(item: Item, me: Me): Item {
+  const last = me.id ? item.messages.findLastIndex((m) => m.authorId === me.id) : -1;
+  return last < 0 ? item : { ...item, messages: item.messages.slice(last + 1) };
+}
+
+/**
+ * The floor a rule puts on the model's answer (FR-4.3), while it still holds: a rule matched by the
+ * messages after Frank's last one. Once he has the last word, a mention he answered no longer
+ * keeps the thread in Today against the model's None.
+ */
+export function ruleFloor(item: Item, rules: Rule[], settings: Settings, me: Me): { rule: Rule; min: 'today' | 'now' } | undefined {
+  const open = sinceMyLastMessage(item, me);
+  if (!open.messages.length) return undefined;
+  const rule = firstMatchingRule(open, rules, settings, me);
+  return rule?.outcome.type === 'model' && rule.outcome.min ? { rule, min: rule.outcome.min } : undefined;
+}

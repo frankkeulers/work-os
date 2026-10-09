@@ -117,14 +117,18 @@ export function ItemMarkers({ item }: { item: ItemSummary }) {
   if (item.newReplies && item.triageState === 'pending') m.push(<Marker key="nr" tone="accent">New replies · re-triage pending</Marker>);
   else if (item.newReplies) m.push(<Marker key="nr" tone="accent">New replies</Marker>);
   if (item.modelPaused) m.push(<Marker key="mp" tone="warn">Model triage paused (budget)</Marker>);
-  if (item.correctedFrom) m.push(<Marker key="cf" tone="neutral">Re-triaged after new replies · you had set {cap(item.correctedFrom)}</Marker>);
+  if (item.correctedFrom) m.push(<Marker key="cf" tone="neutral">Re-triaged after new replies · you had set {attentionName(item.correctedFrom)}</Marker>);
   else if (item.triage?.by === 'user') m.push(<Marker key="c" tone="neutral">Corrected by you</Marker>);
   const stale = Object.values(item.actions).some((a) => a?.stale);
   if (stale) m.push(<Marker key="st" tone="warn">Draft out of date</Marker>);
   return m.length ? <span className="flex flex-wrap gap-1">{m}</span> : null;
 }
 
-const cap = (a: Attention) => (a === 'none' ? 'None' : a === 'now' ? 'Now' : 'Today');
+export const attentionName = (a: Attention) => (a === 'none' ? 'None' : a === 'now' ? 'Now' : 'Today');
+
+/** When a rule's floor or To file changed the model's answer: what each said (FR-4.3). */
+export const ruleOverride = (d: { modelAttention?: Attention; ruleId?: string; attention: Attention }) =>
+  d.modelAttention && d.ruleId ? `model said ${attentionName(d.modelAttention)} · rule ${d.ruleId} set ${attentionName(d.attention)}` : undefined;
 
 function Marker({ tone, icon, children }: { tone: 'accent' | 'warn' | 'neutral'; icon?: 'clock'; children: ReactNode }) {
   const tones = { accent: 'bg-accent-wash text-accent-ink', warn: 'bg-amber-wash text-amber-fg', neutral: 'bg-bg text-ink-2' };

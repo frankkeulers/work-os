@@ -59,6 +59,13 @@ describe('polling and triage', () => {
     expect((await settle(server.getUsage())).today.triageCalls).toBe(usageBefore + 1);
   });
 
+  it('keeps an FYI mention in Today by the mention-me floor, and records that the model said None (FR-4.3)', async () => {
+    await settle(server.pollNow(), 4000);
+    server.advanceClock(10);
+    await run(4000);
+    expect((await settle(server.getItem(id('q1')))).decision).toMatchObject({ attention: 'today', ruleId: 'mention-me', modelAttention: 'none' });
+  });
+
   it('makes no Claude call when nothing is eligible (Story 5.1)', async () => {
     const calls = (await settle(server.getUsage())).today.triageCalls;
     server.simulatePoll('nothing');

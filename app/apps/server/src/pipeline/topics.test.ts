@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Item, Message } from '@work-os/shared';
+import type { Item, Message, Rule } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ClaudeAdapter, RunSpec } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -210,6 +210,7 @@ describe('triage per topic', () => {
   let items: ItemFiles;
   let seen: TriageThread[][];
   let reply: (threads: TriageThread[]) => TriageAnswer;
+  let rules: Rule[];
 
   const claude = {
     structured: async (spec: RunSpec) => {
@@ -248,7 +249,7 @@ describe('triage per topic', () => {
         items,
         claude,
         now: () => NOW,
-        config: () => ({ settings, rules: [] }),
+        config: () => ({ settings, rules }),
         me: () => ({ id: 'UFRANK' }),
         prompt: async () => ({ text: 'triage', version: 'v3' }),
         topicsPrompt: async () => ({ text: 'topics', version: 'v1' }),
@@ -265,6 +266,7 @@ describe('triage per topic', () => {
     items = new ItemFiles(join(dir, 'items'));
     seen = [];
     reply = (threads) => ({ decisions: threads.map((t) => decision(t.id, [{ need: 'approve', step: 'Approve main branch protection' }])) });
+    rules = [];
   });
   afterEach(async () => {
     await store.close();
@@ -302,5 +304,35 @@ describe('triage per topic', () => {
     await triage();
     expect(seen[1][0].done).toEqual(['Approve main branch protection']);
     expect((await items.read('slack', pid(300)))?.text?.next?.asks).toEqual([{ need: 'review', step: 'Review the timestamp_end change' }]);
+  });
+  describe('a rule’s floor (FR-4.3)', () => {
+    const mine = (it: Item): Item => ({ ...it, messages: it.messages.map((m) => ({ ...m, authorId: 'UFRANK' })) });
+    const answer = (attention: 'none' | 'today') => (threads: TriageThread[]) => ({
+      decisions: threads.map((t) => ({ ...decision(t.id, [{ need: 'reply', step: 'Reply' }]), attention, reason: 'Frank already acknowledged it' })),
+    });
+    beforeEach(() => {
+      rules = DEFAULT_RULES;
+    });
+
+    it('lifts once Frank has answered the mention in the topic: the model’s None stands', async () => {
+      await add(piece(300, ['<@UFRANK> PR 63: we will run a spike next sprint']));
+      await add(mine(piece(200, ['PR 63 sounds good, thanks'])));
+      reply = answer('none');
+      await triage();
+      const anchor = store.projection.items[pid(300)];
+      expect(anchor.parts).toEqual([pid(200)]);
+      expect(anchor.decision).toMatchObject({ attention: 'none' });
+      expect(anchor.decision?.ruleId).toBeUndefined();
+      expect(anchor.decision?.modelAttention).toBeUndefined();
+    });
+
+    it('holds for a mention after Frank’s last message, and keeps what the model said', async () => {
+      await add(piece(300, ['<@UFRANK> PR 63: we will run a spike next sprint']));
+      await add(mine(piece(200, ['PR 63 sounds good, thanks'])));
+      await add(piece(100, ['<@UFRANK> PR 63: one more question on the spike']));
+      reply = answer('none');
+      await triage();
+      expect(store.projection.items[pid(300)].decision).toMatchObject({ attention: 'today', ruleId: 'mention-me', modelAttention: 'none' });
+    });
   });
 });

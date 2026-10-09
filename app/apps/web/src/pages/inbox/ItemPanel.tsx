@@ -4,7 +4,7 @@ import type { ActionType, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
-import { CategoryTags, CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
+import { CategoryTags, CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../../components/item';
 import { Icon, MoreIcon } from '../../components/icons';
 import { useEarlierToggle } from '../../components/Earlier';
 import { MessageText, Recipients } from '../../components/SlackText';
@@ -437,8 +437,10 @@ function MetaLine({ view }: { view: ItemView }) {
     by = `rule ${d.ruleId}`;
     text = `Triaged ${fmtWhen(d.decidedAt, now)} by rule ${d.ruleId} · no model call · revision ${d.itemRevision}`;
   } else if (d) {
-    by = 'model';
-    text = [`Triaged ${fmtWhen(d.decidedAt, now)} by model`, d.model, d.promptVersion, batch && `batch of ${plural(batch.threads, 'thread')}`, `revision ${d.itemRevision}`].filter(Boolean).join(' · ');
+    // A rule that overrode the model shows on the closed row too: the reason is the model's (FR-4.3).
+    const override = ruleOverride(d);
+    by = override ?? 'model';
+    text = [`Triaged ${fmtWhen(d.decidedAt, now)} by model`, override, d.model, d.promptVersion, batch && `batch of ${plural(batch.threads, 'thread')}`, `revision ${d.itemRevision}`].filter(Boolean).join(' · ');
   }
   if (!text) return null;
   return (

@@ -43,7 +43,7 @@ source.
 | Now | Straight to Now. Claude is not called. |
 | Today | Straight to Today. Claude is not called. |
 | Drop | Ignored, and not stored. |
-| Ask the model | Claude decides; with a minimum, it can raise the level but never go below it. |
+| Ask the model | Claude decides; with a minimum, it can raise the level but never go below it. The minimum holds only while something after your last message matches the rule: once you have answered the mention, Claude's None stands. When a minimum changes Claude's answer, **Triage details** says so, e.g. "model said None · rule mention-me set Today". |
 | To file | Claude still reads it (for the summary and where to file it), but it needs nothing from you, so it lands in To file. |
 
 ## When you reply

@@ -430,10 +430,11 @@ export const SEED_THREADS: ThreadSeed[] = [
       { by: 'U16CS', minsAgo: 6, text: 'A pilot customer reports map tiles not loading in Meridia IQ since this morning.' },
       { by: 'U07MERIDIAPM', minsAgo: 4, text: 'Looking into it. @Frank FYI in case they escalate to you.' },
     ],
+    // The model says None; the mention-me floor keeps it in Today, and Triage details says so (FR-4.3).
     decision: {
-      attention: 'today',
+      attention: 'none',
       summary: 'FYI: a pilot customer can’t load map tiles in Meridia IQ and may escalate to you.',
-      reason: '@-mention, FYI with escalation risk.',
+      reason: 'An FYI with escalation risk; nothing is asked of Frank yet.',
     },
   },
   {

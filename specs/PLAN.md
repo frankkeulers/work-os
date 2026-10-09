@@ -460,7 +460,7 @@ As built (M2 step 15):
 - The budget (CL-6) is checked before every batch. Once it is spent, the queue waits and is rechecked every 15 minutes; rules still decide at ingest.
 - Each decision is for the revision the model saw. The decision's text goes into the item file under the item's lock, and only if the file is still that revision; then `triage.decided` is logged. A thread that moved on during the call is triaged again at its new revision.
 - An answer that fails zod twice logs `triage.failed` for its batch (CL-7). An item missing from the answer, or whose file is gone, fails on its own. "Try again" (`POST /api/items/:id/retry-triage`) triages that item at once, whatever its quiet window. It answers 429 when the budget is spent, and 503 when Claude can't be called.
-- A model rule's `min` is a floor on the model's answer. A thread with observations about people never gets a Confluence suggestion.
+- A model rule's `min` is a floor on the model's answer. It is checked against the topic's messages after Frank's last one, so once he has answered, the model's answer stands; with nothing after his last message there is no floor. When a floor or a To file rule changes the model's answer, the decision keeps it as `modelAttention`, and Triage details shows both. A thread with observations about people never gets a Confluence suggestion.
 - The poll now writes each item under the same per-item lock. A reply whose file was written but never logged (a crash in between) is recovered on the next poll.
 - Tests and `--fakes` runs use a keyword-based fake model and never call Claude.
 

@@ -121,15 +121,17 @@ export function buildDecision(
   const confluence = script.confluence && !script.people ? { suggested: true, targetHint: script.confluence } : { suggested: false };
   // A To file rule: attention None, and the vault when the model suggested no destination.
   const vault = script.vault ? { suggested: true, targetHint: script.vault } : { suggested: !!by.file && !confluence.suggested };
+  const attention = by.file ? 'none' : atLeast(script.attention, by.min);
   return {
     ...base,
-    attention: by.file ? 'none' : atLeast(script.attention, by.min),
+    attention,
     confluence,
     vault,
     reason: script.reason,
     next: script.next,
     decidedBy: 'model',
     ruleId: by.ruleId,
+    ...(attention !== script.attention && { modelAttention: script.attention }),
     model: by.model,
     promptVersion: 'triage v3',
     batchId: by.batchId,

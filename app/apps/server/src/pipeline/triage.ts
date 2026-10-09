@@ -1,4 +1,4 @@
-import { Attention, NextStep, askId, londonAt, londonParts, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type SourceId, type TriageDecision } from '@work-os/shared';
+import { Attention, NextStep, askId, londonAt, londonParts, ruleFloor, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type SourceId, type TriageDecision } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -131,7 +131,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
   // What the model sees of each thread. An item whose file is gone can't be triaged: it fails
   // once, visibly, instead of being retried on every tick.
   // A topic is triaged through its anchor, over all its pieces.
-  const threads: { item: Item; thread: TriageThread; topicVersion: number; asksDone: string[] }[] = [];
+  const threads: { item: Item; topic: Item; thread: TriageThread; topicVersion: number; asksDone: string[] }[] = [];
   const missing: EventDraft[] = [];
   for (const it of due) {
     const stored = await d.items.read(it.source, it.id);
@@ -153,7 +153,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
     const asksDone = it.asksDone ?? [];
     const done = (stored.text?.next?.asks ?? []).filter((a) => asksDone.includes(askId(a.step))).map((a) => a.step);
     if (done.length) topic.view.done = done;
-    threads.push({ item: stored.item, thread: topic.view, topicVersion: it.topicVersion, asksDone });
+    threads.push({ item: stored.item, topic: topic.item, thread: topic.view, topicVersion: it.topicVersion, asksDone });
   }
   if (missing.length) {
     await d.store.append(...missing);
@@ -202,17 +202,21 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
 
     const byId = new Map(answer.decisions.map((a) => [a.id, a]));
     const events: EventDraft[] = [];
-    for (const { item, topicVersion, asksDone } of batch) {
+    for (const { item, topic, topicVersion, asksDone } of batch) {
       const a = byId.get(item.id);
       if (!a) {
         events.push({ type: 'triage.failed', itemId: item.id, data: { revision: item.revision, attempts: 1, reason: 'missing from the answer' } });
         run.failed++;
         continue;
       }
-      // A rule that sends to the model may set a floor (FR-4.3), or send the thread to To file.
-      const verdict = ruleVerdict(item, rules, settings, d.me(item.source));
-      const floor = verdict.kind === 'model' ? verdict.min : undefined;
-      const toFile = verdict.kind === 'model' && verdict.file;
+      // A rule that sends to the model may send the thread to To file, or set a floor (FR-4.3). The
+      // floor holds only while what came after Frank's last message in the topic still matches it.
+      const me = d.me(item.source);
+      const verdict = ruleVerdict(item, rules, settings, me);
+      const toFile = verdict.kind === 'model' && verdict.file ? verdict.rule : undefined;
+      const floor = verdict.kind === 'model' && !toFile ? ruleFloor(topic, rules, settings, me) : undefined;
+      const attention = toFile ? 'none' : atLeast(a.attention, floor?.min);
+      const ruleId = (toFile ?? floor?.rule)?.id;
       // Never Confluence for observations about people (NF-2, FR-10.1).
       const confluence = a.containsPeopleObservations ? { suggested: false } : a.confluence;
       // To file needs a destination: the model's, or the vault when it suggested neither.
@@ -223,7 +227,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         itemId: item.id,
         itemRevision: item.revision,
         topicVersion,
-        attention: toFile ? 'none' : atLeast(a.attention, floor),
+        attention,
         confluence,
         vault,
         containsPeopleObservations: a.containsPeopleObservations,
@@ -231,7 +235,8 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         reason: a.reason,
         ...(next && { next }),
         decidedBy: 'model',
-        ...((floor || toFile) && verdict.kind === 'model' && verdict.rule && { ruleId: verdict.rule.id }),
+        ...(ruleId && { ruleId }),
+        ...(attention !== a.attention && { modelAttention: a.attention }),
         model: settings.models.triage,
         promptVersion: prompt.version,
         batchId,

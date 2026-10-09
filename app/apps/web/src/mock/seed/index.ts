@@ -3,6 +3,7 @@ import {
   applyDecision,
   failTriage,
   firstMatchingRule,
+  ruleFloor,
   isWorkHours,
   markDone,
   markNotified,
@@ -149,7 +150,7 @@ export function buildState(preset: Preset = 'default'): MockState {
         kind: 'model',
         batchId,
         ruleId: rule?.id,
-        min: rule?.outcome.type === 'model' ? rule.outcome.min : undefined,
+        min: rule?.outcome.type === 'model' ? ruleFloor(rec.item, rules, settings, ME)?.min : undefined,
         model: 'haiku-5.5',
       });
     }

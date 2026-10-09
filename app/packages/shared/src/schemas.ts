@@ -114,6 +114,7 @@ export const TriageDecision = z.object({
   next: NextStep.optional(), // amendment
   decidedBy: z.enum(['rule', 'model']),
   ruleId: z.string().optional(),
+  modelAttention: Attention.optional(), // the model's own answer, when a rule's floor or To file changed it
   model: z.string().optional(),
   promptVersion: z.string().optional(),
   batchId: z.string().optional(),

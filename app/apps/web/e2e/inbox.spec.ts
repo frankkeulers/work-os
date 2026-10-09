@@ -521,6 +521,21 @@ test('a row Frank brings back himself lands at once, even under the open panel (
   await expect(page.locator('[data-new-pill]')).toHaveCount(0);
 });
 
+test('triage details say when a rule’s floor overrode the model’s None (FR-4.3)', async ({ page }) => {
+  // The FYI mention waits for the quiet window, then the model says None and mention-me keeps it in Today.
+  await openControls(page);
+  await page.getByRole('button', { name: '+10 min', exact: true }).click();
+  await expect(page.getByTestId('poll-line')).toContainText(/triaged/, { timeout: 15_000 });
+  await closeDrawer(page);
+  await rows(page, 'Today').filter({ hasText: 'map tiles' }).click();
+  const details = itemPanel(page).getByTestId('triage-details');
+  const toggle = details.getByRole('button', { name: 'Triage details · model said None · rule mention-me set Today' });
+  await toggle.click();
+  await expect(details).toContainText(/Triaged .* by model · model said None · rule mention-me set Today · /);
+  await details.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-triage-floor-light.png'), animations: 'disabled' });
+});
+
 test('triage details sit behind a disclosure that stays as Frank left it (CK-1.6)', async ({ page }) => {
   await rows(page, 'Today').filter({ hasText: 'Graduation request' }).click();
   const details = itemPanel(page).getByTestId('triage-details');
