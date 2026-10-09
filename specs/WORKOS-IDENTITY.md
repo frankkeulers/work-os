@@ -1,7 +1,7 @@
 # Work OS identity: implementation spec
 
 Owner: Frank Keulers
-Status: Ready to build, v1.0, 9 Oct 2026
+Status: Built, v1.1, 9 Oct 2026 (v1.1: the favicon is a self-contained badge, §3)
 Implements: the Work OS mark (the status tile), the favicon, the status-light states and motion. The name doesn't change.
 Design source: `specs/brand-workos/` (see its README). Live canvas: https://claude.ai/artifact/BzeJ17Aw7sp79xzeD2aLEP, "Work OS" page.
 
@@ -53,6 +53,12 @@ M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z
 
 LIGHT: circle cx=44 cy=20 r=4
   at 16px or less, in the attention and filed states: r=6.5 (it fills the socket, so the colour reads)
+
+FAVICON (viewBox 6 6 52 52; a self-contained badge, no prefers-color-scheme variant, because Chrome doesn't
+  reliably apply one to tab icons and the outline mark vanished on a dark tab strip):
+  tile = the TILE outline only, fill #14171C;
+  socket circle cx=44 cy=20 r=6.5 and lines rect(16,34,22×4,rx 2), rect(16,43,15×4,rx 2) in #F3F4F6;
+  light circle cx=44 cy=20: quiet r=4 fill #14171C (a light ring); attention r=6.5 fill #F97316
 
 APP ICON (64 grid): rect 64×64 rx=14.4 fill #14171C;
   socket circle cx=48 cy=16 r=8.67 and lines rect(10.67,34.67,26.67×5.33,rx 2.67), rect(10.67,46.67,17.33×5.33,rx 2.67) in #F3F4F6;
@@ -161,7 +167,7 @@ Build them in order, and don't start one until the previous one passes.
 
 > As Frank, I want the Work OS mark in the browser tab and available as a component, so that the app has its own icon.
 
-- **Given** the built app in light or dark mode, **then** the tab shows the status tile, and the dark variant appears under `prefers-color-scheme: dark`.
+- **Given** the built app in light or dark mode, **then** the tab shows the status tile badge, readable on light and dark tab strips.
 - **Given** `<BrandMark state="attention" size={64} />`, **then** the light is `--mark-attention`, the socket and text lines are transparent, and the element is `aria-hidden`.
 - **Given** `size={16}` and `state="attention"`, **then** the light fills the socket (r=6.5) and the viewBox is `6 6 52 52`.
 - **Unit tests:** state → fill mapping; viewBox by size; `title` gives `role="img"`; `playKey` adds and then removes the animation class; `checking` stops at the end of a cycle.

@@ -7,7 +7,7 @@ Status: **A (the status tile) chosen**, 9 Oct 2026. The implementation spec is [
 | File | Use |
 |---|---|
 | `marks/workos-mark-{quiet,attention,filed}[-dark].svg` | The final mark in each state. The geometry source of truth. |
-| `marks/favicon.svg`, `marks/favicon-attention.svg` | Browser tab. A tight crop, with a dark variant through `prefers-color-scheme`. In the attention version, the orange fills the socket so it reads at 16px. |
+| `marks/favicon.svg`, `marks/favicon-attention.svg` | Browser tab. A tight crop drawn as a self-contained badge: an ink tile with the socket and lines filled light, like the app icon, so it reads on light and dark tab strips without a `prefers-color-scheme` variant (Chrome doesn't reliably apply one to tab icons). Quiet shows a light ring with an ink centre; in the attention version the orange fills the socket so it reads at 16px. |
 | `marks/app-icon.svg` | An ink squircle with the socket and text lines in paper and an orange light. |
 | `png/` | Favicons at 16, 32 and 48 (plus attention at 32), the Apple touch icon at 180, the app icon at 512 and 1024, and the mark at 1024. |
 | `motion/motion-preview.html` | Reference for the three animations, with dark-theme and reduced-motion toggles. |

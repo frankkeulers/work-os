@@ -62,13 +62,12 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 
 - **The mark:** the status tile, a rounded card with two text lines and a status light in the top-right socket. It's drawn in `currentColor`; the socket and the lines are holes (`fill-rule="evenodd"`), so it works on any background. Only the light uses brand colour. The name stays "Work OS". Geometry, components and motion are in `components/brand/` and `styles/brand.css`; the design source is `specs/brand-workos/`.
 - **The light:** quiet matches the tile (nothing needs you); attention is `--mark-attention`, orange, while a live item is in Now; filed is `--mark-filed`, teal, briefly after a vault or Confluence write, dry-run included. No other badges go on the mark.
-- **Where it shows:** the sidebar header at 26px (beside the name, or alone as the rail's Expand button), the browser tab (`favicon.svg` or `favicon-attention.svg`; filed never shows there), the OS notification tile at 22px in attention, Inbox zero at 88px and the first-run card at 72px.
+- **Where it shows:** the sidebar header at 26px (beside the name, or alone as the rail's Expand button), the browser tab (`favicon.svg` or `favicon-attention.svg`, a self-contained badge with the socket and lines filled light so it reads on any tab strip; filed never shows there), the OS notification tile at 22px in attention, Inbox zero at 88px and the first-run card at 72px.
 - **Motion:** checking sources (4.8s loop while a poll runs, on the empty states only, at 48px and up), needs you (2.95s, once, when the Now count rises; never on first load) and filed (2.4s, once). They're CSS keyframes animating only `transform`, `opacity` and `fill`, one at a time per mark. Checking finishes its cycle before it stops. Below 32px the tile doesn't tilt and the light doesn't pop: only its colour changes, with one ring.
 - **Reduced motion:** nothing moves. Attention shows orange at once; filed shows teal for 1.5s, then the resting colour.
 - **Where this differs from the spec:**
   - The viewBox depends on size alone: the tight crop `6 6 52 52` at 32px and below, `-4 -8 72 72` above. Swapping it when an animation starts would make the tile jump.
   - The play-once animations drop the motion preview's idle lead-in, so the pop starts at once (needs you 3.6s becomes 2.95s, filed 4s becomes 2.4s).
-  - The favicon is a self-contained badge (an ink tile with the socket and lines filled light, like the app icon), not the outline mark with a `prefers-color-scheme` variant. Chrome doesn't reliably apply that media query to tab icons, and on a dark tab strip the light-mode outline disappeared.
   - Filed is detected by comparing each inbox load with the one before, not in ActionPanel, so a batch that moves on before its write lands still plays it. The item page has no sidebar, so a filing made there doesn't play.
 
 ## Settings (applied)
