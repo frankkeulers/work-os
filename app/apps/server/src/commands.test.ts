@@ -440,6 +440,20 @@ describe('topics (amendment)', () => {
     expect(claude.calls.at(-1)?.prompt).toContain('<checks>');
   });
 
+  it('puts Frank’s post that @-mentions who asked into their topic, and closes it (the Fleet V2 case)', async () => {
+    slack.users.set('U04SAGAR', 'Sagar Patil');
+    slack.post('C01PROD', { ts: A, user: 'U04SAGAR', text: '<@UFRANK> create-fleet allows 1000 vessels in the spec but 100 in the description. Which is right?' });
+    await settleAfter(12);
+    expect((await inbox()).items.find((i) => i.id === idOf(A))).toMatchObject({ lane: 'today', triageState: 'triaged' });
+
+    slack.post('C01PROD', { ts: isoToTs(START + 13 * MIN), user: 'UFRANK', text: '<@U04SAGAR> I’ve updated the docs' });
+    await settleAfter(12);
+    const routing = claude.calls.filter((c) => c.prompt.includes('<conversations>')).at(-1)!;
+    expect(routing.prompt).toContain('@Sagar Patil I’ve updated the docs'); // a name, not <@U04SAGAR>
+    expect(routing.prompt).toContain('@Frank create-fleet');
+    expect((await inbox()).items.find((i) => i.id === idOf(A))).toMatchObject({ pieces: 2, lane: 'done', doneBy: 'reply' });
+  });
+
   it('regroups topics that routing left apart', async () => {
     slack.post('C01PROD', { ts: A, user: 'U02DANA', text: 'PR 63 adds GOVERNANCE-RULES.md for the contract checks' });
     await settleAfter(12);

@@ -7,7 +7,7 @@ import type { Logger } from '../log';
 import { DEADLINES } from '../net/http';
 import type { ItemFiles, StoredItem } from '../store/items';
 import type { Store } from '../store/store';
-import { estimateTokens, packBatches, threadForTriage, threadTokens, type TopicView, type TriageMessage, type TriageThread } from './truncate';
+import { estimateTokens, packBatches, threadForTriage, threadTokens, withNames, type TopicView, type TriageMessage, type TriageThread } from './truncate';
 
 // Topics (amendment). Ingestion cuts a conversation into pieces (a Slack thread, a DM window, a
 // channel post); routing puts each new piece in the open topic it continues, or starts a new one,
@@ -177,11 +177,15 @@ export function resolveAssignments(pieceIds: string[], candidateIds: string[], a
 
 function candidateView(it: ItemState, item: Item | undefined, summary: string | undefined, me: Me): Candidate {
   const names = new Map(item?.participants.map((x) => [x.id, x.name]) ?? []);
-  const recent = (item?.messages ?? []).slice(-CANDIDATE_RECENT_MESSAGES).map((m) => ({
-    author: me.id && m.authorId === me.id ? 'me' : (names.get(m.authorId) ?? m.authorId),
-    at: m.ts,
-    text: m.text.length > RECENT_MAX_CHARS ? `${m.text.slice(0, RECENT_MAX_CHARS - 1)}…` : m.text,
-  }));
+  const mentioned = new Map([...(item?.mentioned ?? []).map((x): [string, string] => [x.id, x.name]), ...names]);
+  const recent = (item?.messages ?? []).slice(-CANDIDATE_RECENT_MESSAGES).map((m) => {
+    const text = withNames(m.text, me, (id) => mentioned.get(id));
+    return {
+      author: me.id && m.authorId === me.id ? 'me' : (names.get(m.authorId) ?? m.authorId),
+      at: m.ts,
+      text: text.length > RECENT_MAX_CHARS ? `${text.slice(0, RECENT_MAX_CHARS - 1)}…` : text,
+    };
+  });
   return { id: it.id, summary: summary || it.title, ...(it.decision?.next && { need: it.decision.next.need }), lastActivityAt: it.lastActivityAt, recent };
 }
 
@@ -291,6 +295,8 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
       d.logger?.warn({ conversations: batch.map((x) => x.conv.conversation) }, 'Routing output did not match the schema; each piece is its own topic');
       answer = { assignments: [] };
     }
+    // IDs only, so a piece left on its own can be traced to the answer that left it.
+    d.logger?.info({ assignments: answer.assignments }, 'Routing answer');
 
     const events: EventDraft[] = [];
     for (const { pieces, candidates, mine } of batch) {

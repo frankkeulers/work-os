@@ -40,7 +40,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Puts each new thread or stretch of chat in the open topic it continues, or starts a new one.',
     usedBy: 'Topic routing and Regroup',
     defaultText: DEFAULT_TOPICS_PROMPT,
-    previousDefaults: [],
+    previousDefaults: ['ea33c8dd3c0dd6259817d98f1dad8142915008c1'], // topics v1
   },
   {
     id: 'settle',

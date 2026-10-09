@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { triageQueue } from './eligibility';
 import { meFrom, ruleVerdict } from './rules';
-import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, EMAIL_MAX_CHARS, INVITEES_MAX, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens } from './truncate';
+import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, EMAIL_MAX_CHARS, INVITEES_MAX, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens, withNames } from './truncate';
 
 const NOW = new Date('2026-10-06T09:00:00.000Z');
 const ago = (mins: number) => new Date(NOW.getTime() - mins * 60_000).toISOString();
@@ -76,6 +76,26 @@ describe('rule verdicts (FR-4.2, FR-4.3)', () => {
   });
 });
 
+describe('mentions as names', () => {
+  const me = { id: 'UFRANK' };
+  it('shows Slack mentions by name, Frank’s as @Frank, and leaves an unknown ID as it is', () => {
+    const names = new Map([['U04SAGAR', 'Sagar Patil']]);
+    expect(withNames('<@U04SAGAR> I’ve updated the docs, <@UFRANK> fyi', me, (id) => names.get(id))).toBe('@Sagar Patil I’ve updated the docs, @Frank fyi');
+    expect(withNames('cc <@U09NOBODY> and <@U08LABEL|ana>', me, () => undefined)).toBe('cc <@U09NOBODY> and @ana');
+  });
+
+  it('names mentioned people in what triage sees, and still keeps a message that mentions Frank', () => {
+    const t = threadForTriage(
+      thread([msg(1, '<@UFRANK> which limit is right?'), ...Array.from({ length: 8 }, (_, i) => msg(i + 2)), msg(10, 'ask <@U04SAGAR>')], {
+        mentioned: [{ id: 'U04SAGAR', name: 'Sagar Patil' }],
+      }),
+      me,
+      2,
+    );
+    expect(t.messages.map((m) => m.text)).toEqual(['@Frank which limit is right?', 'message 9', 'ask @Sagar Patil']);
+  });
+});
+
 describe('truncation and batching (§5.3, CL-4)', () => {
   const me = meFrom({ id: 'UFRANK' });
 
@@ -84,7 +104,7 @@ describe('truncation and batching (§5.3, CL-4)', () => {
     msgs[6] = msg(7, 'Over to <@UFRANK> for the sign-off');
     msgs[18] = msg(19, 'Thanks', 'UFRANK');
     const t = threadForTriage(thread(msgs, { messageCount: 25 }), me, 3);
-    expect(t.messages.map((m) => m.text)).toEqual(['message 1', 'Over to <@UFRANK> for the sign-off', 'message 18', 'Thanks', 'message 20']);
+    expect(t.messages.map((m) => m.text)).toEqual(['message 1', 'Over to @Frank for the sign-off', 'message 18', 'Thanks', 'message 20']);
     expect(t.messages.map((m) => m.author)).toEqual(['Dana Lee', 'Dana Lee', 'Dana Lee', 'me', 'Dana Lee']);
     expect(t.omitted).toBe(20); // 25 in the thread, 5 sent
   });

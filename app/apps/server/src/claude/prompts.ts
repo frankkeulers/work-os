@@ -137,10 +137,10 @@ Answer with JSON only, no prose, in exactly this shape, one entry per thread, us
 {"decisions":[{"id":"...","attention":"now|today|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"approve","step":"...","why":"...","dueAt":"...","dueLabel":"...","asks":[{"need":"approve","step":"...","dueAt":"..."},{"need":"review","step":"..."}]}}]}
 `;
 
-export const DEFAULT_TOPICS_PROMPT = `<!-- prompt: topics v1 -->
+export const DEFAULT_TOPICS_PROMPT = `<!-- prompt: topics v2 -->
 You sort Slack conversations into topics for Frank, Product Innovation Lead at Pole Star Global
 (maritime data, vessel tracking and compliance products). Messages written by Frank have the
-author "me".
+author "me". An @-mention shows the person's name, and Frank's as "@Frank".
 
 Slack cuts a conversation into pieces: each reply thread is a piece, and a DM or group DM is cut
 into a new piece after 30 minutes of quiet. Frank wants one inbox entry per topic, not per piece,
@@ -161,6 +161,12 @@ pre-publish branch workflow" or "the PR 63 contract checks", not just "API work"
 people talking. Follow-ups, answers, status updates and new asks on that subject belong to it,
 even hours later. A different PR, customer, feature or decision is a different topic, even in
 the same chat and on the same day. Small talk and greetings go with the subject they lead into.
+
+Frank often answers outside the thread he was asked in: a new channel post or DM message that
+@-mentions the person who asked, or reports done what an open topic asked of him ("I've updated
+the docs", "sounds good, thanks"). Such a piece belongs to that open topic. When one open topic
+was started by, or last written to by, the person Frank mentions, and the piece fits its subject,
+answer that topic.
 
 When unsure, answer "new": Frank can merge two entries quickly, but an ask hidden inside the
 wrong topic can be missed.

@@ -50,6 +50,20 @@ export const BEFORE_MAX_CHARS = 500;
 
 const cut = (text: string, max = MESSAGE_MAX_CHARS) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
+const MENTION = /<@([UW][A-Z0-9]+)(?:\|([^>]*))?>/g;
+
+/**
+ * Slack's `<@id>` mentions as "@Name", Frank's as "@Frank", so the model can tie a mention to the
+ * author of another message: a reply that names who asked belongs with what they asked. An ID
+ * with no known name stays as it is.
+ */
+export function withNames(text: string, me: Me, name: (id: string) => string | undefined): string {
+  return text.replace(MENTION, (raw, id: string, label?: string) => {
+    const n = me.id && id === me.id ? 'Frank' : (name(id) ?? label);
+    return n ? `@${n}` : raw;
+  });
+}
+
 /** A topic's extras (topics.ts): messages kept whatever their place, and those from a Slack thread. */
 export interface TopicView {
   keep: Set<string>;
@@ -67,6 +81,7 @@ export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: 
   const inThread = topic?.inThread;
   const names = new Map(item.participants.map((p) => [p.id, p.name]));
   const who = (id: string) => (me.id && id === me.id ? 'me' : (names.get(id) ?? id));
+  const mentioned = new Map([...(item.mentioned ?? []).map((p): [string, string] => [p.id, p.name]), ...names]);
   // Thread replies are marked only in a topic that also has chat outside the thread.
   const mixed = !!inThread?.size && inThread.size < msgs.length;
   const messages = [...keep]
@@ -75,7 +90,7 @@ export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: 
     .map((m): TriageMessage => ({
       author: who(m.authorId),
       at: m.ts,
-      text: cut(m.text, item.kind === 'meeting' ? MEETING_MAX_CHARS : item.kind === 'email' ? EMAIL_MAX_CHARS : MESSAGE_MAX_CHARS),
+      text: cut(withNames(m.text, me, (id) => mentioned.get(id)), item.kind === 'meeting' ? MEETING_MAX_CHARS : item.kind === 'email' ? EMAIL_MAX_CHARS : MESSAGE_MAX_CHARS),
       ...(mixed && inThread.has(m.id) && { thread: true as const }),
       ...(m.to && { to: m.to.map(who) }),
       ...(m.cc?.length && { cc: m.cc.map(who) }),
@@ -101,7 +116,7 @@ export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: 
   if (prior.length) {
     const known = new Map([...names, ...(earlier?.people ?? []).map((p): [string, string] => [p.id, p.name])]);
     const short = (t: string) => (t.length > BEFORE_MAX_CHARS ? `${t.slice(0, BEFORE_MAX_CHARS - 1)}…` : t);
-    thread.before = prior.map((m) => ({ author: me.id && m.authorId === me.id ? 'me' : (known.get(m.authorId) ?? m.authorId), at: m.ts, text: short(m.text) }));
+    thread.before = prior.map((m) => ({ author: me.id && m.authorId === me.id ? 'me' : (known.get(m.authorId) ?? m.authorId), at: m.ts, text: short(withNames(m.text, me, (id) => known.get(id) ?? mentioned.get(id))) }));
   }
   return thread;
 }

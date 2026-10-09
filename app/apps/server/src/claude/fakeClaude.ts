@@ -6,7 +6,8 @@ import type { QueryFn } from './adapter';
 //   today  a question, or check / review / decision
 //   none   anything else
 // Confluence for launch, licensing and pricing talk; the vault for release notes and ideas.
-// Routing joins pieces that name the same PR or ticket (topicsFor).
+// Routing joins pieces that name the same PR or ticket, and Frank's own piece to the topic of the
+// person he @-mentions (topicsFor).
 // A vault draft request gets a new note under Inbox/, named after the thread. The Confluence page
 // picker takes the first page in the catalogue that isn't a hub, and the draft goes to that page's
 // first section; the people check flags words about how someone works.
@@ -50,21 +51,31 @@ export function answerFor(threads: Thread[]) {
   };
 }
 
-type Conversation = { topics: { id: string; summary: string; recent: { text: string }[] }[]; pieces: Thread[] };
+type Conversation = { topics: { id: string; summary: string; recent: { author: string; text: string }[] }[]; pieces: Thread[] };
 
 // A PR number or a ticket key: the fake's idea of a subject.
 const SUBJECT = /\b(PR[ -]?\d+|[A-Z][A-Z0-9]+-\d+)\b/gi;
 const subjects = (text: string) => new Set([...text.matchAll(SUBJECT)].map((m) => m[1].toUpperCase().replace(/[ -]/, '')));
 
-/** Routing: a piece joins the open topic or earlier piece that names the same PR or ticket, else "new". */
+/**
+ * Routing: a piece joins the open topic or earlier piece that names the same PR or ticket; a piece
+ * of Frank's own joins the one written by the person he @-mentions; else "new".
+ */
 export function topicsFor(convs: Conversation[]) {
   return {
     assignments: convs.flatMap((c) => {
-      const seen: { id: string; subjects: Set<string> }[] = c.topics.map((t) => ({ id: t.id, subjects: subjects([t.summary, ...t.recent.map((m) => m.text)].join(' ')) }));
+      const seen: { id: string; subjects: Set<string>; authors: Set<string> }[] = c.topics.map((t) => ({
+        id: t.id,
+        subjects: subjects([t.summary, ...t.recent.map((m) => m.text)].join(' ')),
+        authors: new Set(t.recent.map((m) => m.author)),
+      }));
       return c.pieces.map((p) => {
-        const mine = subjects(p.messages.map((m) => m.text).join(' '));
-        const match = seen.find((x) => [...mine].some((k) => x.subjects.has(k)));
-        seen.push({ id: p.id, subjects: mine });
+        const text = p.messages.map((m) => m.text).join(' ');
+        const mine = subjects(text);
+        const fromMe = p.messages.every((m) => m.author === 'me');
+        const named = (x: { authors: Set<string> }) => fromMe && [...x.authors].some((a) => a !== 'me' && text.includes(`@${a}`));
+        const match = seen.find((x) => [...mine].some((k) => x.subjects.has(k))) ?? seen.find(named);
+        seen.push({ id: p.id, subjects: mine, authors: new Set(p.messages.map((m) => m.author)) });
         return { id: p.id, topic: match?.id ?? 'new' };
       });
     }),

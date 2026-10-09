@@ -186,6 +186,8 @@ reads **Filing 1 of 4**.
 Slack splits one conversation into pieces: each reply thread is a piece, and a DM or group DM
 starts a new piece after 30 minutes of quiet. Work OS asks Claude to join pieces on the same
 subject into a **topic**, so a DM about the MVI launch over three days is one entry, not five.
+A post of your own that @-mentions someone who asked you something, such as "@Sagar I've updated
+the docs" in the channel, joins that person's open topic, so your answer counts as a reply to it.
 
 - **Asks in this topic** lists everything asked of you across its pieces. Tick one off when done.
 - **Pieces** lists what the topic gathers. If a piece does not belong, choose **Split out**: it
