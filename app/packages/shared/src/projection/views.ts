@@ -1,4 +1,4 @@
-import type { BudgetState, ItemSummary } from '../api';
+import type { BudgetState, ClosedByReply, ItemSummary } from '../api';
 import { effectiveTriage, laneFor, viewLane } from '../lanes';
 import type { ActionType, NextStep, Settings, UsageRecord } from '../schemas';
 import { askId } from './topics';
@@ -46,6 +46,7 @@ export interface DecisionText {
   reason?: string;
   next?: NextStep;
   firstMessage?: string; // shown, shortened, until the item has a summary
+  settleWhy?: string; // the last settle check's reason an ask is still open (CK-2.3)
 }
 
 export interface SummaryContext {
@@ -101,7 +102,19 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
     doneAt: s.doneAt,
     pieces: 1 + (s.parts?.length ?? 0),
     asksDone: s.asksDone ?? [],
+    ...(s.doneBy && s.status === 'done' && { doneBy: s.doneBy }),
+    ...(s.doneSource && { doneSource: s.doneSource }),
+    ...(s.doneReason && { doneReason: s.doneReason }),
+    ...(s.settlePending && { settling: true }),
+    ...(s.replyCheck && { replyCheck: { at: s.replyCheck.at, allSettled: s.replyCheck.allSettled, settled: s.replyCheck.settled, ...(ctx.text.settleWhy && { why: ctx.text.settleWhy }) } }),
   };
+}
+
+/** Items Frank's replies closed today, London time, for Needs you's footer (CK-2.5). */
+export function closedByReply(items: Iterable<Pick<ItemSummary, 'doneBy' | 'doneAt' | 'title'>>, now: Date | string): ClosedByReply {
+  const today = londonParts(now).dateKey;
+  const closed = [...items].filter((i) => i.doneBy === 'reply' && i.doneAt && londonParts(i.doneAt).dateKey === today).sort((a, b) => b.doneAt!.localeCompare(a.doneAt!));
+  return { today: closed.length, ...(closed[0] && { latestAt: closed[0].doneAt, latestTitle: closed[0].title }) };
 }
 
 /** Today's budget use (FR-5.5). `force` lets the mock's Scenarios drawer hit a budget on demand. */
@@ -117,7 +130,7 @@ export function budgetsOf(
   let cost = 0;
   for (const u of usage) {
     if (londonParts(u.at).dateKey !== today) continue;
-    if (u.purpose === 'triage' || u.purpose === 'routing') triage += 1; // routing is part of triage
+    if (u.purpose === 'triage' || u.purpose === 'routing' || u.purpose === 'settle') triage += 1; // routing and settle checks count as triage
     else if (u.purpose === 'draft_vault' || u.purpose === 'draft_confluence') drafts += 1;
     cost += u.costEquivalent;
   }

@@ -1,6 +1,6 @@
-import type { LoggedDecision } from '../events';
+import type { EventData, LoggedDecision } from '../events';
 import { effectiveTriage } from '../lanes';
-import type { TriageCorrection } from '../schemas';
+import { SETTLE_MAX_ATTEMPTS, type TriageCorrection } from '../schemas';
 import type { ItemFlags } from './state';
 
 // Item state transitions. Each one changes the flags in place and does no I/O, so the server's
@@ -17,11 +17,40 @@ export const newItemFlags = (): ItemFlags => ({
   topicVersion: 0,
 });
 
-/** New messages on a known item. Messages from Frank alone don't need a re-triage (§5.3). */
-export function receiveMessages(s: ItemFlags, fromMeOnly: boolean) {
-  if (fromMeOnly) return;
+/**
+ * New messages on a known item, the latest at `at`. Messages from Frank alone don't need a
+ * re-triage (§5.3); on an open item that needs him they wait for a settle check (cockpit CK-2.1).
+ * Someone else writing after him puts the item back to triage, which reads his reply too.
+ */
+export function receiveMessages(s: ItemFlags, fromMeOnly: boolean, at?: string) {
+  if (fromMeOnly) {
+    if (at && awaitsReply(s)) s.settlePending = at;
+    return;
+  }
   s.triageState = 'pending';
   s.newReplies = true;
+  s.settlePending = undefined;
+  s.settleFailures = undefined;
+  s.replyCheck = undefined;
+}
+
+/** An open, triaged item in Needs you or This week: one Frank's reply can settle (CK-2.1). */
+export function awaitsReply(s: ItemFlags): boolean {
+  const a = effectiveTriage(s.decision, s.correction)?.attention;
+  return s.status === 'open' && s.triageState === 'triaged' && (a === 'now' || a === 'today');
+}
+
+/** A settle check ran: it saw Frank's replies up to `through` (CK-2.3). */
+export function settleChecked(s: ItemFlags, at: string, d: EventData<'settle.checked'>) {
+  if (s.settlePending && d.through >= s.settlePending) s.settlePending = undefined;
+  s.settleFailures = undefined;
+  s.replyCheck = { at, revision: d.revision, allSettled: d.allSettled, settled: d.settled.length };
+}
+
+/** A settle check failed; after the last attempt the item stays as it is (CK-2.3). */
+export function settleFailed(s: ItemFlags, attempts: number) {
+  s.settleFailures = attempts;
+  if (attempts >= SETTLE_MAX_ATTEMPTS) s.settlePending = undefined;
 }
 
 export function applyDecision<D extends LoggedDecision>(s: ItemFlags<D>, d: D) {
@@ -60,18 +89,27 @@ export function correct(s: ItemFlags, c: TriageCorrection) {
   if (s.triageState === 'failed') s.triageState = 'triaged';
 }
 
-export function markDone(s: ItemFlags, at: string) {
+/** Closes an item; `by` is the item.done event's data: none when Frank pressed Done. */
+export function markDone(s: ItemFlags, at: string, by?: EventData<'item.done'>) {
   s.status = 'done';
   s.doneAt = at;
   s.snoozedUntil = undefined;
   s.newReplies = false;
   s.backFromSnooze = false;
+  s.settlePending = undefined;
+  s.doneBy = by?.by ?? 'you';
+  s.doneSource = by?.by === 'reply' ? by.source : undefined;
+  s.doneReason = by?.by === 'source' ? by.reason : undefined;
 }
 
 export function reopen(s: ItemFlags) {
   s.status = 'open';
   s.doneAt = undefined;
   s.snoozedUntil = undefined;
+  s.doneBy = undefined;
+  s.doneSource = undefined;
+  s.doneReason = undefined;
+  s.replyCheck = undefined;
 }
 
 export function snooze(s: ItemFlags, until: string) {

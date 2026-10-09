@@ -1,6 +1,7 @@
 import type { CategoryTag } from './categories';
 import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
+import type { DoneBy } from './projection/state';
 import type {
   Action,
   ActionType,
@@ -66,6 +67,19 @@ export interface ItemSummary {
   pieces: number; // amendment (topics): threads and stretches of chat in the topic; 1 for a lone piece
   asksDone: string[]; // amendment (topics): asks in next.asks Frank ticked off, by askId
   calendarCategories?: CategoryTag[]; // amendment (R2.8): an invite's or a joined meeting's Outlook categories, while the calendar is read
+  // Cockpit Stage 2 (CK-2.3, CK-2.5): who closed it, and whether Frank's reply settled it.
+  doneBy?: DoneBy;
+  doneSource?: SourceId; // doneBy reply: where the reply was
+  doneReason?: string; // doneBy source: "You accepted it in Outlook"
+  settling?: boolean; // Frank replied; a settle check will look at it
+  replyCheck?: { at: string; allSettled: boolean; settled: number; why?: string }; // the last check on his reply, while it stands
+}
+
+/** Needs you's footer (CK-2.5): items Frank's replies closed today, London time. */
+export interface ClosedByReply {
+  today: number;
+  latestAt?: string;
+  latestTitle?: string;
 }
 
 export type PollPhase = 'idle' | 'polling' | 'triaging';
@@ -179,6 +193,7 @@ export interface InboxView {
   labelCount: number;
   firstRun: boolean;
   workHours: boolean;
+  closedByReply: ClosedByReply;
 }
 
 export interface DraftProgress {

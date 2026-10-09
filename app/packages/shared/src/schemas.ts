@@ -144,7 +144,7 @@ export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', '
 export type FailureReason = z.infer<typeof FailureReason>;
 
 /** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
-export const PromptFileId = z.enum(['triage', 'topics', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export const PromptFileId = z.enum(['triage', 'topics', 'settle', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
 export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
@@ -375,6 +375,9 @@ export const Settings = z.object({
     maxThreadsPerCall: z.number().int().min(1, 'At least 1').max(100, 'At most 100'),
     maxInputTokens: z.number().int().min(1000, 'At least 1,000'),
     keepLastMessages: z.number().int().min(1, 'At least 1').max(20, 'At most 20'),
+    // Amendment (cockpit CK-2.7): whether a settle check that finds Frank's reply settles every ask
+    // closes the item, and on which sources the check runs. See closeOnReply().
+    closeOnReply: z.object({ enabled: z.boolean(), sources: z.partialRecord(SourceId, z.boolean()) }).optional(),
   }),
   models: z.object({
     triage: SettingsModelId,
@@ -466,7 +469,7 @@ export function pollIntervalMinutes(settings: Pick<Settings, 'schedule' | 'sourc
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------
 
-export const UsagePurpose = z.enum(['triage', 'draft_vault', 'confluence_pick', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing']); // fetch: connector relay (CL-9); routing: topics; confluence_pick: the page picker before a Confluence draft
+export const UsagePurpose = z.enum(['triage', 'draft_vault', 'confluence_pick', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing', 'settle']); // fetch: connector relay (CL-9); routing: topics; confluence_pick: the page picker before a Confluence draft; settle: whether Frank's reply settles an item (cockpit CK-2.2)
 export type UsagePurpose = z.infer<typeof UsagePurpose>;
 
 export const UsageRecord = z.object({
@@ -511,3 +514,33 @@ export const EvalReport = z.object({
   source: SourceId.optional(),
 });
 export type EvalReport = z.infer<typeof EvalReport>;
+
+// ---------------------------------------------------------------- settle check (cockpit CK-2.2)
+
+/**
+ * Whether Frank's reply settles an item's open asks, one decision per item. `index` is the ask's
+ * place in the list the prompt gave (0 first). `why` stays with the item's content, never in the log.
+ */
+export const SettleDecision = z.object({
+  itemId: z.string().min(1),
+  itemRevision: z.number().int().positive(),
+  asks: z.array(z.object({ index: z.number().int().nonnegative(), settled: z.boolean(), why: z.string().min(1).max(300) })).min(1),
+  allSettled: z.boolean(),
+});
+export type SettleDecision = z.infer<typeof SettleDecision>;
+
+export const SettleBatchOutput = z.object({ decisions: z.array(SettleDecision) });
+export type SettleBatchOutput = z.infer<typeof SettleBatchOutput>;
+
+/** A check gives up on a reply after this many failures; the item stays as it is (CK-2.3). */
+export const SETTLE_MAX_ATTEMPTS = 3;
+
+/**
+ * Closing on reply (CK-2.7, CK-2.9): on by default; the check runs on Slack, and on Outlook once
+ * Frank turns it on there. With `enabled` off the check still runs, and the row asks "Mark done?".
+ */
+export function closeOnReply(settings: Pick<Settings, 'triage'>): { enabled: boolean; sources: Record<SourceId, boolean> } {
+  const c = settings.triage.closeOnReply;
+  const sources = Object.fromEntries(SourceId.options.map((id) => [id, c?.sources[id] ?? id === 'slack'])) as Record<SourceId, boolean>;
+  return { enabled: c?.enabled ?? true, sources };
+}

@@ -48,7 +48,14 @@ export const EventPayloads = {
     fromMeOnly: z.boolean(), // the new messages are all the user's own: no re-triage (§5.3)
   }),
   // Amendment (R2.8): a source can close an item itself, e.g. an invite Frank answered in Outlook.
-  'item.done': z.object({ by: z.literal('source'), reason: z.string().min(1).max(200) }).strict().optional(),
+  // Cockpit (CK-2.3): Frank's reply settled every ask; `check` is the settle batch that said so.
+  // No data: Frank pressed Done.
+  'item.done': z
+    .union([
+      z.object({ by: z.literal('source'), reason: z.string().min(1).max(200) }).strict(),
+      z.object({ by: z.literal('reply'), source: SourceId, messageId: z.string().min(1), check: z.string().min(1) }).strict(),
+    ])
+    .optional(),
   'item.reopened': none,
   'item.snoozed': z.object({ until: isoDate }),
   'item.unsnoozed': none, // the snooze time passed (FR-8.3)
@@ -59,10 +66,14 @@ export const EventPayloads = {
   // Topics (amendment). On a piece: routing put it in another piece's topic (into), or in its own.
   // A piece Frank splits out is routed by 'user' with no into, and never rejoins that topic (from).
   'topic.routed': z.object({ into: z.string().min(1).optional(), from: z.string().min(1).optional(), by: z.enum(['model', 'user', 'regroup']) }),
-  'topic.askDone': z.object({ askId: z.string().min(1) }), // on an anchor: Frank ticked off one ask
+  'topic.askDone': z.object({ askId: z.string().min(1), by: z.enum(['user', 'reply']).optional() }), // on an anchor: Frank ticked off one ask, or his reply settled it (cockpit CK-2.3)
   'triage.decided': z.object({ decision: LoggedDecision }),
   'triage.corrected': z.object({ correction: TriageCorrection }),
   'triage.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
+  // Cockpit (CK-2.2): a settle check ran on Frank's reply. `through` is the latest activity it saw;
+  // `settled` the asks it found settled, by askId. The reasons stay with the item's content.
+  'settle.checked': z.object({ revision, through: isoDate, batchId: z.string().min(1), allSettled: z.boolean(), settled: z.array(z.string().min(1)) }),
+  'settle.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
   'action.requested': z.object({ type: ActionType, revision, supersedes: z.string().optional() }),
   'action.drafted': z.object({
     type: ActionType,

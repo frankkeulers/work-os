@@ -106,7 +106,7 @@ export function partGrew<D extends LoggedDecision, R extends TopicRec<D>>(items:
   if (!anchor) return;
   act(anchor).lastActivityAt = latest(act(anchor).lastActivityAt, act(part).lastActivityAt);
   anchor.topicVersion++;
-  receiveMessages(anchor, fromMeOnly);
+  receiveMessages(anchor, fromMeOnly, act(part).lastActivityAt);
 }
 
 export function markAskDone(s: { asksDone?: string[] }, askId: string) {

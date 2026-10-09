@@ -31,6 +31,9 @@ function expectReplayMatches(s: MockState, events: WorkEvent[]) {
       correctedFrom: rec.correctedFrom,
       snoozedUntil: rec.snoozedUntil,
       doneAt: rec.doneAt,
+      doneBy: rec.doneBy,
+      doneSource: rec.doneSource,
+      doneReason: rec.doneReason,
       newReplies: rec.newReplies,
       backFromSnooze: rec.backFromSnooze,
       failCount: rec.failCount,
@@ -41,6 +44,9 @@ function expectReplayMatches(s: MockState, events: WorkEvent[]) {
       notWith: rec.notWith,
       topicVersion: rec.topicVersion,
       asksDone: rec.asksDone,
+      settlePending: rec.settlePending,
+      settleFailures: rec.settleFailures,
+      replyCheck: rec.replyCheck,
     });
   }
 

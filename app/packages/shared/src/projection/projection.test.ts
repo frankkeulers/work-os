@@ -4,7 +4,7 @@ import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
 import { askId, conversationOf } from './topics';
-import { budgetsOf, openNext, summaryOf } from './views';
+import { budgetsOf, closedByReply, openNext, summaryOf } from './views';
 
 const ITEM = 'slack:C1:1791189720.000100';
 const T0 = '2026-10-05T08:00:00.000Z';
@@ -373,5 +373,111 @@ describe('budgetsOf', () => {
     expect(b.cost.used).toBeCloseTo(0.5);
     expect(b.pctOfBaseline).toBe(25);
     expect(budgetsOf([], settings, new Date(T0), { drafts: true }).drafts.hit).toBe(true);
+  });
+
+  it('counts settle checks against the triage budget (CK-2.2)', () => {
+    const usage = [{ at: '2026-10-05T07:00:00.000Z', purpose: 'settle' as const, costEquivalent: 0.1 }];
+    expect(budgetsOf(usage, settings, new Date('2026-10-05T09:00:00.000Z')).triage.used).toBe(1);
+  });
+});
+
+describe('settle checks on Frank’s replies (cockpit CK-2.1–2.3)', () => {
+  const ITEM_SUMMARY = { actions: [], quietMinutes: 10, now: at(60), triageBudgetHit: false, text: {} };
+  const checked = (through: number, settled: string[], allSettled: boolean): EventData<'settle.checked'> => ({ revision: 2, through: at(through), batchId: 'settle-1', allSettled, settled });
+
+  it('waits for a check when Frank replies to an open item that needs him, and not otherwise', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2, true, 20));
+    expect(replay(events).items[ITEM]).toMatchObject({ settlePending: at(20), triageState: 'triaged' });
+    expect(summaryOf(replay(events).items[ITEM], replay(events).items[ITEM], ITEM_SUMMARY)).toMatchObject({ settling: true });
+
+    // Low priority, To file, snoozed, done or not yet triaged: his reply asks nothing of the check.
+    for (const prep of [
+      (c: ReturnType<typeof log>) => c.add('triage.decided', 10, decided(1, 'none')),
+      (c: ReturnType<typeof log>) => c.add('triage.decided', 10, decided(1)).add('item.snoozed', 11, { until: at(300) }),
+      (c: ReturnType<typeof log>) => c.add('triage.decided', 10, decided(1)).add('item.done', 11, undefined),
+      () => undefined,
+    ]) {
+      const c = log();
+      c.add('item.upserted', 0, upserted(1));
+      prep(c);
+      c.add('item.upserted', 20, upserted(2, true, 20));
+      expect(replay(c.events).items[ITEM].settlePending).toBeUndefined();
+    }
+  });
+
+  it('closes the item when the check finds every ask settled, and says it was his reply', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2, true, 20));
+    add('settle.checked', 21, checked(20, ['a1'], true)).add('item.done', 21, { by: 'reply', source: 'slack', messageId: '1791190000.000200', check: 'settle-1' });
+    const it = replay(events).items[ITEM];
+    expect(it).toMatchObject({ status: 'done', doneBy: 'reply', doneSource: 'slack', replyCheck: { allSettled: true, settled: 1 } });
+    expect(it.settlePending).toBeUndefined();
+    expect(summaryOf(it, it, ITEM_SUMMARY)).toMatchObject({ lane: 'done', doneBy: 'reply', doneSource: 'slack' });
+
+    // Undo: back in its lane, nothing left of the close or the check.
+    add('item.reopened', 22, undefined);
+    const back = replay(events).items[ITEM];
+    expect(back).toMatchObject({ status: 'open' });
+    expect(back.doneBy).toBeUndefined();
+    expect(back.replyCheck).toBeUndefined();
+  });
+
+  it('ticks the settled asks of a topic and keeps it open on the first one left', () => {
+    const asks = [
+      { need: 'decide' as const, step: 'Pick the three FQ3 items' },
+      { need: 'reply' as const, step: 'Say who owns bulk export' },
+    ];
+    const next = { need: 'decide' as const, step: asks[0].step, why: 'The plan locks this week', asks };
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2, true, 20));
+    add('settle.checked', 21, checked(20, [askId(asks[0].step)], false)).add('topic.askDone', 21, { askId: askId(asks[0].step), by: 'reply' });
+    const it = replay(events).items[ITEM];
+    expect(it).toMatchObject({ status: 'open', asksDone: [askId(asks[0].step)], replyCheck: { allSettled: false, settled: 1 } });
+    expect(openNext(next, it.asksDone)?.step).toBe('Say who owns bulk export');
+    expect(summaryOf(it, it, { ...ITEM_SUMMARY, text: { next, settleWhy: 'Bulk export’s owner is still open' } }).replyCheck).toEqual({ at: at(21), allSettled: false, settled: 1, why: 'Bulk export’s owner is still open' });
+  });
+
+  it('keeps waiting when he replies again during a check, and drops the check once someone else writes', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2, true, 20)).add('item.upserted', 25, upserted(3, true, 25));
+    add('settle.checked', 26, checked(20, [], false)); // the check only saw the first reply
+    expect(replay(events).items[ITEM]).toMatchObject({ settlePending: at(25), replyCheck: { allSettled: false, settled: 0 } });
+
+    add('item.upserted', 30, upserted(4, false, 30));
+    const it = replay(events).items[ITEM];
+    expect(it).toMatchObject({ triageState: 'pending', newReplies: true });
+    expect(it.settlePending).toBeUndefined();
+    expect(it.replyCheck).toBeUndefined();
+  });
+
+  it('retries a failed check, and gives up after the third failure with the item as it was', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2, true, 20));
+    add('settle.failed', 21, { revision: 2, attempts: 1, reason: 'claude unavailable' });
+    expect(replay(events).items[ITEM]).toMatchObject({ status: 'open', settlePending: at(20), settleFailures: 1 });
+    add('settle.failed', 31, { revision: 2, attempts: 3, reason: 'claude unavailable' });
+    const it = replay(events).items[ITEM];
+    expect(it).toMatchObject({ status: 'open', settleFailures: 3 });
+    expect(it.settlePending).toBeUndefined();
+  });
+
+  it('says who closed each done item: Frank, his reply, or the source', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('item.done', 1, undefined);
+    expect(replay(events).items[ITEM]).toMatchObject({ doneBy: 'you' });
+    add('item.reopened', 2, undefined).add('item.done', 3, { by: 'source', reason: 'You accepted it in Outlook' });
+    expect(replay(events).items[ITEM]).toMatchObject({ doneBy: 'source', doneReason: 'You accepted it in Outlook' });
+  });
+
+  it('counts today’s closes by reply for Needs you’s footer, latest first', () => {
+    const rows = [
+      { doneBy: 'reply' as const, doneAt: '2026-10-05T12:40:00.000Z', title: 'Head of Sales' },
+      { doneBy: 'reply' as const, doneAt: '2026-10-05T09:10:00.000Z', title: '#mvi-launch' },
+      { doneBy: 'reply' as const, doneAt: '2026-10-04T16:00:00.000Z', title: 'yesterday' },
+      { doneBy: 'you' as const, doneAt: '2026-10-05T12:50:00.000Z', title: 'by hand' },
+    ];
+    expect(closedByReply(rows, '2026-10-05T12:48:00.000Z')).toEqual({ today: 2, latestAt: '2026-10-05T12:40:00.000Z', latestTitle: 'Head of Sales' });
+    expect(closedByReply([], '2026-10-05T12:48:00.000Z')).toEqual({ today: 0 });
   });
 });

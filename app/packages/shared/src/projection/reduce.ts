@@ -10,6 +10,8 @@ import {
   newItemFlags,
   receiveMessages,
   reopen,
+  settleChecked,
+  settleFailed,
   snooze,
   unsnooze,
 } from './transitions';
@@ -126,7 +128,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       });
       // A replayed poll carries the same revision and changes nothing (FR-2.8).
       if (grew) {
-        receiveMessages(item, fromMeOnly);
+        receiveMessages(item, fromMeOnly, meta.lastActivityAt);
         partGrew(p.items, self, e.itemId, fromMeOnly);
       }
     }
@@ -156,7 +158,13 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       failTriage(item, e.data.attempts);
       break;
     case 'item.done':
-      markDone(item, e.at);
+      markDone(item, e.at, e.data);
+      break;
+    case 'settle.checked':
+      settleChecked(item, e.at, e.data);
+      break;
+    case 'settle.failed':
+      settleFailed(item, e.data.attempts);
       break;
     case 'item.reopened':
       reopen(item);

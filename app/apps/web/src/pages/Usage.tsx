@@ -21,6 +21,7 @@ export const PURPOSE_LABEL: Record<UsagePurpose, string> = {
   startup_check: 'Startup check',
   fetch: 'Connector fetch',
   routing: 'Topic routing',
+  settle: 'Settle check',
 };
 
 export const evalPath = (id: string) => `/usage/eval/${encodeURIComponent(id)}`;

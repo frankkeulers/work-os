@@ -5,6 +5,7 @@ import {
   anchorOf,
   budgetsOf,
   categoryTags,
+  closedByReply,
   isWorkHours,
   londonAt,
   londonParts,
@@ -330,6 +331,7 @@ export function inboxView(d: ViewDeps): InboxView {
     labelCount: d.labels?.counts.labels ?? 0,
     firstRun: !source.lastPollAt,
     workHours: isWorkHours(now, s.schedule.workHours),
+    closedByReply: closedByReply(items, now),
   };
 }
 

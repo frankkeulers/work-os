@@ -31,6 +31,7 @@ import {
   seenChanges,
   snooze,
   summaryOf,
+  closedByReply,
   conversationOf,
   toLoggedDecision,
   topicItem,
@@ -360,7 +361,7 @@ export class MockServer implements WorkOsApi, MockControls {
     if (reply.decision) rec.script = { ...rec.script, ...reply.decision };
     this.event('item.upserted', upserted(item, reply.by === FRANK), { itemId: item.id });
     // Re-triage only when the new messages are not from Frank alone (§5.3). A part's new messages are its topic's.
-    receiveMessages(rec, reply.by === FRANK);
+    receiveMessages(rec, reply.by === FRANK, now);
     partGrew(this.s.items, recActivity, item.id, reply.by === FRANK);
     if (reply.by !== FRANK) {
       const rule = firstMatchingRule(item, this.s.rules, this.s.settings, ME);
@@ -544,6 +545,7 @@ export class MockServer implements WorkOsApi, MockControls {
       labelCount: this.s.labelCount,
       firstRun: this.s.flags.firstRun,
       workHours: isWorkHours(this.now(), this.s.settings.schedule.workHours),
+      closedByReply: closedByReply(items, this.now()),
     };
   }
 
