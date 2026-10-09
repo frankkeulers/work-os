@@ -3,7 +3,7 @@
 Owner: Frank Keulers
 Status: Draft v0.1, 9 Oct 2026
 Design: `specs/cockpit/design/` (Claude Design canvas "Work OS Cockpit", light and dark artboards)
-Requirement prefix: **CK-** (cockpit). These amend PLAN.md and DESIGN.md; section 9 lists the amendments.
+Requirement prefix: **CK-** (cockpit). These amend PLAN.md and DESIGN.md; section 11 lists the amendments.
 
 ---
 
@@ -35,6 +35,8 @@ The biggest saving isn't the layout. It's that **an item closes by itself once F
 | 10 | Later zone: To file, This week, Snoozed, Low priority | 3 |
 | 11 | File in a batch | 4 |
 | 12 | Free time and what fits in it | Backlog (B1) |
+| 13 | Source views: a sidebar source opens everything it has stored, untriaged, with the item panel | 5 |
+| 14 | Related items across sources, filed together and optionally marked done | 6 (specced) |
 
 ### What stays
 
@@ -261,7 +263,7 @@ When a new revision's messages are all Frank's own (`fromMeOnly`), the projectio
 **Journeys:** J52 Reply closes it (Slack), J53 Reply doesn't settle it (Decide), J54 Undo an auto-close, J55 Outlook reply closes it.
 
 **As built (9 Oct, Slack):**
-- `settle.checked` carries `settled: askId[]` (strings), and `ask.settled` is the existing `topic.askDone { askId, by: 'reply' }` (§11).
+- `settle.checked` carries `settled: askId[]` (strings), and `ask.settled` is the existing `topic.askDone { askId, by: 'reply' }` (§13).
 - The check runs straight after triage in the same runtime pass, at most 20 items per call within `maxThreadsPerCall`; the per-ask `why` and the input go to the item file, not the event.
 - The +2/+6 min reads are Slack only (`POST /api/items/:id/replied`). Outlook, once turned on, is checked at the next mail poll; the Sent Items targeted check is not built.
 - The settle eval is CLI only (`npm run eval -- --purpose settle`); Usage shows C1/C2, not the eval.
@@ -393,7 +395,80 @@ The header reads "Later 9 · Once a day".
 
 ---
 
-## 8. Backlog (recorded, not in the first pass)
+## 8. Stage 5: source views (about 2–3 days)
+
+The Inbox shows a triaged slice: topic parts fold into their anchor, done items drop out after 7 days, excluded channels are left out, and lanes put most items behind Later. That's right for deciding what to do next, and wrong for looking something up. Stage 5 gives each source a view of its own history that triage doesn't shape. Meeting notes are the first use: "what did we say in last week's pricing call?"
+
+**CK-5.1 Every stored item, unranked.** `GET /api/sources/:source/items` returns every item stored for the source, newest activity first:
+- done items of any age;
+- items from a Slack channel excluded after they were fetched, flagged `excluded`;
+- items whose text retention has removed, flagged `expired` (metadata and link only);
+- a topic's parts stay inside the topic, as in the Inbox, because its panel shows every piece.
+
+Each row carries its people (Frank left out) and message count as well as the usual summary.
+
+**CK-5.2 The same panel.** A row opens the Inbox's item panel beside the list, with the URL holding the item and the filing target (`/source/slack?item=…&file=vault`). Everything works as in the Inbox: Next step, Reply in…, File it with Confluence and the vault, Done, Snooze, Correct triage and `j`/`k`/`Esc`/`o`. Each row says where triage put the item (its lane, Done and by whom, Filed · Confluence or Vault, Excluded channel, text expired), so nothing is hidden but the state stays visible.
+
+**CK-5.3 Slack** groups items by conversation (channel or DM). The conversation with the newest message comes first, and its items are newest first.
+
+**CK-5.4 Outlook** is a mail list grouped by day (Today, Yesterday, then the date), newest first. Each row shows the people, the subject in bold and a one-line summary.
+
+**CK-5.5 Wispr Flow** lists meeting notes grouped by week (This week, Last week, Week of …), newest first.
+
+**CK-5.6 Outlook Calendar** is a week, Monday to Sunday, London time, with work hours widened to fit the meetings, an all-day row and a now-line. Previous week, next week and This week move it.
+- Cancelled and declined meetings show, struck through and marked.
+- A meeting opens its Wispr Flow notes in the panel; failing that, its invite item, whatever its state; failing that, a read-only card (time, organiser, invitees, your answer, categories, Open in Outlook).
+- The calendar snapshot now starts at this week's Monday (or yesterday, on a Monday), so the days already gone this week show. Past meetings are never read. Weeks outside the snapshot say so.
+
+**CK-5.7 The sidebar.** A source in the sidebar opens its history at `/source/:id`. Its dot and label still show health; health itself is on Usage & health and one click away from the history's header ("Health ›").
+
+> **Story 5.1** As Frank, I want to see everything a source has brought in, whatever triage made of it, so that I can find last week's meeting notes or a thread I marked done without searching Slack.
+>
+> - Given a thread I marked done ten days ago, when I open Slack in the sidebar, then it's there under its channel, marked Done by you.
+> - Given a Wispr Flow meeting from last week, when I open it from Wispr Flow's history, then I can file it to the vault from the panel.
+> - Given Thursday's 1:1 with no notes, when I click it in the calendar week, then a card shows who was invited and opens it in Outlook.
+
+**Journeys:** J63, J64.
+
+**As built (9 Oct):**
+- `GET /api/sources/:source/items` (`sourceView`) and `GET /api/calendar/week?start=YYYY-MM-DD` (`weekView`) in `apps/server/src/api/views.ts`; the mock implements both.
+- The panel's host (the URL state, the item query, the unsaved-edit guard, the click outside and the slide-out) moved out of `Inbox.tsx` into `usePanelHost` and `PanelSlide`, which the Inbox and `pages/Source.tsx` share.
+- The calendar week reuses the time column's meeting layout (`placeMeetings`) and its past shading.
+- The mock seed adds the rest of the seed week to the calendar (including a cancelled and a declined meeting) for the week view only; the agenda is unchanged.
+
+---
+
+## 9. Stage 6: related items, filed together (specced, not built)
+
+Notes about one subject arrive from several sources: a Slack thread, a reply by email, the meeting's Wispr Flow notes and its invite. Today each is filed on its own, which gives three short vault notes where one would do, and leaves the other items open.
+
+**CK-6.1 Find related.** The item panel gets a **Related** section with a **Find related** button. It lists items from every source that are about the same thing, each with a one-line reason ("Same meeting", "Dana's reply to this thread"). A row opens that item.
+- **Candidates (no model call).** Items from all sources within ±7 days of the open item, scored on:
+  - shared people, using the name merge that `GET /api/people` already does;
+  - title and summary words in common, using `words()` in `sources/calendar/match.ts`;
+  - time, weighted as the Wispr ↔ calendar matcher weights it;
+  - links already known: a meeting's notes and invite, a topic's parts.
+- **Ranking (Haiku, on demand).** The top 15 candidates go to a new `related` purpose, which keeps the related ones and says why for each. The answer is cached per item revision and counted against the triage budget. Nothing runs until Frank presses the button.
+
+**CK-6.2 File together.** Frank ticks related items and chooses **File together**. One action covers them all (`action.requested` gains `itemIds`). The vault and Confluence drafters read every item's text and write one entry that cites each source. Review, edit, approve and dry-run work as for a single item.
+
+**CK-6.3 Mark all done.** Approving a joint filing offers **Mark all N done**. With it ticked, `item.done` for every included item goes in the same append as `action.executed`, as `markDoneWhenFiled` does for a batch (CK-4.4). Undo reopens them all.
+
+**CK-6.4 From a source view.** Find related works the same from a source's history, so a past meeting's notes can be gathered with the threads around it after the fact.
+
+> **Story 6.1** As Frank, I want to file a meeting's notes, the Slack thread before it and the email after it as one vault note, and close all three, so that the decision lives in one place and nothing is left open.
+>
+> - Given the pricing workshop's notes, when I press Find related, then the #pricing thread and the Head of Sales's email are listed, each with why.
+> - Given I tick both and choose File together, then one draft cites all three; approving it with Mark all 3 done closes all three.
+
+**Open questions:**
+1. People in different sources don't share IDs: Slack has `U…` IDs, Outlook has addresses, Wispr Flow has names. Name matching is weak. Is a small people map in Settings worth it?
+2. Should Related also search the vault and Confluence (read-only) for notes already filed on the subject, so the joint note appends rather than duplicates?
+3. Does a joint filing replace each item's own suggested filing, or sit beside it?
+
+---
+
+## 10. Backlog (recorded, not in the first pass)
 
 **B1 Free time and what fits** (the "Free 90 min · 3 items fit" block in the first design, taken out of this pass).
 - **Free gaps:** the time column marks gaps of 30 minutes or more between meetings in work hours as dashed "Free 90 min" blocks. This part needs only the calendar snapshot.
@@ -410,7 +485,7 @@ The header reads "Later 9 · Once a day".
 
 ---
 
-## 9. Amendments to PLAN.md and DESIGN.md
+## 11. Amendments to PLAN.md and DESIGN.md
 
 Apply these in the commit that ships each stage.
 
@@ -428,10 +503,14 @@ Apply these in the commit that ships each stage.
 | DESIGN.md Inbox | Replace with the three-zone layout; keep the item panel and action panel sections | 3 |
 | DESIGN.md principles | Add the glance type tokens to the type scale table, scoped to the cockpit | 1 |
 | JOURNEYS.md | J50–J59; resolve open question 5 for batch filing | 1–4 |
+| DESIGN.md Sidebar | A source row opens its history; health is on Usage & health and the history's header (CK-5.7) | 5 |
+| DESIGN.md | New "Source views" section | 5 |
+| PLAN R2.8 | The calendar snapshot runs from this week's Monday, not yesterday (CK-5.6) | 5 |
+| JOURNEYS.md | J63, J64 | 5 |
 
 ---
 
-## 10. Risks
+## 12. Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
@@ -444,7 +523,7 @@ Apply these in the commit that ships each stage.
 
 ---
 
-## 11. Open questions for Frank
+## 13. Open questions for Frank
 
 1. **C1 target.** Keep 40%, or set it once Stage 0 reports auto-close potential?
 2. **Settle check for reply-need items.** The model check is the default (CK-2.2). Would you accept a no-model close for plain reply items once C2 has stayed under 1% for two weeks?

@@ -57,6 +57,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 - **Avatar:** the profile picture from Settings › Profile. Without one it shows your initials from the first and last name (or the display name), and a person icon when no name is set. The picture is cropped to a centred square, scaled down and kept in this browser, like the theme. It never goes to the server.
 - **Profile:** first name, last name, display name and the profile picture, in Settings › Profile. The display name is what the account button shows; when it's empty, the first and last name are used instead. Like the picture, the names stay in this browser and aren't part of `settings.json`.
 - **Icons:** Settings & rules uses a gear. The old sun-like glyph read as a light-mode control.
+- **Sources:** each source row opens that source's history (`/source/:id`, cockpit CK-5.7), and the open one is marked like any nav item. Its dot and label still say how the source is (polling, queued, stale in amber, signed out in red); the health detail is on Usage & health, linked from the history's header as **Health ›**.
 
 ## Brand (applied, from `specs/WORKOS-IDENTITY.md`)
 
@@ -140,6 +141,16 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
   - **Outlook and Teams:** Microsoft's Fluent product icons.
   - **Write targets:** the Confluence and Obsidian marks.
   - All of them live in `components/BrandIcon.tsx`.
+
+## Source views (applied, cockpit CK-5)
+
+A source's history: everything it has stored, newest first, whatever triage made of it. It answers "where is that thing I saw last week?", where the Inbox answers "what do I do next?".
+
+- **Top bar:** the same 64px bar as the Inbox: the source's mark and name, the item count, a muted line saying what the list is ("Every conversation stored, newest first"), when the source was last read, **Health ›** and the health pill.
+- **Groups:** sticky group heads in the Inbox's channel-head style. Slack by conversation, Outlook by day, Wispr Flow by week. The order inside a group is always newest first, and there's no sort menu, since the point is that nothing is ranked.
+- **Rows:** one row style for every list source. On the left, who or what it is (people, or the meeting's name) over kind · time · messages · parts. In the middle, the summary, with an email's subject in bold above it. At the right edge, the state chips: the lane chip (solid, as in the panel), **Done by you** or **Your reply in Slack**, **Filed · Confluence** in teal, **Excluded channel** in amber, and "text expired" in muted mono. Done rows set their summary in the secondary ink. Done sits beside open rows, as in the Inbox list.
+- **Calendar week:** seven equal columns with the hours on the left at 48px an hour, work hours widened to the week's meetings. All-day meetings sit under the day heads, which stick while the hours scroll. Past time is shaded with the time column's `--past`, and today's head is in the accent with a red now-line. A meeting block is the time column's: a category bar, the time in bold, the title. Cancelled and declined meetings are dashed, muted and struck through, with the word after the title. **Notes** or **Invite** in an accent wash marks a meeting that opens an item.
+- **Panel:** the Inbox's item panel, with the same width, scrim, motion and keys. A meeting with no item opens a read-only card in the same slide-over: a MEETING eyebrow, the title, the time, then organiser, your answer, shows as, invited and categories, and Open in Outlook.
 
 ## Action panel (applied)
 

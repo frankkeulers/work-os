@@ -183,6 +183,29 @@ time. It stays open or closed as you left it, in this browser.
 - **Open in Slack** goes to the thread, in the browser or the desktop app as set in Settings.
 - `o` opens the item as a full page; `Esc` or a click outside closes the panel.
 
+## A source's history
+
+The inbox shows what triage thinks needs you. To look something up, click a source in the
+sidebar: [Slack](/source/slack), Outlook, Wispr Flow or the calendar. Each lists everything Work OS
+has stored from it, newest first, whatever triage made of it. Items you marked done weeks ago are
+there, and so are channels you've since excluded, flagged **Excluded channel**. Older than the
+retention period, an item keeps its title and link but its text is gone ("text expired").
+
+- **Slack** groups the items by channel or DM, with the most recent conversation first.
+- **Outlook** lists mail by day, with each email's subject above its summary.
+- **Wispr Flow** lists meeting notes by week.
+- **Outlook Calendar** shows the week, Monday to Sunday. Cancelled and declined meetings are
+  struck through rather than left out. A meeting marked **Notes** opens its Wispr Flow notes, and
+  one marked **Invite** opens its invite. Any other meeting opens a card with who's invited and a
+  link to Outlook. The arrows move a week at a time. The calendar keeps this week and the next two,
+  so earlier weeks are empty.
+
+Each row says where triage put it: its lane, **Done by you**, or **Filed · Confluence**. A row
+opens the same panel as in the inbox, so you can reply, file to the vault or Confluence, or mark it
+done from here. `j`, `k`, `o` and `Esc` work as they do there. The source's dot in the sidebar
+still shows its health; **Health ›** in the page's top bar opens
+[Usage & health](/usage#health).
+
 ## File in a batch
 
 **File in a batch**, in the To file header, files the day's items in one sitting. The panel opens

@@ -46,7 +46,7 @@ async function inbox(page: Page) {
 
 const activity = (page: Page, scope = page.locator('body')) => scope.locator('[data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-activity') ?? ''));
 
-test('J62: Slack’s history — every conversation, newest first, done items too; a row opens the panel and files from there (CK-5.1, 5.3, 5.7)', async ({ page }) => {
+test('J63: Slack’s history — every conversation, newest first, done items too; a row opens the panel and files from there (CK-5.1, 5.3, 5.7)', async ({ page }) => {
   await inbox(page);
   // Done in the Inbox: it leaves Needs you, and stays in the history, marked.
   const first = page.locator('[data-group="needs"] [data-row]').first();
@@ -107,7 +107,7 @@ test('J62: Slack’s history — every conversation, newest first, done items to
   await expect(page).toHaveURL(/\/usage#health$/);
 });
 
-test('J63: Outlook mail by day, and the calendar as a week — a meeting opens its invite, or a card (CK-5.4, 5.6)', async ({ page }) => {
+test('J64: Outlook mail by day, and the calendar as a week — a meeting opens its invite, or a card (CK-5.4, 5.6)', async ({ page }) => {
   await inbox(page);
   await control(page, '13:48 with Outlook and the calendar on (cockpit)');
   await expect(page.locator('[data-row]').filter({ hasText: 'Insights APIs v2 pricing' })).toBeVisible({ timeout: 15_000 });
