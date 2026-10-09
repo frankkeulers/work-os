@@ -1,5 +1,5 @@
 import type { AgendaEvent, AgendaView } from '@work-os/shared';
-import { useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
@@ -7,7 +7,7 @@ import { useNow } from '../hooks/useNow';
 import { dayEvents, phaseOf, wantsAnswer, type AgendaDay } from '../lib/agenda';
 import { fmtAgo, fmtTime } from '../lib/format';
 import { Icon } from './icons';
-import { FutureButton, Segmented, cx } from './ui';
+import { FutureButton, IconButton, Segmented, cx } from './ui';
 
 // The agenda strip on the inbox (R2.8): today's or tomorrow's meetings from Outlook Calendar, the
 // one on now picked out. A meeting opens in Outlook; "Not answered" opens its invite item. Hidden
@@ -46,6 +46,25 @@ function AgendaChip({ e, phase, onOpenItem }: { e: AgendaEvent; phase: 'past' | 
   );
 }
 
+/** Whether a sideways-scrolling list has more before or after what shows, for its fades and arrows. */
+function useMoreAround(ref: RefObject<HTMLElement | null>, key: string) {
+  const [more, setMore] = useState({ before: false, after: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return setMore({ before: false, after: false });
+    const update = () => setMore({ before: el.scrollLeft > 1, after: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 });
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [ref, key]);
+  return more;
+}
+
 /** What the strip says about the calendar itself, beside the meetings. */
 function StateNote({ v, now }: { v: AgendaView; now: Date }) {
   if (v.state === 'auth_failed')
@@ -62,9 +81,13 @@ export function Agenda({ full, onOpenItem }: { full: boolean; onOpenItem: (id: s
   const q = useApiQuery(() => api.getAgenda(), onTopics('inbox', 'settings', 'health'), []);
   const now = useNow(60_000);
   const [day, setDay] = useState<AgendaDay>('today');
+  const listRef = useRef<HTMLOListElement>(null);
   const v = q.data;
+  const list = v ? dayEvents(v.events, now, day) : [];
+  const more = useMoreAround(listRef, `${day}:${list.map((e) => e.id).join(',')}`);
   if (!v || (v.state === 'off' && !full)) return null;
-  const list = dayEvents(v.events, now, day);
+  const page = (dir: 1 | -1) => listRef.current?.scrollBy({ left: dir * listRef.current.clientWidth * 0.8, behavior: 'smooth' });
+  const arrow = 'absolute top-1/2 -translate-y-1/2 bg-surface shadow-sm';
   const empty = v.state === 'off' ? (
     <>
       Outlook Calendar is off. <Link to="/settings/outlook">Turn it on</Link> to see your meetings here.
@@ -88,13 +111,28 @@ export function Agenda({ full, onOpenItem }: { full: boolean; onOpenItem: (id: s
           { value: 'tomorrow', label: 'Tomorrow' },
         ]}
       />
-      <div className="min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1">
         {list.length ? (
-          <ol aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 flex list-none gap-1.5 overflow-x-auto p-0 py-0.5">
-            {list.map((e) => (
-              <AgendaChip key={e.id} e={e} phase={day === 'today' ? phaseOf(e, now) : 'later'} onOpenItem={onOpenItem} />
-            ))}
-          </ol>
+          <>
+            <ol ref={listRef} aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 flex list-none gap-1.5 overflow-x-auto p-0 py-0.5">
+              {list.map((e) => (
+                <AgendaChip key={e.id} e={e} phase={day === 'today' ? phaseOf(e, now) : 'later'} onOpenItem={onOpenItem} />
+              ))}
+            </ol>
+            {/* Meetings past either edge fade out under an arrow that scrolls to them. */}
+            {more.before && (
+              <>
+                <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-linear-to-r from-bg via-bg/80 to-transparent" />
+                <IconButton label="Earlier meetings" icon="back" size={28} bordered className={cx(arrow, 'left-0')} onClick={() => page(-1)} />
+              </>
+            )}
+            {more.after && (
+              <>
+                <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-linear-to-l from-bg via-bg/80 to-transparent" />
+                <IconButton label="Later meetings" icon="forward" size={28} bordered className={cx(arrow, 'right-0')} onClick={() => page(1)} />
+              </>
+            )}
+          </>
         ) : (
           <p className="m-0 py-2.5 text-muted">{empty}</p>
         )}

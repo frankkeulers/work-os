@@ -18,6 +18,7 @@ const PATHS = {
   check: <path d="m5 12 5 5 9-10" />,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   back: <path d="M15 18l-6-6 6-6" />,
+  forward: <path d="M9 18l6-6-6-6" />,
   up: <path d="M6 15l6-6 6 6" />,
   down: <path d="M6 9l6 6 6-6" />,
   expand: <path d="M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7" />,

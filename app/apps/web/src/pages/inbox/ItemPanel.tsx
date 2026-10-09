@@ -280,15 +280,17 @@ function Messages({ view }: { view: ItemView }) {
     ? `In this topic · ${plural(view.pieces.length, 'part')}`
     : item.kind === 'email'
       ? 'Email'
-      : item.kind === 'meeting'
-        ? item.source === 'wispr'
-          ? 'From the meeting notes'
-          : 'From the transcript'
-        : item.kind === 'dm' || item.kind === 'chat'
-          ? item.messages.length === 1
-            ? 'Message'
-            : 'Messages'
-          : 'Latest in the thread';
+      : item.kind === 'event'
+        ? 'The invitation'
+        : item.kind === 'meeting'
+          ? item.source === 'wispr'
+            ? 'From the meeting notes'
+            : 'From the transcript'
+          : item.kind === 'dm' || item.kind === 'chat'
+            ? item.messages.length === 1
+              ? 'Message'
+              : 'Messages'
+            : 'Latest in the thread';
   if (item.contentExpired)
     return (
       <Section title={title}>

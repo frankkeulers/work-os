@@ -3,7 +3,7 @@ title: Outlook mail and calendar
 group: Inbox
 order: 44
 summary: Your Inbox, Sent Items and calendar through the Microsoft 365 connector on claude.ai, one item per conversation, with today's meetings above the inbox.
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 Work OS reads your Outlook mail through the **Microsoft 365 connector** you already use on
@@ -63,7 +63,8 @@ first.
 
 - **The agenda.** Today's meetings show in a strip above the inbox, the one on now picked out;
   **Tomorrow** shows the next day's. Cancelled meetings and ones you declined are left out. Choose
-  a meeting to open it in Outlook.
+  a meeting to open it in Outlook. When the meetings don't all fit, the strip fades at the edge and
+  an arrow there scrolls to the rest.
 - **Not answered** marks a meeting someone else invited you to that you haven't accepted or
   declined yet. Choose it to open the invite's item.
 - **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,

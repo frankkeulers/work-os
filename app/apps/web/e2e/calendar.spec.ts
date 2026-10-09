@@ -78,6 +78,27 @@ test('the agenda shows today’s meetings above the inbox, the one on now picked
   await expect(meeting(page, 'Insights APIs sync').getByText('Not answered')).toHaveCount(0); // answered "tentative"
 });
 
+test('meetings past the edge of the strip fade out under an arrow that scrolls to them', async ({ page }) => {
+  await turnOn(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  const later = agenda(page).getByRole('button', { name: 'Later meetings' });
+  const earlier = agenda(page).getByRole('button', { name: 'Earlier meetings' });
+  await expect(meeting(page, 'Product weekly')).toBeVisible();
+  // Today's five meetings don't fit: the last runs past the edge.
+  await expect(later).toBeVisible();
+  await expect(earlier).toHaveCount(0);
+  await dismissToasts(page);
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-agenda-scroll-light.png'), animations: 'disabled' });
+  await later.click();
+  await expect(earlier).toBeVisible();
+  await expect(meeting(page, 'Product weekly')).toBeInViewport({ ratio: 1 });
+  await earlier.click();
+  await expect(earlier).toHaveCount(0);
+  // Tomorrow's three fit.
+  await agenda(page).getByRole('button', { name: 'Tomorrow' }).click();
+  await expect(later).toHaveCount(0);
+});
+
 test('Disconnect takes the calendar off with the mail, and Full scope says how to turn it on', async ({ page }) => {
   await turnOn(page);
   await page.getByRole('button', { name: 'Disconnect' }).click();
@@ -143,6 +164,7 @@ test('an invite you haven’t answered is an item to answer in Outlook, with not
   await expect(panel.getByText('Accept or decline the invitation')).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Respond in Outlook' })).toBeVisible();
   await expect(panel.getByRole('region', { name: /File it|Also file/ })).toHaveCount(0);
+  await expect(panel.getByRole('heading', { name: 'The invitation' })).toBeVisible();
   await expect(panel.getByText('Frank, please bring the Insights APIs usage numbers.')).toBeVisible();
   await dismissToasts(page);
   // The desktop notification for the Outlook mail stays up 9 s; the screenshot is of the page under it.
