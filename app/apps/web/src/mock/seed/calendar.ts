@@ -26,6 +26,8 @@ export const CALENDAR: AgendaEvent[] = [
   event('AAMkMOCKSTANDUP', 'Product stand-up', 5, '09:00', '09:15', { organizer: 'Delivery manager' }),
   event('AAMkMOCKLAUNCH', 'MVI V2 launch readiness', 5, '09:30', '10:15', { organizer: 'Release manager' }),
   event('AAMkMOCKRENEWAL', '[Customer] renewal call', 5, '14:00', '15:00', { organizer: 'Account lead, [Customer]' }),
+  // Inside the renewal call: two meetings on at once (Scenarios › 14:28).
+  event('AAMkMOCKSIGNOFF', 'Pricing sign-off', 5, '14:30', '14:45', { organizer: 'Head of Sales' }),
   event('AAMkMOCKWEEKLY', 'Product weekly', 5, '16:00', '16:30', { response: 'organizer' }),
   event('AAMkMOCKKICKOFF', 'Sales kick-off', 6, '00:00', '24:00', { allDay: true, showAs: 'free', organizer: 'Head of Sales' }),
   event('AAMkMOCKQ4', 'Q4 roadmap review', 6, '10:00', '11:00', { organizer: 'Matt M.', response: 'none', showAs: 'tentative' }),

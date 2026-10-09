@@ -22,28 +22,39 @@ export function phaseOf(e: AgendaEvent, now: Date): 'past' | 'now' | 'later' {
 /** Someone else's meeting Frank hasn't answered. */
 export const wantsAnswer = (e: AgendaEvent) => e.response === 'none' || e.response === 'notResponded';
 
-/** Meetings that show as next before they start: timed, not Free, and accepted, tentative or Frank's own. */
+/** Meetings the sidebar and agenda count down to and show while on: timed, not Free, and accepted, tentative or Frank's own. */
 const GOING = new Set(['accepted', 'tentativelyAccepted', 'organizer']);
 export const headsUp = (e: AgendaEvent) => !e.allDay && e.showAs !== 'free' && GOING.has(e.response ?? '');
 
 /** At this many minutes or fewer, the countdown turns amber. */
 export const IMMINENT_MINUTES = 2;
 
-export interface NextUp {
+export interface MeetingCue {
   event: AgendaEvent;
-  /** Others that start at the same time. */
-  more: number;
-  /** Whole minutes to go, rounded up, as fmtIn shows them. */
+  /** On now, or starting within the lead time. */
+  phase: 'now' | 'next';
+  /** For one about to start: whole minutes to go, rounded up, as fmtIn shows them. */
   minutes: number;
+  /** About to start, within IMMINENT_MINUTES. */
   imminent: boolean;
 }
 
-/** The next meeting, once it is within `leadMinutes` of its start and until it starts (R2.8). */
-export function nextUp(events: readonly AgendaEvent[], now: Date, leadMinutes: number): NextUp | undefined {
+const byTime = (a: AgendaEvent, b: AgendaEvent) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end) || a.id.localeCompare(b.id);
+
+/**
+ * The meetings Frank is going to that are on now, for as long as they last, then those starting
+ * within `leadMinutes`, each soonest first (R2.8). Overlapping meetings are each one cue.
+ */
+export function meetingCues(events: readonly AgendaEvent[], now: Date, leadMinutes: number): MeetingCue[] {
   const t = now.getTime();
-  const soon = events.filter((e) => headsUp(e) && Date.parse(e.start) > t && Date.parse(e.start) - t <= leadMinutes * 60_000).sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
-  const [event] = soon;
-  if (!event) return undefined;
-  const minutes = Math.ceil((Date.parse(event.start) - t) / 60_000);
-  return { event, more: soon.filter((e) => e !== event && e.start === event.start).length, minutes, imminent: minutes <= IMMINENT_MINUTES };
+  const going = events.filter(headsUp).sort(byTime);
+  const on = going.filter((e) => Date.parse(e.start) <= t && t < Date.parse(e.end));
+  const soon = going.filter((e) => Date.parse(e.start) > t && Date.parse(e.start) - t <= leadMinutes * 60_000);
+  return [
+    ...on.map((event) => ({ event, phase: 'now' as const, minutes: 0, imminent: false })),
+    ...soon.map((event) => {
+      const minutes = Math.ceil((Date.parse(event.start) - t) / 60_000);
+      return { event, phase: 'next' as const, minutes, imminent: minutes <= IMMINENT_MINUTES };
+    }),
+  ];
 }

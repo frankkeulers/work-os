@@ -56,7 +56,7 @@ test('the agenda shows today’s meetings above the inbox, the one on now picked
   await turnOn(page);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
   const today = agenda(page).getByRole('list', { name: 'Today’s meetings' });
-  await expect(today.locator('[data-agenda-event]')).toHaveText([/06:45Voyage Insights pricing workshop/, /09:00Product stand-up/, /09:30MVI V2 launch readinessNow/, /14:00\[Customer\] renewal call/, /16:00Product weekly/]);
+  await expect(today.locator('[data-agenda-event]')).toHaveText([/06:45Voyage Insights pricing workshop/, /09:00Product stand-up/, /09:30MVI V2 launch readinessNow/, /14:00\[Customer\] renewal call/, /14:30Pricing sign-off/, /16:00Product weekly/]);
   await expect(meeting(page, 'Product stand-up')).toHaveAttribute('data-phase', 'past');
   await expect(meeting(page, 'MVI V2 launch readiness')).toHaveAttribute('data-phase', 'now');
   await expect(meeting(page, 'Product weekly')).toHaveAttribute('data-phase', 'later');
@@ -104,48 +104,68 @@ test('Outlook categories: their colours are picked in Settings and show on the a
   await expect(page.getByTestId('calendar-categories').getByRole('listitem')).toHaveText(['Planning', 'Product']);
 });
 
-test('a meeting about to start shows in the sidebar and on its agenda chip, quietly (R2.8)', async ({ page }) => {
-  await turnOn(page);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
-  const next = page.getByRole('region', { name: 'Next meeting' });
-  await expect(meeting(page, 'Product weekly')).toBeVisible();
-  await expect(next).toHaveCount(0); // 09:45: nothing starts within five minutes
-
-  // The scenarios drawer moves the mock clock to four minutes before the renewal call.
+/** Sets the mock clock from the scenarios drawer, then closes it. */
+async function clockTo(page: Page, control: string) {
   await page.keyboard.press('Backquote');
   const drawer = page.getByRole('complementary', { name: 'Scenarios' });
   await drawer.getByRole('group', { name: 'Scenario tab' }).getByRole('button', { name: 'Controls' }).click();
-  await drawer.getByRole('button', { name: '13:56 (renewal call at 14:00)', exact: true }).click();
+  await drawer.getByRole('button', { name: control, exact: true }).click();
   await page.keyboard.press('Backquote');
   await expect(drawer).toHaveCount(0);
+}
 
-  await expect(next).toContainText(/in [34] min/); // the mock clock runs on in real time
-  await expect(next).toContainText('[Customer] renewal call');
-  await expect(next).not.toHaveAttribute('data-imminent');
-  await expect(next.getByRole('link')).toHaveAttribute('href', /itemid=AAMkMOCKRENEWAL/);
+test('the sidebar shows a meeting from five minutes before it starts until it ends, and its agenda chip counts down, quietly (R2.8)', async ({ page }) => {
+  await turnOn(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  const cues = page.getByRole('region', { name: 'Meetings now and next' });
+  const cue = (title: string) => cues.locator('[data-meeting-cue]').filter({ hasText: title });
+
+  // 09:45: the launch check is on, until 10:15; nothing starts within five minutes.
+  await expect(cues.locator('[data-meeting-cue]')).toHaveCount(1);
+  await expect(cue('MVI V2 launch readiness')).toHaveAttribute('data-phase', 'now');
+  await expect(cue('MVI V2 launch readiness')).toContainText(/Now ·\s*until 10:15/);
+  await expect(agenda(page).locator('[data-soon]')).toHaveCount(0);
+
+  // 13:56: four minutes before the renewal call.
+  await clockTo(page, '13:56 (renewal call at 14:00)');
+  await expect(cues.locator('[data-meeting-cue]')).toHaveCount(1); // the launch check has ended
+  await expect(cue('[Customer] renewal call')).toHaveAttribute('data-phase', 'next');
+  await expect(cue('[Customer] renewal call')).toContainText(/Next ·\s*in [34] min/); // the mock clock runs on in real time
+  await expect(cue('[Customer] renewal call')).not.toHaveAttribute('data-imminent');
+  await expect(cue('[Customer] renewal call').getByRole('link')).toHaveAttribute('href', /itemid=AAMkMOCKRENEWAL/);
   await expect(meeting(page, 'renewal call')).toHaveAttribute('data-soon', '');
   await expect(meeting(page, 'renewal call')).toContainText(/in [34] min/);
   await expect(meeting(page, 'Product weekly')).not.toHaveAttribute('data-soon');
   await dismissToasts(page);
   await page.screenshot({ path: join(APP, 'screenshots/inbox-next-meeting-light.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
+
+  // 14:28: two meetings at once. The call is on until 15:00, and the sign-off inside it starts in two minutes.
+  await clockTo(page, '14:28 (renewal call on, sign-off at 14:30)');
+  await expect(cues.locator('[data-meeting-cue]')).toHaveText([/Now ·\s*until 15:0014:00\[Customer\] renewal call/, /Next ·\s*in [12] min14:30Pricing sign-off/]);
+  await expect(cue('Pricing sign-off')).toHaveAttribute('data-imminent', 'true'); // amber
+  await expect(meeting(page, 'renewal call')).toHaveAttribute('data-phase', 'now');
+  await expect(meeting(page, 'renewal call')).not.toHaveAttribute('data-soon');
+  await expect(meeting(page, 'Pricing sign-off')).toHaveAttribute('data-soon', '');
+  await dismissToasts(page);
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-meetings-now-next-light.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
   await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
-  await page.screenshot({ path: join(APP, 'screenshots/inbox-next-meeting-dark.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-meetings-now-next-dark.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 
-  // Collapsed, the sidebar keeps it as an icon with the minutes.
+  // Collapsed, the sidebar keeps one icon with the minutes to the next, and says both.
   await page.keyboard.press('BracketLeft');
-  await expect(next).toContainText(/Next meeting, in [34] min: 14:00 \[Customer\] renewal call/);
+  await expect(cues).toContainText(/Now, until 15:00: 14:00 \[Customer\] renewal call; Next, in [12] min: 14:30 Pricing sign-off/);
   await page.keyboard.press('BracketLeft');
 
-  // On every page; and Settings › Notifications sets how early it shows.
+  // On every page; and Settings › Notifications sets how early one shows. One on now stays.
   await page.goto('/settings/notifications');
-  await expect(next).toBeVisible();
+  await expect(cues.locator('[data-meeting-cue]')).toHaveCount(2);
   const lead = page.getByLabel('Minutes before a meeting it shows as next');
   await expect(lead).toHaveValue('5');
   await lead.fill('1');
   await lead.blur();
   await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
-  await expect(next).toHaveCount(0);
+  await expect(cues.locator('[data-meeting-cue]')).toHaveText([/renewal call/]);
 });
 
 test('meetings past the edge of the strip fade out under an arrow that scrolls to them', async ({ page }) => {
