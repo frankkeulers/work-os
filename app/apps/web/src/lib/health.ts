@@ -1,5 +1,6 @@
 import type { DependencyHealth, HealthView, PollStatus, SourceHealth } from '@work-os/shared';
 import { SOURCE_NAME } from './next';
+import { fmtAgoLong } from './format';
 
 export interface AppHealth {
   tone: 'ok' | 'info' | 'warn' | 'bad' | 'idle';
@@ -67,15 +68,6 @@ function depFix(d: DependencyHealth): PillHealth['fix'] {
   return { ...HEALTH_FIX, title: d.fix };
 }
 
-/** "34 min ago", "2 h 5 min ago". */
-function agoLong(iso: string, now: Date): string {
-  const mins = Math.floor((now.getTime() - Date.parse(iso)) / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const h = Math.floor(mins / 60);
-  return mins % 60 ? `${h} h ${mins % 60} min ago` : `${h} h ago`;
-}
-
 const more = (label: string, n: number) => (n > 1 ? `${label} (+${n - 1} more)` : label);
 
 /**
@@ -102,9 +94,9 @@ export function pillHealth(h: Pick<HealthView, 'mode' | 'phase' | 'deps'>, sourc
   const stale = polling.filter((s) => !busy(s) && now.getTime() - Date.parse(s.lastPollAt!) > 2 * s.intervalMinutes! * 60_000);
   if (stale.length) {
     const s = stale[0];
-    return { tone: 'warn', label: more(`${SOURCE_NAME[s.id]} stale · last read ${agoLong(s.lastPollAt!, now)}`, stale.length), fix: HEALTH_FIX };
+    return { tone: 'warn', label: more(`${SOURCE_NAME[s.id]} stale · last read ${fmtAgoLong(s.lastPollAt!, now)}`, stale.length), fix: HEALTH_FIX };
   }
 
   const oldest = polling.map((s) => s.lastPollAt!).sort()[0];
-  return { tone: 'ok', label: oldest ? `All sources live · ${agoLong(oldest, now)}` : 'All sources live' };
+  return { tone: 'ok', label: oldest ? `All sources live · ${fmtAgoLong(oldest, now)}` : 'All sources live' };
 }

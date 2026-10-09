@@ -16,6 +16,7 @@ import { useLookedAt } from '../hooks/useLookedAt';
 import { useWideLayout } from '../hooks/useLayout';
 import { useStableGroups, type ShownRow } from '../hooks/useStableGroups';
 import { useNow } from '../hooks/useNow';
+import { closedByReply, useRepliedHold } from '../hooks/useRepliedHold';
 import type { AgendaDay } from '../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
 import { targetChip } from '../lib/lanes';
@@ -23,10 +24,10 @@ import { INBOX_SORT_LABEL, byDue, channelKey, dueInfo, groupByChannel, isLive, l
 import { NEW_FOR_MS, usePrefs } from '../store/prefs';
 import { useUserMoves } from '../store/userMoves';
 import { errorToast, toast } from '../store/toasts';
-import { DueChip, NeedTag, StatusChip } from './inbox/chips';
-import { CockpitRow, LaterRow } from './inbox/cockpit/rows';
+import { DoneByChip, DueChip, NeedTag, StatusChip } from './inbox/chips';
+import { CockpitRow, LaterRow, RepliedRow, ReplyNote } from './inbox/cockpit/rows';
 import { TimeColumn } from './inbox/cockpit/TimeColumn';
-import { LOWER, LaterZone, NeedsYouZone, type Lower } from './inbox/cockpit/zones';
+import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox/cockpit/zones';
 import { ItemPanel } from './inbox/ItemPanel';
 
 // The two groups on screen (FR-8.1). Failed triage sits in Needs you, untriaged, so it isn't missed.
@@ -487,6 +488,7 @@ function QueueRow({ item, selected, isNew, leaving, divide, onPick }: { item: It
         <span className="flex min-w-0 flex-[1_1_260px] flex-wrap items-center gap-x-3.5 gap-y-1.5">
           <span className={cx('flex min-w-0 flex-[1_1_240px] flex-col gap-1 text-[13px] leading-[1.4]', top ? 'font-medium text-ink' : 'text-ink-2')}>
             <span>{item.summary}</span>
+            <ReplyNote item={item} />
             <ItemMarkers item={item} />
           </span>
           <span className="flex flex-wrap gap-1">
@@ -495,6 +497,7 @@ function QueueRow({ item, selected, isNew, leaving, divide, onPick }: { item: It
             {due && <DueChip due={due} />}
             {target && <StatusChip tone="file">{target}</StatusChip>}
             {item.lane === 'failed' && <StatusChip tone="bad">Triage failed</StatusChip>}
+            {item.lane === 'done' && <DoneByChip item={item} />}
             {meta && <span className="font-mono text-[11px] text-muted">{meta}</span>}
           </span>
         </span>
@@ -690,16 +693,19 @@ export function InboxPage() {
   const wide = useWideLayout();
   const [day, setDay] = useState<AgendaDay>('today');
 
+  // Items Frank's reply just closed stay in Needs you for 5 s as "You replied" (CK-2.5).
+  const replied = useRepliedHold(all, !!inbox);
   const by = useMemo(() => {
-    const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(all, sort, true, now), file: [], week: [], else: [], waiting: [], snoozed: [], done: [] };
+    const m: Record<Group | Lower, ItemSummary[]> = { needs: [...sortItems(all, sort, true, now), ...replied], file: [], week: [], else: [], waiting: [], snoozed: [], done: [], replied: [] };
     for (const i of all) if (i.lane in m) m[i.lane as Group | Lower].push(i);
     for (const g of ['file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
     if (grouped) for (const g of ['needs', 'file', 'else', 'waiting'] as const) m[g] = groupByChannel(m[g]);
     m.week = byDue(m.week);
     m.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
+    m.replied = m.done.filter((i) => i.doneBy === 'reply'); // Review, from the closes line
     return m;
-  }, [all, now, sort, grouped]);
+  }, [all, now, sort, grouped, replied]);
   // Open topics per conversation, across every group: Regroup is offered where there are two or more.
   const openTopics = useMemo(() => {
     const m = new Map<string, number>();
@@ -914,14 +920,17 @@ export function InboxPage() {
   // Under Priority, a darker hairline closes the Now block at the top of Needs you. Grouped by
   // channel, each Slack channel's run of rows opens with its name. The cockpit has its own rows:
   // two lines in Needs you, the summary first in Later.
-  const row = (r: ShownRow, n: number, list: ShownRow[], variant: 'list' | 'needs' | 'later' = 'list') => {
+  const row = (r: ShownRow, n: number, list: ShownRow[], variant: 'list' | 'needs' | 'later' = 'list', lower = false) => {
     const i = r.item;
     const key = grouped ? channelKey(i) : undefined;
     const head = key && (n === 0 || channelKey(list[n - 1].item) !== key);
     const props = { item: i, selected: i.id === sel, isNew: !r.leaving && isNew(i.id), leaving: r.leaving, onPick: () => pick(i.id) };
     return [
       head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => !x.leaving && channelKey(x.item) === key).map((x) => x.item)} topics={openTopics.get(key) ?? 0} />,
-      variant === 'needs' ? (
+      // Held in Needs you for a moment after Frank's reply closed it (CK-2.5).
+      !lower && closedByReply(i) ? (
+        <RepliedRow key={i.id} {...props} compact={variant === 'list'} />
+      ) : variant === 'needs' ? (
         <CockpitRow key={i.id} {...props} />
       ) : variant === 'later' ? (
         <LaterRow key={i.id} {...props} meta={isTop(i) ? undefined : lowerMeta(i, now)} />
@@ -931,7 +940,7 @@ export function InboxPage() {
     ];
   };
   const groupRows = { needs: needsRows, file: fileRows };
-  const lowerRow = (i: ItemSummary, n: number, list: ItemSummary[]) => row({ item: i }, n, list.map((item) => ({ item })), wide ? 'later' : 'list');
+  const lowerRow = (i: ItemSummary, n: number, list: ItemSummary[]) => row({ item: i }, n, list.map((item) => ({ item })), wide ? 'later' : 'list', true);
   const openItem = (id: string) => (all.some((i) => i.id === id) ? pick(id) : navigate(itemPath(id)));
   const pillItems = (g: Group) => [...stable.pending[g].map((p) => p.id), ...stable.above[g]].flatMap((id) => all.filter((i) => i.id === id));
   const goNew = (g: Group) => {
@@ -995,6 +1004,7 @@ export function InboxPage() {
               scrollerRef={listRef}
               sortMenu={<SortMenu />}
               empty={inbox.firstRun ? <FirstRun inbox={inbox} /> : undefined}
+              footer={<RepliesLine closed={inbox.closedByReply} onReview={() => setOpen('replied')} className="h-12" />}
             >
               {full && <CommitmentsGroup />}
             </NeedsYouZone>
@@ -1028,6 +1038,7 @@ export function InboxPage() {
                     <div className="border-b border-line-soft">
                       {groupRows[g.id].length ? groupRows[g.id].flatMap((r, n, list) => row(r, n, list)) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
                     </div>
+                    {g.id === 'needs' && <RepliesLine closed={inbox.closedByReply} onReview={() => setOpen('replied')} className="border-t-0 py-2.5" />}
                   </section>
                 ))
               )}

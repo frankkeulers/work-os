@@ -214,6 +214,8 @@ export interface ItemView {
   results: Record<string, string>; // by action id, outcome message after execution or failure
   /** Pages excluded from the Confluence scope: a draft for one of them, or below one, will be refused. */
   excludedPageIds: string[];
+  /** Frank's reply closes this item once it settles the asks (cockpit CK-2.5): closing on reply is on for its source. */
+  closesOnReply: boolean;
   dryRun: boolean;
   dataDir: string;
   /** Where approved actions write, for links to the Confluence page and the Obsidian note. */

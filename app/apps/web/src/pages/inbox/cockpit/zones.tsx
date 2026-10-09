@@ -6,13 +6,14 @@ import { Icon } from '../../../components/icons';
 import { Button, IconButton, cx } from '../../../components/ui';
 import type { ShownRow } from '../../../hooks/useStableGroups';
 import { useNow } from '../../../hooks/useNow';
-import { fmtWhen } from '../../../lib/format';
+import type { ClosedByReply } from '@work-os/shared';
+import { fmtAgoLong, fmtWhen } from '../../../lib/format';
 
 // The cockpit's Needs you and Later zones (CK-3.8, CK-3.11). The Inbox page owns the rows (their
 // order, the New dot, the panel); the zones lay them out, each scrolling on its own.
 
 /** The lists off the main groups: footer links in the list layout, the Later zone on the cockpit. */
-export type Lower = 'week' | 'else' | 'snoozed' | 'done' | 'waiting';
+export type Lower = 'week' | 'else' | 'snoozed' | 'done' | 'waiting' | 'replied';
 
 export const LOWER: Record<Lower, { title: string; note: string }> = {
   week: { title: 'This week', note: 'Due after today. Each moves to Needs you on the day it falls due.' },
@@ -20,9 +21,31 @@ export const LOWER: Record<Lower, { title: string; note: string }> = {
   snoozed: { title: 'Snoozed', note: 'Each comes back at its snooze time, or early if a new reply makes it Now.' },
   done: { title: 'Done', note: 'Comes back if someone other than you replies.' },
   waiting: { title: 'Waiting for quiet window', note: 'Still active. Triage runs once each thread has been quiet for a while.' },
+  replied: { title: 'Closed by your replies', note: 'Your reply settled each of these. Reopen any that should still be open: it teaches the check.' },
 };
 
 type RenderRow = (r: ShownRow, n: number, list: ShownRow[]) => ReactNode;
+
+/** "7 closed by your replies today · latest 2 min ago: Head of Sales", with Review (cockpit CK-2.5). */
+export function RepliesLine({ closed, onReview, className }: { closed?: ClosedByReply; onReview: () => void; className?: string }) {
+  const now = useNow(30_000);
+  if (!closed?.today) return null;
+  return (
+    <div data-testid="replies-line" className={cx('flex shrink-0 items-center gap-2 border-t border-line px-6 text-[13px] text-muted', className)}>
+      <Icon name="check" size={16} strokeWidth={2.25} className="shrink-0 text-green-fg" />
+      <span className="min-w-0 truncate">
+        <b className="font-semibold text-ink-2">
+          {closed.today} closed by your {closed.today === 1 ? 'reply' : 'replies'}
+        </b>{' '}
+        today{closed.latestAt && ` · latest ${fmtAgoLong(closed.latestAt, now)}: ${closed.latestTitle ?? ''}`}
+      </span>
+      <span className="flex-1" />
+      <button type="button" onClick={onReview} className="shrink-0 font-medium text-accent cursor-pointer hover:underline">
+        Review
+      </button>
+    </div>
+  );
+}
 
 function ZoneHead({ dot, title, count, children }: { dot: string; title: string; count: number; children?: ReactNode }) {
   return (
@@ -46,6 +69,7 @@ export function NeedsYouZone({
   scrollerRef,
   sortMenu,
   empty,
+  footer,
   children,
 }: {
   rows: ShownRow[];
@@ -54,6 +78,8 @@ export function NeedsYouZone({
   scrollerRef: RefObject<HTMLElement | null>;
   sortMenu: ReactNode;
   empty?: ReactNode;
+  /** The line under the list: closes by reply today (CK-2.5). */
+  footer?: ReactNode;
   children?: ReactNode;
 }) {
   const now = rows.filter((r) => r.item.lane === 'now');
@@ -91,6 +117,7 @@ export function NeedsYouZone({
           ))}
         {children}
       </section>
+      {footer}
     </section>
   );
 }

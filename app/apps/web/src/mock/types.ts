@@ -92,6 +92,7 @@ export interface ItemRec extends ItemFlags<TriageDecision> {
   batch?: { at: string; threads: number; calls: number };
   topicKey?: string; // ThreadSeed.topic
   regroupKey?: string; // ThreadSeed.regroupWith
+  settleWhy?: string; // the last settle check's reason an ask is still open (cockpit CK-2.3)
 }
 
 export interface TimelineEntry {

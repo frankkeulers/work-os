@@ -544,3 +544,9 @@ export function closeOnReply(settings: Pick<Settings, 'triage'>): { enabled: boo
   const sources = Object.fromEntries(SourceId.options.map((id) => [id, c?.sources[id] ?? id === 'slack'])) as Record<SourceId, boolean>;
   return { enabled: c?.enabled ?? true, sources };
 }
+
+/** Whether Frank's reply can close an item from this source by itself (CK-2.5). */
+export const closesOnReply = (settings: Pick<Settings, 'triage'>, source: SourceId) => {
+  const c = closeOnReply(settings);
+  return c.enabled && c.sources[source];
+};

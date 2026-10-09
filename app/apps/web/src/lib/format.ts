@@ -26,6 +26,15 @@ export function fmtAgo(iso: string, now: Date): string {
   return dayMonth.format(new Date(iso));
 }
 
+/** "34 min ago", "2 h 5 min ago", "just now". */
+export function fmtAgoLong(iso: string, now: Date): string {
+  const mins = Math.floor((now.getTime() - Date.parse(iso)) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const h = Math.floor(mins / 60);
+  return mins % 60 ? `${h} h ${mins % 60} min ago` : `${h} h ago`;
+}
+
 /** "in 6 min", "in 1 h 5 min", "now". */
 export function fmtIn(iso: string, now: Date): string {
   const mins = Math.ceil((Date.parse(iso) - now.getTime()) / 60_000);

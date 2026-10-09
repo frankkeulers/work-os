@@ -7,7 +7,7 @@ const mockControls = controls!;
 import { Icon } from '../components/icons';
 import { Button, IconButton, Segmented, cx } from '../components/ui';
 import { fmtDayDate, fmtTime } from '../lib/format';
-import type { PollOutcome, StateFlag } from '../mock/controls';
+import type { PollOutcome, SettleOutcome, StateFlag } from '../mock/controls';
 import type { DraftOutcome } from '../mock/types';
 import { usePrefs } from '../store/prefs';
 import { toast } from '../store/toasts';
@@ -57,6 +57,12 @@ const OUTCOMES: [DraftOutcome, string][] = [
   ['model_error', 'Model error'],
 ];
 
+const SETTLES: [SettleOutcome, string][] = [
+  ['settled', 'Settles it'],
+  ['open', 'Holds it (“will look later”)'],
+  ['failed', 'Check fails'],
+];
+
 const POLLS: [PollOutcome, string][] = [
   ['nothing', 'Nothing eligible'],
   ['vip_dm', 'VIP DM'],
@@ -88,6 +94,13 @@ function Controls() {
       <Group title="Poll outcome" hint={`${s.timelinePending} scripted arrivals left`}>
         {POLLS.map(([o, l]) => (
           <Ctl key={o} onClick={() => mockControls.simulatePoll(o)}>
+            {l}
+          </Ctl>
+        ))}
+      </Group>
+      <Group title="Frank replies" hint="to the open item, or a Slack item in Needs you; the settle check answers a moment later">
+        {SETTLES.map(([o, l]) => (
+          <Ctl key={o} onClick={() => mockControls.frankReplies(o, new URLSearchParams(window.location.search).get('item') ?? undefined)}>
             {l}
           </Ctl>
         ))}

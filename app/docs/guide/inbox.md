@@ -116,6 +116,22 @@ after the poll that brings your reply in.
 - **Not settled**, such as "will look later" or a question back: the item stays where it is.
 - A message from someone else brings a closed item back, as it does for anything in Done.
 
+What you see when a reply closes an item:
+
+- The row stays where it was for five seconds, washed green and struck through, reading **✓ You
+  replied just now**, then it goes.
+- A toast says **Closed: you replied in Slack**, with **Undo** to bring the item straight back.
+- Under Needs you, a line counts the day's closes: **2 closed by your replies today · latest 4 min
+  ago: …**. **Review** opens the list **Closed by your replies**; on a narrower window the line sits
+  under the groups.
+- In Done, each item says how it closed: **Your reply in Slack**, **Answered in Outlook** (an
+  invite), **Closed in Slack** (the thread was deleted) or **Done by you**.
+
+When the check says your reply didn't settle it, the row and the panel's next step read **You
+replied · still open:** and why, such as "You said you'd look later". If closing on reply is off for
+that source, they read **You replied · Mark done?** instead. The panel says under its main button
+whether a reply closes the item: **Closes by itself when you reply in the thread**.
+
 If you reply through the panel's **Reply in Slack** (or **Open thread in Slack**), Work OS reads that
 thread again 2 and 6 minutes later, so the item closes without waiting for the next poll. A reply
 you make without the button is still picked up by the poll.

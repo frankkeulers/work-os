@@ -2,12 +2,13 @@ import type { ReactNode } from 'react';
 import type { ItemSummary } from '../../../api';
 import { SourceMark } from '../../../components/BrandIcon';
 import { CategoryDot, ItemMarkers, kindLabel, markDoneWithUndo } from '../../../components/item';
+import { Icon } from '../../../components/icons';
 import { IconButton, cx } from '../../../components/ui';
 import { useNow } from '../../../hooks/useNow';
-import { fmtAgo, plural } from '../../../lib/format';
+import { fmtAgo, fmtAgoLong, plural } from '../../../lib/format';
 import { targetChip } from '../../../lib/lanes';
 import { dueInfo, needLabel, topicAsks } from '../../../lib/next';
-import { DueChip, NeedTag, StatusChip } from '../chips';
+import { DoneByChip, DueChip, NeedTag, StatusChip } from '../chips';
 
 // The cockpit's rows (CK-3.8, CK-3.11). Needs you: two lines, where and the chips, then the summary
 // large enough to read from across the desk. Later: the summary first, then where and its one chip.
@@ -78,6 +79,51 @@ function Categories({ item }: { item: ItemSummary }) {
   );
 }
 
+/**
+ * What Frank's last reply did, under the summary (cockpit CK-2.3, CK-2.7): what is still open after
+ * it, or, with closing on reply off, that it settled everything.
+ */
+export function ReplyNote({ item, className, wrap }: { item: ItemSummary; className?: string; wrap?: boolean }) {
+  const c = item.replyCheck;
+  if (!c || item.status !== 'open') return null;
+  return (
+    <span data-reply-note={c.allSettled ? 'settled' : 'open'} className={cx('block w-full text-[13px] text-muted', !wrap && 'truncate', className)}>
+      {c.allSettled ? 'You replied · Mark done?' : `You replied · still open${c.why ? `: ${c.why}` : ''}`}
+    </span>
+  );
+}
+
+/**
+ * A row Frank's reply just closed (CK-2.5): "You replied", the summary struck through on green, for
+ * 5 s before it leaves like any other row.
+ */
+export function RepliedRow({ item, selected, leaving, onPick, compact }: Omit<RowProps, 'isNew'> & { compact?: boolean }) {
+  const now = useNow(30_000);
+  const row = (
+    <div className={cx('flex items-center border-t border-line-soft bg-green-wash pr-3', selected && 'shadow-[inset_3px_0_0_var(--accent-bg)]')}>
+      <button type="button" {...rowAttrs(item, false, leaving, selected)} data-replied onClick={onPick} className={cx('flex min-w-0 flex-1 flex-col gap-1 pl-6 pr-2 text-left cursor-pointer', compact ? 'py-[9px]' : 'py-2.5')}>
+        <span className="flex w-full min-w-0 items-center gap-2 text-xs text-muted">
+          <span className="flex w-[18px] shrink-0 justify-center">
+            <SourceMark source={item.source} size={18} />
+          </span>
+          <span className="min-w-0 truncate font-medium text-ink-2">{item.title}</span>
+          <span className="shrink-0">
+            {kindLabel(item.kind)} · {fmtAgo(item.lastActivityAt, now)}
+          </span>
+          <span className="flex-1" />
+          <span className="inline-flex shrink-0 items-center gap-1 font-semibold text-green-fg">
+            <Icon name="check" size={14} strokeWidth={2.25} />
+            You replied {fmtAgoLong(item.lastActivityAt, now)}
+          </span>
+        </span>
+        <span className={cx('w-full truncate pl-[26px] text-muted line-through', compact ? 'text-sm' : 'text-row')}>{item.summary}</span>
+      </button>
+      <span aria-hidden="true" className="w-8 shrink-0" />
+    </div>
+  );
+  return collapse(leaving, row);
+}
+
 export function CockpitRow({ item, selected, isNew, leaving, onPick }: RowProps) {
   const now = useNow(30_000);
   const failed = item.lane === 'failed';
@@ -109,6 +155,7 @@ export function CockpitRow({ item, selected, isNew, leaving, onPick }: RowProps)
           {due && <DueChip due={due} />}
         </span>
         <span className="w-full truncate pl-[26px] text-row">{item.summary}</span>
+        <ReplyNote item={item} className="pl-[26px]" />
         <span className="pl-[26px] empty:hidden">
           <ItemMarkers item={item} />
         </span>
@@ -138,6 +185,7 @@ export function LaterRow({ item, selected, isNew, leaving, meta, onPick }: RowPr
           {item.lane === 'week' && item.next && <NeedTag>{needLabel(item.next)}</NeedTag>}
           {due && <DueChip due={due} />}
           {target && <StatusChip tone="file">{target}</StatusChip>}
+          {item.lane === 'done' && <DoneByChip item={item} />}
           {meta && <span className="shrink-0 font-mono text-[11px]">{meta}</span>}
         </span>
         <span className="empty:hidden">

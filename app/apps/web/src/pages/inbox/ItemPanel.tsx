@@ -16,6 +16,7 @@ import { SOURCE_NAME, dueInfo, isLive, needLabel, shownStep, suggestedSnooze, to
 import { usePrefs } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { DueChip, LaneChip, NeedTag, StatusChip } from './chips';
+import { ReplyNote } from './cockpit/rows';
 
 const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
@@ -79,7 +80,24 @@ function SnoozeSplit({ item, hint }: { item: ItemSummary; hint: { label: string;
  * What to do, and the doing of it: the next step (or, with nothing to do, the item's status) on top,
  * and under it either the filing options or the open draft (`workflow`) with its progress and review.
  */
-function NextStepCard({ item, draftsBudgetHit, onFile, workflow }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void; workflow?: ReactNode }) {
+/** Under Reply in …: that a reply closes the item by itself, when closing on reply is on (cockpit CK-2.5). */
+function CloseNote({ item }: { item: ItemSummary }) {
+  const where = item.kind === 'dm' || item.kind === 'chat' ? 'the conversation' : item.kind === 'email' ? 'the email' : 'the thread';
+  const text = !item.next || item.next.need === 'reply' ? `Closes by itself when you reply in ${where}.` : 'Closes when your reply settles it.';
+  // Only Slack is read again after the click (CK-2.4).
+  const checked = item.source === 'slack' ? ` Checked 2 min after you open ${SOURCE_NAME[item.source]}.` : '';
+  return (
+    <div data-close-note className="flex items-center gap-2 rounded-md bg-green-wash px-2.5 py-2 text-[13px] text-green-fg">
+      <Icon name="check" size={14} strokeWidth={2.25} className="shrink-0" />
+      <span>
+        {text}
+        {checked}
+      </span>
+    </div>
+  );
+}
+
+function NextStepCard({ item, draftsBudgetHit, closesOnReply, onFile, workflow }: { item: ItemSummary; draftsBudgetHit: boolean; closesOnReply: boolean; onFile: (t: ActionType) => void; workflow?: ReactNode }) {
   const now = useNow(30_000);
   const step = shownStep(item, draftsBudgetHit, now);
   const hint = suggestedSnooze(item, now);
@@ -125,6 +143,8 @@ function NextStepCard({ item, draftsBudgetHit, onFile, workflow }: { item: ItemS
           <SnoozeSplit item={item} hint={hint} />
         </div>
         {draftHint && <div className="-mt-1 text-xs text-muted">{draftHint}</div>}
+        {p.kind === 'open' && closesOnReply && <CloseNote item={item} />}
+        <ReplyNote item={item} wrap />
       </div>
       {workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} skip={draft?.type} />)}
     </section>
@@ -598,6 +618,7 @@ export function ItemPanel({
         <NextStepCard
           item={item}
           draftsBudgetHit={draftsBudgetHit}
+          closesOnReply={!!view?.closesOnReply}
           onFile={file}
           workflow={
             filing && view ? (

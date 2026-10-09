@@ -1,6 +1,12 @@
 import {
   Rules,
+  SETTLE_MAX_ATTEMPTS,
   Settings as SettingsSchema,
+  askId,
+  awaitsReply,
+  effectiveTriage,
+  settleChecked,
+  settleFailed,
   anchorOf,
   applyActionEvent,
   applyDecision,
@@ -32,6 +38,8 @@ import {
   snooze,
   summaryOf,
   closedByReply,
+  closeOnReply,
+  closesOnReply,
   conversationOf,
   replay,
   replyCloseCriteria,
@@ -82,7 +90,7 @@ import {
 } from '@work-os/shared';
 import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
-import type { MockControls, PollOutcome, StateFlag } from './controls';
+import type { MockControls, PollOutcome, SettleOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
 import { CALENDAR, CALENDAR_CATEGORIES } from './seed/calendar';
 import { inMockScope, mockCatalogue } from './seed/catalogue';
@@ -485,7 +493,7 @@ export class MockServer implements WorkOsApi, MockControls {
       quietMinutes: this.s.settings.triage.quietMinutes,
       now: this.iso(),
       triageBudgetHit: budgets.triage.hit,
-      text: { summary: d?.summary, reason: d?.reason, next: d?.next, firstMessage: rec.item.messages[0]?.text },
+      text: { summary: d?.summary, reason: d?.reason, next: d?.next, firstMessage: rec.item.messages[0]?.text, ...(rec.settleWhy && { settleWhy: rec.settleWhy }) },
     });
     const calendarCategories = this.categoryTagsOf(rec.item.meeting?.calendar?.eventId);
     return calendarCategories ? { ...row, calendarCategories } : row;
@@ -653,6 +661,7 @@ export class MockServer implements WorkOsApi, MockControls {
       progress: { ...progress },
       results,
       excludedPageIds: this.s.settings.confluence.exclude.map((p) => p.id),
+      closesOnReply: closesOnReply(this.s.settings, rec.item.source),
       dryRun: this.s.settings.dryRun,
       dataDir: this.s.settings.dataDir,
       targets: { confluenceSite: this.s.settings.confluence.siteUrl, spaceKey: this.s.settings.confluence.spaceKey, vaultPath: this.s.settings.vaultPath },
@@ -1433,6 +1442,48 @@ export class MockServer implements WorkOsApi, MockControls {
     void this.runPoll('manual', { threads: OUTLOOK_THREADS });
     this.readCalendarOnce();
     this.emitAll();
+  }
+
+  frankReplies(outcome: SettleOutcome, itemId?: string) {
+    // The check runs only where closing on reply is on for the source (Slack until CK-2.9).
+    const checked = closeOnReply(this.s.settings).sources;
+    const open = Object.values(this.s.items).filter((r) => !r.topicOf && awaitsReply(r) && checked[r.item.source]);
+    const rank = (r: ItemRec) => (effectiveTriage(r.decision, r.correction)?.attention === 'now' ? 0 : 1);
+    const rec = itemId ? this.s.items[itemId] : open.sort((a, b) => rank(a) - rank(b) || b.item.lastActivityAt.localeCompare(a.item.lastActivityAt))[0];
+    if (!rec || !awaitsReply(rec) || !checked[rec.item.source]) return;
+    const text = { settled: 'Yes, go ahead. Done on my side.', open: 'Will look later today', failed: 'Sounds good' }[outcome];
+    this.ingestReply({ targetKey: rec.key, by: FRANK, text });
+    this.emit({ topic: 'inbox' });
+    const id = rec.item.id;
+    const revision = rec.item.revision;
+    const through = rec.item.lastActivityAt;
+    const messageId = rec.item.messages.at(-1)!.id;
+    void (async () => {
+      await sleep(1200); // the poll that brought it in, then the check
+      const r = this.s.items[id];
+      if (!r || r.item.revision !== revision || !r.settlePending) return;
+      const at = this.iso();
+      if (outcome === 'failed') {
+        const data = { revision, attempts: SETTLE_MAX_ATTEMPTS, reason: 'claude unavailable' };
+        settleFailed(r, data.attempts);
+        this.event('settle.failed', data, { itemId: id });
+      } else {
+        const next = r.decision?.next;
+        const asks = next?.asks?.filter((a) => !(r.asksDone ?? []).includes(askId(a.step))) ?? (next ? [next] : []);
+        const settled = outcome === 'settled';
+        const data = { revision, through, batchId: `settle-${at}-1`, allSettled: settled, settled: settled ? asks.map((a) => askId(a.step)) : [] };
+        this.recordUsage('settle', this.s.settings.models.triage, 2400, 140, [id], 'settle v1#mock', 1400);
+        r.settleWhy = settled ? undefined : `You said you’d look later; ${next ? `“${next.step}”` : 'the reply'} is still yours.`;
+        settleChecked(r, at, data);
+        this.event('settle.checked', data, { itemId: id });
+        if (settled && closesOnReply(this.s.settings, r.item.source)) {
+          const done = { by: 'reply' as const, source: r.item.source, messageId, check: data.batchId };
+          markDone(r, at, done);
+          this.event('item.done', done, { itemId: id });
+        }
+      }
+      this.emit({ topic: 'inbox' }, { topic: 'item', id }, { topic: 'usage' });
+    })();
   }
 
   wakeFromSleep() {
