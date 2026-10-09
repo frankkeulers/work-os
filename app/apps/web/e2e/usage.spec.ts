@@ -27,9 +27,11 @@ test('J28 no baseline yet shows cost-equivalent instead of percentages', async (
   await expect(page.locator('[data-criterion="S3"]')).toContainText('Baseline not measured');
 });
 
-test('Slack source link opens source health', async ({ page }) => {
+test('Slack source link opens Slack’s history, and its Health link opens source health (CK-5.7)', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Slack/ }).click();
+  await expect(page).toHaveURL(/\/source\/slack$/);
+  await page.locator('[data-source-header]').getByRole('link', { name: 'Health ›' }).click();
   await expect(page).toHaveURL(/\/usage#health$/);
   await expect(page.getByTestId('slack-health')).toContainText('Healthy');
 });

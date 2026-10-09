@@ -332,12 +332,13 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
             const turn = pollTurn(id, inbox?.poll);
             const label = health ? sourceLabel(id, health, now, turn) : '';
             // A source the health pill calls stale is amber here too, though its last poll went well.
+            // The row opens the source's history (cockpit CK-5.7); health is on Usage & health.
             const stale = !!health && health.status === 'healthy' && isStale(health, now, inbox?.poll);
             const dot = health ? (stale ? 'var(--amber)' : SLACK_DOT[health.status]) : 'var(--gray-mid)';
             return (
               <NavLink
                 key={id}
-                to="/usage#health"
+                to={`/source/${id}`}
                 title={collapsed ? `${name} · ${label}` : undefined}
                 className={cx('flex items-center gap-2.5 rounded-lg !text-ink no-underline hover:bg-surface-2', collapsed ? 'relative min-h-10 justify-center' : 'px-2 py-1.5')}
               >
