@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useRef } from 'react';
-import { Outlet, RouterProvider, createBrowserRouter, useLocation, useNavigate } from 'react-router';
+import { Outlet, createBrowserRouter, useLocation, useNavigate } from 'react-router';
+import { RouterProvider } from 'react-router/dom'; // wires up flushSync, for navigations that need it
 import { API_MODE, api } from './api';
 import { Shell } from './components/Shell';
 import { Toasts } from './components/Toasts';

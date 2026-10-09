@@ -813,7 +813,8 @@ export function InboxPage() {
       if (!id) return;
       clearNew(id);
       setPanelOpen(true);
-      setSearch({ item: id }, { replace: true });
+      // At once, not in a transition: a key pressed straight after (j again, or e) acts on this row.
+      setSearch({ item: id }, { replace: true, flushSync: true });
       const el = rowEl(id);
       el?.focus({ preventScroll: true });
       el?.scrollIntoView({ block: 'nearest' });

@@ -94,6 +94,22 @@ test('J06 keyboard: j/k move the panel, e and ⇧E mark done, Esc closes', async
   await expect(itemPanel(page)).toBeVisible();
 });
 
+test('J06 keyboard: keys pressed faster than the screen updates act on the row they reach', async ({ page }) => {
+  const ids = await rows(page, 'Now').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')!));
+  expect(ids.length).toBeGreaterThanOrEqual(3);
+  await expect(selected(page)).toHaveAttribute('data-row', ids[0]);
+  // In one burst: no render in between.
+  const burst = (keys: string[]) => page.evaluate((ks) => ks.forEach((key) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))), keys);
+
+  await burst(['j', 'j']);
+  await expect(selected(page)).toHaveAttribute('data-row', ids[2]);
+  await burst(['k', 'e']);
+  // e marked the second done, not the third it left.
+  await expect(rows(page, 'Now')).toHaveCount(ids.length - 1);
+  await expect(page.locator(`[data-row="${ids[1]}"]`)).toHaveCount(0);
+  await expect(rows(page, 'Now').and(page.locator(`[data-row="${ids[2]}"]`))).toHaveCount(1);
+});
+
 test('J04 correct triage in the panel moves the item and grows the labelled set', async ({ page }) => {
   const row = rows(page, 'Today').first();
   const id = (await row.getAttribute('data-row'))!;
