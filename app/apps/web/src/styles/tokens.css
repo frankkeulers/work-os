@@ -67,6 +67,17 @@
   --violet-line:#8B5CF6;
   --violet-wash:#FBFAFF;
   --violet-wash-2:#F5F3FF;
+  /* Cockpit (specs/cockpit/SPEC.md CK-1.8) */
+  --green-wash:#F0FAF3; /* health pill, "you replied" row, auto-close note */
+  --amber-line:#F59E0B; /* degraded top bar, meeting starting soon */
+  --now-line:#F7DCC8; /* hairline between Now rows */
+  --later-bg:#FCFCFD; /* Later zone ground */
+  --past:#FAFAFB; /* the elapsed part of the timeline */
+  --selection:rgba(29,78,216,0.08); /* selected row wash */
+  --health-blue-bar:#EFF6FF; /* catching-up top bar */
+  --health-amber-pill:#FEF3C7; /* degraded pill */
+  --health-red-pill:#FCE4E4; /* safe-mode pill */
+  --health-red-line:#B91C1C; /* safe-mode top bar hairline */
   color-scheme: light;
 }
 
@@ -137,6 +148,17 @@
   --violet-line:#8B6CF0;
   --violet-wash:#1E1A2E;
   --violet-wash-2:#241E38;
+  /* Cockpit (specs/cockpit/SPEC.md CK-1.8) */
+  --green-wash:#13261B; /* health pill, "you replied" row, auto-close note */
+  --amber-line:#7A5410; /* degraded top bar, meeting starting soon */
+  --now-line:#3A2418; /* hairline between Now rows */
+  --later-bg:#171A20; /* Later zone ground */
+  --past:#16191F; /* the elapsed part of the timeline */
+  --selection:rgba(138,168,255,0.12); /* selected row wash */
+  --health-blue-bar:#172033; /* catching-up top bar */
+  --health-amber-pill:#3A2C10; /* degraded pill */
+  --health-red-pill:#3A1A1A; /* safe-mode pill */
+  --health-red-line:#7F1D1D; /* safe-mode top bar hairline */
   color-scheme:dark;
 }
 
@@ -208,6 +230,17 @@
     --violet-line:#8B6CF0;
     --violet-wash:#1E1A2E;
     --violet-wash-2:#241E38;
+    /* Cockpit (specs/cockpit/SPEC.md CK-1.8) */
+    --green-wash:#13261B; /* health pill, "you replied" row, auto-close note */
+    --amber-line:#7A5410; /* degraded top bar, meeting starting soon */
+    --now-line:#3A2418; /* hairline between Now rows */
+    --later-bg:#171A20; /* Later zone ground */
+    --past:#16191F; /* the elapsed part of the timeline */
+    --selection:rgba(138,168,255,0.12); /* selected row wash */
+    --health-blue-bar:#172033; /* catching-up top bar */
+    --health-amber-pill:#3A2C10; /* degraded pill */
+    --health-red-pill:#3A1A1A; /* safe-mode pill */
+    --health-red-line:#7F1D1D; /* safe-mode top bar hairline */
     color-scheme:dark;
   }
 }
@@ -280,4 +313,31 @@
   --color-violet-line: var(--violet-line);
   --color-violet-wash: var(--violet-wash);
   --color-violet-wash-2: var(--violet-wash-2);
+  --color-green-wash: var(--green-wash);
+  --color-amber-line: var(--amber-line);
+  --color-now-line: var(--now-line);
+  --color-later-bg: var(--later-bg);
+  --color-past: var(--past);
+  --color-selection: var(--selection);
+  --color-health-blue-bar: var(--health-blue-bar);
+  --color-health-amber-pill: var(--health-amber-pill);
+  --color-health-red-pill: var(--health-red-pill);
+  --color-health-red-line: var(--health-red-line);
+}
+
+/* Glance type (specs/cockpit/SPEC.md CK-1.4): read from across the desk. Used only where the spec
+   names it; everything else keeps the DESIGN.md scale. text-glance-xl, text-glance-l, ... */
+@theme {
+  --text-glance-xl: 28px; /* the clock in the time column */
+  --text-glance-xl--line-height: 34px;
+  --text-glance-xl--font-weight: 600;
+  --text-glance-l: 22px; /* count pills in the top bar */
+  --text-glance-l--line-height: 28px;
+  --text-glance-l--font-weight: 600;
+  --text-glance-m: 18px; /* next-meeting title, zone titles */
+  --text-glance-m--line-height: 24px;
+  --text-glance-m--font-weight: 600;
+  --text-row: 15px; /* Needs you summaries */
+  --text-row--line-height: 21px;
+  --text-row--font-weight: 500;
 }

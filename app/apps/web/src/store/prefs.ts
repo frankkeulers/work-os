@@ -40,8 +40,10 @@ export const usePrefs = create<Prefs>()(
       panelOpen: true,
       scope: 'mvp',
       navCollapsed: false,
-      inboxSort: 'newest',
-      groupByChannel: true,
+      // Cockpit CK-1.1: Priority order and no channel groups by default. A choice already saved in
+      // this browser is kept (persist merges it over these).
+      inboxSort: 'priority',
+      groupByChannel: false,
       dismissedMeetings: {},
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),

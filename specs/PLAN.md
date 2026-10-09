@@ -606,7 +606,7 @@ As built (M2 step 16):
 
 ### 7.8 Inbox lanes (M2 UI)
 
-**FR-8.1** The inbox shows two groups: **Needs you** (attention now or today, plus items whose triage failed, shown untriaged) and **To file** (confluence or vault suggested, attention none). A Sort menu orders the lists by last activity, **newest first** (the default) or oldest first, or by **Priority**: Needs you lists Now items first, then failed ones, then Today items by deadline. **Group by channel** (on by default, can be switched off in the same menu) brings each Slack channel's or DM's items together under its name; channels follow the chosen order. Both choices are kept in the browser. **Low priority** (no attention, nothing to file) is a footer link that opens its list. Lanes stay as before underneath (now, today, file, else, failed, waiting).
+**FR-8.1** The inbox shows two groups: **Needs you** (attention now or today, plus items whose triage failed, shown untriaged) and **To file** (confluence or vault suggested, attention none). A Sort menu orders the lists by **Priority** (the default since the cockpit, CK-1.1): Needs you lists Now items first, then failed ones, then Today items by deadline; or by last activity, newest or oldest first. **Group by channel** (off by default since CK-1.1, switched on in the same menu) brings each Slack channel's or DM's items together under its name; channels follow the chosen order. Both choices are kept in the browser. **Low priority** (no attention, nothing to file) is a footer link that opens its list. Lanes stay as before underneath (now, today, file, else, failed, waiting).
 
 **FR-8.2** Item actions: Open in Slack, Done, Snooze (1h / tomorrow 09:00 / custom), Correct triage, Draft vault note, Draft Confluence entry.
 

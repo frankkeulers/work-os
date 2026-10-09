@@ -146,7 +146,9 @@ test('J10 file from the panel: review and approve the Confluence entry in place'
 });
 
 test('the Next step card holds the filing: its options, the draft’s progress and the review', async ({ page }) => {
-  // A reply: the step's action is Slack, so both targets are filing options in the same card.
+  // The newest item is a reply: the step's action is Slack, so both targets are filing options in the same card.
+  await sortBy(page, 'Newest first');
+  await group(page, 'Needs you').locator('[data-row]').first().click();
   const step = itemPanel(page).getByRole('region', { name: 'Next step' });
   const options = step.getByRole('region', { name: 'File it' });
   await expect(options.getByRole('button')).toHaveText(['Draft Confluence entry', 'Draft vault note']);
@@ -360,31 +362,52 @@ async function rowsInOrder(page: Page) {
 }
 const newestFirst = (list: string[]) => expect(list).toEqual([...list].sort().reverse());
 
-test('the Inbox groups Slack items by channel, newest first, and the Sort menu changes both', async ({ page }) => {
-  await expect(page.getByRole('button', { name: 'Sort: Newest first' })).toBeVisible();
+test('the Inbox sorts by priority, ungrouped, by default; the Sort menu groups by channel and changes the order (CK-1.1)', async ({ page }) => {
+  await expect(page.getByRole('button', { name: 'Sort: Priority' })).toBeVisible();
+  await expect(page.locator('[data-channel]')).toHaveCount(0);
+  // Priority: the Now rows lead Needs you.
+  const lanes = await group(page, 'Needs you').locator('[data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-lane')));
+  expect(lanes.slice(0, 3)).toEqual(['now', 'now', 'now']);
+  expect(lanes.slice(3)).not.toContain('now');
+
+  await sortBy(page, 'Newest first');
+  for (const list of await rowsInOrder(page)) newestFirst(list.map((r) => r.at));
+
   // Grouped: each channel's rows sit together, newest first, under one heading.
+  await page.getByRole('button', { name: /^Sort: / }).click();
+  const grouping = page.getByRole('menuitemcheckbox', { name: 'Group by channel' });
+  await expect(grouping).toHaveAttribute('aria-checked', 'false');
+  await grouping.click();
+  await expect(grouping).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-group="needs"] [data-channel]').first()).toBeVisible();
   for (const list of await rowsInOrder(page)) {
     const channels = list.map((r) => r.channel).filter((c) => c);
     expect(channels.filter((c, n) => channels.indexOf(c) === n)).toEqual(channels.filter((c, n) => c !== channels[n - 1]));
     for (const c of new Set(channels)) newestFirst(list.filter((r) => r.channel === c).map((r) => r.at));
   }
-  await expect(page.locator('[data-group="needs"] [data-channel]').first()).toBeVisible();
-
-  await page.getByRole('button', { name: /^Sort: / }).click();
-  const grouping = page.getByRole('menuitemcheckbox', { name: 'Group by channel' });
-  await expect(grouping).toHaveAttribute('aria-checked', 'true');
-  await grouping.click();
-  await expect(grouping).toHaveAttribute('aria-checked', 'false');
-  await page.keyboard.press('Escape');
-  await expect(page.locator('[data-channel]')).toHaveCount(0);
-  for (const list of await rowsInOrder(page)) newestFirst(list.map((r) => r.at));
 
   await sortBy(page, 'Oldest first');
+  await page.getByRole('button', { name: /^Sort: / }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Group by channel' }).click();
+  await page.keyboard.press('Escape');
   for (const list of await rowsInOrder(page)) expect(list.map((r) => r.at)).toEqual(list.map((r) => r.at).sort());
 
+  // The choice is kept in this browser.
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sort: Oldest first' })).toBeVisible();
   await expect(page.locator('[data-channel]')).toHaveCount(0);
+});
+
+test('the top bar counts Now, Today and To file, and a pill scrolls to its rows (CK-1.5)', async ({ page }) => {
+  const pills = page.getByTestId('count-pills');
+  const today = await group(page, 'Needs you').locator('[data-row][data-lane="today"], [data-row][data-lane="failed"]').count();
+  await expect(pills.locator('[data-pill]')).toHaveText(['3now', `${today}today`, '4to file']);
+  await page.setViewportSize({ width: 1440, height: 560 });
+  const fileGroup = page.locator('[data-group="file"]');
+  await expect(fileGroup).not.toBeInViewport();
+  await pills.locator('[data-pill="file"]').click();
+  await expect(fileGroup).toBeInViewport();
 });
 
 test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {

@@ -18,6 +18,10 @@ test.beforeEach(async ({ page }) => {
   await drawer(page).getByRole('button', { name: 'Topics', exact: true }).click();
   await page.getByRole('button', { name: 'Close scenarios' }).click();
   await page.reload(); // items that arrive while the inbox is open wait behind "new"; a fresh load shows them
+  // Regroup sits on a conversation's group header, so group by channel (off by default, CK-1.1).
+  await page.getByRole('button', { name: /^Sort: / }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Group by channel' }).click();
+  await page.keyboard.press('Escape');
   await expect(channel(page, 'G01APIGOV').first()).toBeVisible();
 });
 

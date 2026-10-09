@@ -3,7 +3,7 @@ title: The inbox
 group: Inbox
 order: 30
 summary: Needs you and To file, what the chips mean, topics, and how to correct a decision.
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 ## Needs you and To file
@@ -20,7 +20,12 @@ Each row reads left to right: where it happened and how long ago, the one-line s
 three chips: what it needs (reply, decide, review…), a deadline (orange within about four hours,
 blue later today) and, in To file, where it should go.
 
-The **Sort** menu orders by newest, oldest or priority, and can group items by channel or DM.
+The header counts what's waiting, large enough to read from across the desk: **3 now · 6 today ·
+4 to file** (Today includes items whose triage failed). Click a count to scroll to those rows.
+
+The **Sort** menu starts on **Priority**: Now first, then failed triage, then Today by deadline. It
+can also order by newest or oldest, and **Group by channel** gathers items under their channel or
+DM. Your choice is kept in this browser.
 
 With [Outlook Calendar](outlook.md) on, a strip above the groups shows today's meetings, the
 one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook. An
@@ -55,7 +60,7 @@ subject into a **topic**, so a DM about the MVI launch over three days is one en
 - **Asks in this topic** lists everything asked of you across its pieces. Tick one off when done.
 - **Pieces** lists what the topic gathers. If a piece does not belong, choose **Split out**: it
   gets its own entry once triaged.
-- **Regroup**, on a conversation's group header, asks Claude to look again at that
+- **Regroup**, on a conversation's group header (turn on **Sort › Group by channel**), asks Claude to look again at that
   conversation's entries and merge those on the same subject.
 
 ## Correcting triage

@@ -38,6 +38,26 @@ export function dueInfo(next: Partial<NextStep> | undefined, now: Date): { text:
 
 const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'file';
 
+/**
+ * The top bar's count pills (cockpit CK-1.5): Now, Today and To file. Failed triage counts with Today,
+ * where its row sits. One count for every place that shows them, so they always agree.
+ */
+export interface LaneCounts {
+  now: number;
+  today: number;
+  file: number;
+}
+
+export function laneCounts(items: readonly Pick<ItemSummary, 'lane'>[]): LaneCounts {
+  const c: LaneCounts = { now: 0, today: 0, file: 0 };
+  for (const i of items) {
+    if (i.lane === 'now') c.now++;
+    else if (i.lane === 'today' || i.lane === 'failed') c.today++;
+    else if (i.lane === 'file') c.file++;
+  }
+  return c;
+}
+
 /** The earliest deadline still ahead among the items that need you, for the page header. */
 export function nextDeadline(items: ItemSummary[], now: Date): string | undefined {
   const due = items

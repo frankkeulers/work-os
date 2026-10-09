@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
-import { dueInfo, isLive, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
+import { dueInfo, isLive, laneCounts, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
 import { canFile, cardActions } from './lanes';
 
 // Mon 5 Oct 2026, 09:45 London (BST).
@@ -33,6 +33,14 @@ const item = (over: Partial<ItemSummary>): ItemSummary => ({
   pieces: 1,
   asksDone: [],
   ...over,
+});
+
+describe('laneCounts (CK-1.5)', () => {
+  it('counts Now, Today with failed triage, and To file; nothing else', () => {
+    const lanes = ['now', 'now', 'today', 'failed', 'file', 'else', 'waiting', 'snoozed', 'done'] as const;
+    expect(laneCounts(lanes.map((lane) => item({ lane })))).toEqual({ now: 2, today: 2, file: 1 });
+    expect(laneCounts([])).toEqual({ now: 0, today: 0, file: 0 });
+  });
 });
 
 describe('isLive', () => {

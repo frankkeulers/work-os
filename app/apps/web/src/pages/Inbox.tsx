@@ -13,7 +13,7 @@ import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverP
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
-import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, isLive, needLabel, sortItems, topicAsks, type InboxSort } from '../lib/next';
+import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
 import { usePrefs } from '../store/prefs';
 import { errorToast, toast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
@@ -86,6 +86,47 @@ function pollTooltip(inbox: InboxView) {
   else if (poll.nextPollAt) parts.push(`next ${fmtTime(poll.nextPollAt)}`);
   if (!inbox.workHours) parts.push('off-hours');
   return parts.join(' · ');
+}
+
+/** Where each count pill scrolls to: the first row of its lane, or the To file group. */
+const PILL_TARGET: Record<keyof LaneCounts, string> = {
+  now: '[data-group="needs"] [data-row][data-lane="now"]',
+  today: '[data-group="needs"] [data-row][data-lane="today"], [data-group="needs"] [data-row][data-lane="failed"]',
+  file: '[data-group="file"]',
+};
+
+const PILLS: { id: keyof LaneCounts; label: string; tone: string }[] = [
+  { id: 'now', label: 'now', tone: 'bg-orange-wash text-orange-fg' },
+  { id: 'today', label: 'today', tone: 'bg-accent-wash text-accent-ink' },
+  { id: 'file', label: 'to file', tone: 'bg-teal-wash text-teal-ink' },
+];
+
+/** "3 now · 6 today · 4 to file", readable from across the desk (cockpit CK-1.5). A click scrolls there. */
+function CountPills({ counts }: { counts: LaneCounts }) {
+  const go = (id: keyof LaneCounts) => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    document.querySelector(PILL_TARGET[id])?.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+  };
+  return (
+    <div data-testid="count-pills" className="flex items-center gap-2.5">
+      {PILLS.map((p) => {
+        const n = counts[p.id];
+        return (
+          <button
+            key={p.id}
+            type="button"
+            data-pill={p.id}
+            disabled={!n}
+            onClick={() => go(p.id)}
+            className={cx('inline-flex items-baseline gap-1.5 rounded-lg px-3 py-1 text-sm font-medium', n ? `${p.tone} cursor-pointer hover:brightness-[0.97]` : 'bg-surface-2 text-muted')}
+          >
+            <span className="text-glance-l tabular-nums">{n}</span>
+            {p.label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function SortMenu() {
@@ -770,6 +811,7 @@ export function InboxPage() {
   if (!inbox) return <div className="p-8 text-muted">{q.error ? 'Could not load the inbox.' : 'Loading…'}</div>;
 
   const topCount = by.needs.length + by.file.length;
+  const counts = laneCounts(all);
   // Under Priority, a darker hairline closes the Now block at the top of Needs you. Grouped by
   // channel, each Slack channel's run of rows opens with its name.
   const row = (i: ItemSummary, n: number, list: ItemSummary[]) => {
@@ -790,6 +832,7 @@ export function InboxPage() {
       {/* 64px, the height of the sidebar's header, so the two line up. */}
       <header data-inbox-header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-6">
         <h1 className="m-0 text-xl font-semibold tracking-[-0.01em]">Inbox</h1>
+        <CountPills counts={counts} />
         <SortMenu />
         <span className="flex-1" />
         <PollStatus inbox={inbox} />

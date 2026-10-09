@@ -18,6 +18,16 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
    | Meta | 12px / 400, muted | Counts, times, IDs |
 
    Mono is only for things you'd copy: IDs, paths, model names, prompt versions, regexes.
+
+   **Glance type** (cockpit, specs/cockpit/SPEC.md CK-1.4) is for things read from across the desk.
+   It is used only where named; everything else keeps the scale above.
+
+   | Token | Size / weight | Use |
+   |---|---|---|
+   | `text-glance-xl` | 28px / 600, tabular figures | The clock in the time column |
+   | `text-glance-l` | 22px / 600 | Count pills in the Inbox top bar |
+   | `text-glance-m` | 18px / 600 | Next-meeting title, zone titles |
+   | `text-row` | 15px / 500 | Needs you summaries |
 3. **A 4px spacing grid.** The page gutter is 32px. Rows have 20px vertical padding, groups are 32px apart and sections 40px apart. The root font size stays at 16px so Tailwind sizes are what they say (body copy is set to 14px on `body`).
 4. **Label left, control right.** Small controls (switches, selects, short numbers, segmented controls) sit at the right edge of the row. Wide controls (chip lists, allow-lists, rule lists) go under the label at full width.
 5. **Colour carries meaning, nothing else.**
