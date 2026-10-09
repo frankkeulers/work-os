@@ -306,7 +306,7 @@ describe('settings (FR-1.5)', () => {
     const settings = { ...view.settings, dryRun: false };
     const res = await put('/api/settings', { settings, rules: view.rules });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ savedAt: NOW.toISOString() });
+    expect(res.json()).toEqual({ savedAt: NOW.toISOString(), settings, rules: view.rules });
     expect(seen.map((e) => e.type)).toEqual(['settings.changed']);
     expect(JSON.parse(await readFile(paths(dir).settings, 'utf8')).dryRun).toBe(false);
     expect(JSON.parse(await readFile(paths(dir).settingsLastGood, 'utf8')).dryRun).toBe(false);
@@ -683,6 +683,24 @@ describe('Outlook connect (R2.5)', () => {
     // …and a save can't set one either.
     await put('/api/settings', { settings: { ...s, connectors: { ms365: { id: 'mcpsrv_other' } } }, rules: before.rules });
     expect((await saved()).connectors?.ms365?.id).toBe(FAKE_CONNECTOR_ID);
+  });
+
+  it('a Settings save from a form that hasn’t caught up with Connect keeps Outlook on, and changes only what Frank changed', async () => {
+    await build({ outlook: link() });
+    const before = (await get('/api/settings')).json<SettingsView>();
+    expect(before.settings.sources?.outlook?.enabled).toBeFalsy();
+    await post('/api/sources/outlook/connect', {});
+    const base = { settings: before.settings, rules: before.rules };
+    const res = await put('/api/settings', { settings: { ...before.settings, dryRun: !before.settings.dryRun }, rules: before.rules, base });
+    expect(res.statusCode).toBe(200);
+    const s = await saved();
+    expect(s.dryRun).toBe(!before.settings.dryRun);
+    expect(s.sources?.outlook?.enabled).toBe(true);
+    // The reply is the files as saved, so the form can take Connect's change from it.
+    expect(res.json()).toMatchObject({ settings: { dryRun: !before.settings.dryRun, sources: { outlook: { enabled: true } } }, rules: before.rules });
+    // Without a base the files are replaced whole, as before.
+    await put('/api/settings', { settings: before.settings, rules: before.rules });
+    expect((await saved()).sources?.outlook?.enabled).toBeFalsy();
   });
 
   it('Connect is unavailable where the server has no Outlook link; the status still reads', async () => {

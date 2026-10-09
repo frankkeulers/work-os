@@ -8,4 +8,5 @@ export * from './pricing';
 export * from './errors';
 export * from './projection';
 export * from './requests';
+export * from './merge';
 export type * from './api';

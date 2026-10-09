@@ -1,4 +1,4 @@
-import { Rules, Settings as SettingsSchema, type Rule, type Settings } from '@work-os/shared';
+import { mergeEdit, Rules, Settings as SettingsSchema, type Rule, type Settings } from '@work-os/shared';
 import { isApiError } from '../api/errors';
 
 export interface Draft {
@@ -24,7 +24,11 @@ export type SaveKind = 'saved' | 'undone';
 export type SaveInfo = { settings: boolean; rules: boolean };
 
 export interface EditorDeps {
-  save: (d: Draft) => Promise<{ savedAt: string }>;
+  /**
+   * Saves `d`, made from `base`: the server applies only what changed from it, keeping anything it
+   * changed meanwhile (Connect turning a source on), and returns the files as saved.
+   */
+  save: (d: Draft, base: Draft) => Promise<{ savedAt: string; settings?: Settings; rules?: Rule[] }>;
   onSaved: (kind: SaveKind, undo: () => void, info: SaveInfo) => void;
   onError: (e: unknown) => void;
   /** Pause after typing before a save, in ms. */
@@ -91,11 +95,11 @@ export class SettingsEditor {
     for (const l of this.listeners) l();
   }
 
-  /** Takes the server's files. A change still waiting to save is kept. */
+  /** Takes the server's files. A change still waiting to save is kept, on top of them. */
   receive(d: Draft) {
     const { draft, base } = this.state;
     const untouched = !draft || !base || same(draft, base);
-    this.set({ base: d, draft: untouched ? d : draft });
+    this.set({ base: d, draft: untouched ? d : mergeEdit(d, base, draft) });
   }
 
   /** Applies a change. Clicks save at once; typing saves after a pause, or on blur via flush(). */
@@ -130,9 +134,12 @@ export class SettingsEditor {
     if (this.timer) void this.flush();
   }
 
-  private revert(to: Draft) {
+  /** Undoes one save: what it changed from `to` to `from` goes back, and nothing else. */
+  private revert(to: Draft, from: Draft) {
+    const { draft } = this.state;
+    if (!draft) return;
     clearTimeout(this.timer);
-    this.set({ draft: to, errors: {}, pending: false });
+    this.set({ draft: mergeEdit(draft, from, to), errors: {}, pending: false });
     this.queue = this.queue.then(() => this.save('undone'));
   }
 
@@ -144,9 +151,12 @@ export class SettingsEditor {
     if (!payload || same(payload, base)) return;
     this.set({ saving: true, failed: false });
     try {
-      await this.deps.save(payload);
-      this.set({ base: payload });
-      this.deps.onSaved(kind, () => this.revert(base), { settings: !same(payload.settings, base.settings), rules: !same(payload.rules, base.rules) });
+      const r = await this.deps.save(payload, base);
+      const saved = r.settings && r.rules ? { settings: r.settings, rules: r.rules } : payload;
+      // Changes made while saving, and invalid fields held back, stay on top of the files as saved.
+      const latest = this.state.draft ?? payload;
+      this.set({ base: saved, draft: mergeEdit(saved, payload, latest) });
+      this.deps.onSaved(kind, () => this.revert(base, payload), { settings: !same(payload.settings, base.settings), rules: !same(payload.rules, base.rules) });
     } catch (e) {
       if (isApiError(e) && e.code === 'validation' && e.issues) this.set({ errors: toErrors(e.issues.map((i) => ({ path: i.path, message: friendly(i.message) }))) });
       else this.set({ failed: true });

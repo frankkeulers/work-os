@@ -60,7 +60,7 @@ export function SettingsPage() {
   const [editor] = useState(
     () =>
       new SettingsEditor({
-        save: (d) => api.saveSettings(d.settings, d.rules),
+        save: (d, base) => api.saveSettings(d.settings, d.rules, base),
         onSaved: (kind, undo, info) =>
           toast(kind === 'undone' ? 'Change undone' : 'Changes saved', {
             tone: 'success',

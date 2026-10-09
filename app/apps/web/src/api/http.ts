@@ -1,4 +1,4 @@
-import type { Action, ActionType, AgendaView, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -163,7 +163,7 @@ export class HttpApi implements WorkOsApi {
 
   runEval = () => this.post('/api/evals');
   rebuildState = () => this.post<{ events: number }>('/api/admin/rebuild-state');
-  saveSettings = (settings: Settings, rules: Rule[]) => this.request<{ savedAt: string }>('PUT', '/api/settings', { settings, rules });
+  saveSettings = (settings: Settings, rules: Rule[], base?: { settings: Settings; rules: Rule[] }) => this.request<SettingsSaved>('PUT', '/api/settings', { settings, rules, ...(base && { base }) });
   getPrompts = () => this.get<PromptFileView[]>('/api/prompts');
   savePrompt = (id: PromptFileId, text: string, baseVersion: string) => this.request<PromptFileView>('PUT', `/api/prompts/${id}`, { text, baseVersion });
   resetPrompt = (id: PromptFileId, baseVersion: string) => this.post<PromptFileView>(`/api/prompts/${id}/reset`, { baseVersion });

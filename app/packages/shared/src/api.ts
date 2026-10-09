@@ -290,6 +290,13 @@ export interface SettingsView {
   vaultConventionsLoaded: boolean;
 }
 
+/** PUT /api/settings: the files as saved, with any change made meanwhile kept (FR-1.5). */
+export interface SettingsSaved {
+  savedAt: string;
+  settings: Settings;
+  rules: Rule[];
+}
+
 /** A prompt or guidance file under config/ (FR-1.7). Claude calls read it fresh every time. */
 export interface PromptFileView {
   id: PromptFileId;
@@ -448,7 +455,8 @@ export interface WorkOsApi {
 
   runEval(): Promise<void>;
   rebuildState(): Promise<{ events: number }>;
-  saveSettings(settings: Settings, rules: Rule[]): Promise<{ savedAt: string }>;
+  /** `base`: the files the form had when the change was made; only what changed from it is applied. */
+  saveSettings(settings: Settings, rules: Rule[], base?: { settings: Settings; rules: Rule[] }): Promise<SettingsSaved>;
   /** Starts Wispr Flow's sign-in: open the URL in a new tab. No URL: already signed in, and the source is on. */
   connectWispr(): Promise<WisprConnectView>;
   /** Forgets the Wispr Flow sign-in and turns the source off. */

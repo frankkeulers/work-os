@@ -29,7 +29,7 @@ async function turnOn(page: Page) {
   await expect(calendar).toBeDisabled(); // nothing to read through until Outlook is connected
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page.getByTestId('outlook-account')).toBeVisible();
-  // The form has caught up with Connect: a save from it before then would turn mail back off.
+  // The form shows what Connect turned on (a save made before then keeps it on too).
   await expect(page.getByRole('switch', { name: 'Read Outlook mail' })).toHaveAttribute('aria-checked', 'true');
   await expect(calendar).toHaveAttribute('aria-checked', 'false'); // connecting turns on mail only
   await calendar.click();

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mergeEdit } from '@work-os/shared';
 import { SEED_RULES, SEED_SETTINGS } from '../mock/seed/config';
 import { SettingsEditor, savable, type Draft, type SaveInfo, type SaveKind } from './settingsEditor';
 
@@ -104,5 +105,67 @@ describe('savable', () => {
     const r = savable(d, seed());
     expect(Object.keys(r.errors).some((k) => k.startsWith(`rules.${i}`))).toBe(true);
     expect(r.payload).not.toBeNull();
+  });
+});
+
+describe('a change made on the server meanwhile, such as Connect (FR-1.5)', () => {
+  // A server that applies only what changed from the base the form sent, as PUT /api/settings does.
+  let server: Draft;
+  let sent: { d: Draft; base: Draft }[];
+  let ed: SettingsEditor;
+  const outlookOn = (d: Draft) => !!d.settings.sources?.outlook?.enabled;
+  const connect = () => (server.settings = { ...server.settings, sources: { ...server.settings.sources, outlook: { ...server.settings.sources?.outlook, enabled: true } } });
+
+  beforeEach(() => {
+    server = seed();
+    sent = [];
+    toasts = [];
+    ed = new SettingsEditor({
+      save: async (d, base) => {
+        sent.push(structuredClone({ d, base }));
+        server = { settings: mergeEdit(server.settings, base.settings, d.settings), rules: mergeEdit(server.rules, base.rules, d.rules) };
+        return { savedAt: '2026-10-05T09:00:00.000Z', ...structuredClone(server) };
+      },
+      onSaved: (kind, undo, info) => toasts.push({ kind, undo, info }),
+      onError: (e) => {
+        throw e;
+      },
+      delay: 700,
+    });
+    ed.receive(seed());
+    expect(outlookOn(server)).toBe(false);
+  });
+
+  it('a save before the form has caught up with Connect leaves Outlook on, and the form then shows it on', async () => {
+    connect();
+    ed.change((d) => (d.settings.dryRun = !d.settings.dryRun));
+    await ed.flush();
+    expect(sent[0].base).toEqual(seed()); // what the form had when the change was made
+    expect(outlookOn(server)).toBe(true);
+    expect(server.settings.dryRun).toBe(!SEED_SETTINGS.dryRun);
+    expect(outlookOn(ed.getState().base!)).toBe(true);
+    expect(outlookOn(ed.getState().draft!)).toBe(true);
+  });
+
+  it('keeps an edit still waiting to save when the server’s files arrive, on top of them', async () => {
+    ed.change((d) => (d.settings.schedule.intervalWorkMinutes = 15), 'typing');
+    connect();
+    ed.receive(structuredClone(server));
+    expect(ed.getState().draft!.settings.schedule.intervalWorkMinutes).toBe(15);
+    expect(outlookOn(ed.getState().draft!)).toBe(true);
+    await vi.advanceTimersByTimeAsync(800);
+    expect(server.settings.schedule.intervalWorkMinutes).toBe(15);
+    expect(outlookOn(server)).toBe(true);
+  });
+
+  it('undo takes back only that change, not Connect’s', async () => {
+    ed.change((d) => (d.settings.dryRun = !d.settings.dryRun));
+    await ed.flush();
+    connect();
+    toasts[0].undo();
+    await ed.flush();
+    expect(server.settings.dryRun).toBe(SEED_SETTINGS.dryRun);
+    expect(outlookOn(server)).toBe(true);
+    expect(toasts.map((t) => t.kind)).toEqual(['saved', 'undone']);
   });
 });

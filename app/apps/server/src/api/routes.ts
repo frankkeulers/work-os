@@ -1,4 +1,4 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SettingsSaved, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -348,11 +348,16 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!body.success) throw new HttpError('validation', 'Send { settings, rules }.');
     let saved;
     try {
-      // The connector is set by Outlook's Connect alone: a form loaded before it can't undo it.
-      const { connectors } = d.settings.editable.settings;
-      const sent = body.data.settings;
+      // Only what Frank changed from the files the form had: a change made meanwhile (Connect
+      // turning Outlook on, Wispr Flow's sign-in) is kept, though the form hadn't caught up with it.
+      const cur = d.settings.editable;
+      const { base } = body.data;
+      const merged = base ? { settings: mergeEdit<unknown>(cur.settings, base.settings, body.data.settings), rules: mergeEdit<unknown>(cur.rules, base.rules, body.data.rules) } : body.data;
+      // The connector is set by Outlook's Connect alone: no save can change it.
+      const { connectors } = cur.settings;
+      const sent = merged.settings;
       const settings = sent && typeof sent === 'object' && !Array.isArray(sent) ? { ...(sent as object), connectors } : sent;
-      saved = await d.settings.save({ ...body.data, settings }, d.now());
+      saved = await d.settings.save({ settings, rules: merged.rules }, d.now());
     } catch (e) {
       if (e instanceof SettingsValidationError) throw new HttpError('validation', e.message, e.issues);
       throw e;
@@ -362,7 +367,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (saved.rulesChanged) events.push({ type: 'rules.changed' as const, data: { count: saved.rules.length } });
     if (events.length) await d.store.append(...events);
     if (saved.settingsChanged) d.runtime?.settingsChanged();
-    return reply.headers(noStore).send({ savedAt: d.settings.savedAt });
+    return reply.headers(noStore).send({ savedAt: d.settings.savedAt, settings: saved.settings, rules: saved.rules } satisfies SettingsSaved);
   });
 
   // Prompt and guidance files (FR-1.7). Every Claude call reads its file fresh, so a save takes

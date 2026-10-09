@@ -4,7 +4,15 @@ import { Ms365Connector } from './schemas';
 // Request bodies for the API's commands. The server checks every body against these (FR-3.3);
 // the settings themselves are checked field by field, so the UI can show each problem in place.
 
-export const SettingsSave = z.object({ settings: z.unknown(), rules: z.unknown() }).strict();
+export const SettingsSave = z
+  .object({
+    settings: z.unknown(),
+    rules: z.unknown(),
+    // The files as the form had them when Frank made this change: only what he changed is applied
+    // (mergeEdit). Without it the files are replaced whole.
+    base: z.object({ settings: z.unknown(), rules: z.unknown() }).strict().optional(),
+  })
+  .strict();
 export type SettingsSave = z.infer<typeof SettingsSave>;
 
 /** POST /api/sources/outlook/connect (R2.5): the connector ID Frank entered, or none to find it. */

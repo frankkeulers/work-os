@@ -25,6 +25,7 @@ import {
   routeTopic,
   categoryTags,
   meetingLead,
+  mergeEdit,
   sourceSchedule,
   seenChanges,
   snooze,
@@ -58,6 +59,7 @@ import {
   type PromptFileView,
   type Rule,
   type Settings,
+  type SettingsSaved,
   type SettingsView,
   type SourceHealth,
   type StartupCheck,
@@ -1270,8 +1272,11 @@ export class MockServer implements WorkOsApi, MockControls {
     return { events: this.s.events.length };
   }
 
-  async saveSettings(settings: Settings, rules: Rule[]) {
+  async saveSettings(sent: Settings, sentRules: Rule[], base?: { settings: Settings; rules: Rule[] }): Promise<SettingsSaved> {
     await this.gate(COMMAND_MS + 200);
+    // As the server: only what changed from the form's base, so Connect's change made meanwhile stays.
+    const settings = base ? mergeEdit(this.s.settings, base.settings, sent) : sent;
+    const rules = base ? mergeEdit(this.s.rules, base.rules, sentRules) : sentRules;
     const issues: FieldIssue[] = [];
     const sp = SettingsSchema.safeParse(settings);
     if (!sp.success) for (const i of sp.error.issues) issues.push({ path: ['settings', ...i.path].join('.'), message: i.message });
@@ -1294,7 +1299,7 @@ export class MockServer implements WorkOsApi, MockControls {
     this.s.savedAt = this.iso();
     this.emit({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
     this.readCalendarOnce();
-    return { savedAt: this.s.savedAt };
+    return { savedAt: this.s.savedAt, settings: structuredClone(this.s.settings), rules: structuredClone(this.s.rules) };
   }
 
   // ---------------------------------------------------------------- prompt files (FR-1.7)

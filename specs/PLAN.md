@@ -495,7 +495,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 **FR-1.4** The event log, item files, cursors and snapshot follow the storage rules in section 4.3.
 
-**FR-1.5** The UI settings page edits `settings.json` and `rules.json`. Changes are validated before saving and logged as events.
+**FR-1.5** The UI settings page edits `settings.json` and `rules.json`. Changes are validated before saving and logged as events. Each save sends the files the form had when the change was made, and the server applies only what changed from them (`mergeEdit`), so a change the server made meanwhile (Connect or Disconnect turning a source on or off, Wispr Flow's sign-in) is kept though the form hadn't caught up with it. Undo takes back only that save's change.
 
 **FR-1.6** Dry-run mode (default **on** in development) redirects vault writes to `~/WorkOS-data/sandbox/vault/` and turns Confluence writes into logged no-ops.
 
