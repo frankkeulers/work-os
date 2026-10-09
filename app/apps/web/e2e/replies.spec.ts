@@ -111,12 +111,16 @@ test('your reply settles a This week item — "You replied" in This week for a m
   await first.click();
   await expect(panel(page)).toBeVisible();
   await control(page, 'Settles it');
+  await page.keyboard.press('Escape'); // the panel covers Later
+  await expect(panel(page)).toHaveCount(0);
   const row = week.locator(`[data-row="${id}"]`);
   await expect(row).toHaveAttribute('data-replied');
   await expect(row).toHaveAttribute('data-lane', 'week');
   await expect(row).toContainText(/You replied (just now|\d+ min ago)/);
   await expect(page.getByRole('status').filter({ hasText: 'Closed: you replied in Slack' })).toBeVisible();
   await expect(zone(page, 'Needs you').locator(`[data-row="${id}"]`)).toHaveCount(0);
+  await page.addStyleTag({ content: HIDE });
+  await zone(page, 'Later').screenshot({ path: join(APP, 'screenshots/cockpit-replied-week-light.png'), animations: 'disabled' });
   await expect(row).toHaveCount(0, { timeout: 8000 });
 });
 
