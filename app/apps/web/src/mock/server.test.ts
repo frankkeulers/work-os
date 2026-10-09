@@ -24,11 +24,13 @@ afterEach(() => {
 
 describe('inbox commands', () => {
   it('returns a snoozed item when the snooze time passes (FR-8.3)', async () => {
+    // t3 asks for a walkthrough "this week": This week on a Monday (CK-3.10), and back there after.
+    expect(await lane('t3')).toBe('week');
     await settle(server.snooze(id('t3'), new Date(server.now().getTime() + 5 * 60_000).toISOString()));
     expect(await lane('t3')).toBe('snoozed');
     server.advanceClock(6);
     const view = await settle(server.getItem(id('t3')));
-    expect(view.summary.lane).toBe('today');
+    expect(view.summary.lane).toBe('week');
     expect(view.summary.backFromSnooze).toBe(true);
   });
 

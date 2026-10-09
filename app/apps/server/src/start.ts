@@ -26,7 +26,7 @@ import { apiKeySet, clearRefusal, refuseApiKey } from './runtime/refuse';
 import { Runtime } from './runtime/runtime';
 import { followSystemZone } from './runtime/tz';
 import { CursorFile } from './pipeline/cursors';
-import { returnSnoozed } from './pipeline/due';
+import { newDayWatcher, returnSnoozed } from './pipeline/due';
 import { relinkMeetings, withCalendar } from './pipeline/meetings';
 import { pollSource } from './pipeline/poll';
 import { buildSources, type AdapterFactory } from './sources/registry';
@@ -388,6 +388,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     notifications.stop();
     await Promise.all([notifications.settled(), alerts.settled()]);
   });
+  // At midnight, This week items due today move into Needs you (cockpit CK-3.10): tell open tabs.
+  const newDay = newDayWatcher(() => publish({ topic: 'inbox' }));
   const runtime: Runtime = new Runtime({
     clock,
     store,
@@ -402,7 +404,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     // The sidebar shows which sources are polling (FR-2.6).
     onPollChange: () => publish({ topic: 'inbox' }),
     poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }), refetch: takeRefetch, enrich: joinCalendar }, s, reason, signal),
-    due: (at) => returnSnoozed(store, at),
+    due: (at) => (newDay(at), returnSnoozed(store, at)),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
     checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings), claude: () => runtime.health.get('claude') }),
     wakeTime: deps.wakeTime ?? readWakeTime,

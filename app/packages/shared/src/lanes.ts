@@ -1,7 +1,9 @@
-import type { Attention, TriageCorrection, TriageDecision } from './schemas';
+import type { Attention, NextStep, TriageCorrection, TriageDecision } from './schemas';
+import { londonAt, londonParts } from './time';
 
-// Inbox lanes (FR-8.1) plus the off-lane places an item can be.
-export type Lane = 'now' | 'today' | 'file' | 'else' | 'failed' | 'waiting' | 'snoozed' | 'done';
+// Inbox lanes (FR-8.1) plus the off-lane places an item can be. `week` is a view of Today: Today
+// items due after today (cockpit CK-3.10).
+export type Lane = 'now' | 'today' | 'week' | 'file' | 'else' | 'failed' | 'waiting' | 'snoozed' | 'done';
 
 export type ItemStatus = 'open' | 'done' | 'snoozed';
 export type TriageState = 'pending' | 'triaged' | 'failed';
@@ -50,4 +52,22 @@ export function laneFor(input: {
   if (eff.attention === 'now') return 'now';
   if (eff.attention === 'today') return 'today';
   return eff.confluence || eff.vault ? 'file' : 'else';
+}
+
+/**
+ * Later › This week (cockpit CK-3.10): a next step due after the end of today, London time. With no
+ * `dueAt` (decisions from before triage v7), a label saying so: "next week" always; "this week" or
+ * "by Friday" from Monday to Thursday, as on Friday it means today.
+ */
+export function dueAfterToday(next: Pick<NextStep, 'dueAt' | 'dueLabel'> | undefined, now: Date | string): boolean {
+  if (!next) return false;
+  if (next.dueAt) return Date.parse(next.dueAt) >= Date.parse(londonAt(new Date(now), '00:00', 1));
+  const label = next.dueLabel ?? '';
+  if (/\bnext week\b/i.test(label)) return true;
+  return /\b(this week|by friday)\b/i.test(label) && !['Fri', 'Sat', 'Sun'].includes(londonParts(now).weekday);
+}
+
+/** The lane the inbox shows: a Today item due after today moves to This week. A correction to Now wins, as it is Now. */
+export function viewLane(lane: Lane, next: Pick<NextStep, 'dueAt' | 'dueLabel'> | undefined, now: Date | string): Lane {
+  return lane === 'today' && dueAfterToday(next, now) ? 'week' : lane;
 }

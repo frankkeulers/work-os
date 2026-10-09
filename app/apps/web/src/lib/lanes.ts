@@ -4,6 +4,7 @@ import type { ItemSummary } from '../api';
 export const LANE_META: Record<Lane, { name: string; dot: string; headline: string; band: { bg: string; line: string; badge: string } }> = {
   now: { name: 'Now', dot: 'var(--orange)', headline: 'Needs you within the hour.', band: { bg: 'var(--orange-wash)', line: 'var(--orange-line)', badge: 'var(--orange)' } },
   today: { name: 'Today', dot: 'var(--accent-bg)', headline: 'Handle before end of day.', band: { bg: 'var(--accent-wash-3)', line: 'var(--accent-line-4)', badge: 'var(--accent-bg)' } },
+  week: { name: 'This week', dot: 'var(--accent-light)', headline: 'Due later this week. Moves to Needs you on the day.', band: { bg: 'var(--surface-2)', line: 'var(--line-strong)', badge: 'var(--accent-bg)' } },
   file: { name: 'File', dot: 'var(--teal-solid)', headline: 'No reply needed. Worth filing.', band: { bg: 'var(--teal-wash)', line: 'var(--teal-line)', badge: 'var(--teal-solid)' } },
   else: { name: 'Everything else', dot: 'var(--gray-mid)', headline: 'No action and nothing to file.', band: { bg: 'var(--line-soft)', line: 'var(--line-strong)', badge: 'var(--gray-solid)' } },
   failed: { name: 'Failed', dot: 'var(--red)', headline: 'Triage failed. Shown untriaged.', band: { bg: 'var(--surface)', line: 'var(--red-line)', badge: 'var(--red)' } },

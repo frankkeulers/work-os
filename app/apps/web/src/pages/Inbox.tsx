@@ -16,7 +16,7 @@ import { useLookedAt } from '../hooks/useLookedAt';
 import { useStableGroups, type ShownRow } from '../hooks/useStableGroups';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
-import { INBOX_SORT_LABEL, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
+import { INBOX_SORT_LABEL, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
 import { NEW_FOR_MS, usePrefs } from '../store/prefs';
 import { useUserMoves } from '../store/userMoves';
 import { errorToast, toast } from '../store/toasts';
@@ -24,7 +24,7 @@ import { DueChip, NeedTag, StatusChip } from './inbox/chips';
 import { ItemPanel } from './inbox/ItemPanel';
 
 // The two groups on screen (FR-8.1). Failed triage sits in Needs you, untriaged, so it isn't missed.
-const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'failed' || i.lane === 'file';
+const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'week' || i.lane === 'failed' || i.lane === 'file';
 const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
 // ---------- Header ----------
@@ -362,9 +362,10 @@ const GROUPS: { id: Group; title: string; dot: string }[] = [
 ];
 
 // Off the main list: one footer link each (Waiting's link is in the header), opening one list at a time.
-type Lower = 'else' | 'snoozed' | 'done' | 'waiting';
+type Lower = 'week' | 'else' | 'snoozed' | 'done' | 'waiting';
 
 const LOWER: Record<Lower, { title: string; note: string }> = {
+  week: { title: 'This week', note: 'Due after today. Each moves to Needs you on the day it falls due.' },
   else: { title: 'Low priority', note: 'No action and nothing to file. Correct any that are wrong.' },
   snoozed: { title: 'Snoozed', note: 'Each comes back at its snooze time, or early if a new reply makes it Now.' },
   done: { title: 'Done', note: 'Comes back if someone other than you replies.' },
@@ -376,7 +377,8 @@ function FooterLinks({ by, open, onToggle }: { by: Record<Lower, ItemSummary[]>;
   const now = useNow(30_000);
   const back = by.snoozed[0]?.snoozedUntil;
   const chevron = (id: Lower) => <Icon name="down" size={12} className={cx('transition-transform', open !== id && '-rotate-90')} />;
-  const quiet: { id: Lower; icon: 'clock' | 'check'; label: string }[] = [
+  const quiet: { id: Lower; icon: 'calendar' | 'clock' | 'check'; label: string }[] = [
+    ...(by.week.length ? [{ id: 'week' as const, icon: 'calendar' as const, label: `${by.week.length} this week` }] : []),
     ...(by.snoozed.length ? [{ id: 'snoozed' as const, icon: 'clock' as const, label: `${by.snoozed.length} snoozed${back ? ` · next back ${fmtWhen(back, now)}` : ''}` }] : []),
     ...(by.done.length ? [{ id: 'done' as const, icon: 'check' as const, label: `${by.done.length} done` }] : []),
   ];
@@ -679,10 +681,11 @@ export function InboxPage() {
   const grouped = usePrefs((s) => s.groupByChannel);
 
   const by = useMemo(() => {
-    const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(all, sort, true, now), file: [], else: [], waiting: [], snoozed: [], done: [] };
+    const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(all, sort, true, now), file: [], week: [], else: [], waiting: [], snoozed: [], done: [] };
     for (const i of all) if (i.lane in m) m[i.lane as Group | Lower].push(i);
     for (const g of ['file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
     if (grouped) for (const g of ['needs', 'file', 'else', 'waiting'] as const) m[g] = groupByChannel(m[g]);
+    m.week = byDue(m.week);
     m.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
     return m;

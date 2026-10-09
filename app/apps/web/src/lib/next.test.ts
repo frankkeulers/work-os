@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
-import { dueInfo, isLive, laneCounts, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
+import { byDue, dueInfo, isLive, laneCounts, needLabel, needsYouOrder, nextDeadline, groupByChannel, openLabel, shownStep, sortItems, suggestedSnooze } from './next';
 import { canFile, cardActions } from './lanes';
 
 // Mon 5 Oct 2026, 09:45 London (BST).
@@ -40,6 +40,21 @@ describe('laneCounts (CK-1.5)', () => {
     const lanes = ['now', 'now', 'today', 'failed', 'file', 'else', 'waiting', 'snoozed', 'done'] as const;
     expect(laneCounts(lanes.map((lane) => item({ lane })))).toEqual({ now: 2, today: 2, file: 1 });
     expect(laneCounts([])).toEqual({ now: 0, today: 0, file: 0 });
+  });
+});
+
+describe('byDue (CK-3.10)', () => {
+  it('puts the soonest due first, and a label without a time after those, newest first', () => {
+    const fri = item({ id: 'fri', lane: 'week', next: { need: 'reply', step: 's', why: '', dueAt: london(9, '17:00') } });
+    const thu = item({ id: 'thu', lane: 'week', next: { need: 'reply', step: 's', why: '', dueAt: london(8, '09:00') } });
+    const label = item({ id: 'label', lane: 'week', next: { need: 'reply', step: 's', why: '', dueLabel: 'this week' } });
+    const label2 = item({ id: 'label2', lane: 'week', lastActivityAt: '2026-10-05T08:30:00.000Z', next: { need: 'reply', step: 's', why: '', dueLabel: 'next week' } });
+    expect(byDue([label, fri, label2, thu]).map((i) => i.id)).toEqual(['thu', 'fri', 'label2', 'label']);
+  });
+
+  it('keeps This week out of the counts and out of Needs you', () => {
+    expect(laneCounts([item({ lane: 'week' })])).toEqual({ now: 0, today: 0, file: 0 });
+    expect(needsYouOrder([item({ lane: 'week' })], now)).toEqual([]);
   });
 });
 

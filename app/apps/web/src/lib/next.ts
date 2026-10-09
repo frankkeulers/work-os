@@ -36,7 +36,7 @@ export function dueInfo(next: Partial<NextStep> | undefined, now: Date): { text:
   return { text, tone: today && mins <= 4 * 60 ? 'now' : today ? 'today' : 'later' };
 }
 
-const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'file';
+const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'week' || i.lane === 'file';
 
 /**
  * The top bar's count pills (cockpit CK-1.5): Now, Today and To file. Failed triage counts with Today,
@@ -87,6 +87,12 @@ export function needsYouOrder(items: ItemSummary[], now: Date): ItemSummary[] {
     .map((i) => ({ i, lane: LANE_RANK[i.lane]!, due: dueKey(i, now) }))
     .sort((a, b) => a.lane - b.lane || a.due[0] - b.due[0] || a.due[1] - b.due[1] || b.i.lastActivityAt.localeCompare(a.i.lastActivityAt))
     .map((x) => x.i);
+}
+
+/** This week (cockpit CK-3.10): soonest due first; a label without a time ("this week") after those. */
+export function byDue(items: ItemSummary[]): ItemSummary[] {
+  const key = (i: ItemSummary) => i.next?.dueAt ?? '\uffff';
+  return [...items].sort((a, b) => key(a).localeCompare(key(b)) || b.lastActivityAt.localeCompare(a.lastActivityAt));
 }
 
 export type InboxSort = 'newest' | 'oldest' | 'priority';

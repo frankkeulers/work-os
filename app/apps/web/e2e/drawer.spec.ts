@@ -135,6 +135,10 @@ test('revision collisions: replies on done, snoozed, corrected and drafted items
 
   await expect(rows(page, 'Today').filter({ hasText: 'logo swapped' })).toContainText('New replies');
   await expect(rows(page, 'Now').filter({ hasText: 'needed by 15:00' })).toBeVisible();
+  // The corrected item is the "this week" walkthrough: back under This week (CK-3.10), a footer
+  // link the open panel covers.
+  await page.keyboard.press('Escape');
+  await page.getByTestId('inbox-footer').getByRole('button', { name: /this week/ }).click();
   await expect(page.getByText(/Re-triaged after new replies · you had set None/)).toBeVisible();
 
   await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();

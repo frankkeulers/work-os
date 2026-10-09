@@ -1,5 +1,5 @@
 import type { BudgetState, ItemSummary } from '../api';
-import { effectiveTriage, laneFor } from '../lanes';
+import { effectiveTriage, laneFor, viewLane } from '../lanes';
 import type { ActionType, NextStep, Settings, UsageRecord } from '../schemas';
 import { askId } from './topics';
 import { londonParts } from '../time';
@@ -73,6 +73,7 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
   const d = s.decision;
   const quietUntil = s.triageState === 'pending' ? new Date(Date.parse(meta.lastActivityAt) + ctx.quietMinutes * MIN).toISOString() : undefined;
   const first = ctx.text.firstMessage ?? '';
+  const next = openNext(ctx.text.next, s.asksDone);
   return {
     id: meta.id,
     source: meta.source,
@@ -81,12 +82,12 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
     permalink: meta.permalink,
     lastActivityAt: meta.lastActivityAt,
     revision: meta.revision,
-    lane: laneFor(s),
+    lane: viewLane(laneFor(s), next, ctx.now),
     status: s.status,
     triageState: s.triageState,
     summary: ctx.text.summary ?? (first.length > SUMMARY_MAX ? `${first.slice(0, SUMMARY_MAX - 3)}…` : first),
     reason: ctx.text.reason,
-    next: openNext(ctx.text.next, s.asksDone),
+    next,
     triage: effectiveTriage(d, s.correction),
     correctedFrom: s.correctedFrom,
     containsPeopleObservations: d?.containsPeopleObservations ?? false,

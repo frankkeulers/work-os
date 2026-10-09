@@ -42,8 +42,10 @@ async function replaceDraftText(page: Page, text: string) {
 }
 
 test('J01 morning scan: groups, the item panel, Done with Undo', async ({ page }) => {
-  await expect(rows(page, 'Today')).toHaveCount(4);
+  // Monday: Today holds what's due today; asks due Thursday, Friday or "this week" wait under This week (CK-3.10).
+  await expect(rows(page, 'Today')).toHaveCount(1);
   await expect(rows(page, 'To file')).toHaveCount(4);
+  await expect(page.getByTestId('inbox-footer').getByRole('button', { name: /^3 this week/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /Dry-run on/ })).toBeVisible();
   // Last and next poll live in the Poll button's tooltip; the top bar stays quiet when idle.
   await expect(page.getByRole('button', { name: 'Poll now' })).toHaveAttribute('title', 'Poll now · Last poll 09:42 · next 09:52');
@@ -51,7 +53,7 @@ test('J01 morning scan: groups, the item panel, Done with Undo', async ({ page }
   // The panel opens on the first item, with its next step.
   const first = rows(page, 'Now').first();
   await expect(first).toHaveAttribute('aria-current', 'true');
-  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('1 of 12');
+  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('1 of 9');
   await expect(itemPanel(page).getByRole('region', { name: 'Next step' })).toBeVisible();
   // Rows show the source's brand mark.
   await expect(first.getByRole('img', { name: 'Slack' })).toBeVisible();
@@ -70,7 +72,7 @@ test('J06 keyboard: j/k move the panel, e and ⇧E mark done, Esc closes', async
   const secondId = await rows(page, 'Now').nth(1).getAttribute('data-row');
   await page.keyboard.press('j');
   await expect(selected(page)).toHaveAttribute('data-row', secondId!);
-  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('2 of 12');
+  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('2 of 9');
   await page.keyboard.press('k');
   await expect(selected(page)).toHaveAttribute('data-row', firstId!);
 
@@ -104,7 +106,7 @@ test('J04 correct triage in the panel moves the item and grows the labelled set'
   const moved = group(page, 'Needs you').locator(`[data-row="${id}"][data-lane="now"]`);
   await expect(moved).toBeVisible();
   await expect(moved.getByText('Corrected by you')).toBeVisible();
-  await expect(rows(page, 'Today')).toHaveCount(3);
+  await expect(rows(page, 'Today')).toHaveCount(0);
 });
 
 test('J03 snooze for an hour, then it comes back marked', async ({ page }) => {
@@ -208,11 +210,11 @@ test('a filed entry with new replies offers a v2 draft, and discarding it goes b
 // Outlook is live (R2.5): its mail arrives after Connect, checked in outlook.spec.ts.
 test('Full scope adds the Teams items with their brand mark, tagged P2', async ({ page }) => {
   const nav = page.getByRole('navigation', { name: 'Main' });
-  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('11');
+  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('8');
   await expect(page.locator('[data-row^="teams:"]')).toHaveCount(0);
 
   await setScope(page, 'Full');
-  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('13');
+  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('10');
   await expect(rows(page, 'Now')).toHaveCount(3);
   await expect(page.locator('[data-row^="teams:"]').first().getByRole('img', { name: 'Teams' })).toBeVisible();
 
@@ -403,15 +405,17 @@ test('the top bar counts Now, Today and To file, and a pill scrolls to its rows 
   const pills = page.getByTestId('count-pills');
   const today = await group(page, 'Needs you').locator('[data-row][data-lane="today"], [data-row][data-lane="failed"]').count();
   await expect(pills.locator('[data-pill]')).toHaveText(['3now', `${today}today`, '4to file']);
-  await page.setViewportSize({ width: 1440, height: 560 });
-  const fileGroup = page.locator('[data-group="file"]');
-  await expect(fileGroup).not.toBeInViewport();
-  await pills.locator('[data-pill="file"]').click();
-  await expect(fileGroup).toBeInViewport();
+  // Scrolled to the foot of a short window, the Now pill brings the Now rows back.
+  await page.setViewportSize({ width: 1440, height: 480 });
+  await page.getByRole('region', { name: 'Inbox list' }).evaluate((el) => (el.scrollTop = el.scrollHeight));
+  const firstNow = rows(page, 'Now').first();
+  await expect(firstNow).not.toBeInViewport();
+  await pills.locator('[data-pill="now"]').click();
+  await expect(firstNow).toBeInViewport();
 });
 
 test('J50 still list: a new Now item waits while the panel is open, then lands marked New (CK-1.2, CK-1.3)', async ({ page }) => {
-  await rows(page, 'Today').filter({ hasText: 'walkthrough' }).click();
+  await rows(page, 'Today').filter({ hasText: 'Graduation request' }).click();
   // What was there on load isn't new.
   await expect(page.locator('[data-new-dot]')).toHaveCount(0);
   const ids = () => group(page, 'Needs you').locator('[data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')!));
@@ -479,7 +483,7 @@ test('a row Frank brings back himself lands at once, even under the open panel (
 });
 
 test('triage details sit behind a disclosure that stays as Frank left it (CK-1.6)', async ({ page }) => {
-  await rows(page, 'Today').filter({ hasText: 'walkthrough' }).click();
+  await rows(page, 'Today').filter({ hasText: 'Graduation request' }).click();
   const details = itemPanel(page).getByTestId('triage-details');
   const toggle = details.getByRole('button', { name: 'Triage details · model' });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -571,13 +575,31 @@ test('the footer opens Low priority, Snoozed and Done one at a time, and j/k wal
   const n = await lowRows.count();
   expect(n).toBeGreaterThan(0);
   // The open list joins the panel's order after To file.
-  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText(`1 of ${12 + n}`);
+  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText(`1 of ${9 + n}`);
 
   await done.click();
   await expect(page.getByRole('region', { name: 'Low priority' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Done' }).locator('[data-row]').first()).toBeVisible();
   await done.click();
   await expect(page.getByRole('region', { name: 'Done' })).toHaveCount(0);
+});
+
+test('asks due after today wait under This week, soonest first, with their dates (CK-3.10)', async ({ page }) => {
+  await page.keyboard.press('Escape'); // the open panel covers the footer's end
+  const footer = page.getByTestId('inbox-footer');
+  const week = footer.getByRole('button', { name: /^3 this week/ });
+  await week.click();
+  await expect(week).toHaveAttribute('aria-expanded', 'true');
+  const list = page.getByRole('region', { name: 'This week' }).locator('[data-row]');
+  // Thursday 09:00, Friday 17:00, then "this week" with no time.
+  await expect(list).toHaveCount(3);
+  await expect(list.nth(0)).toContainText('overloaded engineers');
+  await expect(list.nth(0)).toContainText('Thu 09:00');
+  await expect(list.nth(1)).toContainText('which three items');
+  await expect(list.nth(1)).toContainText('Fri 17:00');
+  await expect(list.nth(2)).toContainText('walkthrough');
+  // None of them is in Needs you.
+  await expect(group(page, 'Needs you')).not.toContainText('walkthrough');
 });
 
 test('a row can be marked done from the list without opening it', async ({ page }) => {

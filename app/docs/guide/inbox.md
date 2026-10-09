@@ -12,7 +12,9 @@ The inbox has two groups of equal weight.
 
 - **Needs you** holds what asks something of you. **Now** items come first, with a faint orange
   wash: they need you within the hour. Then items whose triage failed (so they are never missed),
-  then **Today** items, by deadline.
+  then **Today** items, by deadline. A Today item due after today (Thursday 09:00, "this week",
+  "next week") waits under **This week** instead, and moves into Needs you on the day it falls due.
+  If you correct it to Now, it stays in Needs you.
 - **To file** holds threads that need nothing from you but hold something worth keeping, in
   Confluence, your vault or both.
 
@@ -44,11 +46,12 @@ one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in
 invite you haven't answered is also an item, which closes itself once you answer it in Outlook;
 see [Invites](outlook.md#invites).
 
-## Low priority, snoozed and done
+## This week, low priority, snoozed and done
 
 Below the groups, **Low priority** opens everything that needs nothing and holds nothing worth
-filing. It is worth a glance now and then, to catch a wrong decision. **Snoozed** and **Done** open
-their lists the same way; a snoozed item comes back at its time, marked "Back from snooze".
+filing. It is worth a glance now and then, to catch a wrong decision. **This week**, **Snoozed** and
+**Done** open their lists the same way. This week lists the soonest due first, with the date on
+each; a snoozed item comes back at its time, marked "Back from snooze".
 
 Threads still being written show as **N still active** in the header. They are triaged once they
 have been quiet for the quiet window (10 minutes by default, in [Settings › Schedule](/settings/schedule)).

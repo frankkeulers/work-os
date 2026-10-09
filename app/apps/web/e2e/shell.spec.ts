@@ -16,7 +16,7 @@ test('the sidebar collapses to an icon rail and remembers it', async ({ page }) 
   const usage = nav.getByRole('link', { name: /Usage & health/ });
   await expect(usage).toHaveAttribute('title', 'Usage & health · Running normally');
   expect((await usage.boundingBox())!.width).toBeLessThanOrEqual(40);
-  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('11');
+  await expect(nav.getByRole('link', { name: /Inbox/ })).toContainText('8');
   // The account menu still opens from the rail, beside it rather than clipped by it.
   await nav.getByRole('button', { name: 'Account' }).click();
   const menu = page.getByRole('dialog', { name: 'Account' });
