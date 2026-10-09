@@ -233,6 +233,28 @@ describe('topics', () => {
     expect(p.items[A]).toMatchObject({ parts: [B], topicVersion: 1, triageState: 'pending', newReplies: true, lastActivityAt: at(40) });
   });
 
+  it('takes a piece of Frank’s own as his reply: a settle check, not a re-triage (cockpit CK-2.1)', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A))
+      .add('topic.routed', 10, { by: 'model' }, on(A))
+      .add('triage.decided', 11, decidedOn(A, 1, 0), on(A))
+      .add('item.upserted', 40, piece(40), on(B))
+      .add('topic.routed', 50, { into: A, by: 'model', fromMeOnly: true }, on(B));
+    expect(replay(events).items[A]).toMatchObject({ parts: [B], topicVersion: 1, triageState: 'triaged', newReplies: false, settlePending: at(40) });
+  });
+
+  it('leaves a topic that no longer needs Frank alone when his own piece joins it', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, piece(0), on(A))
+      .add('topic.routed', 10, { by: 'model' }, on(A))
+      .add('triage.decided', 11, { decision: toLoggedDecision({ ...decision(1, 'none'), itemId: A, topicVersion: 0 }) }, on(A))
+      .add('item.upserted', 40, piece(40), on(B))
+      .add('topic.routed', 50, { into: A, by: 'model', fromMeOnly: true }, on(B));
+    const a = replay(events).items[A];
+    expect(a).toMatchObject({ triageState: 'triaged', newReplies: false });
+    expect(a.settlePending).toBeUndefined();
+  });
+
   it('marks a fresh topic pending without new replies, and a regroup too', () => {
     const { events, add } = log();
     add('item.upserted', 0, piece(0), on(A)).add('item.upserted', 5, piece(5), on(B)).add('topic.routed', 10, { into: A, by: 'model' }, on(B));

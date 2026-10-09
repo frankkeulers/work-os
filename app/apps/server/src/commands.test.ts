@@ -426,6 +426,20 @@ describe('topics (amendment)', () => {
     expect(items.find((i) => i.id === idOf(B))).toMatchObject({ pieces: 1, triageState: 'triaged' });
   });
 
+  it('closes a topic when Frank answers in a post of his own, outside the thread (cockpit CK-2.1)', async () => {
+    const triageCalls = () => claude.calls.filter((c) => c.prompt.includes('<threads>')).length;
+    slack.post('C01PROD', { ts: A, user: 'U02DANA', text: 'PR 63: the security scheme lands on the wrong module, can you check?' });
+    await settleAfter(12);
+    expect((await inbox()).items.find((i) => i.id === idOf(A))).toMatchObject({ lane: 'today', triageState: 'triaged' });
+    const before = triageCalls();
+
+    slack.post('C01PROD', { ts: isoToTs(START + 13 * MIN), user: 'UFRANK', text: 'PR 63: moved the scheme to the right module' });
+    await settleAfter(12);
+    expect((await inbox()).items.find((i) => i.id === idOf(A))).toMatchObject({ pieces: 2, lane: 'done', doneBy: 'reply' });
+    expect(triageCalls()).toBe(before); // his own post needs no triage, only the settle check
+    expect(claude.calls.at(-1)?.prompt).toContain('<checks>');
+  });
+
   it('regroups topics that routing left apart', async () => {
     slack.post('C01PROD', { ts: A, user: 'U02DANA', text: 'PR 63 adds GOVERNANCE-RULES.md for the contract checks' });
     await settleAfter(12);

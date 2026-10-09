@@ -65,7 +65,8 @@ export const EventPayloads = {
   'item.notified': z.object({ kind: z.enum(['now', 'summary']), suppressed: z.enum(['quiet_hours', 'disabled']).optional() }),
   // Topics (amendment). On a piece: routing put it in another piece's topic (into), or in its own.
   // A piece Frank splits out is routed by 'user' with no into, and never rejoins that topic (from).
-  'topic.routed': z.object({ into: z.string().min(1).optional(), from: z.string().min(1).optional(), by: z.enum(['model', 'user', 'regroup']) }),
+  // fromMeOnly: every message in the joining piece is Frank's, so it is his reply to the topic (cockpit CK-2.1).
+  'topic.routed': z.object({ into: z.string().min(1).optional(), from: z.string().min(1).optional(), by: z.enum(['model', 'user', 'regroup']), fromMeOnly: z.boolean().optional() }),
   'topic.askDone': z.object({ askId: z.string().min(1), by: z.enum(['user', 'reply']).optional() }), // on an anchor: Frank ticked off one ask, or his reply settled it (cockpit CK-2.3)
   'triage.decided': z.object({ decision: LoggedDecision }),
   'triage.corrected': z.object({ correction: TriageCorrection }),

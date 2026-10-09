@@ -191,6 +191,7 @@ When a new revision's messages are all Frank's own (`fromMeOnly`), the projectio
 
 **CK-2.1 Trigger.** An **open** item in Needs you or Later › This week (not To file, Low priority or Snoozed) gets a `fromMeOnly` revision. Frank's message must be **after the latest message from someone else**. Matching:
 - **Slack:** a reply in the same thread, or a message in the same DM window, by Frank's user ID (`directory.identity`).
+- **Slack, amended (topics):** a piece made only of Frank's messages, such as a channel post or a reply in another thread, that routing places in the topic. `topic.routed` carries `fromMeOnly`, and the join waits for a settle check instead of re-triaging the topic, as Frank's messages on a part already did.
 - **Outlook:** a Sent Items email in the same `conversationId`, from Frank's address (`get_me`).
 
 **CK-2.2 Settle check.** The item goes to a **settle check**: a Haiku call, separate from triage, that decides whether Frank's message settles the open asks.

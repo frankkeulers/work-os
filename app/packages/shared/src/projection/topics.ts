@@ -41,9 +41,16 @@ export function followAnchor<D extends LoggedDecision, R extends TopicRec<D>>(it
 /**
  * A piece was placed: into the topic `into` belongs to, or (no `into`) its own. Joining brings the
  * piece's own parts along, so two topics can merge (regroup). `by: 'user'` is Frank splitting it
- * out: it never rejoins that topic.
+ * out: it never rejoins that topic. `fromMeOnly`: the piece is Frank's own messages, his reply.
  */
-export function routeTopic<D extends LoggedDecision, R extends TopicRec<D>>(items: Recs<D, R>, act: Activity<R>, pieceId: string, into: string | undefined, by: 'model' | 'user' | 'regroup') {
+export function routeTopic<D extends LoggedDecision, R extends TopicRec<D>>(
+  items: Recs<D, R>,
+  act: Activity<R>,
+  pieceId: string,
+  into: string | undefined,
+  by: 'model' | 'user' | 'regroup',
+  fromMeOnly = false,
+) {
   const piece = items[pieceId];
   if (!piece) return;
   piece.routed = true;
@@ -51,7 +58,7 @@ export function routeTopic<D extends LoggedDecision, R extends TopicRec<D>>(item
   const from = piece.topicOf;
   if (from && from === target) return;
   if (from) leave(items, pieceId, from, by === 'user');
-  if (target && target !== pieceId && items[target] && !items[target].topicOf) join(items, act, pieceId, target, by);
+  if (target && target !== pieceId && items[target] && !items[target].topicOf) join(items, act, pieceId, target, by, fromMeOnly);
 }
 
 function leave<D extends LoggedDecision, R extends TopicRec<D>>(items: Recs<D, R>, pieceId: string, anchorId: string, split: boolean) {
@@ -76,7 +83,7 @@ function leave<D extends LoggedDecision, R extends TopicRec<D>>(items: Recs<D, R
   piece.snoozedUntil = undefined;
 }
 
-function join<D extends LoggedDecision, R extends TopicRec<D>>(items: Recs<D, R>, act: Activity<R>, pieceId: string, anchorId: string, by: 'model' | 'user' | 'regroup') {
+function join<D extends LoggedDecision, R extends TopicRec<D>>(items: Recs<D, R>, act: Activity<R>, pieceId: string, anchorId: string, by: 'model' | 'user' | 'regroup', fromMeOnly: boolean) {
   const piece = items[pieceId];
   const anchor = items[anchorId];
   const moving = topicPieces(piece, pieceId).filter((id) => id !== anchorId);
@@ -94,7 +101,9 @@ function join<D extends LoggedDecision, R extends TopicRec<D>>(items: Recs<D, R>
   anchor.topicVersion++;
   // New messages for a topic Frank has seen show as new replies, and reopen it once triaged.
   // A regroup only rearranges what he has seen, and a topic never triaged has nothing to compare.
-  if (by !== 'regroup' && anchor.decision) receiveMessages(anchor, false);
+  // A piece of Frank's own is his reply, posted outside the thread: like his messages on a part,
+  // it waits for a settle check instead of a re-triage (cockpit CK-2.1).
+  if (by !== 'regroup' && anchor.decision) receiveMessages(anchor, fromMeOnly, act(piece).lastActivityAt);
   else anchor.triageState = 'pending';
   followAnchor(items, anchorId);
 }

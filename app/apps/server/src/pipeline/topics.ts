@@ -219,7 +219,7 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
   }
 
   // A conversation with nothing to choose between needs no call.
-  const convs: { conv: Conversation; pieces: ItemState[]; candidates: ItemState[] }[] = [];
+  const convs: { conv: Conversation; pieces: ItemState[]; candidates: ItemState[]; mine: Set<string> }[] = [];
   const alone: EventDraft[] = [];
   for (const [c, pieces] of byConv) {
     const ids = new Set(pieces.map((x) => x.id));
@@ -229,16 +229,20 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
       continue;
     }
     const views: TriageThread[] = [];
+    // Pieces that are Frank's messages alone: joining a topic, they are his reply to it.
+    const mine = new Set<string>();
     for (const it of pieces) {
       const topic = await topicForTriage(p, d.items, it.id, me, regroup ? CANDIDATE_RECENT_MESSAGES : t.keepLastMessages);
-      if (topic) views.push(topic.view);
+      if (!topic) continue;
+      views.push(topic.view);
+      if (me.id && topic.item.messages.length && topic.item.messages.every((m) => m.authorId === me.id)) mine.add(it.id);
     }
     const topics: Candidate[] = [];
     for (const it of candidates) {
       const stored = await d.items.read(it.source, it.id);
       topics.push(candidateView(it, stored?.item, stored?.text?.summary, me));
     }
-    convs.push({ conv: { conversation: c, title: pieces[0].title, topics, pieces: views }, pieces, candidates });
+    convs.push({ conv: { conversation: c, title: pieces[0].title, topics, pieces: views }, pieces, candidates, mine });
   }
   if (alone.length) {
     await d.store.append(...alone);
@@ -289,7 +293,7 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
     }
 
     const events: EventDraft[] = [];
-    for (const { pieces, candidates } of batch) {
+    for (const { pieces, candidates, mine } of batch) {
       const ids = pieces.map((x) => x.id);
       const placed = resolveAssignments(
         ids,
@@ -303,7 +307,7 @@ export async function routeTopics(d: TopicsDeps, signal: AbortSignal, opts: { re
         const into = placed.get(id);
         // Regroup: a topic that stays on its own is already placed.
         if (regroup && !into) continue;
-        events.push({ type: 'topic.routed', itemId: id, data: { ...(into && { into }), by } });
+        events.push({ type: 'topic.routed', itemId: id, data: { ...(into && { into }), by, ...(into && !regroup && mine.has(id) && { fromMeOnly: true }) } });
         run.routed++;
         if (into) run.joined++;
       }

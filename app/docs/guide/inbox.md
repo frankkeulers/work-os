@@ -108,7 +108,9 @@ have been quiet for the quiet window (10 minutes by default, in [Settings › Sc
 
 When you answer an item from Needs you or This week in Slack, Work OS asks Claude whether your
 reply settles what was asked. It is a short check, separate from triage, and it runs straight
-after the poll that brings your reply in.
+after the poll that brings your reply in. A reply counts in the thread, and also as a post of
+your own elsewhere in the conversation that Work OS groups into the item's topic, such as a
+channel message telling someone the fix is in.
 
 - **Settled:** the item closes by itself and goes to Done. If the check got it wrong, reopen it
   from Done. Each reopen is kept as a label, as corrections are for triage, so a change to the

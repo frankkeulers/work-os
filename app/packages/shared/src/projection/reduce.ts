@@ -150,7 +150,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       break;
     }
     case 'topic.routed':
-      routeTopic(p.items, self, e.itemId, e.data.into, e.data.by);
+      routeTopic(p.items, self, e.itemId, e.data.into, e.data.by, e.data.fromMeOnly);
       break;
     case 'topic.askDone':
       markAskDone(item, e.data.askId);

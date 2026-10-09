@@ -167,6 +167,15 @@ describe('routeTopics', () => {
     alone(pid(200, 'C9')); // another conversation
   });
 
+  it('takes a piece of Frank’s own that joins a topic as his reply: a settle check, not a re-triage (cockpit CK-2.1)', async () => {
+    await add(piece(300, ['PR 63: can you check the security scheme?']), { summary: 'PR 63 security scheme' });
+    const own = piece(60, ['PR 63: moved the scheme to the right module']);
+    await add({ ...own, messages: own.messages.map((m) => ({ ...m, authorId: 'UFRANK' })) });
+    await routeTopics(deps, new AbortController().signal);
+    expect(p()[pid(60)].topicOf).toBe(pid(300));
+    expect(p()[pid(300)]).toMatchObject({ triageState: 'triaged', newReplies: false, settlePending: minsAgo(60) });
+  });
+
   it('waits for a piece to go quiet, and leaves routed pieces alone', async () => {
     await add(piece(300, ['PR 63 rules']), { summary: 'PR 63' });
     await add(piece(5, ['PR 63 again']));
