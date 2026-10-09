@@ -252,6 +252,15 @@ When a new revision's messages are all Frank's own (`fromMeOnly`), the projectio
 
 **Journeys:** J52 Reply closes it (Slack), J53 Reply doesn't settle it (Decide), J54 Undo an auto-close, J55 Outlook reply closes it.
 
+**As built (9 Oct, Slack):**
+- `settle.checked` carries `settled: askId[]` (strings), and `ask.settled` is the existing `topic.askDone { askId, by: 'reply' }` (§11).
+- The check runs straight after triage in the same runtime pass, at most 20 items per call within `maxThreadsPerCall`; the per-ask `why` and the input go to the item file, not the event.
+- The +2/+6 min reads are Slack only (`POST /api/items/:id/replied`). Outlook, once turned on, is checked at the next mail poll; the Sent Items targeted check is not built.
+- The settle eval is CLI only (`npm run eval -- --purpose settle`); Usage shows C1/C2, not the eval.
+- An item that a reply closes from Later › This week gets the toast but isn't held as a "You replied" row; only Needs you rows are.
+- C1 counts exits from This week as Needs you exits.
+- J55 (Outlook) waits for the CK-2.9 gate.
+
 ---
 
 ## 6. Stage 3: the three-zone cockpit (about 4–6 days)

@@ -58,11 +58,13 @@ Phase 0 tasks (Slack app, baseline, labelling, spikes) come first because they'r
 
 | # | Criterion | Target |
 |---|---|---|
+| C1 | Share of Needs you exits closed by Frank's reply | ≥ 40% (a guess, to reset after the Stage 0 baseline) |
+| C2 | False closes: closes by reply that Frank undoes, or reopens within 24 h | ≤ 2% of closes by reply |
 | C3 | Needs you empty at 18:00 | ≥ 3 of 5 working days |
 | C4 | Minutes a day with the item panel open | Down on the Stage 0 baseline |
 | C5 | Now items done more than 4 h after their deadline | No increase on baseline |
 
-C1 and C2 (items closed by Frank's reply, and false closes) join them with the cockpit's Stage 2.
+C1 and C2 come from the event log (the projection counts closes and undos over 30 days) and show in Usage & health over the last 14 days. Kill criterion: C2 above 5% after one round of prompt tuning turns closing on reply back into a suggestion ("You replied · Mark done?", the setting in FR-8.3).
 
 ### Kill criteria
 
@@ -265,6 +267,9 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
     psg-context-builder.md    Confluence routing guidance, built-in default from the psg-context-builder skill
     prompts/
       triage.md
+      topics.md
+      settle.md               does Frank's reply settle the asks (cockpit CK-2.2)
+      pick-confluence.md
       draft-vault.md
       draft-confluence.md
       people-check.md
@@ -282,6 +287,7 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
     <actionId>.json           draft content + target + base version
   labels/
     triage.jsonl              labelled set + corrections from the UI
+    settle.jsonl              settle checks Frank showed wrong: an Undo, or a Done soon after "not settled" (cockpit CK-2.6)
   logs/
     app-2026-10-20.log
     usage-2026-10-20.jsonl    one line per Claude call
@@ -354,7 +360,8 @@ interface Action {
 
 type EventType =
   | 'item.upserted' | 'triage.decided' | 'triage.corrected'
-  | 'item.done' | 'item.reopened' | 'item.snoozed'
+  | 'item.done'                  // data, when not Frank's click: { by: 'source' | 'reply', ... } (cockpit CK-2.2)
+  | 'item.reopened' | 'item.snoozed'
   | 'item.unsnoozed'             // the snooze time passed (FR-8.3)
   | 'item.seen'                  // opening the item cleared "new replies" or "back from snooze"
   | 'item.notified'              // logged even when quiet hours held it back, so it never repeats (FR-11.2)
@@ -362,6 +369,8 @@ type EventType =
   | 'action.executing'           // fsynced before every write attempt (FR-14.5)
   | 'action.executed' | 'action.failed' | 'action.discarded'
   | 'source.polled' | 'source.failed'
+  | 'settle.checked'             // a settle check's answer for a revision: allSettled, the askIds settled (cockpit CK-2.2)
+  | 'settle.failed'              // the check got no usable answer; tried up to 3 times
   | 'system.started' | 'system.stopped' | 'system.woke' | 'health.changed';
 
 interface WorkEvent {
@@ -387,6 +396,7 @@ Every change to inbox or action state is an event, so replaying the log rebuilds
 | Purpose | Default model | Call shape |
 |---|---|---|
 | Triage | Haiku 4.5 (`haiku`) | One batched call per poll, only when threads are eligible. No tools, no MCP, short custom system prompt, single turn, JSON output. |
+| Settle (cockpit CK-2.2) | The triage model | After a poll brings in Frank's reply to an open item that awaits one: does the reply settle the open asks? Batched, at most 20 per call. No tools, no MCP, its own short prompt (`config/prompts/settle.md`), JSON output. Counts towards the triage budget. |
 | Draft vault note | Sonnet 5.5 (`sonnet`) | Per click. Read-only vault access to find related notes. Output is the final markdown file. |
 | Draft Confluence entry | Sonnet 5.5 (`sonnet`) | Per click. Read-only Confluence access to choose the page and section. Output is a structured patch. |
 | Multi-source synthesis (later) | Opus 5.5 (`opus`) | Rare. Briefs and weekly reviews. |
@@ -433,7 +443,7 @@ As built (M2 step 14), checked against the Agent SDK 0.3.291 types and the P0-9 
 - Triage only threads that have been quiet for `quietMinutes` (default 10). VIP rules bypass the wait.
 - Batch all eligible threads into one call, up to `triage.maxThreadsPerCall` (default 25) and `triage.maxInputTokens`.
 - Truncate long threads: keep the first message, the last N messages and any message mentioning Frank.
-- Re-triage a thread only when its `revision` changes and the new messages are not from Frank alone.
+- Re-triage a thread only when its `revision` changes and the new messages are not from Frank alone. An open item in Needs you or This week that awaits Frank's reply gets a settle check instead (cockpit CK-2.2).
 - Skip the call entirely when nothing is eligible.
 
 As built (M2 step 13):
@@ -509,7 +519,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 **FR-1.6** Dry-run mode (default **on** in development) redirects vault writes to `~/WorkOS-data/sandbox/vault/` and turns Confluence writes into logged no-ops.
 
-**FR-1.7** Settings › Prompts lists the four prompt files and the two filing guidance files with their versions, marks the ones that differ from the built-in default, and edits them with an explicit Save (not autosave: every Claude call reads its file fresh, so a half-typed edit would reach a real call). A save names the version it was edited from and fails as a conflict if the file changed on disk since. Reset to default asks first. Each change is logged as `prompt.changed`. The two guidance files name their sources in their header (`<!-- source: <id> sha1:<12 hex> -->`: the psg-context-builder and obsidian-vault-reader skills, the vault's Notes System note and llms.txt). The server compares each with the source as it is now and Settings marks the file "Source changed"; once the guidance has been checked against it, Mark reviewed records the current hashes. Tests and fakes never look at the real sources.
+**FR-1.7** Settings › Prompts lists the prompt files (triage, topics, settle, draft vault, pick Confluence, draft Confluence and people check) and the two filing guidance files with their versions, marks the ones that differ from the built-in default, and edits them with an explicit Save (not autosave: every Claude call reads its file fresh, so a half-typed edit would reach a real call). A save names the version it was edited from and fails as a conflict if the file changed on disk since. Reset to default asks first. Each change is logged as `prompt.changed`. The two guidance files name their sources in their header (`<!-- source: <id> sha1:<12 hex> -->`: the psg-context-builder and obsidian-vault-reader skills, the vault's Notes System note and llms.txt). The server compares each with the source as it is now and Settings marks the file "Source changed"; once the guidance has been checked against it, Mark reviewed records the current hashes. Tests and fakes never look at the real sources.
 
 **FR-1.8** The app has a user guide at `/guide`, reached from a quiet sidebar link and from contextual links where a setting or failure needs explaining. Its pages are Markdown files kept in the repo (`app/docs/guide/`). The web build carries a copy; the server reads the folder on each request (`GET /api/guide`: `<slug>.md` files only, at most 100 of 256 kB each), and the page uses that when it can, re-reading it when the window regains focus, so an edit shows without a deploy. The folder is `WORKOS_GUIDE_DIR`, which `agent:install` sets to the repo's folder for prod; development reads the repo's copy. Without a readable folder (the mock, a moved repo, macOS refusing access to ~/Documents) the build's copy is shown, and the page says which copy it is. A file that doesn't parse keeps its built-in copy and the page names the problem. Raw HTML in them is not rendered. A test checks every page's front matter and that every link between pages, every anchor, every app route a page links to, and every contextual link into the guide still resolves. A change to what Frank sees updates the guide in the same commit.
 
@@ -588,7 +598,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 ### 7.6 E6 Eval and feedback
 
-**FR-6.1** `npm run eval` runs triage over `labels/triage.jsonl` and reports precision and recall per category, the confusion matrix for attention, and tokens and cost-equivalent used.
+**FR-6.1** `npm run eval` runs triage over `labels/triage.jsonl` and reports precision and recall per category, the confusion matrix for attention, and tokens and cost-equivalent used. `npm run eval -- --purpose settle` runs the settle check over `labels/settle.jsonl` (once it holds 30 labels) and reports false closes and missed closes (cockpit CK-2.6).
 
 **FR-6.2** In the UI, Frank can correct any decision with one click (attention level, confluence y/n, vault y/n). Corrections append to `labels/triage.jsonl` and emit `triage.corrected`.
 
@@ -620,7 +630,7 @@ As built (M2 step 16):
 
 **FR-8.2** Item actions: Open in Slack, Done, Snooze (1h / tomorrow 09:00 / custom), Correct triage, Draft vault note, Draft Confluence entry.
 
-**FR-8.3** Done and snoozed items leave the two groups. Each has a footer link that opens its list (Snoozed shows when the next one comes back). Snoozed items return at the snooze time, marked "Back from snooze". Threads waiting for the quiet window show as a quiet "N still active" link in the header.
+**FR-8.3** Done and snoozed items leave the two groups. Each has a footer link that opens its list (Snoozed shows when the next one comes back). Snoozed items return at the snooze time, marked "Back from snooze". Threads waiting for the quiet window show as a quiet "N still active" link in the header. Done items say how they closed: by Frank ("Done by you"), by the source ("Answered in Outlook", "Closed in Slack"), or by his reply (`item.done { by: 'reply' }`, "Your reply in Slack"). An item closes on Frank's reply when a settle check finds it settles every open ask (cockpit CK-2.1–2.7); a partial answer ticks off the settled asks (`topic.askDone { by: 'reply' }`). Settings › Triage rules turns closing off (the row then asks "Mark done?") and picks the sources whose replies are checked: Slack on, Outlook off until the CK-2.9 gate. Undo, or a Done within 30 minutes of a "not settled" check, is written to `labels/settle.jsonl` for `npm run eval -- --purpose settle`.
 
 ### 7.9 E8 Vault note action
 
@@ -964,7 +974,7 @@ Each phase starts only when the previous phase meets its success criteria. Each 
 
 | Source | Approach | Approval needed | Retires |
 |---|---|---|---|
-| Outlook mail | Relay calls (R2.5) on the claude.ai Microsoft 365 connector, every 30 min in work hours and 120 min outside: `outlook_email_search` on Inbox and Sent Items, then `read_resource` for each new email, batched up to 10 per run, for the body, names, To/Cc and `conversationId` (one item per conversation). Sent Items is context only: triage sees Frank's replies as "me" and lanes don't move on their own. Go-live gate: three working days alongside the digest, at least 30 corrected emails, and S1/S2 on Outlook alone (`npm run eval -- --source outlook`). Our own Graph app registration is unlikely to get consent, and the connector is already approved for the tenant. Local reads are not viable: new Outlook for Mac caches mail in an undocumented binary store (`HxStore.hxd`) that only refreshes while Outlook runs. Fallback if P0-9 fails: add the account to Apple Mail and read its local store, which needs Full Disk Access. | P0-9 passes. Tell IT the approved connector will be polled automatically. | Daily Outlook digest |
+| Outlook mail | Relay calls (R2.5) on the claude.ai Microsoft 365 connector, every 30 min in work hours and 120 min outside: `outlook_email_search` on Inbox and Sent Items, then `read_resource` for each new email, batched up to 10 per run, for the body, names, To/Cc and `conversationId` (one item per conversation). Sent Items is context only: triage sees Frank's replies as "me" and lanes don't move on their own, except a reply that settles an item's asks (cockpit CK-2.1), once Outlook is turned on for it. Go-live gate: three working days alongside the digest, at least 30 corrected emails, and S1/S2 on Outlook alone (`npm run eval -- --source outlook`). Our own Graph app registration is unlikely to get consent, and the connector is already approved for the tenant. Local reads are not viable: new Outlook for Mac caches mail in an undocumented binary store (`HxStore.hxd`) that only refreshes while Outlook runs. Fallback if P0-9 fails: add the account to Apple Mail and read its local store, which needs Full Disk Access. | P0-9 passes. Tell IT the approved connector will be polled automatically. | Daily Outlook digest |
 | Outlook calendar | Relay calls (R2.5) on the same connector, every 30 min in work hours and 120 min outside (R2.8): `outlook_calendar_search` over a rolling window, then `read_resource` only for new or changed invites. Feeds an agenda strip on the inbox, adds calendar titles and invitees to Wispr Flow meetings, and makes unanswered invites triaged items. A shadow week in Full scope first. | P0-12 passes. Covered by the mail notice to IT. | Checking invites by hand in Outlook |
 | Wispr Flow meetings | Wispr Flow's official MCP server, called from code with an MCP client and no model in the loop (R2.7), every 3 h in work hours. Amended from local reads of `flow.sqlite` (R2.6, P0-10) at Frank's choice: the MCP is the only supported way out and adds attendees and a share link. The local read stays the documented fallback if the MCP is withdrawn or its sign-in can't be kept. | P0-11 passes (P0-10 for the fallback) | Whichever scheduled task covers Wispr Flow notes, if any |
 | Teams chats | Graph delta on chats Frank is in | `Chat.Read` delegated, admin consent | Part of the daily Teams transcript sweep |

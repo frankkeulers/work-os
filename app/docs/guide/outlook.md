@@ -39,6 +39,10 @@ connector stays on claude.ai, so **Connect** turns Outlook mail back on at once.
 - **Your own sent email** is never a task for you. A conversation you started shows under
   Everything else, decided "You sent this and nobody has answered yet". When someone replies, it
   is triaged again.
+- **Your replies don't close items yet.** In Slack, a reply that settles what was asked closes the
+  item by itself; for Outlook that is off until you turn on **Check replies in Outlook** in
+  [Settings › Triage rules](rules.md#when-you-reply). Then the next mail poll brings your reply in
+  and the same check runs. See [When you reply](inbox.md#when-you-reply).
 - Work OS only reads. It never sends, moves, flags or marks anything as read in Outlook.
 
 The first time you connect, Work OS reads the last two days of mail.
