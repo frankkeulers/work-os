@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work OS inbox zero</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#3F3A9E}a:hover{color:#2B2775}
+.ck-body{transform-box:view-box;transform-origin:32px 56px;animation:ckHop 4.8s ease-in-out infinite}
+@keyframes ckHop{0%,20%{transform:translate(0px,0px) scale(1,1)}25%{transform:translate(0px,0px) scale(1.06,.9)}31%{transform:translate(0px,-8px) scale(.97,1.05)}37%{transform:translate(0px,0px) scale(1.06,.9)}42%,100%{transform:translate(0px,0px) scale(1,1)}}
+.ck-light{transform-box:fill-box;transform-origin:center;animation:ckLook 4.8s ease-in-out infinite}
+@keyframes ckLook{0%,45%{transform:translate(0px,0px) scale(1)}50%,62%{transform:translate(-1.8px,0px) scale(1)}68%,80%{transform:translate(1.8px,0px) scale(1)}86%{transform:translate(0px,0px) scale(1)}88%{transform:translate(0px,0px) scale(1.6)}90%,100%{transform:translate(0px,0px) scale(1)}}
+@media (prefers-reduced-motion: reduce){.ck-body,.ck-light{animation:none}}
+</style>
+</helmet>
+<div style="width: 1280px; height: 760px; box-sizing: border-box; background: #E9EBEF; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #14171C; display: flex; flex-direction: column; font-size: 14px">
+
+<div style="height: 44px; box-sizing: border-box; padding: 8px 12px 0; display: flex; align-items: flex-end; gap: 8px">
+<div style="width: 240px; height: 36px; box-sizing: border-box; padding: 0 14px; background: #FFFFFF; border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 8px; font-size: 13px">
+<svg width="16" height="16" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#14171C"></circle></svg>
+<span>Inbox · Work OS</span>
+</div>
+</div>
+
+<div style="flex-grow: 1; display: flex; background: #FFFFFF; min-height: 0">
+
+<div style="width: 220px; box-sizing: border-box; border-right: 1px solid #E2E5EA; display: flex; flex-direction: column; padding: 0 14px">
+<div style="height: 64px; box-sizing: border-box; padding-left: 8px; display: flex; align-items: center; gap: 10px">
+<svg width="26" height="26" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#14171C"></circle></svg>
+<span style="flex-grow: 1; font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Work OS</span>
+<button type="button" aria-label="Collapse sidebar" style="width: 32px; height: 32px; border: none; border-radius: 8px; background: transparent; color: #5B6270; display: flex; align-items: center; justify-content: center">
+<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M9 4v16"></path></svg>
+</button>
+</div>
+<nav aria-label="Main" style="display: flex; flex-direction: column; gap: 2px">
+<a href="#inbox" style="height: 40px; box-sizing: border-box; padding: 0 8px; border-radius: 8px; background: #EEF2FF; color: #1D4ED8; font-weight: 500; text-decoration: none; display: flex; align-items: center; gap: 10px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h5l2 3h4l2-3h5"></path><path d="M5 5h14l2 8v6H3v-6l2-8z"></path></svg>
+<span>Inbox</span>
+</a>
+<a href="#usage" style="height: 40px; box-sizing: border-box; padding: 0 8px; border-radius: 8px; color: #3A404B; font-weight: 500; text-decoration: none; display: flex; align-items: center; gap: 10px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg>
+<span>Usage &amp; health</span>
+</a>
+<a href="#settings" style="height: 40px; box-sizing: border-box; padding: 0 8px; border-radius: 8px; color: #3A404B; font-weight: 500; text-decoration: none; display: flex; align-items: center; gap: 10px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"></path></svg>
+<span>Settings &amp; rules</span>
+</a>
+</nav>
+</div>
+
+<div style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0; background: #F3F4F6">
+<div style="height: 64px; box-sizing: border-box; padding: 0 24px; background: #FFFFFF; border-bottom: 1px solid #EEF0F3; display: flex; align-items: center; justify-content: space-between">
+<h1 style="margin: 0; font-size: 22px; font-weight: 600">Inbox</h1>
+<span style="font-size: 12px; color: #1D4ED8">Polling Slack…</span>
+</div>
+<div style="margin: 16px 24px; padding: 48px 32px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+<svg width="88" height="88" viewBox="-4 -8 72 72" aria-hidden="true"><g class="ck-body"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle class="ck-light" cx="44" cy="20" r="4" fill="#14171C"></circle></g></svg>
+<h2 style="margin: 8px 0 0; font-size: 20px; font-weight: 600">Inbox zero</h2>
+<p style="margin: 0; max-width: 460px; font-size: 14px; color: #3A404B">Nothing needs you and nothing is waiting to be filed. Next poll at 09:50.</p>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

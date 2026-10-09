@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Work OS motion reference</title>
+<style>
+/* Reference implementation of the three Work OS state animations (status tile).
+   Timings, easings and keyframes here are the source of truth for the React port (see ../../WORKOS-IDENTITY.md §6).
+   Preview loops every animation; in the app needs-you and filed play once per trigger, checking loops while a poll runs. */
+:root{--bg:#F3F4F6;--surface:#FFFFFF;--line:#E2E5EA;--ink:#14171C;--muted:#5B6270;--mark-attention:#C2410C;--mark-filed:#0F766E;color-scheme:light}
+[data-theme="dark"]{--bg:#0F1115;--surface:#1A1D24;--line:#2A2F38;--ink:#E8EAEE;--muted:#9CA3AF;--mark-attention:#F97316;--mark-filed:#2DD4BF;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;padding:32px;background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans",system-ui,sans-serif}
+h1{margin:0 0 4px;font-size:22px;font-weight:600}
+p{margin:0 0 24px;color:var(--muted)}
+.controls{display:flex;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+.controls label{display:flex;gap:6px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:16px;height:280px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.label{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:10px}
+.mark{color:var(--ink)}
+
+/* ---------- Checking sources: 4.8s, loops ---------- */
+.ck-body{transform-box:view-box;transform-origin:32px 56px;animation:ckHop 4.8s ease-in-out infinite}
+@keyframes ckHop{0%,20%{transform:translate(0px,0px) scale(1,1)}25%{transform:translate(0px,0px) scale(1.06,.9)}31%{transform:translate(0px,-8px) scale(.97,1.05)}37%{transform:translate(0px,0px) scale(1.06,.9)}42%,100%{transform:translate(0px,0px) scale(1,1)}}
+/* The light looks left, then right, then blinks (it grows to fill the socket). */
+.ck-light{transform-box:fill-box;transform-origin:center;animation:ckLook 4.8s ease-in-out infinite}
+@keyframes ckLook{0%,45%{transform:translate(0px,0px) scale(1)}50%,62%{transform:translate(-1.8px,0px) scale(1)}68%,80%{transform:translate(1.8px,0px) scale(1)}86%{transform:translate(0px,0px) scale(1)}88%{transform:translate(0px,0px) scale(1.6)}90%,100%{transform:translate(0px,0px) scale(1)}}
+
+/* ---------- Needs you: 3.6s, once per trigger ---------- */
+.nd-body{transform-box:view-box;transform-origin:8px 56px;animation:ndTilt 3.6s cubic-bezier(.3,1.6,.5,1) infinite}
+@keyframes ndTilt{0%,18%{transform:rotate(0deg)}24%{transform:rotate(-8deg)}28%{transform:rotate(-3deg)}32%{transform:rotate(-6deg)}36%,70%{transform:rotate(-5deg)}82%,100%{transform:rotate(0deg)}}
+.nd-light{transform-box:fill-box;transform-origin:center;animation:ndLight 3.6s ease-out infinite}
+@keyframes ndLight{0%,20%{fill:currentColor;transform:scale(1)}25%{fill:var(--mark-attention);transform:scale(1.7)}31%,72%{fill:var(--mark-attention);transform:scale(1)}84%,100%{fill:currentColor;transform:scale(1)}}
+.nd-ring{transform-box:fill-box;transform-origin:center;opacity:0;stroke:var(--mark-attention);animation:ndRing 3.6s ease-out infinite}
+.nd-ring2{animation-delay:.28s}
+@keyframes ndRing{0%,22%{transform:scale(1);opacity:0}25%{opacity:1}55%,100%{transform:scale(4.5);opacity:0}}
+
+/* ---------- Filed: 4s, once per trigger ---------- */
+.fl-light{transform-box:fill-box;transform-origin:center;animation:flLight 4s ease-out infinite}
+@keyframes flLight{0%,40%{fill:currentColor;transform:scale(1)}45%{fill:var(--mark-filed);transform:scale(1.7)}51%,76%{fill:var(--mark-filed);transform:scale(1)}86%,100%{fill:currentColor;transform:scale(1)}}
+.fl-ring{transform-box:fill-box;transform-origin:center;opacity:0;stroke:var(--mark-filed);animation:flRing 4s ease-out infinite}
+@keyframes flRing{0%,42%{transform:scale(1);opacity:0}45%{opacity:1}70%,100%{transform:scale(4.5);opacity:0}}
+
+/* Reduced motion: nothing moves; needs-you and filed show their colour. */
+.reduce .ck-body,.reduce .ck-light,.reduce .nd-body,.reduce .nd-light,.reduce .nd-ring,.reduce .fl-light,.reduce .fl-ring{animation:none}
+.reduce .nd-light{fill:var(--mark-attention)}.reduce .fl-light{fill:var(--mark-filed)}
+@media (prefers-reduced-motion: reduce){
+.ck-body,.ck-light,.nd-body,.nd-light,.nd-ring,.fl-light,.fl-ring{animation:none}
+.nd-light{fill:var(--mark-attention)}.fl-light{fill:var(--mark-filed)}
+}
+</style>
+</head>
+<body>
+<h1>Work OS motion reference</h1>
+<p>Status tile, three states. Everything loops here.</p>
+<div class="controls">
+<label><input type="checkbox" id="dark"> Dark theme</label>
+<label><input type="checkbox" id="reduce"> Simulate reduced motion</label>
+</div>
+<div class="grid" id="grid">
+
+<div>
+<div class="label">Checking sources (4.8s, loops)</div>
+<div class="tile">
+<svg class="mark" width="200" height="200" viewBox="-4 -8 72 72" role="img" aria-label="The tile hops and its status light looks left and right">
+<g class="ck-body">
+<path fill="currentColor" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"/>
+<circle class="ck-light" cx="44" cy="20" r="4" fill="currentColor"/>
+</g>
+</svg>
+</div>
+</div>
+
+<div>
+<div class="label">Needs you (3.6s, once)</div>
+<div class="tile">
+<svg class="mark" width="200" height="200" viewBox="-4 -8 72 72" role="img" aria-label="The tile tilts up and its status light turns orange">
+<g class="nd-body">
+<path fill="currentColor" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"/>
+<circle class="nd-ring" cx="44" cy="20" r="4" fill="none" stroke-width="0.9"/>
+<circle class="nd-ring nd-ring2" cx="44" cy="20" r="4" fill="none" stroke-width="0.6"/>
+<circle class="nd-light" cx="44" cy="20" r="4"/>
+</g>
+</svg>
+</div>
+</div>
+
+<div>
+<div class="label">Filed (4s, once)</div>
+<div class="tile">
+<svg class="mark" width="200" height="200" viewBox="-4 -8 72 72" role="img" aria-label="The status light turns teal">
+<path fill="currentColor" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"/>
+<circle class="fl-ring" cx="44" cy="20" r="4" fill="none" stroke-width="0.9"/>
+<circle class="fl-light" cx="44" cy="20" r="4"/>
+</svg>
+</div>
+</div>
+
+</div>
+<script>
+document.getElementById('dark').addEventListener('change', e => { document.documentElement.dataset.theme = e.target.checked ? 'dark' : 'light'; });
+document.getElementById('reduce').addEventListener('change', e => { document.getElementById('grid').classList.toggle('reduce', e.target.checked); });
+</script>
+</body>
+</html>

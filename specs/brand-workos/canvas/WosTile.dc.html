@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work OS status tile, final</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#3F3A9E}a:hover{color:#2B2775}
+</style>
+</helmet>
+<div style="width: 1040px; height: 600px; box-sizing: border-box; padding: 48px; background: #F3F4F6; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #14171C; display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 48px">
+
+<div style="width: 440px; height: 504px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center">
+<svg width="300" height="300" viewBox="0 0 64 64" aria-label="Work OS mark, status tile"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#C2410C"></circle></svg>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 28px">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">Sizes: quiet, needs you (16px fills the socket)</div>
+<div style="display: flex; gap: 12px">
+<div style="flex-grow: 1; height: 96px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 22px">
+<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#14171C"></circle></svg>
+<svg width="32" height="32" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#C2410C"></circle></svg>
+<svg width="16" height="16" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#14171C"></circle></svg>
+<svg width="16" height="16" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="6.5" fill="#C2410C"></circle></svg>
+</div>
+<div style="flex-grow: 1; height: 96px; background: #0F1115; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 22px">
+<svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true"><path fill="#E8EAEE" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#E8EAEE"></circle></svg>
+<svg width="32" height="32" viewBox="6 6 52 52" aria-hidden="true"><path fill="#E8EAEE" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#F97316"></circle></svg>
+<svg width="16" height="16" viewBox="6 6 52 52" aria-hidden="true"><path fill="#E8EAEE" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#E8EAEE"></circle></svg>
+<svg width="16" height="16" viewBox="6 6 52 52" aria-hidden="true"><path fill="#E8EAEE" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="6.5" fill="#F97316"></circle></svg>
+</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">Sidebar header</div>
+<div style="display: flex; gap: 12px">
+<div style="flex-grow: 1; height: 64px; box-sizing: border-box; padding: 0 20px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 12px; display: flex; align-items: center; gap: 10px">
+<svg width="26" height="26" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#14171C"></circle></svg>
+<span style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Work OS</span>
+</div>
+<div style="flex-grow: 1; height: 64px; box-sizing: border-box; padding: 0 20px; background: #1A1D24; border-radius: 12px; display: flex; align-items: center; gap: 10px; color: #E8EAEE">
+<svg width="26" height="26" viewBox="6 6 52 52" aria-hidden="true"><path fill="#E8EAEE" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#F97316"></circle></svg>
+<span style="font-size: 17px; font-weight: 600; letter-spacing: -0.01em">Work OS</span>
+</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">Tab, rail quiet, rail needs you, toast tile, app icon</div>
+<div style="display: flex; gap: 14px; align-items: flex-end">
+<div style="width: 176px; height: 40px; box-sizing: border-box; padding: 0 12px; background: #FFFFFF; border: 1px solid #E2E5EA; border-bottom: none; border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 8px; font-size: 13px">
+<svg width="16" height="16" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="6.5" fill="#C2410C"></circle></svg>
+<span>Inbox · Work OS</span>
+</div>
+<div style="width: 60px; height: 64px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 12px; display: flex; align-items: center; justify-content: center">
+<svg width="26" height="26" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#14171C"></circle></svg>
+</div>
+<div style="width: 60px; height: 64px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 12px; display: flex; align-items: center; justify-content: center">
+<svg width="26" height="26" viewBox="6 6 52 52" aria-hidden="true"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#C2410C"></circle></svg>
+</div>
+<div style="width: 36px; height: 36px; border-radius: 8px; background: #14171C; display: flex; align-items: center; justify-content: center">
+<svg width="22" height="22" viewBox="6 6 52 52" aria-hidden="true"><path fill="#FFFFFF" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle cx="44" cy="20" r="4" fill="#F97316"></circle></svg>
+</div>
+<svg width="120" height="120" viewBox="0 0 64 64" aria-label="Work OS app icon"><rect width="64" height="64" rx="14.4" fill="#14171C"></rect><circle cx="48" cy="16" r="8.67" fill="#F3F4F6"></circle><rect x="10.67" y="34.67" width="26.67" height="5.33" rx="2.67" fill="#F3F4F6"></rect><rect x="10.67" y="46.67" width="17.33" height="5.33" rx="2.67" fill="#F3F4F6"></rect><circle cx="48" cy="16" r="5.33" fill="#F97316"></circle></svg>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1040,"height":600}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

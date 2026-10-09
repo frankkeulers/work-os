@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work OS state animations</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#3F3A9E}a:hover{color:#2B2775}
+
+/* Shared: the status dot pops and rings ripple out */
+.pop-att{transform-box:fill-box;transform-origin:center;animation:popAtt 3.6s ease-out infinite}
+@keyframes popAtt{0%,20%{fill:#14171C;transform:scale(1)}25%{fill:#C2410C;transform:scale(1.7)}31%,72%{fill:#C2410C;transform:scale(1)}84%,100%{fill:#14171C;transform:scale(1)}}
+.ring-att{transform-box:fill-box;transform-origin:center;opacity:0;animation:ringAtt 3.6s ease-out infinite}
+.ring-att2{animation-delay:.28s}
+@keyframes ringAtt{0%,22%{transform:scale(1);opacity:0}25%{opacity:1}55%,100%{transform:scale(4.5);opacity:0}}
+.pop-fil{transform-box:fill-box;transform-origin:center;animation:popFil 4s ease-out infinite}
+@keyframes popFil{0%,40%{fill:#14171C;transform:scale(1)}45%{fill:#0F766E;transform:scale(1.7)}51%,76%{fill:#0F766E;transform:scale(1)}86%,100%{fill:#14171C;transform:scale(1)}}
+.ring-fil{transform-box:fill-box;transform-origin:center;opacity:0;animation:ringFil 4s ease-out infinite}
+@keyframes ringFil{0%,42%{transform:scale(1);opacity:0}45%{opacity:1}70%,100%{transform:scale(4.5);opacity:0}}
+
+/* A · Status tile */
+.a-ck-body{transform-box:view-box;transform-origin:32px 56px;animation:aHop 4.8s ease-in-out infinite}
+@keyframes aHop{0%,20%{transform:translate(0px,0px) scale(1,1)}25%{transform:translate(0px,0px) scale(1.06,.9)}31%{transform:translate(0px,-8px) scale(.97,1.05)}37%{transform:translate(0px,0px) scale(1.06,.9)}42%,100%{transform:translate(0px,0px) scale(1,1)}}
+.a-ck-dot{transform-box:fill-box;transform-origin:center;animation:aLook 4.8s ease-in-out infinite}
+@keyframes aLook{0%,45%{transform:translate(0px,0px) scale(1)}50%,62%{transform:translate(-1.8px,0px) scale(1)}68%,80%{transform:translate(1.8px,0px) scale(1)}86%{transform:translate(0px,0px) scale(1)}88%{transform:translate(0px,0px) scale(1.6)}90%,100%{transform:translate(0px,0px) scale(1)}}
+.a-nd-body{transform-box:view-box;transform-origin:8px 56px;animation:aTilt 3.6s cubic-bezier(.3,1.6,.5,1) infinite}
+@keyframes aTilt{0%,18%{transform:rotate(0deg)}24%{transform:rotate(-8deg)}28%{transform:rotate(-3deg)}32%{transform:rotate(-6deg)}36%,70%{transform:rotate(-5deg)}82%,100%{transform:rotate(0deg)}}
+
+/* B · Orbit */
+.b-ck{transform-box:view-box;transform-origin:32px 32px;animation:bSpin 2s cubic-bezier(.6,0,.3,1) infinite}
+@keyframes bSpin{0%{transform:rotate(0deg)}70%,100%{transform:rotate(360deg)}}
+.b-nd{transform-box:view-box;transform-origin:32px 32px;animation:bWiggle 3.6s cubic-bezier(.3,1.6,.5,1) infinite}
+@keyframes bWiggle{0%,18%{transform:rotate(0deg)}24%{transform:rotate(-14deg)}30%{transform:rotate(7deg)}36%{transform:rotate(-3deg)}42%,100%{transform:rotate(0deg)}}
+
+/* C · W mark */
+.c-ck-dot{transform-box:view-box;transform-origin:32px 13px;animation:cHop 3.2s ease-in-out infinite}
+@keyframes cHop{
+0%{transform:translate(0px,0px)}
+6%{transform:translate(-12px,-9px)}
+12%,24%{transform:translate(-24px,-2px)}
+30%{transform:translate(-12px,-9px)}
+36%,48%{transform:translate(0px,0px)}
+54%{transform:translate(12px,-9px)}
+60%,72%{transform:translate(24px,-2px)}
+78%{transform:translate(12px,-9px)}
+84%,100%{transform:translate(0px,0px)}}
+.c-nd-jump{transform-box:view-box;transform-origin:32px 13px;animation:cJump 3.6s cubic-bezier(.3,1.4,.5,1) infinite}
+@keyframes cJump{0%,14%{transform:translateY(0px)}20%{transform:translateY(-8px)}26%,100%{transform:translateY(0px)}}
+.c-nd-w{transform-box:view-box;transform-origin:32px 50px;animation:cSquash 3.6s ease-out infinite}
+@keyframes cSquash{0%,12%{transform:scale(1,1)}15%{transform:scale(1.04,.92)}19%,24%{transform:scale(1,1)}26%{transform:scale(1.03,.95)}30%,100%{transform:scale(1,1)}}
+
+@media (prefers-reduced-motion: reduce){
+.pop-att,.ring-att,.pop-fil,.ring-fil,.a-ck-body,.a-ck-dot,.a-nd-body,.b-ck,.b-nd,.c-ck-dot,.c-nd-jump,.c-nd-w{animation:none}
+.pop-att{fill:#C2410C}.pop-fil{fill:#0F766E}
+}
+</style>
+</helmet>
+<div style="width: 1280px; height: 900px; box-sizing: border-box; padding: 48px; background: #F3F4F6; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #14171C; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">A · Checking sources</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -8 72 72" aria-label="The tile hops and its status light looks left and right"><g class="a-ck-body"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle class="a-ck-dot" cx="44" cy="20" r="4" fill="#14171C"></circle></g></svg>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">A · Needs you</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -8 72 72" aria-label="The tile tilts up and its status light turns orange"><g class="a-nd-body"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle class="ring-att" cx="44" cy="20" r="4" fill="none" stroke="#C2410C" stroke-width="0.9"></circle><circle class="ring-att ring-att2" cx="44" cy="20" r="4" fill="none" stroke="#C2410C" stroke-width="0.6"></circle><circle class="pop-att" cx="44" cy="20" r="4" fill="#C2410C"></circle></g></svg>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">A · Filed</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -8 72 72" aria-label="The status light turns teal"><path fill="#14171C" fill-rule="evenodd" d="M22 8 H42 C50 8 56 14 56 22 V42 C56 50 50 56 42 56 H22 C14 56 8 50 8 42 V22 C8 14 14 8 22 8 Z M50.5 20 A6.5 6.5 0 1 0 37.5 20 A6.5 6.5 0 1 0 50.5 20 Z M18 34 H36 A2 2 0 0 1 36 38 H18 A2 2 0 0 1 18 34 Z M18 43 H29 A2 2 0 0 1 29 47 H18 A2 2 0 0 1 18 43 Z"></path><circle class="ring-fil" cx="44" cy="20" r="4" fill="none" stroke="#0F766E" stroke-width="0.9"></circle><circle class="pop-fil" cx="44" cy="20" r="4" fill="#14171C"></circle></svg>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">B · Checking sources</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -4 72 72" aria-label="The orbit spins once, then pauses"><g class="b-ck"><path d="M51.73 24.82 A21 21 0 1 1 39.18 12.27" fill="none" stroke="#14171C" stroke-width="7" stroke-linecap="round"></path><circle cx="46.85" cy="17.15" r="5.5" fill="#14171C"></circle></g></svg>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">B · Needs you</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -4 72 72" aria-label="The orbit wiggles and its dot turns orange"><g class="b-nd"><path d="M51.73 24.82 A21 21 0 1 1 39.18 12.27" fill="none" stroke="#14171C" stroke-width="7" stroke-linecap="round"></path><circle class="ring-att" cx="46.85" cy="17.15" r="5.5" fill="none" stroke="#C2410C" stroke-width="0.9"></circle><circle class="ring-att ring-att2" cx="46.85" cy="17.15" r="5.5" fill="none" stroke="#C2410C" stroke-width="0.6"></circle><circle class="pop-att" cx="46.85" cy="17.15" r="5.5" fill="#C2410C"></circle></g></svg>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">B · Filed</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -4 72 72" aria-label="The orbit's dot turns teal"><path d="M51.73 24.82 A21 21 0 1 1 39.18 12.27" fill="none" stroke="#14171C" stroke-width="7" stroke-linecap="round"></path><circle class="ring-fil" cx="46.85" cy="17.15" r="5.5" fill="none" stroke="#0F766E" stroke-width="0.9"></circle><circle class="pop-fil" cx="46.85" cy="17.15" r="5.5" fill="#14171C"></circle></svg>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">C · Checking sources</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -6 72 72" aria-label="The dot hops from peak to peak of the W"><path d="M8 20 L20 50 L32 28 L44 50 L56 20" fill="none" stroke="#14171C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><g class="c-ck-dot"><circle cx="32" cy="13" r="5.5" fill="#14171C"></circle></g></svg>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">C · Needs you</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -6 72 72" aria-label="The dot jumps and turns orange"><g class="c-nd-w"><path d="M8 20 L20 50 L32 28 L44 50 L56 20" fill="none" stroke="#14171C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path></g><circle class="ring-att" cx="32" cy="13" r="5.5" fill="none" stroke="#C2410C" stroke-width="0.9"></circle><circle class="ring-att ring-att2" cx="32" cy="13" r="5.5" fill="none" stroke="#C2410C" stroke-width="0.6"></circle><g class="c-nd-jump"><circle class="pop-att" cx="32" cy="13" r="5.5" fill="#C2410C"></circle></g></svg>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 13px; font-weight: 600; color: #5B6270">C · Filed</div>
+<div style="height: 220px; background: #FFFFFF; border: 1px solid #E2E5EA; border-radius: 16px; display: flex; align-items: center; justify-content: center; overflow: hidden">
+<svg width="160" height="160" viewBox="-4 -6 72 72" aria-label="The W's dot turns teal"><path d="M8 20 L20 50 L32 28 L44 50 L56 20" fill="none" stroke="#14171C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"></path><circle class="ring-fil" cx="32" cy="13" r="5.5" fill="none" stroke="#0F766E" stroke-width="0.9"></circle><circle class="pop-fil" cx="32" cy="13" r="5.5" fill="#14171C"></circle></svg>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
