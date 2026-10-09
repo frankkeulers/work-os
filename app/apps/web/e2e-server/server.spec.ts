@@ -338,3 +338,32 @@ test('Outlook Calendar: the agenda, an invite as an item that answering in Outlo
   await expect.poll(async () => (await invite())?.status, { timeout: 30_000 }).toBe('done');
   await expect(agenda.locator('[data-agenda-event]').filter({ hasText: 'Nordic Star renewal review' }).getByText('Not answered')).toHaveCount(0);
 });
+
+test('source views: each source’s whole history and the calendar week, from the real server (CK-5.1, 5.6)', async ({ page, request }) => {
+  // After the tests above: an item marked done, Wispr Flow and Outlook connected, the invite answered.
+  type Row = { id: string; source: string; title: string; status: string; people: string[] };
+  const rows = async (source: string) => ((await (await request.get(`${BASE}/api/sources/${source}/items`, { headers: auth })).json()) as { items: Row[] }).items;
+  const slack = await rows('slack');
+  expect(slack.length).toBeGreaterThan(0);
+  expect(slack.every((i) => i.source === 'slack')).toBe(true);
+  expect(slack.some((i) => i.status === 'done')).toBe(true);
+  expect((await rows('calendar')).find((i) => i.title === 'Nordic Star renewal review')?.status).toBe('done');
+  expect((await request.get(`${BASE}/api/sources/gong/items`, { headers: auth })).status()).toBe(404);
+
+  type Week = { state: string; weekStart: string; events: { title: string; notesItemId?: string }[] };
+  const week = (await (await request.get(`${BASE}/api/calendar/week`, { headers: auth })).json()) as Week;
+  expect(week.state).toBe('ok');
+  expect(week.weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(week.events.find((e) => e.title === 'MVI V2 launch readiness')?.notesItemId).toMatch(/^wispr:/);
+
+  // The sidebar's Calendar opens the week; the launch meeting opens its Wispr Flow notes in the panel.
+  await page.goto('/');
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^Calendar/ }).click();
+  await expect(page).toHaveURL(/\/source\/calendar$/);
+  const launch = page.locator('[data-week-event]').filter({ hasText: 'MVI V2 launch readiness' });
+  await expect(launch).toHaveAttribute('data-linked', 'notes');
+  await launch.click();
+  const panel = page.getByRole('complementary', { name: 'Item panel' });
+  await expect(panel.getByTestId('on-calendar')).toHaveText(/^On your calendar: MVI V2 launch readiness/);
+  await page.screenshot({ path: join(APP, 'screenshots/server-source-calendar-light.png'), animations: 'disabled' });
+});
