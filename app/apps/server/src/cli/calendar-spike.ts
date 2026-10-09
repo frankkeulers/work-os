@@ -16,6 +16,8 @@ import { API_KEY_FIX, apiKeySet } from '../runtime/refuse';
 //   spike:calendar search [days]   one outlook_calendar_search from yesterday to `days` ahead (14)
 //   spike:calendar read [n]        that search, then read n events (10) in ONE batched run
 //   spike:calendar mail [n]        read the n newest Inbox emails (10): is a meeting request marked?
+//   spike:calendar categories      how events carry categories, and whether any URI reads the
+//                                  mailbox's category list with its colours (names never printed)
 //
 // Usage goes to a temporary folder, not the app's usage log, so the spike never touches app data.
 
@@ -149,7 +151,40 @@ async function main(): Promise<number> {
       console.log(`event link: ${has(reads, 'event')} · meetingRequestType: ${tally(reads, 'meetingRequestType')}`);
       return 0;
     }
-    console.error(`Unknown command ${cmd}. Use search, read or mail.`);
+    if (cmd === 'categories') {
+      const day = 86_400_000;
+      const args = { query: '*', afterDateTime: new Date(Date.now() - day).toISOString(), beforeDateTime: new Date(Date.now() + 14 * day).toISOString(), order: 'oldest', limit: 25, offset: 0 };
+      const s = await relayToolCall(claude, { connector, tool: 'outlook_calendar_search', args });
+      report('search', [s.run]);
+      const events = blocks(s.raw).filter((x) => (x as Obj)?.uri);
+      const cats = events.map((e) => get(e, 'categories'));
+      const tagged = events.filter((e) => Array.isArray(get(e, 'categories')) && (get(e, 'categories') as unknown[]).length);
+      const all = cats.flatMap((c) => (Array.isArray(c) ? c : []));
+      console.log(`
+categories: ${has(events, 'categories')} have the field; ${tagged.length} of ${events.length} have one or more; per event ${[...new Set(cats.map((c) => (Array.isArray(c) ? c.length : -1)))].join(', ')}`);
+      console.log(`entry shape: ${JSON.stringify(shape(all[0]))}; distinct ${new Set(all.map((c) => JSON.stringify(c))).size}`);
+      // Outlook's preset names ("Red category") carry their colour; renamed ones don't. Counted, not printed.
+      const preset = all.filter((c) => typeof c === 'string' && /^(red|orange|yellow|green|blue|purple) category$/i.test(c));
+      console.log(`preset-named entries: ${preset.length} of ${all.length}`);
+      if (tagged[0]) {
+        const r = await relayToolCall(claude, { connector, tool: 'read_resource', args: { uri: (tagged[0] as Obj).uri as string } });
+        report('read tagged event', [r.run]);
+        const read = blocks(r.raw)[0];
+        console.log(`read categories shape: ${JSON.stringify(shape(get(read, 'categories')))}; colour-like fields: ${keys([read]).split(', ').filter((k) => /colou?r|categor/i.test(k)).join(', ') || '(none)'}`);
+      }
+      for (const uri of ['mail:///masterCategories', 'mail:///categories', 'mail:///outlook/masterCategories', 'calendar:///categories', 'mail:///labels']) {
+        try {
+          const r = await relayToolCall(claude, { connector, tool: 'read_resource', args: { uri } });
+          const out = blocks(r.raw);
+          console.log(`${uri}: ok · ${JSON.stringify(shape(out[0]))}`);
+        } catch (e) {
+          console.log(`${uri}: ${(e as Error).name} · ${(e as Error).message.slice(0, 160)}`);
+        }
+      }
+      console.log(`tools mentioning labels or categories: ${connector.tools.filter((t) => /label|categor/i.test(t)).join(', ')}`);
+      return 0;
+    }
+    console.error(`Unknown command ${cmd}. Use search, read, mail or categories.`);
     return 1;
   } catch (e) {
     console.error(`The spike failed: ${(e as Error).name}: ${(e as Error).message}`);

@@ -135,6 +135,23 @@ describe('the calendar adapter', () => {
     expect(store.snapshot?.invites).toEqual([{ itemId: item.id, eventIds: [q4.id] }]);
   });
 
+  it('keeps each event’s Outlook categories from search, and follows a change to them without a read', async () => {
+    const q4 = invite({ categories: ['Customer', ' customer ', ''] });
+    const ops = invite({ subject: 'Ops sync', attendees: [{ ...FRANK, response: 'accepted' }], start: at(3), end: at(4), categories: ['Internal'] });
+    box.calendar.push(q4, ops);
+    const r = await poll();
+    expect(r.items[0].meeting?.calendar?.categories).toEqual(['Customer']); // trimmed, without blanks or a repeat in other case
+    expect(store.snapshot?.events.find((e) => e.id === ops.id)?.categories).toEqual(['Internal']);
+
+    const reads = box.eventReads.length;
+    ops.categories = ['Internal', 'Focus'];
+    q4.categories = [];
+    await poll();
+    expect(box.eventReads.length - reads).toBe(1); // only the open invite, read every poll for its answer
+    expect(store.snapshot?.events.find((e) => e.id === ops.id)?.categories).toEqual(['Internal', 'Focus']);
+    expect(store.snapshot?.events.find((e) => e.id === q4.id)?.categories).toBeUndefined();
+  });
+
   it('keeps no body, Teams text or join link in the snapshot', async () => {
     box.calendar.push(invite());
     await poll();

@@ -325,6 +325,8 @@ test('Outlook Calendar: the agenda, an invite as an item that answering in Outlo
   await expect(panel.getByText('Ahead of the renewal, could we walk through the fleet coverage', { exact: false })).toBeVisible();
   await expect(panel.getByText(/Passcode|Meeting ID/)).toHaveCount(0); // the Teams block is cut
   await expect(panel.getByRole('region', { name: /File it|Also file/ })).toHaveCount(0);
+  await expect(panel.getByTestId('calendar-categories').getByRole('listitem')).toHaveText(['Customer']); // from search, its colour Frank's to pick
+  await expect(launch).toHaveAttribute('data-category-color', /.+/);
   await agenda.getByRole('button', { name: 'Tomorrow' }).click();
   await expect(agenda.locator('[data-agenda-event]').filter({ hasText: 'Nordic Star renewal review' }).getByRole('button', { name: 'Not answered' })).toBeVisible();
   await page.screenshot({ path: join(APP, 'screenshots/server-calendar-light.png'), animations: 'disabled' });

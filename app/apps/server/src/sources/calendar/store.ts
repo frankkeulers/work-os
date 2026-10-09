@@ -5,7 +5,7 @@ import { writeJsonAtomic } from '../../store/atomic';
 // state/calendar.json (R2.8): the calendar as the last poll saw it, from yesterday to two weeks
 // ahead. It is the agenda, and what the next poll compares against to see what moved, was
 // cancelled or was answered. It is not the event log: nothing here is history. Subjects, times,
-// names and addresses only: never an event's body, its Teams text or its join link.
+// names and addresses and category names only: never an event's body, its Teams text or its join link.
 
 const Person = z.object({ name: z.string().optional(), address: z.string().optional(), type: z.string().optional() });
 export type SnapPerson = z.infer<typeof Person>;
@@ -29,6 +29,8 @@ export const SnapEvent = z.object({
   /** Frank's answer, from his own attendee entry; unset until read, "notListed" when he isn't one. */
   response: z.string().optional(),
   created: z.string().optional(),
+  /** Outlook category names, from search (R2.8). */
+  categories: z.array(z.string()).optional(),
 });
 export type SnapEvent = z.infer<typeof SnapEvent>;
 

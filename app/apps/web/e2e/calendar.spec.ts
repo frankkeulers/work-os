@@ -73,9 +73,33 @@ test('the agenda shows today’s meetings above the inbox, the one on now picked
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 
   await agenda(page).getByRole('button', { name: 'Tomorrow' }).click();
-  await expect(agenda(page).getByRole('list', { name: 'Tomorrow’s meetings' }).locator('[data-agenda-event]')).toHaveText([/All daySales kick-off/, /10:00Q4 roadmap reviewNot answered/, /15:00Insights APIs sync/]);
+  await expect(agenda(page).getByRole('list', { name: 'Tomorrow’s meetings' }).locator('[data-agenda-event]')).toHaveText([/All daySales kick-off/, /10:00Q4 roadmap review, Planning, ProductNot answered/, /15:00Insights APIs sync/]);
   await expect(meeting(page, 'Q4 roadmap review')).toHaveAttribute('data-phase', 'later');
   await expect(meeting(page, 'Insights APIs sync').getByText('Not answered')).toHaveCount(0); // answered "tentative"
+});
+
+test('Outlook categories: their colours are picked in Settings and show on the agenda and the item (R2.8)', async ({ page }) => {
+  await turnOn(page);
+  const colours = page.getByRole('heading', { name: 'Category colours' });
+  await expect(colours).toBeVisible();
+  // Read from the meetings, A to Z; each has a colour of its own until one is picked.
+  await expect(page.getByLabel(/: colour$/)).toHaveCount(3);
+  await expect(page.getByLabel('Customer: colour')).toBeVisible();
+  await expect(page.getByLabel('Planning: colour')).toBeVisible();
+  await page.getByLabel('Customer: colour').selectOption({ label: 'Dark red' });
+  await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
+  await dismissToasts(page);
+  await colours.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(APP, 'screenshots/settings-outlook-categories-light.png') });
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  await expect(meeting(page, 'renewal call')).toHaveAttribute('data-category-color', 'darkRed');
+  await expect(meeting(page, 'Product stand-up')).not.toHaveAttribute('data-category-color');
+  await agenda(page).getByRole('button', { name: 'Tomorrow' }).click();
+  // In MVP scope the invite isn't in the list (the calendar isn't live yet), so it opens on its own page.
+  await meeting(page, 'Q4 roadmap review').getByRole('button', { name: 'Not answered' }).click();
+  await expect(page).toHaveURL(/\/item\/calendar/);
+  await expect(page.getByTestId('calendar-categories').getByRole('listitem')).toHaveText(['Planning', 'Product']);
 });
 
 test('meetings past the edge of the strip fade out under an arrow that scrolls to them', async ({ page }) => {
@@ -131,6 +155,7 @@ test('a Wispr Flow meeting shows its calendar event, and the agenda opens its no
   const onCalendar = panel.getByTestId('on-calendar');
   await expect(onCalendar).toHaveText('On your calendar: Voyage Insights pricing workshop · organised by Head of Sales · 3 invited');
   await expect(panel.getByRole('heading', { name: 'Action items for you' })).toHaveCount(1);
+  await expect(panel.getByTestId('calendar-categories').getByRole('listitem')).toHaveText(['Customer']);
   await expect(onCalendar.getByRole('link', { name: 'Voyage Insights pricing workshop' })).toHaveAttribute('href', /itemid=AAMkMOCKPRICING/);
   await dismissToasts(page);
   await page.screenshot({ path: join(APP, 'screenshots/inbox-meeting-on-calendar-light.png') });
@@ -165,6 +190,7 @@ test('an invite you haven’t answered is an item to answer in Outlook, with not
   await expect(panel.getByRole('button', { name: 'Respond in Outlook' })).toBeVisible();
   await expect(panel.getByRole('region', { name: /File it|Also file/ })).toHaveCount(0);
   await expect(panel.getByRole('heading', { name: 'The invitation' })).toBeVisible();
+  await expect(panel.getByTestId('calendar-categories').getByRole('listitem')).toHaveText(['Planning', 'Product']);
   await expect(panel.getByText('Frank, please bring the Insights APIs usage numbers.')).toBeVisible();
   await dismissToasts(page);
   // The desktop notification for the Outlook mail stays up 9 s; the screenshot is of the page under it.

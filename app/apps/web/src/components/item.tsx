@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { Attention, ItemMeeting, SourceId } from '@work-os/shared';
+import { OUTLOOK_COLORS, type Attention, type CategoryTag, type ItemMeeting, type OutlookColor, type SourceId } from '@work-os/shared';
 import { API_MODE, api, type ItemSummary } from '../api';
 import { SOURCE_NAME } from '../lib/next';
 import { snoozeOptions } from '../lib/snooze';
@@ -66,6 +66,25 @@ export async function markDoneWithUndo(item: ItemSummary) {
 
 /** Markers that explain why a card looks the way it does. */
 /** A Wispr Flow meeting's calendar event (R2.8): its title, opening Outlook, who organised it and how many were asked. */
+/** An Outlook category's colour, as a dot (R2.8). */
+export function CategoryDot({ color, size = 8 }: { color: OutlookColor; size?: number }) {
+  return <span aria-hidden className="inline-block shrink-0 rounded-full ring-1 ring-line" style={{ width: size, height: size, background: OUTLOOK_COLORS[color] }} />;
+}
+
+/** A calendar event's Outlook categories, each in the colour given it in Settings › Outlook. */
+export function CategoryTags({ tags }: { tags: CategoryTag[] }) {
+  return (
+    <ul aria-label="Outlook categories" data-testid="calendar-categories" className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+      {tags.map((t) => (
+        <li key={t.name} data-category={t.name} data-color={t.color} className="inline-flex items-center gap-1.5 rounded-full border border-line-soft bg-surface px-2 py-0.5 text-xs text-ink-2">
+          <CategoryDot color={t.color} />
+          {t.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function OnCalendar({ calendar: c }: { calendar: NonNullable<ItemMeeting['calendar']> }) {
   const invited = c.invitees.map((p) => p.name).join(', ');
   return (

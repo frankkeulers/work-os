@@ -140,7 +140,7 @@ export function fakeWorld(now: Date) {
   const ingrid = { name: 'Ingrid Berg', address: 'ingrid.berg@nordicshipping.example' };
   const calendar = CalendarStore.memory();
   ms365.calendar.push(
-    fakeEvent({ id: 'AAMkFAKEEVENTLAUNCH', subject: 'MVI V2 launch readiness', organizer: sam, attendees: [{ ...frank, response: 'accepted' }, { ...dana, response: 'accepted' }], start: minsAgo(150), end: minsAgo(120), created: minsAgo(3 * 1440) }),
+    fakeEvent({ id: 'AAMkFAKEEVENTLAUNCH', subject: 'MVI V2 launch readiness', organizer: sam, attendees: [{ ...frank, response: 'accepted' }, { ...dana, response: 'accepted' }], start: minsAgo(150), end: minsAgo(120), created: minsAgo(3 * 1440), categories: ['Product'] }),
     fakeEvent({
       id: 'AAMkFAKEEVENTNORDIC',
       subject: 'Nordic Star renewal review',
@@ -149,6 +149,7 @@ export function fakeWorld(now: Date) {
       start: londonAt(now, '14:00', 1),
       end: londonAt(now, '15:00', 1),
       created: minsAgo(50),
+      categories: ['Customer'],
       html: '<p>Hi Frank,</p><p>Ahead of the renewal, could we walk through the fleet coverage and the new port-call alerts?</p><p>Ingrid</p><p>________________________________________________________________________________</p><p>Microsoft Teams meeting</p><p>Meeting ID: 123 456 789 0</p><p>Passcode: AbC123</p>',
     }),
     fakeEvent({ id: 'AAMkFAKEEVENTWEEKLY', subject: 'Product weekly', organizer: frank, attendees: [{ ...frank, response: 'organizer' }, { ...dana }, { ...sam }], start: londonAt(now, '16:00'), end: londonAt(now, '16:30'), created: minsAgo(30 * 1440) }),

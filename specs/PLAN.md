@@ -170,6 +170,7 @@ Read rules:
 - **No series identity:** no `seriesMasterId`, `type` or `iCalUId`, and `recurrence` is null on occurrences. A recurring meeting is a run of unrelated events.
 - **Mail doesn't mark meeting requests:** a read email has no `@odata.type`, `meetingMessageType` or event link, so mail can only spot invites by subject.
 - **Not settled read-only:** whether a reschedule resets Frank's answer, and whether events he declined stay in search. R2.8 copes with either.
+- **Categories (9 Oct 2026, `spike:calendar categories`):** search gives each event's category names (`categories`, strings); 15 of 25 events had one, 3 names, none a preset name such as "Red category". The colours aren't readable: `read_resource` refuses every URI but messages, folders and events, and no tool lists the master category list (only create, update and delete take a colour). So Frank picks the colours in Settings.
 
 ## 4. Architecture
 
@@ -990,6 +991,7 @@ Requirements:
   - **Times:** UTC as the connector returns them; a named zone (IANA or Windows) is converted with `wallToUtc`.
   - **Invites:** an event needs an answer when Frank's attendee entry says `none`. With no series identity, unanswered events with the same organiser and subject are one item, `calendar:<sha1(organiser|subject)>`, kind `event`, so a weekly series asks once. Messages: `invite` and `moved` (which re-triages), with the Teams block and passcode cut. A cancellation is not a message: it closes the item, and the close carries the reason. Frank is matched by his address; an invite that reaches him only through a distribution list is not an item.
   - **Closing:** the source closes an invite item (`item.done`, by source) when Frank answers, every event in it is cancelled or gone, or the last one starts. If a reschedule resets his answer, the item opens again.
+  - **Categories:** each event's Outlook category names come with search and are kept in the snapshot (a change needs no read), on invite items and on Wispr Flow meetings joined to an event. Their colours are `settings.calendar.categoryColors` (name → one of Outlook's 25), set in Settings › Outlook; a category without one has a steady colour from its name. Shown on agenda chips (a colour bar) and as tags on the item.
   - **Mail:** while the calendar is on, meeting requests, updates and cancellations in Outlook mail are dropped when the calendar holds an event with the same subject (less any `Canceled:`/`Updated:` prefix) from the same sender, and the email has such a prefix or a Teams or Zoom joining block. Replies and forwards about a meeting stay in mail, as do answers.
   - **Health and cost:** the `ms365` dependency, shared with mail. About $0.002 a poll for two search pages, plus $0.0017 for each ten reads.
 

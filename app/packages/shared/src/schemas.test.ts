@@ -94,4 +94,11 @@ describe('Outlook (amendments)', () => {
     expect(Message.parse({ ...m, to: ['frank@example.com'], cc: [] })).toMatchObject({ to: ['frank@example.com'], cc: [] });
     expect(Message.parse(m)).toEqual(m);
   });
+
+  it('keeps the colour chosen for each calendar category, one of Outlook’s (R2.8)', () => {
+    expect(Settings.shape.calendar.parse({ categoryColors: { Customer: 'darkRed' } })).toEqual({ categoryColors: { Customer: 'darkRed' } });
+    expect(Settings.shape.calendar.parse(undefined)).toBeUndefined();
+    expect(Settings.shape.calendar.safeParse({ categoryColors: { Customer: 'pink' } }).success).toBe(false);
+    expect(Settings.shape.calendar.safeParse({ categoryColors: { '': 'red' } }).success).toBe(false);
+  });
 });

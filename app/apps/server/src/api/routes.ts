@@ -9,7 +9,7 @@ import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { agendaView, healthView, inboxView, itemView, settingsView, usageView, type ViewDeps } from './views';
+import { agendaView, healthView, inboxView, itemView, knownCategories, settingsView, usageView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
 
@@ -308,7 +308,8 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   const outlookView = (): OutlookStatusView => {
     const cur = d.settings.editable.settings;
     const c = cur.connectors?.ms365;
-    return { ...(c && { connectorId: c.id }), ...(c?.account && { account: { name: c.account.name, address: c.account.address } }), enabled: sourceSchedule(cur, 'outlook').enabled };
+    const categories = knownCategories(d);
+    return { ...(c && { connectorId: c.id }), ...(c?.account && { account: { name: c.account.name, address: c.account.address } }), enabled: sourceSchedule(cur, 'outlook').enabled, ...(categories.length && { categories }) };
   };
   app.get('/api/sources/outlook', async (_req, reply) => reply.headers(noStore).send(outlookView()));
   app.post('/api/sources/outlook/connect', async (req, reply) => {

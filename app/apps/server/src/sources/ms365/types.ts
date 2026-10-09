@@ -106,6 +106,7 @@ export const EventRow = z.looseObject({
   isCancelled: z.boolean().nullish(),
   isOrganizer: z.boolean().nullish(),
   webLink: z.string().nullish(),
+  categories: z.array(z.string()).nullish(), // Outlook category names; their colours aren't given
 });
 export type EventRow = z.infer<typeof EventRow>;
 
@@ -139,5 +140,6 @@ export const EventDetail = z.looseObject({
   createdDateTime: z.string().nullish(),
   lastModifiedDateTime: z.string().nullish(),
   webLink: z.string().nullish(),
+  categories: z.array(z.string()).nullish(),
 });
 export type EventDetail = z.infer<typeof EventDetail>;

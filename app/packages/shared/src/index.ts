@@ -1,4 +1,5 @@
 export * from './schemas';
+export * from './categories';
 export * from './events';
 export * from './lanes';
 export * from './time';

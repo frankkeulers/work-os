@@ -91,8 +91,11 @@ export class CalendarAdapter implements SourceAdapter {
       const hash = rowHash(row);
       hashes.set(row.id, hash);
       const was = prevById.get(row.id);
-      if (was?.hash === hash) listed.set(row.id, { ...was, uri: row.uri, showAs: fresh.showAs, isOrganizer: fresh.isOrganizer });
-      else {
+      if (was?.hash === hash) {
+        // Categories come with search, so a change to them needs no read.
+        const { categories: _was, ...kept } = was;
+        listed.set(row.id, { ...kept, uri: row.uri, showAs: fresh.showAs, isOrganizer: fresh.isOrganizer, ...(fresh.categories && { categories: fresh.categories }) });
+      } else {
         listed.set(row.id, { ...fresh, ...(was?.response !== undefined && { response: was.response }) });
         changed.add(row.id);
       }

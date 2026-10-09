@@ -4,6 +4,7 @@ import type { SourceEnv } from '../claude/promptFiles';
 import {
   anchorOf,
   budgetsOf,
+  categoryTags,
   isWorkHours,
   londonAt,
   londonParts,
@@ -15,6 +16,7 @@ import {
   type AgendaEvent,
   type AgendaView,
   type BudgetState,
+  type CategoryTag,
   type CorrectionInput,
   type Criterion,
   type EvalReport,
@@ -215,6 +217,7 @@ export async function agendaView(d: ViewDeps): Promise<AgendaView> {
         ...((e.isOrganizer || e.response) && { response: e.isOrganizer ? 'organizer' : e.response }),
         ...(open && { inviteItemId: open }),
         ...(notesItemId && { notesItemId }),
+        ...(e.categories && { categories: categoryTags(e.categories, settings.calendar?.categoryColors) }),
       };
     });
   const status = d.runtime?.sourceStatus('calendar').status;
@@ -323,6 +326,27 @@ export function inboxView(d: ViewDeps): InboxView {
   };
 }
 
+/**
+ * A meeting's or invite's Outlook categories while the calendar is read (R2.8): the event's own
+ * now, when the snapshot still has it, else those the item kept.
+ */
+function calendarCategoriesOf(d: ViewDeps, item: Item): CategoryTag[] | undefined {
+  const cal = item.meeting?.calendar;
+  const s = d.settings.editable.settings;
+  if (!cal || !sourceSchedule(s, 'calendar').enabled) return undefined;
+  const live = d.calendar?.()?.events.find((e) => e.id === cal.eventId);
+  const names = live ? live.categories : cal.categories;
+  return names?.length ? categoryTags(names, s.calendar?.categoryColors) : undefined;
+}
+
+/** Every category the calendar has shown or Frank has given a colour, A to Z, for Settings › Outlook. */
+export function knownCategories(d: ViewDeps): string[] {
+  const seen = new Map<string, string>();
+  const names = [...(d.calendar?.()?.events.flatMap((e) => e.categories ?? []) ?? []), ...Object.keys(d.settings.editable.settings.calendar?.categoryColors ?? {})];
+  for (const n of names) if (!seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
+
 export async function itemView(d: ViewDeps, requested: string): Promise<ItemView> {
   // A part opens as its topic.
   const id = anchorOf(d.store.projection.items, requested);
@@ -363,6 +387,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
     contentExpired: true,
     schemaVersion: 1,
   };
+  const calendarCategories = calendarCategoriesOf(d, item);
   // Who is in the DM, for the header. Nice to have: a Slack failure leaves it out.
   const members = it.kind === 'dm' && d.members ? await d.members(item).catch(() => undefined) : undefined;
   const decision: TriageDecision | undefined = it.decision && {
@@ -388,6 +413,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
     meId: d.meId?.(it.source) ?? '',
     ...(members && { members }),
     ...(pieces && { pieces }),
+    ...(calendarCategories && { calendarCategories }),
   };
 }
 

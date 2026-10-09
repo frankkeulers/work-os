@@ -1,3 +1,4 @@
+import type { CategoryTag } from './categories';
 import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type {
@@ -111,6 +112,8 @@ export interface OutlookStatusView {
   account?: { name: string; address: string };
   /** Whether Outlook mail is being polled. */
   enabled: boolean;
+  /** The Outlook categories on the calendar's events and those given a colour, A to Z (R2.8). */
+  categories?: string[];
 }
 
 /** One meeting on the inbox's agenda strip (R2.8), from the calendar snapshot. */
@@ -131,6 +134,8 @@ export interface AgendaEvent {
   inviteItemId?: string;
   /** The Wispr Flow meeting notes for it (R2.8, Wispr enrichment). */
   notesItemId?: string;
+  /** Its Outlook categories, with the colours Frank gave them. */
+  categories?: CategoryTag[];
 }
 
 /** Today's and tomorrow's meetings, without cancelled or declined ones (R2.8). */
@@ -197,6 +202,8 @@ export interface ItemView {
   members?: Participant[];
   /** The topic's pieces, oldest first; `item.messages` holds all their messages (amendment, topics). Absent: the item is its only piece. */
   pieces?: TopicPiece[];
+  /** The Outlook categories of a meeting's or invite's calendar event, with their colours (R2.8). */
+  calendarCategories?: CategoryTag[];
 }
 
 /** One thread or stretch of chat in a topic. */

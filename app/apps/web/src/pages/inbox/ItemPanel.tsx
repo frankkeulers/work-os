@@ -4,7 +4,7 @@ import type { ActionType, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
-import { CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
+import { CategoryTags, CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource } from '../../components/item';
 import { Icon, MoreIcon } from '../../components/icons';
 import { useEarlierToggle } from '../../components/Earlier';
 import { MessageText, Recipients } from '../../components/SlackText';
@@ -559,6 +559,7 @@ export function ItemPanel({
           </div>
           <ItemMarkers item={item} />
           {item.source === 'wispr' && view?.item.meeting?.calendar && <OnCalendar calendar={view.item.meeting.calendar} />}
+          {view?.calendarCategories && <CategoryTags tags={view.calendarCategories} />}
         </div>
 
         {correcting && (

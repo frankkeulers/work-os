@@ -1,6 +1,6 @@
 import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
+import { OutlookColor, categoryColor, colorLabel, sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type OutlookStatusView, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
@@ -17,6 +17,7 @@ import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { GuideLink } from '../../components/GuideLink';
 import { FutureRow, Group, Meter, NumInput, Row, SectionHeader } from './parts';
+import { CategoryDot } from '../../components/item';
 
 export interface Confirm {
   title: string;
@@ -629,6 +630,7 @@ function OutlookSection({ s, set, type, flush, err, confirm, full }: Ctx) {
         err={err}
         disabled={!linked}
       />
+      {linked && sourceSchedule(s, 'calendar').enabled && <CategoryColors s={s} set={set} categories={v?.categories ?? []} />}
       <Group title="What’s read">
         <p className="m-0 py-3 text-[13px] leading-relaxed text-ink-2">
           New email in your Inbox, one item per conversation, and your replies from Sent Items, so triage knows what you’ve already answered. Quoted history, signatures and the external-sender
@@ -647,6 +649,59 @@ function OutlookSection({ s, set, type, flush, err, confirm, full }: Ctx) {
         </FutureRow>
       )}
     </>
+  );
+}
+
+/**
+ * The colour of each Outlook category on the calendar (R2.8). The connector gives the categories'
+ * names but not their colours, so Frank picks them here; until he does, each has its own.
+ */
+function CategoryColors({ s, set, categories }: { s: Settings; set: Ctx['set']; categories: string[] }) {
+  const chosen = s.calendar?.categoryColors;
+  return (
+    <Group title="Category colours">
+      <p className="m-0 py-3 text-[13px] leading-relaxed text-ink-2">
+        {categories.length
+          ? 'Work OS reads your meetings’ Outlook categories but not the colours you gave them, so pick the same colours here. Until you do, each category has a colour of its own.'
+          : 'None of your meetings in the next two weeks has an Outlook category. Categories show here once one does.'}
+      </p>
+      {categories.map((name) => {
+        const color = categoryColor(name, chosen);
+        const id = `category-${name}`;
+        return (
+          <Row
+            key={name}
+            htmlFor={id}
+            label={
+              <span className="inline-flex items-center gap-2">
+                <CategoryDot color={color} size={10} />
+                {name}
+              </span>
+            }
+          >
+            <select
+              id={id}
+              aria-label={`${name}: colour`}
+              className={cx(inputBase, 'w-[170px] text-[13px]')}
+              value={color}
+              onChange={(e) =>
+                set((x) => {
+                  // One entry a category: Outlook ignores case, so does the choice.
+                  const others = Object.entries(x.calendar?.categoryColors ?? {}).filter(([k]) => k.toLowerCase() !== name.toLowerCase());
+                  x.calendar = { categoryColors: { ...Object.fromEntries(others), [name]: OutlookColor.parse(e.target.value) } };
+                })
+              }
+            >
+              {OutlookColor.options.map((c) => (
+                <option key={c} value={c}>
+                  {colorLabel(c)}
+                </option>
+              ))}
+            </select>
+          </Row>
+        );
+      })}
+    </Group>
   );
 }
 

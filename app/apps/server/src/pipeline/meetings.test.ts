@@ -118,6 +118,12 @@ describe('joining a meeting to its event', () => {
     });
   });
 
+  it('keeps the event’s Outlook categories on the meeting', () => {
+    const joined = withCalendar(wispr(), snap([ev('e1', 'MVI V2 launch readiness', -60, -15, { categories: ['Customer'] })]), ME);
+    expect(joined.meeting?.calendar?.categories).toEqual(['Customer']);
+    expect(withCalendar(wispr(), snap([ev('e1', 'MVI V2 launch readiness', -60, -15)]), ME).meeting?.calendar).not.toHaveProperty('categories');
+  });
+
   it('leaves alone what isn’t a timed Wispr meeting, or has no event', () => {
     const s = snap([ev('e1', 'Launch readiness', -60, -15)]);
     const slack = wispr({ source: 'slack', id: 'slack:x' });

@@ -23,6 +23,7 @@ import {
   receiveMessages,
   reopen,
   routeTopic,
+  categoryTags,
   sourceSchedule,
   seenChanges,
   snooze,
@@ -64,6 +65,7 @@ import {
   type UsageRow,
   type UsageView,
   type AgendaView,
+  type CategoryTag,
   type Item,
   type OutlookStatusView,
   type WisprConnectView,
@@ -75,7 +77,7 @@ import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
-import { CALENDAR } from './seed/calendar';
+import { CALENDAR, CALENDAR_CATEGORIES } from './seed/calendar';
 import { inMockScope, mockCatalogue } from './seed/catalogue';
 import { ME } from './me';
 import { FRANK } from './seed/people';
@@ -634,6 +636,7 @@ export class MockServer implements WorkOsApi, MockControls {
       targets: { confluenceSite: this.s.settings.confluence.siteUrl, spaceKey: this.s.settings.confluence.spaceKey, vaultPath: this.s.settings.vaultPath },
       budgets,
       meId: FRANK,
+      ...(this.categoryTagsOf(rec.item.meeting?.calendar?.eventId) && { calendarCategories: this.categoryTagsOf(rec.item.meeting?.calendar?.eventId) }),
     };
   }
 
@@ -789,7 +792,18 @@ export class MockServer implements WorkOsApi, MockControls {
 
   private outlookView(): OutlookStatusView {
     const o = this.s.outlook;
-    return { ...(o && { connectorId: o.connectorId, account: o.account }), enabled: sourceSchedule(this.s.settings, 'outlook').enabled };
+    const chosen = Object.keys(this.s.settings.calendar?.categoryColors ?? {});
+    const seen = this.calendarOn() ? Object.values(CALENDAR_CATEGORIES).flat() : [];
+    const categories = [...new Map([...seen, ...chosen].map((n) => [n.toLowerCase(), n])).values()].sort((a, b) => a.localeCompare(b));
+    return { ...(o && { connectorId: o.connectorId, account: o.account }), enabled: sourceSchedule(this.s.settings, 'outlook').enabled, ...(categories.length && { categories }) };
+  }
+
+  private calendarOn = () => !!this.s.outlook && sourceSchedule(this.s.settings, 'calendar').enabled;
+
+  /** A seed event's Outlook categories, in the colours chosen in Settings › Outlook (R2.8). */
+  private categoryTagsOf(eventId: string | undefined): CategoryTag[] | undefined {
+    const names = eventId ? CALENDAR_CATEGORIES[eventId] : undefined;
+    return names && this.calendarOn() ? categoryTags(names, this.s.settings.calendar?.categoryColors) : undefined;
   }
 
   async getOutlookStatus(): Promise<OutlookStatusView> {
@@ -836,7 +850,7 @@ export class MockServer implements WorkOsApi, MockControls {
       new Map(Object.values(this.s.items).flatMap((r) => (r.item.source === source && r.item.meeting?.calendar && (!open || r.status === 'open') ? [[r.item.meeting.calendar.eventId, r.item.id] as const] : [])));
     const notes = joined('wispr', false);
     const invites = joined('calendar', true);
-    const events = CALENDAR.map((e) => ({ ...e, ...(notes.has(e.id) && { notesItemId: notes.get(e.id) }), ...(invites.has(e.id) && { inviteItemId: invites.get(e.id) }) }));
+    const events = CALENDAR.map((e) => ({ ...e, ...(notes.has(e.id) && { notesItemId: notes.get(e.id) }), ...(invites.has(e.id) && { inviteItemId: invites.get(e.id) }), ...(CALENDAR_CATEGORIES[e.id] && { categories: this.categoryTagsOf(e.id) }) }));
     return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events };
   }
 

@@ -2,7 +2,7 @@ import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgendaView, ApiErrorBody, EarlierView, EventData, EventDraft, InboxView, Item, ItemView, PromptFileView, Settings, SettingsView, UsageView, WorkEvent } from '@work-os/shared';
+import { categoryColor, type AgendaView, type ApiErrorBody, type EarlierView, type EventData, type EventDraft, type InboxView, type Item, type ItemView, type OutlookColor, type OutlookStatusView, type PromptFileView, type Settings, type SettingsView, type UsageView, type WorkEvent } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDataDir, paths } from '../config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
@@ -34,8 +34,8 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; connectors?: Settings['connectors']; wispr?: ViewDeps['wispr']; outlook?: ViewDeps['outlook']; calendar?: ViewDeps['calendar'] } = {}) {
-  await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }), ...(opts.connectors && { connectors: opts.connectors }) }, rules: DEFAULT_RULES });
+async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; connectors?: Settings['connectors']; wispr?: ViewDeps['wispr']; outlook?: ViewDeps['outlook']; calendar?: ViewDeps['calendar']; categoryColors?: Record<string, OutlookColor> } = {}) {
+  await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }), ...(opts.connectors && { connectors: opts.connectors }), ...(opts.categoryColors && { calendar: { categoryColors: opts.categoryColors } }) }, rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
   lifecycle = new Lifecycle();
@@ -741,6 +741,28 @@ describe('the agenda (R2.8)', () => {
     const view = (await get('/api/calendar/agenda')).json<AgendaView>();
     expect(view.events.find((e) => e.id === 'Stand-up')?.notesItemId).toBe('wispr:m1');
     expect(view.events.filter((e) => e.notesItemId)).toHaveLength(1);
+  });
+
+  it('gives meetings their Outlook categories in the colours chosen in Settings, and lists the categories for Settings › Outlook', async () => {
+    const s = snap();
+    s.events = s.events.map((e) => (e.id === 'Stand-up' ? { ...e, categories: ['Customer', 'Focus'] } : e));
+    await build({ connectors, sources, calendar: () => s, categoryColors: { customer: 'darkRed', Board: 'black' } });
+    const view = (await get('/api/calendar/agenda')).json<AgendaView>();
+    expect(view.events[0].categories).toEqual([
+      { name: 'Customer', color: 'darkRed' }, // chosen, whatever the case
+      { name: 'Focus', color: categoryColor('Focus', undefined) }, // its own until one is chosen
+    ]);
+    expect(view.events[1]).not.toHaveProperty('categories');
+    expect((await get('/api/sources/outlook')).json<OutlookStatusView>().categories).toEqual(['Board', 'Customer', 'Focus']);
+
+    // A Wispr Flow meeting joined to the event: the event's categories now, while the snapshot has it, else those it kept.
+    const joined = (eventId: string): Item => ({ ...storedItem(), id: `wispr:${eventId}`, source: 'wispr', kind: 'meeting', title: eventId, lastActivityAt: '2026-10-05T08:20:00.000Z', meeting: { start: '2026-10-05T08:00:00.000Z', end: '2026-10-05T08:16:00.000Z', calendar: { eventId, title: eventId, invitees: [], categories: ['Customer'] } } });
+    for (const it of [joined('Stand-up'), joined('Last week')]) {
+      await items.write({ item: it, schemaVersion: 1 });
+      await store.append({ ...upsert({ source: 'wispr', kind: 'meeting', title: it.title, lastActivityAt: it.lastActivityAt }), itemId: it.id });
+    }
+    expect((await get(`/api/items/${encodeURIComponent('wispr:Stand-up')}`)).json<ItemView>().calendarCategories).toEqual(view.events[0].categories);
+    expect((await get(`/api/items/${encodeURIComponent('wispr:Last week')}`)).json<ItemView>().calendarCategories).toEqual([{ name: 'Customer', color: 'darkRed' }]);
   });
 
   it('is off while the calendar is off, or Outlook was never connected', async () => {

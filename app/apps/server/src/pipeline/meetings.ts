@@ -16,7 +16,7 @@ import type { Store } from '../store/store';
 /** The calendar side of a meeting, as the item keeps it. */
 export function calendarOf(e: SnapEvent, me: MeInfo): NonNullable<ItemMeeting['calendar']> {
   const { organizer, required, optional } = peopleOf(e, me);
-  return { eventId: e.id, title: e.subject || '(no title)', ...(organizer && { organizer }), invitees: [...required, ...optional], ...(e.link && /^https:\/\//.test(e.link) && { link: e.link }) };
+  return { eventId: e.id, title: e.subject || '(no title)', ...(organizer && { organizer }), invitees: [...required, ...optional], ...(e.link && /^https:\/\//.test(e.link) && { link: e.link }), ...(e.categories && { categories: e.categories }) };
 }
 
 /** The meeting with its calendar event, when the calendar clearly has it; otherwise as it was. */

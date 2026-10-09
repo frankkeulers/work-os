@@ -34,6 +34,12 @@ const isoOf = (t: string | null | undefined) => {
   return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
 };
 const https = (link: string | null | undefined) => (link && /^https:\/\//.test(link) ? link : undefined);
+/** An event's category names, trimmed, without blanks or repeats (Outlook ignores case); undefined when it has none. */
+export const categoriesOf = (c: readonly string[] | null | undefined) => {
+  const byKey = new Map<string, string>();
+  for (const x of c ?? []) if (x.trim() && !byKey.has(x.trim().toLowerCase())) byKey.set(x.trim().toLowerCase(), x.trim());
+  return byKey.size ? [...byKey.values()] : undefined;
+};
 
 /** What search says about an event, hashed: when it changes, the event is read again. */
 export function rowHash(r: EventRow): string {
@@ -60,6 +66,7 @@ export function snapFromRow(r: EventRow, me: MeInfo): SnapEvent | undefined {
     isOrganizer: !!r.isOrganizer || (!!organizer?.address && me.aliases.includes(organizer.address)),
     ...(r.showAs && { showAs: r.showAs }),
     ...(https(r.webLink) && { link: r.webLink! }),
+    ...(categoriesOf(r.categories) && { categories: categoriesOf(r.categories) }),
   };
 }
 
@@ -171,7 +178,7 @@ export function inviteItem(itemId: string, events: SnapEvent[], messages: Messag
     meeting: {
       start: first.start,
       end: first.end,
-      calendar: { eventId: first.id, title: first.subject || '(no title)', ...(organizer && { organizer }), invitees, ...(https(first.link) && { link: first.link }) },
+      calendar: { eventId: first.id, title: first.subject || '(no title)', ...(organizer && { organizer }), invitees, ...(https(first.link) && { link: first.link }), ...(first.categories && { categories: first.categories }) },
     },
   };
 }

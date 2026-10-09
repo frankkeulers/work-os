@@ -68,7 +68,7 @@ first.
 - **Not answered** marks a meeting someone else invited you to that you haven't accepted or
   declined yet. Choose it to open the invite's item.
 - **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,
-  who organised it and who is invited, and your answer. Never a meeting's description, its Teams
+  who organised it and who is invited, its categories, and your answer. Never a meeting's description, its Teams
   link or its passcode.
 - Work OS only reads. It never answers, moves or changes a meeting.
 
@@ -76,6 +76,18 @@ The calendar polls on its own schedule, every 30 minutes in work hours and every
 them; change either under **Calendar** in [Settings › Outlook](/settings/outlook). Each poll is a
 short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it reads; it shows on
 [Usage](/usage). If the last read is old, the strip says when it was.
+
+### Categories
+
+The Outlook categories on your meetings come with the calendar. A meeting with one has that
+category's colour down its left edge on the agenda, and an invite or a Wispr Flow meeting joined to
+it lists its categories under the summary.
+
+Work OS can read a category's name but not the colour you gave it in Outlook: the connector doesn't
+offer your category list. Pick the same colours under **Category colours** in
+[Settings › Outlook](/settings/outlook), from Outlook's 25. Until you do, each category has a colour
+of its own, the same every time. A new category shows there once a meeting in the next two weeks has
+it.
 
 ### Invites
 

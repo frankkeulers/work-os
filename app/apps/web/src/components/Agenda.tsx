@@ -1,4 +1,4 @@
-import type { AgendaEvent, AgendaView } from '@work-os/shared';
+import { OUTLOOK_COLORS, type AgendaEvent, type AgendaView } from '@work-os/shared';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api';
@@ -18,16 +18,22 @@ const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
 function AgendaChip({ e, phase, onOpenItem }: { e: AgendaEvent; phase: 'past' | 'now' | 'later'; onOpenItem: (id: string) => void }) {
   const when = e.allDay ? 'All day' : fmtTime(e.start);
   const tag = 'inline-flex min-h-7 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-xs font-medium hover:bg-bg';
+  const categories = e.categories ?? [];
+  const named = categories.map((c) => c.name).join(', ');
+  // A meeting with Outlook categories has the first one's colour down its left edge, as in Outlook.
   return (
     <li
       data-agenda-event={e.id}
       data-phase={phase}
-      className={cx('flex shrink-0 items-center gap-0.5 rounded-lg border pl-2 pr-0.5', phase === 'now' ? 'border-accent-line bg-accent-wash' : 'border-line-soft bg-surface', phase === 'past' && 'opacity-60')}
+      data-category-color={categories[0]?.color}
+      className={cx('flex shrink-0 items-center gap-0.5 rounded-lg border pl-2 pr-0.5', categories.length > 0 && 'pl-3', phase === 'now' ? 'border-accent-line bg-accent-wash' : 'border-line-soft bg-surface', phase === 'past' && 'opacity-60')}
+      style={categories.length ? { boxShadow: `inset 4px 0 0 ${OUTLOOK_COLORS[categories[0].color]}` } : undefined}
     >
-      <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" title={`${e.title}${e.organizer ? ` · ${e.organizer}` : ''}: open in Outlook`} className="flex min-h-9 max-w-[280px] items-center gap-1.5 pr-1.5 !text-ink no-underline hover:underline">
+      <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" title={`${e.title}${e.organizer ? ` · ${e.organizer}` : ''}${named ? ` · ${named}` : ''}: open in Outlook`} className="flex min-h-9 max-w-[280px] items-center gap-1.5 pr-1.5 !text-ink no-underline hover:underline">
         <span className="font-mono text-xs text-ink-2">{when}</span>
         <span className="truncate">{e.title}</span>
         {phase === 'now' && <span className="rounded bg-accent-bg px-1 text-[10px] font-semibold text-on-solid no-underline">Now</span>}
+        {named && <span className="sr-only">, {named}</span>}
       </a>
       {wantsAnswer(e) &&
         (e.inviteItemId ? (

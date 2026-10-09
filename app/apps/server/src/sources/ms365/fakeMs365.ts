@@ -98,6 +98,7 @@ export class FakeMs365 implements Ms365Api {
       isCancelled: e.isCancelled ?? false,
       isOrganizer: (e.organizer?.address ?? '').toLowerCase() === me,
       webLink: e.webLink,
+      categories: e.categories ?? [],
     };
   }
 
@@ -206,6 +207,7 @@ export function fakeEvent(o: {
   cancelled?: boolean;
   allDay?: boolean;
   created?: string;
+  categories?: string[];
 }): EventDetail {
   const id = o.id ?? `AAMkFAKEEVENT${String(++eventSeq).padStart(4, '0')}`;
   return {
@@ -221,5 +223,6 @@ export function fakeEvent(o: {
     createdDateTime: o.created ?? o.start,
     lastModifiedDateTime: o.created ?? o.start,
     webLink: `https://outlook.office365.com/owa/?itemid=${encodeURIComponent(id)}&exvsurl=1&path=/calendar/item`,
+    categories: o.categories ?? [],
   };
 }

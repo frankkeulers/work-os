@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OutlookColor } from './categories';
 
 // Shared contract between the web app and the future server (PLAN.md §4.4).
 // Additions beyond §4.4 are marked "amendment" and listed in JOURNEYS.md.
@@ -39,6 +40,7 @@ export const ItemMeeting = z.object({
       organizer: Participant.optional(),
       invitees: z.array(Participant),
       link: z.url().optional(),
+      categories: z.array(z.string()).optional(), // Outlook category names, as the event had them
     })
     .optional(),
 });
@@ -408,6 +410,9 @@ export const Settings = z.object({
   // Amendment (Outlook, R2.5): the claude.ai connectors the relay reads through, shared by every
   // source on them. Set by Settings › Sources › Outlook, never typed into the settings form.
   connectors: z.object({ ms365: Ms365Connector.optional() }).optional(),
+  // Amendment (R2.8): the colour Frank gives each Outlook category, by name. The connector can't
+  // read the colours Outlook has for them.
+  calendar: z.object({ categoryColors: z.record(z.string().min(1), OutlookColor) }).optional(),
   schemaVersion: z.literal(1),
 });
 export type Settings = z.infer<typeof Settings>;

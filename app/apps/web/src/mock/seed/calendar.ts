@@ -31,3 +31,12 @@ export const CALENDAR: AgendaEvent[] = [
   event('AAMkMOCKQ4', 'Q4 roadmap review', 6, '10:00', '11:00', { organizer: 'Matt M.', response: 'none', showAs: 'tentative' }),
   event('AAMkMOCKAPIS', 'Insights APIs sync', 6, '15:00', '15:30', { organizer: 'Backend lead', response: 'tentativelyAccepted', showAs: 'tentative' }),
 ];
+
+/** The Outlook categories on the seed week's meetings (R2.8): names only, as the connector gives them. */
+export const CALENDAR_CATEGORIES: Record<string, string[]> = {
+  AAMkMOCKPRICING: ['Customer'],
+  AAMkMOCKLAUNCH: ['Product'],
+  AAMkMOCKRENEWAL: ['Customer'],
+  AAMkMOCKWEEKLY: ['Product'],
+  AAMkMOCKQ4: ['Planning', 'Product'],
+};
