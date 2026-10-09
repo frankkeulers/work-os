@@ -28,7 +28,8 @@ import { DoneByChip, DueChip, NeedTag, StatusChip } from './inbox/chips';
 import { CockpitRow, LaterRow, RepliedRow, ReplyNote } from './inbox/cockpit/rows';
 import { TimeColumn } from './inbox/cockpit/TimeColumn';
 import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox/cockpit/zones';
-import { ItemPanel } from './inbox/ItemPanel';
+import { BatchDone, ItemPanel } from './inbox/ItemPanel';
+import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
 
 // The two groups on screen (FR-8.1). Failed triage sits in Needs you, untriaged, so it isn't missed.
 const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'week' || i.lane === 'failed' || i.lane === 'file';
@@ -826,10 +827,13 @@ export function InboxPage() {
     },
     [order, idx, sel, anchor, pick],
   );
+  // File in a batch (CK-4.1–4.4): ended by closing the panel or opening an item outside it.
+  const [batch, setBatch] = useState<Batch | null>(null);
   const close = useCallback(() => {
+    setBatch(null);
     setPanelOpen(false);
     setSearch({}, { replace: true });
-  }, [setPanelOpen, setSearch]);
+  }, [setPanelOpen, setSearch, setBatch]);
   const doneAndNext = useCallback(() => {
     if (!selItem) return;
     const next = idx >= 0 ? (order[idx + 1] ?? order[idx - 1]) : order[Math.min(anchor, order.length - 1)];
@@ -844,6 +848,40 @@ export function InboxPage() {
     },
     [sel, setSearch],
   );
+
+  // The batch opens each item on its filing, its draft started, with the next item's draft
+  // running ahead: only one, so stopping wastes at most one draft (CK-4.2).
+  const budgetHit = !!inbox?.budgets.drafts.hit;
+  const batchIds = useMemo(() => fileRows.filter((r) => !r.leaving && batchable(r.item)).map((r) => r.item.id), [fileRows]);
+  const fileOn = useCallback(
+    (item: ItemSummary, type: ActionType) => {
+      if (needsDraft(item, type, budgetHit)) void api.requestDraft(item.id, type).catch(errorToast);
+      clearNew(item.id);
+      setPanelOpen(true);
+      setSearch({ item: item.id, file: type === 'vault_note' ? 'vault' : 'confluence' }, { replace: true });
+      rowEl(item.id)?.scrollIntoView({ block: 'nearest' });
+    },
+    [budgetHit, clearNew, setPanelOpen, setSearch],
+  );
+  const batchFrom = useCallback(
+    (b: Batch, from: number) => {
+      const [cur, ahead] = b.ids.slice(from).flatMap((id) => all.filter((i) => i.id === id && batchable(i)));
+      if (!cur) {
+        // Past the last one: the tally, until Esc.
+        setBatch({ ...b, done: true });
+        setPanelOpen(false);
+        setSearch({}, { replace: true });
+        return;
+      }
+      setBatch(b);
+      fileOn(cur, filingFor(cur)!);
+      const next = ahead && filingFor(ahead);
+      if (ahead && next && needsDraft(ahead, next, budgetHit)) void api.requestDraft(ahead.id, next).catch(errorToast);
+    },
+    [all, fileOn, budgetHit, setPanelOpen, setSearch, setBatch],
+  );
+  const batchPos = batch && !batch.done && sel ? batch.ids.indexOf(sel) : -1;
+  if (batch && !batch.done && sel && batchPos < 0) setBatch(null);
 
   // The panel opens on the first item until it's closed. A stale ?item= (after a reset) moves on.
   // The preference is read, not watched: picking a row sets it a moment before the URL changes,
@@ -878,6 +916,9 @@ export function InboxPage() {
       } else if (e.key === 'Escape' && sel) {
         e.preventDefault();
         close();
+      } else if (e.key === 'Escape' && batch?.done) {
+        e.preventDefault();
+        setBatch(null);
       } else if (e.key === 'Escape' && wide && open) {
         // A list open in the Later zone goes back to its default view.
         e.preventDefault();
@@ -892,7 +933,7 @@ export function InboxPage() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [step, close, sel, navigate, pick, firstNeeds, firstLater, wide, open]);
+  }, [step, close, sel, navigate, pick, firstNeeds, firstLater, wide, open, batch]);
 
   // A click outside the panel closes it. On click rather than mousedown, so the control you
   // clicked still gets the click before the list widens.
@@ -954,6 +995,27 @@ export function InboxPage() {
     }
   };
   const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
+  // In the To file header (CK-4.1). Not a click outside the panel: it opens the batch there.
+  const batchButton = batchIds.length > 0 && (
+    <Button size="sm" icon="forward" data-row-action onClick={() => batchFrom({ ids: batchIds, filed: 0, skipped: 0, done: false }, 0)}>
+      File in a batch
+    </Button>
+  );
+  const batchPanel =
+    batch && batchPos >= 0
+      ? {
+          pos: batchPos + 1,
+          total: batch.ids.length,
+          onSkip: () => batchFrom({ ...batch, skipped: batch.skipped + 1 }, batchPos + 1),
+          // Its other suggested filing next, if any; then the next item.
+          onApproved: (t: ActionType) => {
+            const cur = all.find((i) => i.id === batch.ids[batchPos]);
+            const other = cur && filingFor(cur, t);
+            if (cur && other) fileOn(cur, other);
+            else batchFrom({ ...batch, filed: batch.filed + 1 }, batchPos + 1);
+          },
+        }
+      : undefined;
   if (selItem && (shown?.item !== selItem || shown.view !== view || shown.pos !== idx + 1)) setShown({ item: selItem, view, pos: idx + 1 });
   const closing = !selItem && !!shown;
   const panel = selItem ? { item: selItem, view, pos: idx + 1 } : shown;
@@ -1016,6 +1078,7 @@ export function InboxPage() {
               renderFile={(r, n, list) => row(r, n, list, 'later')}
               renderLower={lowerRow}
               pill={<NewPill group="file" items={pillItems('file')} above={stable.pending.file.every((p) => p.above)} onGo={() => goNew('file')} />}
+              fileAction={batchButton}
               scrollerRef={laterRef}
             />
           </>
@@ -1034,6 +1097,7 @@ export function InboxPage() {
                     <NewPill group={g.id} items={pillItems(g.id)} above={stable.pending[g.id].every((p) => p.above)} onGo={() => goNew(g.id)} />
                     <div className="flex items-baseline gap-2 px-6 pb-2 pt-3">
                       <GroupHead dot={g.dot} title={g.title} count={by[g.id].length} />
+                      {g.id === 'file' && <span className="ml-auto self-center">{batchButton}</span>}
                     </div>
                     <div className="border-b border-line-soft">
                       {groupRows[g.id].length ? groupRows[g.id].flatMap((r, n, list) => row(r, n, list)) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
@@ -1088,9 +1152,15 @@ export function InboxPage() {
                 onClose={close}
                 onDoneNext={doneAndNext}
                 onDirty={onDirty}
+                batch={batchPanel}
               />
             </div>
           </>
+        )}
+        {!panel && batch?.done && (
+          <div data-state="open" className={cx('item-panel absolute inset-y-0 right-0 z-30 flex w-full flex-col', wide ? 'max-w-[640px]' : 'max-w-[600px]')}>
+            <BatchDone batch={batch} onClose={() => setBatch(null)} />
+          </div>
         )}
       </div>
 

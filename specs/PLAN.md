@@ -632,6 +632,8 @@ As built (M2 step 16):
 
 **FR-8.3** Done and snoozed items leave the two groups. Each has a footer link that opens its list (Snoozed shows when the next one comes back). Snoozed items return at the snooze time, marked "Back from snooze". Threads waiting for the quiet window show as a quiet "N still active" link in the header. Done items say how they closed: by Frank ("Done by you"), by the source ("Answered in Outlook", "Closed in Slack"), or by his reply (`item.done { by: 'reply' }`, "Your reply in Slack"). An item closes on Frank's reply when a settle check finds it settles every open ask (cockpit CK-2.1–2.7); a partial answer ticks off the settled asks (`topic.askDone { by: 'reply' }`). Settings › Triage rules turns closing off (the row then asks "Mark done?") and picks the sources whose replies are checked: Slack on, Outlook off until the CK-2.9 gate. Undo, or a Done within 30 minutes of a "not settled" check, is written to `labels/settle.jsonl` for `npm run eval -- --purpose settle`.
 
+**FR-8.4** (cockpit CK-4.1–4.4) **File in a batch**, in the To file header, opens each To file item in turn on its suggested filing, with the next item's draft running ahead (one at most). Approve writes and moves on; Skip (`→`) leaves the item in To file; the end shows "N filed · M skipped". An approval from a batch (`action.approved { markDoneWhenFiled: true }`) marks the item done once all its suggested filings are written, in the same append as the last write. Single filing still leaves the item open (JOURNEYS open question 5).
+
 ### 7.9 E8 Vault note action
 
 **FR-9.1** "Draft vault note" emits `action.requested` and runs a Sonnet draft with:

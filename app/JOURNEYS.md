@@ -113,6 +113,8 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J57 | Clear what's due before the meeting | Start J57. Click the **14:00** pin: the pricing email opens in the 640 px panel over Later. `g l` goes to the first item to file, `g n` back to Needs you, `j` walks Now, Today, To file, This week. `Esc`, then `t` shows tomorrow (Sales kick-off all day, the Q4 review and the APIs sync); `t` again for today. Open **low priority · check triage** in Later, then `Esc` back. | Is the gap before the meeting enough to act from the card? Do the keys feel natural? | CK-3.2, CK-3.3, CK-3.6 | |
 | J58 | A deadline passes | Start J57, then Scenarios › Controls › +10 min twice (14:08). The pricing pin turns red and joins the licensing one at the now-line as **2 overdue**; the row's chip reads **14:00 · overdue**; the card reads **NOW · UNTIL 15:00**. | Does red say "too late" without alarming? | CK-3.6 | |
 | J59 | A narrower window | Narrow the window below 1600 px: the inbox becomes the single list with the agenda strip, the footer links (This week, Snoozed, Done) and the sidebar's meeting cues. Widen it again: the three zones come back. | Does the smaller layout lose anything you need? | CK-3.1, CK-3.7 | |
+| J60 | File in a batch | Start J60 on a wide window. In Later, To file's header has **File in a batch**: click it. The panel reads **Filing 1 of 4** on the v2 vessel-events decision, its Confluence entry ready. Approve: the panel stays on it for the vault note; approve again, and it moves to **Filing 2 of 4**, whose draft has been running meanwhile. The first item leaves To file once its writes land. `→` skips the next; Skip the rest: **1 filed · 3 skipped**. `Esc`. | Is the next draft ready when you get there? Does marking done on approval feel right, or too eager? | CK-4.1–4.4 | |
+| J61 | Stop a batch | Start J61, **File in a batch**, `→` once, then `Esc`: all four stay in To file. Open the third: its draft is running or ready (the one ahead). Open the fourth: no draft. | Is stopping safe and cheap? | CK-4.2, CK-4.3 | |
 
 ## Open product questions
 
@@ -122,7 +124,7 @@ The prototype shows one default for each question. Decide each one in the UX rou
 2. **New reply on a snoozed item.** Default: it stays snoozed unless the re-triage says Now.
 3. **New reply on an item you corrected.** Default: your correction stands until the next revision, then the model re-triages it and shows what you had set. Should corrections be sticky?
 4. **New reply after a draft.** Default: a stale-draft banner appears, and you can still approve.
-5. **After a write.** Default: the item stays open, with a "Mark done and next item" button. Should filing an item that only needed filing mark it done automatically?
+5. **After a write.** Default: the item stays open, with a "Mark done and next item" button. Should filing an item that only needed filing mark it done automatically? *Decided for the batch path (cockpit CK-4.4): an item filed in a batch is done once all its suggested filings are written. Single filing keeps the default until Frank decides.*
 6. **Keyboard shortcuts.** Are they worth building in M1?
 7. **Scope warning before approval.** The app warns before you approve when the drafted page, or a page above it, has since been excluded. PLAN.md only requires the executor to refuse at write time. Other scope changes, such as removing a root, show up only as the executor's refusal.
 

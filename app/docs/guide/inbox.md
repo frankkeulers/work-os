@@ -160,6 +160,22 @@ time. It stays open or closed as you left it, in this browser.
 - **Open in Slack** goes to the thread, in the browser or the desktop app as set in Settings.
 - `o` opens the item as a full page; `Esc` or a click outside closes the panel.
 
+## File in a batch
+
+**File in a batch**, in the To file header, files the day's items in one sitting. The panel opens
+on the first item, on the filing triage suggests (Confluence first), with its draft started, and
+reads **Filing 1 of 4**.
+
+- **Approve** writes it (to the sandbox while dry-run is on) and moves on. An item that suggests
+  both Confluence and the vault stays open for the second one first.
+- An item filed this way goes to Done once all its suggested filings are written, so it leaves
+  To file by itself. Filing one item on its own still leaves it open, as before.
+- **Skip** (`→`) leaves the item in To file and moves on. **Discard** works as usual.
+- The next item's draft runs while you review the current one, so it is usually ready when you
+  get there. Only one runs ahead: stopping part-way wastes at most one draft.
+- At the end the panel shows what happened, such as **3 filed · 1 skipped**. `Esc` closes it.
+  `Esc` part-way, or opening another item, stops the batch; the rest stay in To file.
+
 ## Topics
 
 Slack splits one conversation into pieces: each reply thread is a piece, and a DM or group DM

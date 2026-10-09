@@ -75,4 +75,6 @@ export const JOURNEYS: Journey[] = [
   { id: 'J57', group: 'Cockpit', title: 'Clear what’s due before the meeting', start: (c) => (c.cockpitAfternoon(), '/') },
   { id: 'J58', group: 'Cockpit', title: 'A deadline passes', start: (c) => (c.cockpitAfternoon(), '/') },
   { id: 'J59', group: 'Cockpit', title: 'A narrower window', start: (c) => (fresh(c), '/') },
+  { id: 'J60', group: 'Cockpit', title: 'File in a batch', start: (c) => (c.cockpitAfternoon(), '/') },
+  { id: 'J61', group: 'Cockpit', title: 'Stop a batch', start: (c) => (c.cockpitAfternoon(), '/') },
 ];

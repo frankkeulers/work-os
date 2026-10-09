@@ -377,6 +377,12 @@ The header reads "Later 9 · Once a day".
 > - Given 4 To file items, when I choose File in a batch and approve each, then each is written, marked done, and the next draft is ready when I get to it.
 > - Given I press Esc after item 2, then items 3 and 4 stay in To file, and at most one extra draft was made.
 
+**As built (9 Oct):**
+- `action.approved` carries `{ markDoneWhenFiled: true }` from a batch; the outbox appends `item.done` (Frank's, "Done by you") with the `action.executed` that completes the item's suggested filings, in one append. A failed or refused write leaves the item in To file.
+- An item that suggests both targets stays open in the batch for the second after the first is approved; "N filed" counts items, by approval.
+- The batch takes the To file rows as they show when it starts. Esc, or opening another item, ends it. Skip is a header button and `→`.
+- No artboard covers filing mode; DESIGN.md records the build. Journeys J60 and J61.
+
 ---
 
 ## 8. Backlog (recorded, not in the first pass)

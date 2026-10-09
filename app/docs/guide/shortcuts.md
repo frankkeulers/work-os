@@ -34,6 +34,7 @@ Shortcuts work anywhere except while you are typing in a field.
 | `E` (shift-e) | Done and open the next item |
 | `s` | Snooze |
 | `c` | Correct triage |
+| `→` | Skip, while filing in a batch: the item stays in To file |
 
 ## Guide
 

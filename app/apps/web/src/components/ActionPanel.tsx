@@ -357,11 +357,14 @@ export function ActionPanel({
   embedded,
   onDoneNext,
   onClose,
+  onApproved,
 }: {
   view: ItemView;
   type: ActionType;
   setType: (t: ActionType) => void;
   onDirty: (dirty: boolean) => void;
+  /** Filing in a batch (cockpit CK-4.3): the approval marks the item done once filed, then the batch moves on. */
+  onApproved?: (t: ActionType) => void;
   /** Inside the Inbox item panel's Next step card: no frame of its own, and "Done and next" moves the panel on. */
   embedded?: boolean;
   onDoneNext?: () => void;
@@ -699,7 +702,7 @@ export function ActionPanel({
   const footer =
     action && draft && !editing && (action.status === 'ready' || action.status === 'approved' || action.status === 'executing') ? (
       <div className={cx('flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3', embedded ? 'rounded-b-[11px] px-[18px]' : 'px-6')}>
-        <Button variant="solid" size="lg" icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(() => api.approveAction(action.id))}>
+        <Button variant="solid" size="lg" icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(async () => (await api.approveAction(action.id, onApproved && { markDoneWhenFiled: true }), onApproved?.(type)))}>
           {action.status === 'ready' ? (
             view.dryRun ? (
               'Approve and write to sandbox'
