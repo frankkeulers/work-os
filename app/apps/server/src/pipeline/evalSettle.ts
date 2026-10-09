@@ -47,8 +47,11 @@ export interface SettleEvalDeps {
   logger?: Logger;
 }
 
-/** Re-runs each item's latest labelled check. Throws ClaudeError when Claude can't be called. */
-export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecord[]): Promise<SettleEvalReport> {
+/**
+ * Re-runs each item's latest labelled check. Throws ClaudeError when Claude can't be called. The
+ * finish eval (cockpit CK-2.10) is the same over labels/finish.jsonl, with its prompt and `render`.
+ */
+export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecord[], render: (checks: SettleCheck[], now: Date) => string = renderChecks): Promise<SettleEvalReport> {
   const labels = latestSettleLabels(records);
   if (!labels.length) throw new Error('No settle labels yet.');
   const t = d.settings.triage;
@@ -68,7 +71,7 @@ export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecor
           purpose: 'eval',
           model,
           system: d.prompt.text,
-          prompt: renderChecks(batch.map(check), d.now()),
+          prompt: render(batch.map(check), d.now()),
           promptVersion: d.prompt.version,
           timeoutMs: DEADLINES.triage,
           signal: d.signal,

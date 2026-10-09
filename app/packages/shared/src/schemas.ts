@@ -145,7 +145,7 @@ export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', '
 export type FailureReason = z.infer<typeof FailureReason>;
 
 /** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
-export const PromptFileId = z.enum(['triage', 'topics', 'settle', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export const PromptFileId = z.enum(['triage', 'topics', 'settle', 'finish', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
 export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
@@ -380,6 +380,9 @@ export const Settings = z.object({
     // Amendment (cockpit CK-2.7): whether a settle check that finds Frank's reply settles every ask
     // closes the item, and on which sources the check runs. See closeOnReply().
     closeOnReply: z.object({ enabled: z.boolean(), sources: z.partialRecord(SourceId, z.boolean()) }).optional(),
+    // Amendment (cockpit CK-2.10): on which sources a topic that waited on Frank, and that later
+    // messages settled, is suggested as "Looks finished". See suggestFinished().
+    suggestFinished: z.object({ sources: z.partialRecord(SourceId, z.boolean()) }).optional(),
   }),
   models: z.object({
     triage: SettingsModelId,
@@ -545,6 +548,12 @@ export function closeOnReply(settings: Pick<Settings, 'triage'>): { enabled: boo
   const c = settings.triage.closeOnReply;
   const sources = Object.fromEntries(SourceId.options.map((id) => [id, c?.sources[id] ?? id === 'slack'])) as Record<SourceId, boolean>;
   return { enabled: c?.enabled ?? true, sources };
+}
+
+/** "Looks finished" (CK-2.10): suggested on Slack by default, and on Outlook once Frank turns it on. */
+export function suggestFinished(settings: Pick<Settings, 'triage'>): Record<SourceId, boolean> {
+  const c = settings.triage.suggestFinished;
+  return Object.fromEntries(SourceId.options.map((id) => [id, c?.sources[id] ?? id === 'slack'])) as Record<SourceId, boolean>;
 }
 
 /** Whether Frank's reply can close an item from this source by itself (CK-2.5). */

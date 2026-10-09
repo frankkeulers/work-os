@@ -11,7 +11,8 @@ import type { QueryFn } from './adapter';
 // A vault draft request gets a new note under Inbox/, named after the thread. The Confluence page
 // picker takes the first page in the catalogue that isn't a hub, and the draft goes to that page's
 // first section; the people check flags words about how someone works.
-// A settle check settles every ask unless Frank's reply only holds it ("later", "on it", a question).
+// A settle check settles every ask unless Frank's reply only holds it ("later", "on it", a question);
+// a finish check (CK-2.10) likewise, judged on the latest message since.
 
 export interface FakeClaude {
   query: QueryFn;
@@ -111,17 +112,18 @@ export function confluenceEntryFor(prompt: string) {
   return { pageId: page?.pageId ?? 'none', section: section?.heading ?? 'none', title: `${t.title ?? 'Thread'} update`, content: `${t.messages?.[0]?.text ?? ''}\n\n[Slack thread](${t.permalink ?? ''})` };
 }
 
-type Check = { itemId: string; itemRevision: number; asks: { index: number }[]; reply: { text: string }[] };
+type Check = { itemId: string; itemRevision: number; asks: { index: number }[]; reply?: { text: string }[]; since?: { text: string }[] };
 
 const HOLDING = /\b(later|on it|let me|will|tomorrow)\b|\?\s*$|^\W*$/i;
 
-/** Settle checks: a holding reply settles nothing; any other settles every ask. */
+/** Settle and finish checks: a holding reply (or latest message) settles nothing; any other settles every ask. */
 export function settleFor(checks: Check[]) {
   return {
     decisions: checks.map((c) => {
-      const text = c.reply.map((m) => m.text).join(' ');
+      const text = c.reply ? c.reply.map((m) => m.text).join(' ') : (c.since?.at(-1)?.text ?? '');
       const settled = !HOLDING.test(text);
-      return { itemId: c.itemId, itemRevision: c.itemRevision, asks: c.asks.map((a) => ({ index: a.index, settled, why: settled ? 'Your reply answers it.' : 'You said you would come back to it.' })), allSettled: settled };
+      const why = c.reply ? (settled ? 'Your reply answers it.' : 'You said you would come back to it.') : settled ? 'The latest messages settle it.' : 'It still waits on you.';
+      return { itemId: c.itemId, itemRevision: c.itemRevision, asks: c.asks.map((a) => ({ index: a.index, settled, why })), allSettled: settled };
     }),
   };
 }

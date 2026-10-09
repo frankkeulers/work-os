@@ -1,4 +1,23 @@
-import { Attention, NextStep, askId, londonAt, londonParts, ruleFloor, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type SourceId, type TriageDecision } from '@work-os/shared';
+import {
+  Attention,
+  NextStep,
+  askId,
+  effectiveTriage,
+  londonAt,
+  londonParts,
+  ruleFloor,
+  suggestFinished,
+  toLoggedDecision,
+  type EarlierView,
+  type EventDraft,
+  type Item,
+  type ItemState,
+  type Me,
+  type Rule,
+  type Settings,
+  type SourceId,
+  type TriageDecision,
+} from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -10,6 +29,7 @@ import type { SnapEvent } from '../sources/calendar/store';
 import type { Store } from '../store/store';
 import { triageQueue } from './eligibility';
 import { ruleVerdict } from './rules';
+import { openAsks } from './settle';
 import { routeTopics, topicForTriage } from './topics';
 import { estimateTokens, packBatches, threadTokens, type TriageThread } from './truncate';
 
@@ -131,7 +151,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
   // What the model sees of each thread. An item whose file is gone can't be triaged: it fails
   // once, visibly, instead of being retried on every tick.
   // A topic is triaged through its anchor, over all its pieces.
-  const threads: { item: Item; topic: Item; thread: TriageThread; topicVersion: number; asksDone: string[] }[] = [];
+  const threads: { item: Item; topic: Item; state: ItemState; thread: TriageThread; topicVersion: number; asksDone: string[] }[] = [];
   const missing: EventDraft[] = [];
   for (const it of due) {
     const stored = await d.items.read(it.source, it.id);
@@ -153,7 +173,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
     const asksDone = it.asksDone ?? [];
     const done = (stored.text?.next?.asks ?? []).filter((a) => asksDone.includes(askId(a.step))).map((a) => a.step);
     if (done.length) topic.view.done = done;
-    threads.push({ item: stored.item, topic: topic.item, thread: topic.view, topicVersion: it.topicVersion, asksDone });
+    threads.push({ item: stored.item, topic: topic.item, state: it, thread: topic.view, topicVersion: it.topicVersion, asksDone });
   }
   if (missing.length) {
     await d.store.append(...missing);
@@ -202,7 +222,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
 
     const byId = new Map(answer.decisions.map((a) => [a.id, a]));
     const events: EventDraft[] = [];
-    for (const { item, topic, topicVersion, asksDone } of batch) {
+    for (const { item, topic, state, topicVersion, asksDone } of batch) {
       const a = byId.get(item.id);
       if (!a) {
         events.push({ type: 'triage.failed', itemId: item.id, data: { revision: item.revision, attempts: 1, reason: 'missing from the answer' } });
@@ -242,13 +262,25 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         batchId,
         decidedAt: d.now().toISOString(),
       };
+      // A topic that waited on Frank, with new content since, that the model now says needs nothing
+      // from him, not even filing: a check of whether the new messages settled his asks follows
+      // (CK-2.10). The model's answer counts, not a rule's floor on it: a mention others answered
+      // stays in Today, and the check may then suggest it as finished there. The asks come from the
+      // decision this one replaces, kept with the item's content.
+      const before = state.decision;
+      const was = effectiveTriage(state.decision, state.correction)?.attention;
+      const moved = !!before && (item.revision > before.itemRevision || topicVersion > (before.topicVersion ?? 0));
+      const finishCheck = state.status === 'open' && (was === 'now' || was === 'today') && moved && a.attention === 'none' && !toFile && !confluence.suggested && !vault.suggested && suggestFinished(settings)[item.source];
       // The thread moved on during the call, or the topic's parts changed: the new content waits its turn.
       const current = () => d.store.projection.items[item.id]?.topicVersion === topicVersion;
-      const saved = await d.items.update(item.source, item.id, (stored) =>
-        stored && stored.item.revision === item.revision && current() ? { ...stored, text: { summary: a.summary, reason: a.reason, ...(next && { next }) } } : undefined,
-      );
+      const saved = await d.items.update(item.source, item.id, (stored) => {
+        if (!stored || stored.item.revision !== item.revision || !current()) return undefined;
+        const { finish: _finish, ...rest } = stored;
+        const asks = finishCheck ? openAsks(stored.text, asksDone) : [];
+        return { ...rest, text: { summary: a.summary, reason: a.reason, ...(next && { next }) }, ...(asks.length > 0 && before && { finish: { asks, since: before.decidedAt } }) };
+      });
       if (!saved) continue;
-      events.push({ type: 'triage.decided', itemId: item.id, data: { decision: toLoggedDecision(decision) } });
+      events.push({ type: 'triage.decided', itemId: item.id, data: { decision: toLoggedDecision(decision), ...(finishCheck && saved.finish && { finishCheck: true as const }) } });
       run.triaged++;
     }
     if (events.length) await d.store.append(...events);

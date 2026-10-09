@@ -74,6 +74,7 @@ export interface ItemSummary {
   doneReason?: string; // doneBy source: "You accepted it in Outlook"
   settling?: boolean; // Frank replied; a settle check will look at it
   replyCheck?: { at: string; allSettled: boolean; settled: number; why?: string }; // the last check on his reply, while it stands
+  looksFinished?: { at: string; why?: string }; // cockpit CK-2.10: others' messages settled what it asked of Frank; suggested as Done
 }
 
 /** Needs you's footer (CK-2.5): items Frank's replies closed today, London time. */
@@ -461,6 +462,8 @@ export interface WorkOsApi {
   reopenMany(itemIds: string[]): Promise<{ count: number }>;
   snooze(itemId: string, untilIso: string): Promise<void>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
+  /** "Not finished" on a topic that looks finished (cockpit CK-2.10): back to Today, and a label for the finish eval. */
+  notFinished(itemId: string): Promise<{ labelCount: number }>;
   /** "Triage was right": the decision as it stands joins the labelled set, so the eval sees what triage gets right too. */
   confirmTriage(itemId: string): Promise<{ labelCount: number }>;
   retryTriage(itemId: string): Promise<void>;

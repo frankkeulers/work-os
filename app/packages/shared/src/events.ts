@@ -68,7 +68,9 @@ export const EventPayloads = {
   // fromMeOnly: every message in the joining piece is Frank's, so it is his reply to the topic (cockpit CK-2.1).
   'topic.routed': z.object({ into: z.string().min(1).optional(), from: z.string().min(1).optional(), by: z.enum(['model', 'user', 'regroup']), fromMeOnly: z.boolean().optional() }),
   'topic.askDone': z.object({ askId: z.string().min(1), by: z.enum(['user', 'reply']).optional() }), // on an anchor: Frank ticked off one ask, or his reply settled it (cockpit CK-2.3)
-  'triage.decided': z.object({ decision: LoggedDecision }),
+  // finishCheck (cockpit CK-2.10): the topic waited on Frank and now needs nothing from him, after
+  // messages from others: a check of whether they settled what it asked of him follows.
+  'triage.decided': z.object({ decision: LoggedDecision, finishCheck: z.literal(true).optional() }),
   'triage.corrected': z.object({ correction: TriageCorrection }),
   // Frank said the decision for this revision was right; the labelled set gains it as a label.
   'triage.confirmed': z.object({ revision }),
@@ -77,6 +79,10 @@ export const EventPayloads = {
   // `settled` the asks it found settled, by askId. The reasons stay with the item's content.
   'settle.checked': z.object({ revision, through: isoDate, batchId: z.string().min(1), allSettled: z.boolean(), settled: z.array(z.string().min(1)) }),
   'settle.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
+  // Cockpit (CK-2.10): the check after finishCheck ran. allSettled: the topic looks finished, and is
+  // suggested as Done. A failed check suggests nothing. The reasons stay with the item's content.
+  'finish.checked': z.object({ revision, batchId: z.string().min(1), allSettled: z.boolean() }),
+  'finish.failed': z.object({ revision, reason: z.string().min(1) }),
   'action.requested': z.object({ type: ActionType, revision, supersedes: z.string().optional() }),
   'action.drafted': z.object({
     type: ActionType,

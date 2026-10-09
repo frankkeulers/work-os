@@ -56,6 +56,7 @@ import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
 import { routeTopics } from './pipeline/topics';
 import { meetingsToday, runTriage, type TriageDeps } from './pipeline/triage';
+import { runFinish } from './pipeline/finish';
 import { runSettle, settleCheckOf, type SettleDeps } from './pipeline/settle';
 import { confirmTriage, correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
@@ -316,10 +317,13 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     },
   };
   const settleDeps: SettleDeps = { ...triageDeps, prompt: () => loadPromptFile(config.dataDir, 'settle') };
+  const finishDeps: SettleDeps = { ...triageDeps, prompt: () => loadPromptFile(config.dataDir, 'finish') };
   const labels = await LabelStore.open(paths(config.dataDir).labels);
   lifecycle.onStop('labels', () => labels.close());
   const settleLabels = await SettleLabelStore.open(paths(config.dataDir).settleLabels);
   lifecycle.onStop('settle-labels', () => settleLabels.close());
+  const finishLabels = await SettleLabelStore.open(paths(config.dataDir).finishLabels);
+  lifecycle.onStop('finish-labels', () => finishLabels.close());
   const correctionDeps = { store, items, labels, now, me: triageDeps.me, keepLastMessages: () => settings.editable.settings.triage.keepLastMessages };
   const correct = (id: string, input: Parameters<typeof correctTriage>[2]) => correctTriage(correctionDeps, id, input);
   const confirm = (id: string) => confirmTriage(correctionDeps, id);
@@ -405,13 +409,15 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     settings,
     logger,
     sources: () => buildSources(settings.settings, factories),
-    // After triage, the settle checks on Frank's replies (cockpit CK-2.2): the same run, so they
-    // share its breaker, its one-at-a-time and its timing after every poll.
+    // After triage, the settle checks on Frank's replies (cockpit CK-2.2), then the checks on
+    // topics others' messages may have finished (CK-2.10): the same run, so they share its
+    // breaker, its one-at-a-time and its timing after every poll.
     triage: async (signal, only) => {
       const r = await runTriage(triageDeps, signal, { only });
       if (only) return r;
       const settled = await runSettle(settleDeps, signal);
-      return { ...r, calls: r.calls + settled.calls };
+      const finished = await runFinish(finishDeps, signal);
+      return { ...r, calls: r.calls + settled.calls + finished.calls };
     },
     regroup: (signal, conversation) => routeTopics({ ...triageDeps, topicsPrompt: triageDeps.topicsPrompt! }, signal, { regroup: conversation }),
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
@@ -468,6 +474,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     usage: () => usage.records(),
     labels,
     settleLabels,
+    finishLabels,
     settleCheck: async (it) => {
       const c = await settleCheckOf(settleDeps, it, settleDeps.me(it.source), settleDeps.config().settings.triage.keepLastMessages);
       return c?.messageId && c.revision === it.revision ? c.check : undefined;

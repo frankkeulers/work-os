@@ -115,6 +115,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J59 | A narrower window | Narrow the window below 1600 px: the inbox becomes the single list with the agenda strip, the footer links (This week, Snoozed, Done) and the sidebar's meeting cues. Widen it again: the three zones come back. | Does the smaller layout lose anything you need? | CK-3.1, CK-3.7 | |
 | J60 | File in a batch | Start J60 on a wide window. In Later, To file's header has **File in a batch**: click it. The panel reads **Filing 1 of 4** on the v2 vessel-events decision, its Confluence entry ready. Approve: the panel stays on it for the vault note; approve again, and it moves to **Filing 2 of 4**, whose draft has been running meanwhile. The first item leaves To file once its writes land. `→` skips the next; Skip the rest: **1 filed · 3 skipped**. `Esc`. | Is the next draft ready when you get there? Does marking done on approval feel right, or too eager? | CK-4.1–4.4 | |
 | J61 | Stop a batch | Start J61, **File in a batch**, `→` once, then `Esc`: all four stay in To file. Open the third: its draft is running or ready (the one ahead). Open the fourth: no draft. | Is stopping safe and cheap? | CK-4.2, CK-4.3 | |
+| J62 | Others settled it | Open the inbox on a wide window, `Esc` the panel, then Scenarios › Controls › +10 min until the Meridia PM's FQ3 update has come in and been triaged (about four times). The FQ3 row moves from This week to Today and reads **Looks finished · The Meridia PM locked the FQ3 three with Matt…**. Open it: a green **Looks finished** callout with **Done** and **Not finished**. Press **Not finished**: the toast says **Kept in Today**, and the suggestion goes. Reload, step the clock again and press **Done** instead: the row leaves. | Is the why enough to press Done without opening Slack? Would you let it close by itself? | CK-2.10 | |
 
 ## Open product questions
 
@@ -127,6 +128,7 @@ The prototype shows one default for each question. Decide each one in the UX rou
 5. **After a write.** Default: the item stays open, with a "Mark done and next item" button. Should filing an item that only needed filing mark it done automatically? *Decided for the batch path (cockpit CK-4.4): an item filed in a batch is done once all its suggested filings are written. Single filing keeps the default until Frank decides.*
 6. **Keyboard shortcuts.** Are they worth building in M1?
 7. **Scope warning before approval.** The app warns before you approve when the drafted page, or a page above it, has since been excluded. PLAN.md only requires the executor to refuse at write time. Other scope changes, such as removing a root, show up only as the executor's refusal.
+8. **Topics others settle.** Default: the row says "Looks finished" and waits for Done (CK-2.10). Should it close by itself, with Undo, once the finish eval stays at or below 2% false closes over 30 labels?
 
 ## Proposed PLAN.md amendments
 

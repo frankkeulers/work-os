@@ -47,6 +47,8 @@ function expectReplayMatches(s: MockState, events: WorkEvent[]) {
       settlePending: rec.settlePending,
       settleFailures: rec.settleFailures,
       replyCheck: rec.replyCheck,
+      finishPending: rec.finishPending,
+      looksFinished: rec.looksFinished,
     });
   }
 

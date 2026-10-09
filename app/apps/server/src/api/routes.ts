@@ -51,6 +51,8 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const before = ids.map((id) => ({ ...d.store.projection.items[id] }));
     await d.store.append(...ids.map((itemId) => ({ type, itemId, data: undefined })));
     await d.settleLabels?.label(d, before, type === 'item.done' ? 'done' : 'reopened').catch(() => 0); // a label is never worth failing the click
+    // Done on a topic that looks finished: the suggestion was right (CK-2.10).
+    if (type === 'item.done') for (const it of before) if (it.looksFinished) await d.finishLabels?.labelFinish(d, it, true).catch(() => false);
   };
   const many = (type: 'item.done' | 'item.reopened') => async (req: { body: unknown }) => {
     const body = ItemIds.safeParse(req.body);
@@ -132,6 +134,16 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const body = CorrectionBody.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { attention, confluence, vault }.');
     return reply.headers(noStore).send(await d.correct(id, body.data));
+  });
+  // "Not finished" (cockpit CK-2.10): the topic still needs Frank. The suggestion's check was wrong,
+  // and so was triage's None: a label for each, and the item goes back to Today.
+  app.post<{ Params: { id: string } }>('/api/items/:id/not-finished', async (req, reply) => {
+    const id = item(req.params.id);
+    if (!d.correct) throw new HttpError('unavailable', 'Corrections are not available.');
+    const it = { ...d.store.projection.items[id] };
+    if (!it.looksFinished || it.status !== 'open') throw new HttpError('conflict', 'This item is not suggested as finished.');
+    await d.finishLabels?.labelFinish(d, it, false).catch(() => false);
+    return reply.headers(noStore).send(await d.correct(id, { attention: 'today', confluence: false, vault: false }));
   });
   // "Triage was right": the decision joins the labelled set as it stands.
   app.post<{ Params: { id: string } }>('/api/items/:id/confirm', async (req, reply) => {

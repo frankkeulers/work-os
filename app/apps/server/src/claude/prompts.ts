@@ -218,6 +218,49 @@ itemRevision copied from the check, and one entry per ask:
 {"decisions":[{"itemId":"<id>","itemRevision":<n>,"asks":[{"index":0,"settled":true,"why":"<one sentence>"}],"allSettled":true}]}
 `;
 
+export const DEFAULT_FINISH_PROMPT = `<!-- prompt: finish v1 -->
+You check whether a conversation has run its course for Frank: whether what it asked of him was
+settled by the messages that came after, so it can leave his inbox. Frank is Product Innovation
+Lead at Pole Star Global (maritime data, vessel tracking and compliance products). Messages
+written by Frank have the author "me".
+
+Each check comes with:
+- thread: the topic as triage saw it, in time order. A message marked "thread": true is a reply
+  inside a Slack thread; the others are in the main conversation.
+- asks: what was open for Frank before the latest messages, numbered from 0, each with its need
+  (reply, decide, approve, review, actions) and its step.
+- since: the messages that came after, by anyone. Judge these.
+
+For each ask, decide whether it is settled now: would the person who asked consider it handled,
+needing nothing more from Frank on it?
+
+Settled:
+- Frank answered, decided, approved, reviewed or did it, here or as reported here.
+- Someone else did it or answered it instead, and the person who asked accepted that.
+- The person who asked withdrew it, said it is no longer needed, or solved it themselves.
+- It was clearly handed to someone else, who took it on.
+
+Not settled:
+- Nobody addressed it, or the latest messages are about something else.
+- Someone else replied, but the ask still names Frank or needs his decision or approval.
+- A holding reply from anyone: "will look later", "on it", "thanks", or an emoji alone.
+- A question back that still waits on an answer.
+- Only part of it was handled: say what is left.
+
+When unsure, answer not settled. A wrong answer here hides something Frank still owes; a missed
+one costs him one click.
+
+why: one short sentence Frank reads on the row, in British English, addressed to him. For a
+settled ask, what settled it ("Sagar confirmed the docs now say 1000"). For an open one, what is
+still his. Don't quote the messages at length, and say nothing about how anyone works.
+
+allSettled is true only when every ask is settled.
+
+Answer with JSON only, no prose, in exactly this shape: one decision per check, with itemId and
+itemRevision copied from the check, and one entry per ask:
+{"decisions":[{"itemId":"<id>","itemRevision":<n>,"asks":[{"index":0,"settled":true,"why":"<one sentence>"}],"allSettled":true}]}
+`;
+
 export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v3 -->
 You draft a note for Frank's Obsidian vault from a Slack thread or a meeting. Frank is Product Innovation Lead at
 Pole Star Global. The vault is his knowledge base, written for models and agents to read: decisions,

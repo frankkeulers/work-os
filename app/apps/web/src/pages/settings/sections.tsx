@@ -1,6 +1,6 @@
 import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { OutlookColor, categoryColor, closeOnReply, colorLabel, meetingLead, sourceSchedule, type SourceId, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
+import { OutlookColor, categoryColor, closeOnReply, colorLabel, suggestFinished, meetingLead, sourceSchedule, type SourceId, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type OutlookStatusView, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
@@ -63,6 +63,13 @@ function RulesSection({ s, rules, view, full, set, setRules, ruleError }: Ctx) {
       fn(c);
       x.triage.closeOnReply = { enabled: c.enabled, sources: Object.fromEntries(REPLY_SOURCES.map(({ id }) => [id, c.sources[id]])) };
     });
+  const finish = suggestFinished(s);
+  const setFinish = (id: SourceId, v: boolean) =>
+    set((x) => {
+      const f = suggestFinished(x);
+      f[id] = v;
+      x.triage.suggestFinished = { sources: Object.fromEntries(REPLY_SOURCES.map(({ id }) => [id, f[id]])) };
+    });
   return (
     <>
       <SectionHeader
@@ -95,6 +102,17 @@ function RulesSection({ s, rules, view, full, set, setRules, ruleError }: Ctx) {
         {REPLY_SOURCES.map(({ id, label, help }) => (
           <Row key={id} label={`Check replies in ${label}`} help={help}>
             <Switch label={`Check replies in ${label}`} checked={close.sources[id]} onChange={(v) => setClose((c) => (c.sources[id] = v))} />
+          </Row>
+        ))}
+      </Group>
+      <Group title="When others settle it">
+        {REPLY_SOURCES.map(({ id, label }) => (
+          <Row
+            key={id}
+            label={`Suggest Done in ${label}`}
+            help="When later messages settle what a Today item asked of you, the row says “Looks finished”. Done or Not finished labels it for the finish eval; nothing closes by itself."
+          >
+            <Switch label={`Suggest Done in ${label}`} checked={finish[id]} onChange={(v) => setFinish(id, v)} />
           </Row>
         ))}
       </Group>
@@ -1665,7 +1683,7 @@ export interface SectionDef {
 const under = (...prefixes: string[]) => (path: string) => prefixes.some((p) => path === p || path.startsWith(`${p}.`));
 
 export const SECTIONS: SectionDef[] = [
-  { id: 'rules', label: 'Triage rules', group: 'Inbox', View: RulesSection, owns: under('rules', 'settings.triage.closeOnReply') },
+  { id: 'rules', label: 'Triage rules', group: 'Inbox', View: RulesSection, owns: under('rules', 'settings.triage.closeOnReply', 'settings.triage.suggestFinished') },
   { id: 'people', label: 'People', group: 'Inbox', View: PeopleSection, owns: under('settings.people') },
   { id: 'schedule', label: 'Schedule', group: 'Inbox', View: ScheduleSection, owns: under('settings.schedule.workHours', 'settings.triage.quietMinutes') },
   { id: 'notifications', label: 'Notifications', group: 'Inbox', View: NotificationsSection, owns: under('settings.notifications') },

@@ -16,6 +16,7 @@ const MOVES: Partial<Record<keyof WorkOsApi, (...args: never[]) => readonly stri
   reopen: (id: string) => [id],
   reopenMany: (ids: string[]) => ids,
   correctTriage: (id: string) => [id],
+  notFinished: (id: string) => [id],
   retryTriage: (id: string) => [id],
   splitPiece: (id: string) => [id],
 };

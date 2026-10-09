@@ -79,11 +79,24 @@ function Categories({ item }: { item: ItemSummary }) {
   );
 }
 
+/** That others' messages look to have settled what was asked of Frank (cockpit CK-2.10); the row's ✓ accepts. */
+export function FinishNote({ item, className, wrap }: { item: ItemSummary; className?: string; wrap?: boolean }) {
+  const f = item.looksFinished;
+  if (!f || item.status !== 'open') return null;
+  return (
+    <span data-finish-note className={cx('block w-full text-[13px] text-green-fg', !wrap && 'truncate', className)}>
+      Looks finished{f.why ? ` · ${f.why}` : ''}
+    </span>
+  );
+}
+
 /**
  * What Frank's last reply did, under the summary (cockpit CK-2.3, CK-2.7): what is still open after
- * it, or, with closing on reply off, that it settled everything.
+ * it, or, with closing on reply off, that it settled everything. A topic that looks finished says so
+ * instead, unless `finish` is off.
  */
-export function ReplyNote({ item, className, wrap }: { item: ItemSummary; className?: string; wrap?: boolean }) {
+export function ReplyNote({ item, className, wrap, finish = true }: { item: ItemSummary; className?: string; wrap?: boolean; finish?: boolean }) {
+  if (finish && item.looksFinished) return <FinishNote item={item} className={className} wrap={wrap} />;
   const c = item.replyCheck;
   if (!c || item.status !== 'open') return null;
   return (
@@ -188,6 +201,7 @@ export function LaterRow({ item, selected, isNew, leaving, meta, onPick }: RowPr
           {item.lane === 'done' && <DoneByChip item={item} />}
           {meta && <span className="shrink-0 font-mono text-[11px]">{meta}</span>}
         </span>
+        <FinishNote item={item} className="text-xs" />
         <span className="empty:hidden">
           <ItemMarkers item={item} />
         </span>

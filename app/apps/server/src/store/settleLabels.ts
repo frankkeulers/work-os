@@ -16,7 +16,8 @@ export const MISSED_CLOSE_MS = 30 * 60_000;
 
 export const SettleLabelRecord = z.object({
   at: z.iso.datetime(),
-  origin: z.enum(['undo', 'manual_done', 'manual_done_unchecked']),
+  // finish_*: labels/finish.jsonl, Frank's answer to a "Looks finished" suggestion (cockpit CK-2.10).
+  origin: z.enum(['undo', 'manual_done', 'manual_done_unchecked', 'finish_accepted', 'finish_rejected']),
   itemId: z.string().min(1),
   itemRevision: z.number().int().positive(),
   source: SourceId,
@@ -123,6 +124,29 @@ export class SettleLabelStore {
       n++;
     }
     return n;
+  }
+
+  /**
+   * Frank answered a "Looks finished" suggestion (cockpit CK-2.10): Done says the check was right,
+   * "Not finished" that it wasn't. Labelled from the check's snapshot in the item's file.
+   */
+  async labelFinish(d: { items: ItemFiles; now: () => Date }, it: ItemState, settled: boolean): Promise<boolean> {
+    if (!it.looksFinished) return false;
+    const snap = (await d.items.read(it.source, it.id))?.finish?.check;
+    if (!snap) return false;
+    await this.append({
+      at: d.now().toISOString(),
+      origin: settled ? 'finish_accepted' : 'finish_rejected',
+      itemId: it.id,
+      itemRevision: snap.decision.itemRevision,
+      source: it.source,
+      settled,
+      check: snap.input,
+      was: snap.decision,
+      model: snap.model,
+      promptVersion: snap.promptVersion,
+    });
+    return true;
   }
 
   all() {

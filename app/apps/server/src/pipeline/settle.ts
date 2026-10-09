@@ -131,7 +131,7 @@ export function renderChecks(checks: SettleCheck[], now: Date): string {
  * The model's answer for one check, held to the asks it was given: an ask it left out counts as
  * not settled, so the item closes only when every ask it was sent is settled.
  */
-export function judge(check: SettleCheck, d: SettleDecision): { settled: SettleAsk[]; allSettled: boolean; why?: string } {
+export function judge(check: { asks: SettleAsk[] }, d: SettleDecision): { settled: SettleAsk[]; allSettled: boolean; why?: string } {
   const verdict = new Map(d.asks.filter((a) => a.index < check.asks.length).map((a) => [a.index, a]));
   const settled = check.asks.filter((a) => verdict.get(a.index)?.settled);
   const open = check.asks.find((a) => !verdict.get(a.index)?.settled);

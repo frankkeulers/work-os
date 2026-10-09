@@ -124,6 +124,21 @@ channel message telling someone the fix is in.
 - **Not settled**, such as "will look later" or a question back: the item stays where it is.
 - A message from someone else brings a closed item back, as it does for anything in Done.
 
+### When others settle it
+
+Sometimes a thread finishes without you: someone else did it, the ask was withdrawn, or the
+question was answered. When a Today item is triaged again after messages from others and Claude
+now sees nothing for you, a second short check asks whether those messages settled what was
+asked. If they did, the row says **Looks finished**, with why, and stays where it is.
+
+- **Done** (the row's ✓, the panel's callout or `e`) closes it, and keeps a label that the
+  suggestion was right.
+- **Not finished** in the panel keeps it in Today and keeps a label that it was wrong.
+
+Nothing closes by itself yet. Once there are 30 labels, `npm run eval -- --purpose finish`
+measures how often the suggestion is wrong. Turn it off per source in
+[Settings › Triage rules](/settings/rules) › When others settle it.
+
 What you see when a reply closes an item:
 
 - The row stays where it was, in Needs you or in This week, for five seconds, washed green and

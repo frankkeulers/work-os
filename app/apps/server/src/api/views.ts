@@ -90,6 +90,8 @@ export interface ViewDeps {
   confirm?: (id: string) => Promise<{ labelCount: number }>;
   /** What the settle check got wrong, from Frank's Undo or a Done soon after it (cockpit CK-2.6). */
   settleLabels?: SettleLabelStore;
+  /** Frank's answers to "Looks finished" (cockpit CK-2.10), for the finish eval. */
+  finishLabels?: SettleLabelStore;
   /** The settle check on an item's reply as it stands, for a Done no check saw (CK-2.6). */
   settleCheck?: (it: ItemState) => Promise<object | undefined>;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */

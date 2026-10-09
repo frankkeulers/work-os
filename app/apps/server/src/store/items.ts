@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Item, NextStep, SettleDecision, type DecisionText } from '@work-os/shared';
+import { Item, Need, NextStep, SettleDecision, type DecisionText } from '@work-os/shared';
 import { z } from 'zod';
 import { writeJsonAtomic } from './atomic';
 
@@ -26,10 +26,23 @@ export const SettleSnapshot = z.object({
 });
 export type SettleSnapshot = z.infer<typeof SettleSnapshot>;
 
+/**
+ * Looks finished (cockpit CK-2.10): what the topic asked of Frank before a re-triage found it needs
+ * nothing from him (the decision's text no longer says), messages after `since` to judge it by,
+ * and the check's snapshot once it ran, for the row and for a label when Frank answers it.
+ */
+export const FinishState = z.object({
+  asks: z.array(z.object({ index: z.number().int().nonnegative(), need: Need, step: z.string().min(1) })).min(1),
+  since: z.string(),
+  check: SettleSnapshot.optional(),
+});
+export type FinishState = z.infer<typeof FinishState>;
+
 export const StoredItem = z.object({
   item: Item,
   text: z.object({ summary: z.string(), reason: z.string(), next: NextStep.optional() }).optional(),
   settle: SettleSnapshot.optional(),
+  finish: FinishState.optional(),
   schemaVersion: z.literal(1),
 });
 export type StoredItem = z.infer<typeof StoredItem>;
@@ -166,6 +179,7 @@ export class ItemFiles {
         next: stored.text?.next,
         firstMessage: stored.item.messages[0]?.text,
         ...(stored.settle?.why && { settleWhy: stored.settle.why }),
+        ...(stored.finish?.check?.decision.asks[0]?.why && { finishWhy: stored.finish.check.decision.asks[0].why }),
       });
       const cal = stored.item.meeting?.calendar;
       if (cal) this.calendars.set(id, { eventId: cal.eventId, ...(cal.categories && { categories: cal.categories }) });

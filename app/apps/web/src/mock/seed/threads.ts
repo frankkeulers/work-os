@@ -639,7 +639,21 @@ export const TIMELINE: { afterMins: number; thread?: ThreadSeed; reply?: ReplySe
   },
   {
     afterMins: 18,
-    reply: { targetKey: 't1', by: 'U07MERIDIAPM', text: 'Leaning towards bulk export, ETA confidence and Teams alerts. Shout if you disagree.' },
+    // Others settle the FQ3 ask: the model says None, mention-me keeps it in Today, and the
+    // finish check suggests it looks finished (cockpit CK-2.10).
+    reply: {
+      targetKey: 't1',
+      by: 'U07MERIDIAPM',
+      text: 'Update: Matt and I locked bulk export, ETA confidence and Teams alerts for FQ3. Nothing needed from you on this one.',
+      decision: {
+        attention: 'none',
+        vault: undefined,
+        summary: 'FQ3 plan for Meridia IQ locked with Matt: bulk export, ETA confidence and Teams alerts.',
+        reason: 'The Meridia PM locked the plan with Matt; nothing waits on you.',
+        next: undefined,
+      },
+      looksFinished: 'The Meridia PM locked the FQ3 three with Matt and says nothing is needed from you.',
+    },
   },
   {
     afterMins: 32,

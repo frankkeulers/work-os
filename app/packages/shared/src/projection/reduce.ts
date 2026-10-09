@@ -15,6 +15,7 @@ import {
   reopen,
   settleChecked,
   settleFailed,
+  finishChecked,
   snooze,
   unsnooze,
 } from './transitions';
@@ -146,7 +147,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       // A decision made from older messages than the item now has is stale (§5.3); so is one
       // made before the topic's parts changed.
       const d = e.data.decision;
-      if (d.itemRevision >= item.revision && (d.topicVersion === undefined || d.topicVersion === item.topicVersion)) applyDecision(item, d);
+      if (d.itemRevision >= item.revision && (d.topicVersion === undefined || d.topicVersion === item.topicVersion)) applyDecision(item, d, e.data.finishCheck);
       break;
     }
     case 'topic.routed':
@@ -173,6 +174,12 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       break;
     case 'settle.failed':
       settleFailed(item, e.data.attempts);
+      break;
+    case 'finish.checked':
+      finishChecked(item, e.at, e.data);
+      break;
+    case 'finish.failed':
+      item.finishPending = undefined;
       break;
     case 'item.reopened':
       countUndo((p.closes ??= {}), item, e.at);

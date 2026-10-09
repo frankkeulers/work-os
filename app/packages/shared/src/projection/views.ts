@@ -60,6 +60,7 @@ export interface DecisionText {
   next?: NextStep;
   firstMessage?: string; // shown, shortened, until the item has a summary
   settleWhy?: string; // the last settle check's reason an ask is still open (CK-2.3)
+  finishWhy?: string; // what settled the topic, when it looks finished (CK-2.10)
 }
 
 export interface SummaryContext {
@@ -125,6 +126,7 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
     ...(s.doneReason && { doneReason: s.doneReason }),
     ...(s.settlePending && { settling: true }),
     ...(s.replyCheck && { replyCheck: { at: s.replyCheck.at, allSettled: s.replyCheck.allSettled, settled: s.replyCheck.settled, ...(ctx.text.settleWhy && { why: ctx.text.settleWhy }) } }),
+    ...(s.looksFinished && s.status === 'open' && { looksFinished: { at: s.looksFinished, ...(ctx.text.finishWhy && { why: ctx.text.finishWhy }) } }),
   };
 }
 

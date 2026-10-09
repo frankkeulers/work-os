@@ -22,6 +22,7 @@ export const paths = (dataDir: string) => ({
   logs: join(dataDir, 'logs'),
   labels: join(dataDir, 'labels/triage.jsonl'),
   settleLabels: join(dataDir, 'labels/settle.jsonl'),
+  finishLabels: join(dataDir, 'labels/finish.jsonl'),
 });
 
 const exists = (p: string) =>

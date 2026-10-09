@@ -77,6 +77,7 @@ export interface ReplySeed {
   by: string;
   text: string;
   decision?: Partial<ScriptedDecision>; // how the re-triage changes, if at all
+  looksFinished?: string; // the finish check after the re-triage finds the asks settled, and why (cockpit CK-2.10)
 }
 
 export type DraftOutcome = 'normal' | 'vault_conflict' | 'confluence_conflict' | 'people_check' | 'allow_list' | 'no_fit' | 'model_error';
@@ -93,6 +94,8 @@ export interface ItemRec extends ItemFlags<TriageDecision> {
   topicKey?: string; // ThreadSeed.topic
   regroupKey?: string; // ThreadSeed.regroupWith
   settleWhy?: string; // the last settle check's reason an ask is still open (cockpit CK-2.3)
+  finishWhy?: string; // what settled it, while it looks finished (cockpit CK-2.10)
+  finishOnTriage?: string; // the finish check's why, once the next model triage runs (cockpit CK-2.10)
 }
 
 export interface TimelineEntry {

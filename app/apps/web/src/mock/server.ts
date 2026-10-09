@@ -11,6 +11,7 @@ import {
   anchorOf,
   applyActionEvent,
   applyDecision,
+  finishChecked,
   budgetsOf,
   confirm,
   correct,
@@ -372,6 +373,7 @@ export class MockServer implements WorkOsApi, MockControls {
       item.participants.push({ id: reply.by, name: this.personName(reply.by) });
     }
     if (reply.decision) rec.script = { ...rec.script, ...reply.decision };
+    rec.finishOnTriage = reply.looksFinished;
     this.event('item.upserted', upserted(item, reply.by === FRANK), { itemId: item.id });
     // Re-triage only when the new messages are not from Frank alone (§5.3). A part's new messages are its topic's.
     receiveMessages(rec, reply.by === FRANK, now);
@@ -428,6 +430,8 @@ export class MockServer implements WorkOsApi, MockControls {
           continue;
         }
         const rule = firstMatchingRule(rec.item, this.s.rules, this.s.settings, ME);
+        const finish = rec.finishOnTriage;
+        rec.finishOnTriage = undefined;
         this.decide(
           rec,
           buildDecision(rec, at, {
@@ -438,6 +442,7 @@ export class MockServer implements WorkOsApi, MockControls {
             file: rule?.outcome.type === 'file',
             model: this.s.settings.models.triage,
           }),
+          finish,
         );
         if (rule) this.s.ruleHits[rule.id] = (this.s.ruleHits[rule.id] ?? 0) + 1;
         triaged += 1;
@@ -446,9 +451,16 @@ export class MockServer implements WorkOsApi, MockControls {
     return { triaged, calls };
   }
 
-  private decide(rec: ItemRec, d: NonNullable<ItemRec['decision']>) {
-    applyDecision(rec, d);
-    this.event('triage.decided', { decision: toLoggedDecision(d) }, { itemId: rec.item.id });
+  /** `finish`: the finish check that follows finds every ask settled by others, and why (cockpit CK-2.10). */
+  private decide(rec: ItemRec, d: NonNullable<ItemRec['decision']>, finish?: string) {
+    applyDecision(rec, d, !!finish);
+    this.event('triage.decided', { decision: toLoggedDecision(d), ...(finish && { finishCheck: true as const }) }, { itemId: rec.item.id });
+    if (finish) {
+      const check = { revision: rec.item.revision, batchId: `finish-${d.decidedAt}`, allSettled: true };
+      rec.finishWhy = finish;
+      finishChecked(rec, d.decidedAt, check);
+      this.event('finish.checked', check, { itemId: rec.item.id });
+    }
     if (needsNotification(rec)) {
       const n = this.s.settings.notifications;
       const suppressed = !n.enabled ? 'disabled' : inTimeRange(this.now(), n.quietHours) ? 'quiet_hours' : undefined;
@@ -496,7 +508,7 @@ export class MockServer implements WorkOsApi, MockControls {
       quietMinutes: this.s.settings.triage.quietMinutes,
       now: this.iso(),
       triageBudgetHit: budgets.triage.hit,
-      text: { summary: d?.summary, reason: d?.reason, next: d?.next, firstMessage: rec.item.messages[0]?.text, ...(rec.settleWhy && { settleWhy: rec.settleWhy }) },
+      text: { summary: d?.summary, reason: d?.reason, next: d?.next, firstMessage: rec.item.messages[0]?.text, ...(rec.settleWhy && { settleWhy: rec.settleWhy }), ...(rec.finishWhy && { finishWhy: rec.finishWhy }) },
     });
     const calendarCategories = this.categoryTagsOf(rec.item.meeting?.calendar?.eventId);
     return calendarCategories ? { ...row, calendarCategories } : row;
@@ -982,6 +994,13 @@ export class MockServer implements WorkOsApi, MockControls {
     this.event('triage.corrected', { correction }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId }, { topic: 'settings' });
     return { labelCount: this.s.labelCount };
+  }
+
+  /** "Not finished" (cockpit CK-2.10): back to Today as Frank's correction; the finish eval gains a label. */
+  async notFinished(itemId: string) {
+    const rec = this.rec(itemId);
+    if (!rec.looksFinished || rec.status !== 'open') throw new ApiError('conflict', 'This item is not suggested as finished.');
+    return this.correctTriage(itemId, { attention: 'today', confluence: false, vault: false });
   }
 
   async confirmTriage(itemId: string) {

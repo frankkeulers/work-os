@@ -302,6 +302,62 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(label.was).toBeUndefined();
   });
 
+  describe('Looks finished (CK-2.10)', () => {
+    const finishLabels = async () =>
+      (await readFile(join(dir, 'labels/finish.jsonl'), 'utf8').catch(() => ''))
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as { origin: string; settled: boolean; itemId: string; check: { since: { author: string; text: string }[] } });
+    /** Sam answers what Dana asked of Frank, and the model says nothing is left for him. */
+    async function othersSettleIt() {
+      slack.users.set('U03SAM', 'Sam Okafor');
+      slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U03SAM', text: 'I checked the ETA wording with Dana, it reads fine now' });
+      slack.post('C01PROD', { ts: isoToTs(START + 2 * MIN), thread_ts: P, user: 'U02DANA', text: 'Thanks Sam, shipping it as is' });
+      claude.nextTexts.push(
+        JSON.stringify({
+          decisions: [{ id: PROD, attention: 'none', confluence: { suggested: false }, vault: { suggested: false }, containsPeopleObservations: false, summary: 'Sam checked the ETA wording; Dana is shipping', reason: 'Sam handled it; nothing waits on Frank.' }],
+        }),
+      );
+      await call('POST', '/api/poll');
+      await res.runtime.settled();
+      for (let i = 0; i < 12 * 13; i++) await tick(); // past the quiet window
+    }
+
+    it('suggests a mention others settled as finished, still in Today under the floor, and Done labels it right', async () => {
+      await othersSettleIt();
+      const checks = claude.calls.filter((c) => c.prompt.includes('<checks>'));
+      expect(checks).toHaveLength(1);
+      expect(checks[0].system).toMatch(/^<!-- prompt: finish v1 -->/);
+      expect(checks[0].prompt).toContain('Thanks Sam, shipping it as is');
+      const prod = (await inbox()).items.find((i) => i.id === PROD)!;
+      // The model said None; the mention-me floor keeps it in Today, now suggested as finished.
+      expect(prod).toMatchObject({ lane: 'today', status: 'open', looksFinished: { why: 'The latest messages settle it.' } });
+
+      expect((await call('POST', `/api/items/${encodeURIComponent(PROD)}/done`)).status).toBe(204);
+      expect(await finishLabels()).toMatchObject([{ origin: 'finish_accepted', settled: true, itemId: PROD, check: { since: [{ author: 'Sam Okafor' }, { author: 'Dana Lee' }] } }]);
+      expect((await inbox()).items.find((i) => i.id === PROD)?.looksFinished).toBeUndefined();
+    });
+
+    it('takes Not finished back to Today as Frank’s correction, and labels the check wrong', async () => {
+      await othersSettleIt();
+      expect((await call<ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/not-finished`)).status).toBe(200);
+      const prod = (await inbox()).items.find((i) => i.id === PROD)!;
+      expect(prod).toMatchObject({ lane: 'today', triage: { attention: 'today', by: 'user' } });
+      expect(prod.looksFinished).toBeUndefined();
+      expect((await finishLabels()).map((l) => [l.origin, l.settled])).toEqual([['finish_rejected', false]]);
+      expect((await call<ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/not-finished`)).body.code).toBe('conflict');
+    });
+
+    it('checks nothing when Frank turned the suggestion off for Slack', async () => {
+      const view = (await call<SettingsView>('GET', '/api/settings')).body;
+      const triage = { ...view.settings.triage, suggestFinished: { sources: { slack: false } } };
+      expect((await call('PUT', '/api/settings', { settings: { ...view.settings, triage }, rules: view.rules })).status).toBe(200);
+      await othersSettleIt();
+      expect(claude.calls.filter((c) => c.prompt.includes('<checks>'))).toHaveLength(0);
+      expect((await inbox()).items.find((i) => i.id === PROD)?.looksFinished).toBeUndefined();
+    });
+  });
+
   it('reads the thread again 2 and 6 minutes after Reply in Slack, without waiting for the poll (CK-2.4)', async () => {
     const replied = await call<{ scheduled: boolean }>('POST', `/api/items/${encodeURIComponent(PROD)}/replied`);
     expect(replied).toEqual({ status: 200, body: { scheduled: true } });

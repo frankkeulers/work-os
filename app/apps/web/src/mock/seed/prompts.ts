@@ -1,6 +1,6 @@
 import type { PromptFileId, PromptSourceView } from '@work-os/shared';
 
-// The nine prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
+// The ten prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
 // Shortened stand-ins for the server's built-in defaults: the shape matters here, not the wording.
 
 export interface SeedPromptFile {
@@ -60,6 +60,21 @@ You check whether Frank's reply settles what a thread asked of him.
 For each open ask, decide whether his latest messages settle it: answered, decided, approved,
 done or handed on. A holding reply ("will look later", "on it", an emoji) settles nothing.
 When unsure, answer not settled.
+
+Answer with JSON only, no prose.`,
+  },
+  {
+    id: 'finish',
+    label: 'Looks finished',
+    description: 'Decides whether later messages, by anyone, settled what a topic asked of you, so it can be suggested as Done.',
+    usedBy: 'Looks finished',
+    path: 'config/prompts/finish.md',
+    defaultText: `<!-- prompt: finish v1 -->
+You check whether a conversation has run its course for Frank: whether what it asked of him was
+settled by the messages that came after, so it can leave his inbox.
+
+For each ask, decide whether it is settled now: someone else did it, the ask was withdrawn, or the
+question was answered. When unsure, answer not settled.
 
 Answer with JSON only, no prose.`,
   },

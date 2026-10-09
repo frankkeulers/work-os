@@ -233,6 +233,12 @@ When a new revision's messages are all Frank's own (`fromMeOnly`), the projectio
 
 **CK-2.9 Order:** Slack first. Outlook follows once 20 Slack auto-closes have run with no Undo, or after one week, whichever comes later.
 
+**CK-2.10 Looks finished** (amendment). A topic can run its course without Frank writing anything: someone else does it, the ask is withdrawn, or the question is answered.
+- **Trigger.** An open item that was Now or Today is re-triaged after messages from others, and the model's own answer is None (before any rule floor, so a mention-me item the floor holds in Today still qualifies). Nothing is suggested for filing, and Settings › Triage rules › "When others settle it" is on for the source: Slack on, Outlook off by default.
+- **Check.** A finish check (Haiku, prompt `finish v1`, separate from settle) judges the asks open before re-triage against the messages since, by anyone. An ask the model leaves out counts as not settled. The answer goes in the item file and as `finish.checked`; a failure is `finish.failed` and shows nothing.
+- **What Frank sees.** When every ask is settled, the row says **Looks finished · <why>** in place, where "You replied" would be; nothing moves or closes. The panel opens with a green **Looks finished** callout: the why, **Done** and **Not finished**. A new message from someone else, a correction or Done clears it.
+- **Labels.** Done on a suggested item writes a positive line to `labels/finish.jsonl` (origin `finish_accepted`); **Not finished** writes a negative one (`finish_rejected`) and corrects the item to Today. `npm run eval -- --purpose finish` scores the finish prompt against them, as settle is scored. Closing by itself (`auto`) waits for at least 30 labels and a false-close rate at or below the C2 target.
+
 > **Story 2.1** As Frank, I want a thread to leave my inbox once I've answered it in Slack so that I don't have to come back and press Done.
 >
 > - Given Matt's DM asks for a go/no-go and I reply "Go, for the 15th" in the DM, when the next poll runs, then the settle check marks the ask settled, the item closes with "Closed: you replied in Slack", and the Done list shows "Your reply in Slack".

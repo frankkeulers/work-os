@@ -98,6 +98,38 @@ function CloseNote({ item }: { item: ItemSummary }) {
   );
 }
 
+/**
+ * Others' messages look to have settled what was asked of Frank (cockpit CK-2.10): why, and his
+ * answer. Done and Not finished are both labels for the finish eval.
+ */
+function FinishCallout({ item }: { item: ItemSummary }) {
+  const [busy, setBusy] = useState(false);
+  const f = item.looksFinished;
+  if (!f || item.status !== 'open') return null;
+  const notFinished = async () => {
+    setBusy(true);
+    await api.notFinished(item.id).then((r) => toast(`Kept in Today · labelled set now ${r.labelCount}`, { tone: 'success' }), errorToast);
+    setBusy(false);
+  };
+  return (
+    <section aria-label="Looks finished" data-finish-callout className="flex flex-col gap-2.5 rounded-xl bg-green-wash px-[18px] py-4 text-green-fg">
+      <div className="flex items-center gap-2">
+        <Icon name="check" size={14} strokeWidth={2.25} className="shrink-0" />
+        <span className="text-[15px] font-semibold">Looks finished</span>
+      </div>
+      {f.why && <div className="text-[13px] leading-normal">{f.why}</div>}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="solid" icon="check" disabled={busy} onClick={() => void markDoneWithUndo(item)}>
+          Done
+        </Button>
+        <Button disabled={busy} onClick={() => void notFinished()}>
+          {busy && <Spinner size={12} />} Not finished
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 function NextStepCard({ item, draftsBudgetHit, closesOnReply, onFile, workflow }: { item: ItemSummary; draftsBudgetHit: boolean; closesOnReply: boolean; onFile: (t: ActionType) => void; workflow?: ReactNode }) {
   const now = useNow(30_000);
   const step = shownStep(item, draftsBudgetHit, now);
@@ -145,7 +177,7 @@ function NextStepCard({ item, draftsBudgetHit, closesOnReply, onFile, workflow }
         </div>
         {draftHint && <div className="-mt-1 text-xs text-muted">{draftHint}</div>}
         {p.kind === 'open' && closesOnReply && <CloseNote item={item} />}
-        <ReplyNote item={item} wrap />
+        <ReplyNote item={item} wrap finish={false} />
       </div>
       {workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} skip={draft?.type} />)}
     </section>
@@ -669,6 +701,7 @@ export function ItemPanel({
           />
         )}
 
+        <FinishCallout key={`finish:${item.id}`} item={item} />
         <NextStepCard
           item={item}
           draftsBudgetHit={draftsBudgetHit}

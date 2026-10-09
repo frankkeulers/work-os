@@ -3,6 +3,7 @@ import { toLoggedDecision, type EventData, type EventType, type WorkEvent } from
 import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
+import { finishQueue } from './transitions';
 import { askId, conversationOf } from './topics';
 import { budgetsOf, closedByReply, confirmedNow, filedAll, openNext, replyCloseCriteria, summaryOf } from './views';
 
@@ -547,6 +548,55 @@ describe('settle checks on Frank’s replies (cockpit CK-2.1–2.3)', () => {
     ];
     expect(closedByReply(rows, '2026-10-05T12:48:00.000Z')).toEqual({ today: 2, latestAt: '2026-10-05T12:40:00.000Z', latestTitle: 'Head of Sales' });
     expect(closedByReply([], '2026-10-05T12:48:00.000Z')).toEqual({ today: 0 });
+  });
+});
+
+describe('Looks finished (cockpit CK-2.10)', () => {
+  /** Today at revision 1; others write; the re-triage at revision 2 asks for a finish check. */
+  const pending = () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1))
+      .add('triage.decided', 1, decided(1))
+      .add('item.upserted', 20, upserted(2))
+      .add('triage.decided', 30, { ...decided(2, 'none'), finishCheck: true });
+    return { events, add };
+  };
+
+  it('waits for the check after a decision that asks for one, and looks finished once it settles every ask', () => {
+    const { events, add } = pending();
+    expect(replay(events).items[ITEM]).toMatchObject({ finishPending: at(10) });
+    expect(finishQueue(replay(events).items[ITEM])).toBe(true);
+    add('finish.checked', 31, { revision: 2, batchId: 'b', allSettled: true });
+    const it = replay(events).items[ITEM];
+    expect(it).toMatchObject({ looksFinished: at(31) });
+    expect(it.finishPending).toBeUndefined();
+  });
+
+  it('suggests nothing when the check finds an ask still open, or fails', () => {
+    const open = pending();
+    open.add('finish.checked', 31, { revision: 2, batchId: 'b', allSettled: false });
+    expect(replay(open.events).items[ITEM]).not.toHaveProperty('looksFinished', expect.anything());
+    const failed = pending();
+    failed.add('finish.failed', 31, { revision: 2, reason: 'content missing' });
+    const it = replay(failed.events).items[ITEM];
+    expect(it.finishPending).toBeUndefined();
+    expect(it.looksFinished).toBeUndefined();
+  });
+
+  it('drops the suggestion on Done, a correction, or new messages from someone else, and old decisions never ask for a check', () => {
+    for (const next of [
+      (add: ReturnType<typeof log>['add']) => add('item.done', 40, undefined),
+      (add: ReturnType<typeof log>['add']) => add('triage.corrected', 40, { correction: { itemId: ITEM, itemRevision: 2, attention: 'today', confluence: false, vault: false, correctedAt: at(40) } }),
+      (add: ReturnType<typeof log>['add']) => add('item.upserted', 40, upserted(3)),
+    ]) {
+      const { events, add } = pending();
+      add('finish.checked', 31, { revision: 2, batchId: 'b', allSettled: true });
+      next(add);
+      expect(replay(events).items[ITEM].looksFinished).toBeUndefined();
+    }
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 1, decided(1)).add('item.upserted', 20, upserted(2)).add('triage.decided', 30, decided(2, 'none'));
+    expect(replay(events).items[ITEM].finishPending).toBeUndefined();
   });
 });
 

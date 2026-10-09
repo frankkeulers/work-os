@@ -33,6 +33,8 @@ export function receiveMessages(s: ItemFlags, fromMeOnly: boolean, at?: string) 
   s.settlePending = undefined;
   s.settleFailures = undefined;
   s.replyCheck = undefined;
+  s.finishPending = undefined;
+  s.looksFinished = undefined;
 }
 
 /** An open, triaged item in Needs you or This week: one Frank's reply can settle (CK-2.1). */
@@ -48,16 +50,27 @@ export function settleChecked(s: ItemFlags, at: string, d: EventData<'settle.che
   s.replyCheck = { at, revision: d.revision, allSettled: d.allSettled, settled: d.settled.length };
 }
 
+/** The check on whether others' messages settled a topic ran (CK-2.10). */
+export function finishChecked(s: ItemFlags, at: string, d: EventData<'finish.checked'>) {
+  s.finishPending = undefined;
+  if (d.allSettled) s.looksFinished = at;
+}
+
+/** A topic that waited on Frank and needs nothing from him now: the check that may follow (CK-2.10). */
+export const finishQueue = (s: ItemFlags & { topicOf?: string }): boolean => !!s.finishPending && !s.topicOf && s.status === 'open' && s.triageState === 'triaged';
+
 /** A settle check failed; after the last attempt the item stays as it is (CK-2.3). */
 export function settleFailed(s: ItemFlags, attempts: number) {
   s.settleFailures = attempts;
   if (attempts >= SETTLE_MAX_ATTEMPTS) s.settlePending = undefined;
 }
 
-export function applyDecision<D extends LoggedDecision>(s: ItemFlags<D>, d: D) {
+export function applyDecision<D extends LoggedDecision>(s: ItemFlags<D>, d: D, finishCheck = false) {
   if (s.correction && d.itemRevision > s.correction.itemRevision) s.correctedFrom = s.correction.attention;
   s.decision = d;
   s.triageState = 'triaged';
+  s.finishPending = finishCheck ? d.decidedAt : undefined;
+  s.looksFinished = undefined;
   // Defaults for revision collisions; see JOURNEYS.md open questions 1–2.
   if (s.status === 'done' && s.newReplies) {
     s.status = 'open';
@@ -88,6 +101,8 @@ export function failTriage(s: ItemFlags, attempts: number) {
 export function correct(s: ItemFlags, c: TriageCorrection) {
   s.correction = c;
   s.correctedFrom = undefined;
+  s.finishPending = undefined;
+  s.looksFinished = undefined;
   if (s.triageState === 'failed') s.triageState = 'triaged';
 }
 
@@ -104,6 +119,8 @@ export function markDone(s: ItemFlags, at: string, by?: EventData<'item.done'>) 
   s.newReplies = false;
   s.backFromSnooze = false;
   s.settlePending = undefined;
+  s.finishPending = undefined;
+  s.looksFinished = undefined;
   s.doneBy = by?.by ?? 'you';
   s.doneSource = by?.by === 'reply' ? by.source : undefined;
   s.doneReason = by?.by === 'source' ? by.reason : undefined;

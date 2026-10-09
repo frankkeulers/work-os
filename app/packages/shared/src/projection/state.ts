@@ -5,7 +5,7 @@ import type { Action, Attention, ItemKind, Participant, SourceId, TriageCorrecti
 // The inbox state that the event log projects to (PLAN.md §4.3). The server keeps it in memory
 // and in snapshot.json; the mock keeps the same flags on its own records. Bump PROJECTION_VERSION
 // whenever reduce() changes, so the server replays the whole log instead of trusting the snapshot.
-export const PROJECTION_VERSION = 3; // 3: settle checks and who closed an item (cockpit Stage 2)
+export const PROJECTION_VERSION = 4; // 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10)
 
 /**
  * What the inbox knows about an item beyond its content. `D` is the decision type: the server
@@ -40,6 +40,10 @@ export interface ItemFlags<D extends LoggedDecision = LoggedDecision> {
   doneBy?: DoneBy; // who closed it
   doneSource?: SourceId; // doneBy reply: where the reply was
   doneReason?: string; // doneBy source: why the source closed it
+  // Cockpit CK-2.10: a topic that waited on Frank was re-triaged to None after others wrote. A
+  // check of whether their messages settled his asks follows; if so, it looks finished.
+  finishPending?: string; // the decision's time, until the check runs
+  looksFinished?: string; // when the check found every ask settled, until Done, a correction or new messages
 }
 
 /** Who closed an item: Frank pressing Done, his reply settling it, or its source (an answered invite). */
