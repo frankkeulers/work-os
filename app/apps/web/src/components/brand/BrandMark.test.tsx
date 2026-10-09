@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { emitFiled, onFiled } from '../../lib/brandEvents';
 import { BrandMark } from './BrandMark';
 
 // jsdom has no AnimationEvent, so React DOM would listen for webkitAnimationEnd and miss these events.
@@ -152,22 +151,5 @@ describe('BrandMark checking sources (WO-6)', () => {
     } finally {
       vi.unstubAllGlobals();
     }
-  });
-});
-
-describe('brandEvents (WO-14)', () => {
-  it('delivers emitFiled to subscribers and coalesces a burst into one', () => {
-    const cb = vi.fn();
-    const off = onFiled(cb);
-    act(() => {
-      emitFiled(10_000);
-      emitFiled(10_200);
-    });
-    expect(cb).toHaveBeenCalledTimes(1);
-    emitFiled(10_600);
-    expect(cb).toHaveBeenCalledTimes(2);
-    off();
-    emitFiled(20_000);
-    expect(cb).toHaveBeenCalledTimes(2);
   });
 });

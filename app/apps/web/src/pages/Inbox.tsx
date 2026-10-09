@@ -5,6 +5,7 @@ import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
 import { parseType } from '../components/ActionPanel';
 import { Agenda } from '../components/Agenda';
 import { SourceMark } from '../components/BrandIcon';
+import { BrandMark } from '../components/brand/BrandMark';
 import { CategoryDot, ItemMarkers, itemPath, kindLabel, markDoneWithUndo, markManyDoneWithUndo } from '../components/item';
 import { HealthBanner } from '../components/HealthBanner';
 import { HEALTH_BAR, HealthPill, usePillHealth } from '../components/HealthPill';
@@ -321,9 +322,7 @@ function FirstRun({ inbox }: { inbox: InboxView }) {
   const busy = inbox.poll.phase !== 'idle';
   return (
     <div className="mx-6 my-4 flex flex-col items-start gap-4 rounded-xl border border-line bg-surface px-8 py-10">
-      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-wash text-accent">
-        <Icon name="inbox" size={22} />
-      </span>
+      <BrandMark size={72} checking={busy} />
       <div className="flex max-w-[560px] flex-col gap-1.5">
         <h2 className="m-0 text-xl font-semibold">Work OS hasn’t polled Slack yet</h2>
         <p className="m-0 text-sm leading-relaxed text-ink-2">
@@ -349,9 +348,7 @@ function FirstRun({ inbox }: { inbox: InboxView }) {
 function InboxZero({ inbox }: { inbox: InboxView }) {
   return (
     <div className="mx-6 my-4 flex flex-col items-center gap-2 rounded-xl border border-line bg-surface px-8 py-12 text-center" data-testid="inbox-zero">
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-wash text-teal-ink">
-        <Icon name="check" size={22} strokeWidth={2.5} />
-      </span>
+      <BrandMark size={88} checking={inbox.poll.phase !== 'idle'} />
       <h2 className="m-0 text-xl font-semibold">Inbox zero</h2>
       <p className="m-0 max-w-[460px] text-sm text-ink-2">
         Nothing needs you and nothing is waiting to be filed.

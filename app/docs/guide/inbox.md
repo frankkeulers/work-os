@@ -11,6 +11,8 @@ updated: 2026-10-09
 On a window 1600 px wide or more, such as the 16" MacBook Pro full screen, the inbox is a cockpit
 of three columns that each scroll on their own, so it can stay open all day and be read from across
 the desk. The sidebar folds to a narrow rail (`[` opens it; the choice is kept for this layout).
+The Work OS mark at the top of the sidebar, and the browser tab's icon, have a status light: orange
+while something is in Now, briefly teal after a filing is written.
 
 - **Time**, on the left: the clock and the date, then your next meeting, then the day as a
   timeline. See [The time column](#the-time-column).

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useToasts, type OsNotification, type Toast } from '../store/toasts';
+import { BrandMark } from './brand/BrandMark';
 import { Icon } from './icons';
 import { cx } from './ui';
 
@@ -70,7 +71,9 @@ function NotificationCard({ n }: { n: OsNotification }) {
       }}
       className="pointer-events-auto flex w-[360px] items-start gap-3 rounded-[14px] border border-line bg-surface/95 p-3 text-left shadow-[0_16px_40px_rgba(20,23,28,0.22)] backdrop-blur cursor-pointer hover:bg-surface"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-solid text-sm font-semibold text-on-solid">W</span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-solid text-on-solid">
+        <BrandMark size={22} state="attention" />
+      </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-baseline gap-2 text-xs text-muted">
           <span className="flex-1 font-semibold text-ink">Work OS · Now</span>

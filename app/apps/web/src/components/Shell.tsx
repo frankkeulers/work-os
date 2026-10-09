@@ -11,6 +11,8 @@ import { isLive } from '../lib/next';
 import { shownName } from '../lib/profile';
 import { usePrefs, type Scope, type Theme } from '../store/prefs';
 import { Avatar } from './Avatar';
+import { BrandMark } from './brand/BrandMark';
+import { useBrandFavicon } from './brand/useBrandFavicon';
 import { BrandIcon, SourceMark } from './BrandIcon';
 import { problemsOf } from './HealthBanner';
 import { Icon, type IconName } from './icons';
@@ -224,6 +226,35 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+const nowCountOf = (inbox: InboxView, full: boolean) => inbox.items.filter((i) => (full || isLive(i.source)) && i.lane === 'now').length;
+
+/** Whether an action that was still in progress in `prev` is written (done) in `next`, dry-run included. */
+function filedSince(prev: InboxView, next: InboxView): boolean {
+  const pending = new Set(prev.items.flatMap((i) => Object.values(i.actions).flatMap((a) => (a && a.status !== 'done' ? [a.id] : []))));
+  return next.items.some((i) => Object.values(i.actions).some((a) => a?.status === 'done' && pending.has(a.id)));
+}
+
+/**
+ * The mark's light and the tab's icon (WO-13, WO-14): attention while a live item is in Now. Comparing each inbox
+ * load with the one before, needs you plays when that count rises (not on first load, nor when the scope changes
+ * it) and filed plays when a filing is written. The inbox is app-wide, so a batch that moves on before its write
+ * lands still plays filed.
+ */
+function useMarkState(inbox: InboxView | undefined, full: boolean) {
+  const state = inbox && nowCountOf(inbox, full) ? 'attention' : 'quiet';
+  useBrandFavicon(state);
+  const [play, setPlay] = useState<{ playKey: number; play: 'attention' | 'filed' }>({ playKey: 0, play: 'attention' });
+  const [seen, setSeen] = useState({ inbox, full });
+  if (seen.inbox !== inbox || seen.full !== full) {
+    setSeen({ inbox, full });
+    if (seen.inbox && inbox && seen.full === full) {
+      if (nowCountOf(inbox, full) > nowCountOf(seen.inbox, full)) setPlay({ playKey: play.playKey + 1, play: 'attention' });
+      else if (filedSince(seen.inbox, inbox)) setPlay({ playKey: play.playKey + 1, play: 'filed' });
+    }
+  }
+  return { state, ...play } as const;
+}
+
 export function Nav({ inbox }: { inbox?: InboxView }) {
   const now = useNow();
   const scope = usePrefs((s) => s.scope);
@@ -239,6 +270,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const full = scope === 'full';
   // Teams items are P2: they count only in Full scope, as on the Inbox.
   const count = inbox?.items.filter((i) => (full || isLive(i.source)) && (i.lane === 'now' || i.lane === 'today' || i.lane === 'file')).length;
+  const mark = useMarkState(inbox, full);
   // Every enabled source (R2.1); Slack shows even before the first inbox load.
   const sources: { id: SourceId; health?: SourceHealth }[] = inbox?.sources.length ? inbox.sources.map((h) => ({ id: h.id, health: h })) : [{ id: 'slack' }];
 
@@ -263,7 +295,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
       size={32}
       onClick={() => setCollapsed(!collapsed)}
     >
-      <Icon name="sidebar" size={17} />
+      {collapsed ? <BrandMark size={26} {...mark} className="text-ink" /> : <Icon name="sidebar" size={17} />}
     </IconButton>
   );
 
@@ -273,7 +305,12 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
       <nav aria-label="Main" className={cx('flex h-full flex-col gap-[22px] overflow-y-auto overflow-x-hidden whitespace-nowrap', API_MODE === 'mock' ? 'pb-16' : 'pb-3', collapsed ? 'px-2.5' : 'px-3.5')}>
         {/* 64px, the height of the Inbox top bar, so the two line up. */}
         <div className={cx('flex h-16 shrink-0 items-center gap-2', collapsed ? 'justify-center' : 'pl-2')}>
-          {!collapsed && <div className="min-w-0 flex-1 text-[17px] font-semibold tracking-tight">Work OS</div>}
+          {!collapsed && (
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              <BrandMark size={26} {...mark} />
+              <span className="text-[17px] font-semibold tracking-tight">Work OS</span>
+            </div>
+          )}
           {toggle}
         </div>
         <div className="flex flex-col gap-0.5">
