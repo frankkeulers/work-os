@@ -92,3 +92,11 @@ export function cardActions(item: ItemSummary, draftsBudgetHit: boolean): CardAc
   const sec = usable[0];
   return { primary: { kind: 'slack' }, secondary: sec ? btn(sec) : undefined, overflowDrafts: all.filter((t) => t !== sec).map(btn) };
 }
+
+/** "Insights APIs › Decisions" for Confluence, "Vault · Resources" for the vault. */
+export function targetChip(i: ItemSummary): string | undefined {
+  if (i.lane !== 'file') return undefined;
+  if (i.triage?.confluence && i.targetHints.confluence && !i.containsPeopleObservations) return i.targetHints.confluence;
+  const v = i.targetHints.vault;
+  return v ? `Vault · ${v.split('/')[0]}` : undefined;
+}

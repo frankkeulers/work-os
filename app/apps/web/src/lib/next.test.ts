@@ -72,8 +72,8 @@ describe('dueInfo', () => {
     expect(dueInfo({ need: 'decide', step: 's', why: 'w', dueAt: london(5, '16:00'), dueLabel: 'planning' }, now)).toEqual({ text: '16:00 planning', tone: 'today' });
     expect(dueInfo({ need: 'decide', step: 's', why: 'w', dueAt: london(8, '09:00') }, now)).toEqual({ text: 'Thu 09:00', tone: 'later' });
   });
-  it('marks a missed deadline overdue', () => {
-    expect(dueInfo({ need: 'reply', step: 's', why: 'w', dueAt: london(5, '09:00') }, now)).toEqual({ text: '09:00 · overdue', tone: 'now' });
+  it('marks a missed deadline overdue, in red (9 Oct decision)', () => {
+    expect(dueInfo({ need: 'reply', step: 's', why: 'w', dueAt: london(5, '09:00') }, now)).toEqual({ text: '09:00 · overdue', tone: 'late' });
   });
   it('uses the label alone when there is no exact time', () => {
     expect(dueInfo({ need: 'reply', step: 's', why: 'w', dueLabel: 'this week' }, now)).toEqual({ text: 'this week', tone: 'later' });

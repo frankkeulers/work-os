@@ -13,7 +13,7 @@ export function NeedTag({ children }: { children: ReactNode }) {
   return <span className={cx(base, 'bg-bg font-semibold text-ink-strong')}>{children}</span>;
 }
 
-const DUE: Record<DueTone, string> = { now: 'bg-orange-wash text-orange-fg', today: 'bg-accent-wash text-accent-ink', later: 'bg-bg text-ink-2' };
+const DUE: Record<DueTone, string> = { late: 'bg-red-wash text-red-fg', now: 'bg-orange-wash text-orange-fg', today: 'bg-accent-wash text-accent-ink', later: 'bg-bg text-ink-2' };
 
 export function DueChip({ due }: { due: { text: string; tone: DueTone } }) {
   return <span className={cx(base, 'font-medium', DUE[due.tone])}>{due.text}</span>;

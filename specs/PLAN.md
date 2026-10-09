@@ -49,10 +49,20 @@ Phase 0 tasks (Slack app, baseline, labelling, spikes) come first because they'r
 | S1 | Precision of "now" + "today" attention labels on the labelled set | ≥ 80% |
 | S2 | Recall of "now" items (nothing urgent missed) on the labelled set | ≥ 90% |
 | S3 | Total daily Claude usage (Work OS + remaining scheduled tasks) | ≤ baseline measured in Phase 0 |
-| S4 | Frank opens the dashboard | ≥ 4 of 5 working days in week 2 |
+| S4 | Frank opens the dashboard (superseded by C3 and C4 once the cockpit ships: an inbox that stays open all day is always "opened") | ≥ 4 of 5 working days in week 2 |
 | S5 | Writes to Confluence or vault without approval | 0 |
 | S6 | Observations about people written to Confluence | 0 |
 | S7 | Slack knowledge digest scheduled task | Disabled |
+
+### Cockpit success criteria (`specs/cockpit/SPEC.md` §3, measured over 2 working weeks after Stage 3 ships)
+
+| # | Criterion | Target |
+|---|---|---|
+| C3 | Needs you empty at 18:00 | ≥ 3 of 5 working days |
+| C4 | Minutes a day with the item panel open | Down on the Stage 0 baseline |
+| C5 | Now items done more than 4 h after their deadline | No increase on baseline |
+
+C1 and C2 (items closed by Frank's reply, and false closes) join them with the cockpit's Stage 2.
 
 ### Kill criteria
 
@@ -993,6 +1003,7 @@ Requirements:
   - **Closing:** the source closes an invite item (`item.done`, by source) when Frank answers, every event in it is cancelled or gone, or the last one starts. If a reschedule resets his answer, the item opens again.
   - **Categories:** each event's Outlook category names come with search and are kept in the snapshot (a change needs no read), on invite items and on Wispr Flow meetings joined to an event. Their colours are `settings.calendar.categoryColors` (name → one of Outlook's 25), set in Settings › Outlook; a category without one has a steady colour from its name. Shown on agenda chips (a colour bar and a light shade behind), as tags on the item, and as a dot each beside the item's title in the inbox (the item cache keeps an item's event and categories, so the inbox needs no file reads).
   - **Before a meeting:** in the app only (Frank, 9 Oct 2026: Outlook already reminds him). From `settings.notifications.meetingLeadMinutes` (1 to 30, default 5) before a meeting until it starts, the sidebar shows it as Next and its agenda chip counts down, amber in the last two minutes; from its start until its end, the sidebar shows it as Now (Frank, 9 Oct 2026). Overlapping meetings are a line each, those on now first, then those to come, each soonest first; at most three, then "+N more". A line can be dismissed (Frank, 9 Oct 2026): that occurrence, by event ID and start, stays out of the sidebar until it ends, kept in the browser's preferences (`dismissedMeetings`) and dropped once it has ended; the agenda is unchanged. No notification, sound or motion. Only timed meetings Frank accepted, accepted tentatively or organised, not shown as Free. Worked out in the browser from the agenda, which carries the lead time.
+  - **The cockpit (CK-3.4–3.7):** on a window 1600 px or wider, the agenda strip becomes the inbox's time column: the next meeting Frank is going to (the same rules as Before a meeting) with the Needs you items due before it starts, and the day as a timeline of meetings and deadline pins. The sidebar's Now/Next lines are left out there, as the card does their job; they return below 1600 px, where the strip stays.
   - **Mail:** while the calendar is on, meeting requests, updates and cancellations in Outlook mail are dropped when the calendar holds an event with the same subject (less any `Canceled:`/`Updated:` prefix) from the same sender, and the email has such a prefix or a Teams or Zoom joining block. Replies and forwards about a meeting stay in mail, as do answers.
   - **Health and cost:** the `ms365` dependency, shared with mail. About $0.002 a poll for two search pages, plus $0.0017 for each ten reads.
 

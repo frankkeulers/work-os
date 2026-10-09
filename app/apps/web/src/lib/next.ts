@@ -19,11 +19,12 @@ export function needLabel(n: Pick<NextStep, 'need' | 'actionItems'>): string {
   return n.need === 'actions' && count ? `${count} ${count === 1 ? 'action' : 'actions'}` : NEED_LABEL[n.need];
 }
 
-export type DueTone = 'now' | 'today' | 'later';
+/** now: within about 4 hours; today: later today; later: another day; late: overdue (red, 9 Oct decision). */
+export type DueTone = 'late' | 'now' | 'today' | 'later';
 
 const sameDay = (a: Date | string, b: Date | string) => londonParts(a).dateKey === londonParts(b).dateKey;
 
-/** "12:00 · in 2 h 15 min", "Thu 09:00", "this week". Close or overdue deadlines read as Now. */
+/** "12:00 · in 2 h 15 min", "Thu 09:00", "this week". Close deadlines read as Now, missed ones as late. */
 export function dueInfo(next: Partial<NextStep> | undefined, now: Date): { text: string; tone: DueTone } | undefined {
   if (!next) return undefined;
   if (!next.dueAt) return next.dueLabel ? { text: next.dueLabel, tone: next.dueLabel === 'today' ? 'today' : 'later' } : undefined;
@@ -31,7 +32,7 @@ export function dueInfo(next: Partial<NextStep> | undefined, now: Date): { text:
   const today = sameDay(next.dueAt, now);
   let text = fmtWhen(next.dueAt, now);
   if (next.dueLabel) text += ` ${next.dueLabel}`;
-  if (mins < 0) return { text: `${text} · overdue`, tone: 'now' };
+  if (mins < 0) return { text: `${text} · overdue`, tone: 'late' };
   if (today && mins <= 6 * 60) text += ` · ${fmtIn(next.dueAt, now)}`;
   return { text, tone: today && mins <= 4 * 60 ? 'now' : today ? 'today' : 'later' };
 }

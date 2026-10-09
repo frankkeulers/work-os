@@ -2,13 +2,54 @@
 title: The inbox
 group: Inbox
 order: 30
-summary: Needs you and To file, what the chips mean, topics, and how to correct a decision.
+summary: The three zones on a wide screen, Needs you and To file, what the chips mean, topics, and how to correct a decision.
 updated: 2026-10-09
 ---
 
+## Three zones on a wide screen
+
+On a window 1600 px wide or more, such as the 16" MacBook Pro full screen, the inbox is a cockpit
+of three columns that each scroll on their own, so it can stay open all day and be read from across
+the desk. The sidebar folds to a narrow rail (`[` opens it; the choice is kept for this layout).
+
+- **Time**, on the left: the clock and the date, then your next meeting, then the day as a
+  timeline. See [The time column](#the-time-column).
+- **Needs you**, in the middle: **NOW** then **TODAY**, each under its own header. Each row is two
+  lines: where it happened, what it needs and when it's due, then the summary in large type.
+- **Later**, on the right, for once a day: **To file** with where each should go, **This week**
+  soonest first, a **Snoozed** line, and at the foot **N low priority · check triage** and
+  **N done today**. Snoozed, Low priority and Done open in place of the lists; `Esc` or the back
+  arrow returns.
+
+Clicking a row in any column opens it in the item panel, 640 px wide, over Later. `j` and `k` walk
+Now, Today, To file, then This week; `g n` jumps to the first item in Needs you and `g l` to the
+first in Later. In a narrower window the inbox is a single list with the agenda strip above it, as
+described below; nothing is lost.
+
+### The time column
+
+- **The next meeting.** The first meeting today you're going to (accepted, tentative or your own,
+  not shown as Free) that hasn't ended: **NEXT · IN 12 MIN**, amber in the last two minutes, or
+  **NOW · UNTIL 14:30** while it's on. Under it, **Due before it** lists what in Needs you is due
+  by the time it starts, so you can clear it in the gap. **+1 at the same time** means another
+  meeting overlaps; point at it to see which. Click the card to open the meeting in Outlook. With
+  no meetings left, it says so and shows tomorrow's first.
+- **The timeline.** Your work hours, widened to fit the day's meetings and deadlines. Meetings sit
+  on the left with their Outlook category colour; those that are over are greyed. A red line with
+  the time marks now. All-day events are one line above.
+- **Deadline pins**, to the right of the meetings: one for each Needs you item due today, at its
+  time, with a few words of what's due. Orange within about four hours, blue later today. A missed
+  deadline turns red, says **Overdue** and sits at the red line. Pins within 30 minutes of each
+  other stack, such as **2 due 17:30**; point at a pin to see what it holds, click it to open the
+  item.
+- **Tomorrow** (or `t`) shows tomorrow's meetings, with pins for This week items due then.
+
+The meeting card and the meetings need [Outlook Calendar](outlook.md); without it the timeline
+shows the pins only.
+
 ## Needs you and To file
 
-The inbox has two groups of equal weight.
+The inbox has two groups of equal weight. On a wide screen they sit in Needs you and in Later.
 
 - **Needs you** holds what asks something of you. **Now** items come first, with a faint orange
   wash: they need you within the hour. Then items whose triage failed (so they are never missed),
@@ -46,14 +87,14 @@ Undo or Reopen, appear at once.
 A new arrival carries a blue **New** dot until you have looked at it: two seconds in view while
 the window is in front, or opening it. The dot also goes after 30 minutes.
 
-With [Outlook Calendar](outlook.md) on, a strip above the groups shows today's meetings, the
-one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook. An
+With [Outlook Calendar](outlook.md) on, in a window narrower than 1600 px, a strip above the
+groups shows today's meetings, the one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook. An
 invite you haven't answered is also an item, which closes itself once you answer it in Outlook;
 see [Invites](outlook.md#invites).
 
 ## This week, low priority, snoozed and done
 
-Below the groups, **Low priority** opens everything that needs nothing and holds nothing worth
+On a wide screen these live in Later. In a narrower window, below the groups, **Low priority** opens everything that needs nothing and holds nothing worth
 filing. It is worth a glance now and then, to catch a wrong decision. **This week**, **Snoozed** and
 **Done** open their lists the same way. This week lists the soonest due first, with the date on
 each; a snoozed item comes back at its time, marked "Back from snooze".
@@ -94,3 +135,16 @@ set the attention level and the Confluence and vault flags, and save. The item m
 shows "Corrected by you". Every correction is kept as a label: the eval in
 [Usage & health](/usage) measures triage against them, so corrections make the next prompt
 change measurable.
+
+## Keeping it open
+
+The cockpit is made to stay open on your screen all day.
+
+- **Full screen** gives it the whole 1728 px of the 16" MacBook Pro: in Safari, **View › Enter
+  Full Screen** (`Ctrl`-`Cmd`-`F`).
+- **Its own window.** In Safari, with the inbox open, choose **File › Add to Dock**. Work OS then
+  opens from the Dock in a window of its own, without the address bar and tabs, and stays out of
+  your browsing.
+- **Keep the display awake** in work hours: in System Settings › Lock Screen, set when the display
+  turns off while on power adapter to a longer time. The inbox keeps itself up to date while
+  it's open.

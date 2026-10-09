@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, NavLink, Outlet, useOutletContext } from 'react-router';
+import { Link, NavLink, Outlet, useLocation, useOutletContext } from 'react-router';
 import type { SourceHealth, SourceId } from '@work-os/shared';
 import { API_MODE, api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
+import { useWideLayout } from '../hooks/useLayout';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
 import { appHealth, type AppHealth } from '../lib/health';
@@ -226,8 +227,13 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
 export function Nav({ inbox }: { inbox?: InboxView }) {
   const now = useNow();
   const scope = usePrefs((s) => s.scope);
-  const collapsed = usePrefs((s) => s.navCollapsed);
-  const setCollapsed = usePrefs((s) => s.setNavCollapsed);
+  // On the three-zone cockpit the sidebar has its own setting, the rail by default (CK-3.1).
+  const wide = useWideLayout();
+  const collapsed = usePrefs((s) => (wide ? s.navCollapsedWide : s.navCollapsed));
+  const setCollapsed = usePrefs((s) => (wide ? s.setNavCollapsedWide : s.setNavCollapsed));
+  // The time column shows the next meeting on the cockpit, so the cues step aside there (CK-3.7).
+  const path = useLocation().pathname;
+  const onCockpit = wide && path === '/';
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []).data;
   const status = health && appHealth(health, problemsOf(health));
   const full = scope === 'full';
@@ -242,11 +248,12 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
       if (e.key !== '[' || e.metaKey || e.ctrlKey || e.altKey) return;
       if ((e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
       e.preventDefault();
-      setCollapsed(!usePrefs.getState().navCollapsed);
+      const p = usePrefs.getState();
+      setCollapsed(!(wide ? p.navCollapsedWide : p.navCollapsed));
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [setCollapsed]);
+  }, [setCollapsed, wide]);
 
   const toggle = (
     <IconButton
@@ -280,7 +287,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
           <NavItem to="/usage" icon="usage" label="Usage & health" status={status} collapsed={collapsed} />
           <NavItem to="/settings" icon="settings" label="Settings & rules" collapsed={collapsed} />
         </div>
-        <MeetingCues collapsed={collapsed} />
+        {!onCockpit && <MeetingCues collapsed={collapsed} />}
         <div className="flex flex-col gap-2">
           {collapsed ? <div className="mx-2 border-t border-line-soft" /> : <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Sources</div>}
           {sources.map(({ id, health }) => {

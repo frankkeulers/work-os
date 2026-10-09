@@ -1,0 +1,183 @@
+import { join } from 'node:path';
+import { expect, test, type Page } from '@playwright/test';
+
+// The three-zone cockpit (specs/cockpit/SPEC.md CK-3) on the 16" MacBook Pro's 1728 px window:
+// the time column, Needs you and Later. Scenarios › Controls › "13:48 with Outlook and the calendar
+// on" sets the seed week's Monday at 13:48, twelve minutes before the [Customer] renewal call.
+// Below 1600 px the Inbox keeps the list; the other specs cover it at 1440 px.
+
+const APP = join(import.meta.dirname, '../../..');
+/** The macOS-style notification card isn't part of the page under it. */
+const HIDE = '[data-testid="os-notification"], [data-scenarios] { display: none !important; }';
+
+test.use({ viewport: { width: 1728, height: 1000 } });
+
+async function control(page: Page, name: string) {
+  await page.keyboard.press('Backquote');
+  const drawer = page.getByRole('complementary', { name: 'Scenarios' });
+  await drawer.getByRole('group', { name: 'Scenario tab' }).getByRole('button', { name: 'Controls' }).click();
+  await drawer.getByRole('button', { name, exact: true }).click();
+  await page.keyboard.press('Backquote');
+  await expect(drawer).toHaveCount(0);
+}
+
+const panel = (page: Page) => page.getByRole('complementary', { name: 'Item panel' });
+const zone = (page: Page, name: 'Time' | 'Needs you' | 'Later') => page.getByRole('region', { name, exact: true });
+
+/** The cockpit at 13:48, the panel closed, with the Outlook mail that Connect brings in. */
+async function afternoon(page: Page) {
+  await page.goto('/');
+  // The panel opens on the first item; closed, new rows land in place rather than behind a pill.
+  await expect(panel(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(panel(page)).toHaveCount(0);
+  await control(page, '13:48 with Outlook and the calendar on (cockpit)');
+  await expect(page.getByTestId('clock')).toHaveText(/^13:4[89]$/);
+  // Connect's poll brings the Outlook mail in, and triages it.
+  await expect(page.locator('[data-row]').filter({ hasText: 'Insights APIs v2 pricing' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('poll-line')).not.toContainText(/Polling|Triaging/);
+}
+
+test('J56: three zones at a glance — the time, what needs you, and what can wait (CK-3.1, 3.4–3.8, 3.11)', async ({ page }) => {
+  await afternoon(page);
+
+  // Three zones, side by side; the agenda strip and the sidebar's meeting cues give way to the time column.
+  for (const z of ['Time', 'Needs you', 'Later'] as const) await expect(zone(page, z)).toBeVisible();
+  expect((await zone(page, 'Time').boundingBox())!.width).toBeCloseTo(400, 0);
+  expect((await zone(page, 'Later').boundingBox())!.width).toBeCloseTo(440, 0);
+  await expect(page.getByRole('region', { name: 'Agenda' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible(); // the 60 px rail
+
+  // The next meeting, and what's due before it.
+  const card = page.getByTestId('next-meeting');
+  await expect(card).toHaveAttribute('data-phase', 'next');
+  await expect(card).toContainText(/NEXT · IN 1[12] MIN/); // the mock clock runs on in real time
+  await expect(card.getByRole('link', { name: '14:00 [Customer] renewal call' })).toHaveAttribute('href', /AAMkMOCKRENEWAL/);
+  await expect(card).toContainText('+1 at the same time');
+  await expect(card.locator('[data-open-item]')).toHaveText([/#mvi-launch · Confirm the data-licensing/, /Insights APIs v2 pricing · Answer the three pricing/]);
+
+  // The timeline: the morning's meetings past, the renewal call and its overlap side by side, and
+  // the deadlines: the 12:00 one missed (red, at the now-line), the 14:00 one close (orange).
+  const meetings = zone(page, 'Time').getByRole('list', { name: 'Today’s meetings' }).getByRole('listitem');
+  await expect(meetings).toHaveText([/06:45 Voyage Insights/, /09:00 Product stand-up/, /09:30 MVI V2 launch readiness/, /14:00 \[Customer\] renewal call/, /14:30 Pricing sign-off/, /16:00 Product weekly/]);
+  await expect(meetings.filter({ hasText: 'stand-up' })).toHaveAttribute('data-past', 'true');
+  await expect(meetings.filter({ hasText: 'renewal call' })).not.toHaveAttribute('data-past');
+  const pins = zone(page, 'Time').getByRole('list', { name: 'Deadlines' }).getByRole('button');
+  await expect(pins).toHaveText([/^Overdue · Confirm the data-licensing/, /^14:00 Answer the three pricing/]);
+  await expect(pins.nth(0)).toHaveAttribute('data-pin', 'late');
+  await expect(pins.nth(1)).toHaveAttribute('data-pin', 'now');
+  const line = (await page.getByTestId('now-line').boundingBox())!;
+  const late = (await pins.nth(0).boundingBox())!;
+  expect(Math.abs(late.y + late.height / 2 - line.y)).toBeLessThan(6);
+
+  // Needs you: Now, then Today with the failed triage at its top, each under its own header.
+  const needs = zone(page, 'Needs you');
+  await expect(needs.locator('[data-lane-head]')).toHaveText([/^NOW · \d+$/, /^TODAY · \d+$/]);
+  await expect(needs.locator('[data-row]').first()).toHaveAttribute('data-lane', 'now');
+  await expect(needs.locator('[data-row]:not([data-lane="now"])').first()).toHaveAttribute('data-lane', 'failed');
+  await expect(needs.locator('[data-row]').filter({ hasText: 'Insights APIs v2 pricing' })).toContainText('14:00 · in 1');
+
+  // Later: To file with its targets, This week soonest first, Snoozed, Low priority and Done.
+  const later = zone(page, 'Later');
+  await expect(later.getByRole('region', { name: 'To file' }).locator('[data-row]')).toHaveCount(4);
+  await expect(later.getByRole('region', { name: 'To file' }).locator('[data-row]').first()).toContainText('Insights APIs › Decisions');
+  await expect(later.getByRole('region', { name: 'This week' }).locator('[data-row]')).toContainText([/Thu 09:00/, /Fri 17:00 plan lock/, /this week/]);
+  await expect(later.getByRole('button', { name: /^1 snoozed · next back Tue 09:00$/ })).toBeVisible();
+  await expect(later.getByRole('button', { name: /^\d+ low priority · check triage$/ })).toBeVisible();
+
+  // The calendar's first read brings its invite in a second poll: wait for it, so the bar is quiet.
+  await expect(page.getByRole('button', { name: 'Poll now' })).toBeEnabled({ timeout: 10_000 });
+  await expect(page.getByTestId('poll-line')).not.toContainText(/Polling|Triaging/);
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-light.png'), style: HIDE });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-dark.png'), style: HIDE, animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+});
+
+test('J57: clear what’s due before the meeting — pins open the item; j/k, g n, g l and t (CK-3.2, 3.3, 3.6)', async ({ page }) => {
+  await afternoon(page);
+
+  // A pin opens its item in the panel, 640 px wide, below the top bar.
+  await zone(page, 'Time').getByRole('list', { name: 'Deadlines' }).getByRole('button', { name: /^14:00 Answer/ }).click();
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page)).toContainText('Insights APIs v2 pricing');
+  const box = (await panel(page).boundingBox())!;
+  expect(box.width).toBeCloseTo(640, 0);
+  expect(box.y).toBeGreaterThanOrEqual(64);
+  await expect(page.locator('[data-row][aria-current="true"]')).toContainText('Insights APIs v2 pricing');
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-panel-light.png'), style: HIDE, animations: 'disabled' });
+
+  // g l: the first Later item, the top of To file; g n: back to the first Needs you item.
+  await page.keyboard.press('g');
+  await page.keyboard.press('l');
+  await expect(page.locator('[data-row][aria-current="true"]')).toHaveAttribute('data-lane', 'file');
+  await expect(page.locator('[data-row][aria-current="true"]')).toContainText('v2 vessel-events');
+  await page.keyboard.press('g');
+  await page.keyboard.press('n');
+  await expect(zone(page, 'Needs you').locator('[data-row]').first()).toHaveAttribute('aria-current', 'true');
+
+  // j walks Now, then Today, then Later: To file, then This week.
+  const current = page.locator('[data-row][aria-current="true"]');
+  const lanes: string[] = [];
+  // Every row on screen: Needs you, To file and This week.
+  const rows = await page.locator('[data-cockpit-zone] [data-row]').count();
+  for (let n = 0; n < rows - 1; n++) {
+    const id = (await current.getAttribute('data-row'))!;
+    lanes.push((await current.getAttribute('data-lane'))!);
+    await page.keyboard.press('j');
+    await expect(current).not.toHaveAttribute('data-row', id);
+  }
+  lanes.push((await current.getAttribute('data-lane'))!);
+  const runs = lanes.filter((l, n) => l !== lanes[n - 1]);
+  expect(runs).toEqual(['now', 'failed', 'today', 'file', 'week']);
+
+  // Esc closes the panel; t shows tomorrow.
+  await page.keyboard.press('Escape');
+  await expect(panel(page)).toHaveCount(0);
+  await page.keyboard.press('t');
+  await expect(zone(page, 'Time').getByRole('button', { name: 'Tomorrow' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(zone(page, 'Time').getByRole('list', { name: 'All day' })).toContainText('Sales kick-off');
+  await expect(zone(page, 'Time').getByRole('list', { name: 'Tomorrow’s meetings' }).getByRole('listitem')).toHaveText([/10:00 Q4 roadmap review/, /15:00 Insights APIs sync/]);
+  await expect(page.getByTestId('now-line')).toHaveCount(0);
+  await page.keyboard.press('t');
+  await expect(zone(page, 'Time').getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Low priority opens in the Later zone in place of its lists; Esc comes back.
+  const later = zone(page, 'Later');
+  await later.getByRole('button', { name: /low priority · check triage/ }).click();
+  await expect(later.getByRole('region', { name: 'Low priority' })).toBeVisible();
+  await expect(later.getByRole('region', { name: 'To file' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(later.getByRole('region', { name: 'To file' })).toBeVisible();
+  await later.getByRole('button', { name: /snoozed · next back/ }).click();
+  await expect(later.getByRole('region', { name: 'Snoozed' }).locator('[data-row]')).toHaveCount(1);
+  await later.getByRole('button', { name: 'Back to Later (Esc)' }).click();
+  await expect(later.getByRole('region', { name: 'This week' })).toBeVisible();
+});
+
+test('J58: a missed deadline turns its pin red, says Overdue and sits at the now-line (story 3.1)', async ({ page }) => {
+  await afternoon(page);
+  const pins = zone(page, 'Time').getByRole('list', { name: 'Deadlines' }).getByRole('button');
+  await expect(pins.filter({ hasText: 'Answer the three pricing' })).toHaveAttribute('data-pin', 'now');
+  // 13:58, then 14:08: the pricing questions were due at 14:00, so they join the licensing wording at the now-line.
+  await control(page, '+10 min');
+  await control(page, '+10 min');
+  await expect(pins).toHaveText(['2 overdue']);
+  await expect(pins).toHaveAttribute('data-pin', 'late');
+  await expect(zone(page, 'Needs you').locator('[data-row]').filter({ hasText: 'Insights APIs v2 pricing' })).toContainText('14:00 · overdue');
+  await expect(page.getByTestId('next-meeting')).toContainText('NOW · UNTIL 15:00');
+});
+
+test('J59: below 1600 px the Inbox keeps the list and the agenda strip (CK-3.1, 3.7)', async ({ page }) => {
+  await page.setViewportSize({ width: 1599, height: 1000 });
+  await page.goto('/');
+  await expect(page.getByRole('region', { name: 'Inbox list' })).toBeVisible();
+  await expect(zone(page, 'Time')).toHaveCount(0);
+  await expect(zone(page, 'Later')).toHaveCount(0);
+  await expect(page.getByTestId('inbox-footer')).toBeVisible();
+  // Widening the window brings the cockpit, without a reload.
+  await page.setViewportSize({ width: 1728, height: 1000 });
+  await expect(zone(page, 'Time')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Inbox list' })).toHaveCount(0);
+});

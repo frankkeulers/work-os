@@ -68,4 +68,8 @@ export const JOURNEYS: Journey[] = [
     start: (c) => (fresh(c), later(() => c.simulatePoll('vip_dm'), 2500), `/?item=${encodeURIComponent(c.itemIdForKey('t2') ?? '')}`),
   },
   { id: 'J51', group: 'Cockpit', title: 'Health from across the desk', start: (c) => (fresh(c), c.setFlag('health_stale'), '/') },
+  { id: 'J56', group: 'Cockpit', title: 'Three zones at a glance', start: (c) => (c.cockpitAfternoon(), '/') },
+  { id: 'J57', group: 'Cockpit', title: 'Clear what’s due before the meeting', start: (c) => (c.cockpitAfternoon(), '/') },
+  { id: 'J58', group: 'Cockpit', title: 'A deadline passes', start: (c) => (c.cockpitAfternoon(), '/') },
+  { id: 'J59', group: 'Cockpit', title: 'A narrower window', start: (c) => (fresh(c), '/') },
 ];

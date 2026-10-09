@@ -13,14 +13,20 @@ import { useShell } from '../components/Shell';
 import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
 import { useApiQuery } from '../hooks/useApiQuery';
 import { useLookedAt } from '../hooks/useLookedAt';
+import { useWideLayout } from '../hooks/useLayout';
 import { useStableGroups, type ShownRow } from '../hooks/useStableGroups';
 import { useNow } from '../hooks/useNow';
+import type { AgendaDay } from '../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
+import { targetChip } from '../lib/lanes';
 import { INBOX_SORT_LABEL, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
 import { NEW_FOR_MS, usePrefs } from '../store/prefs';
 import { useUserMoves } from '../store/userMoves';
 import { errorToast, toast } from '../store/toasts';
 import { DueChip, NeedTag, StatusChip } from './inbox/chips';
+import { CockpitRow, LaterRow } from './inbox/cockpit/rows';
+import { TimeColumn } from './inbox/cockpit/TimeColumn';
+import { LOWER, LaterZone, NeedsYouZone, type Lower } from './inbox/cockpit/zones';
 import { ItemPanel } from './inbox/ItemPanel';
 
 // The two groups on screen (FR-8.1). Failed triage sits in Needs you, untriaged, so it isn't missed.
@@ -361,16 +367,8 @@ const GROUPS: { id: Group; title: string; dot: string }[] = [
   { id: 'file', title: 'To file', dot: 'var(--teal-solid)' },
 ];
 
-// Off the main list: one footer link each (Waiting's link is in the header), opening one list at a time.
-type Lower = 'week' | 'else' | 'snoozed' | 'done' | 'waiting';
-
-const LOWER: Record<Lower, { title: string; note: string }> = {
-  week: { title: 'This week', note: 'Due after today. Each moves to Needs you on the day it falls due.' },
-  else: { title: 'Low priority', note: 'No action and nothing to file. Correct any that are wrong.' },
-  snoozed: { title: 'Snoozed', note: 'Each comes back at its snooze time, or early if a new reply makes it Now.' },
-  done: { title: 'Done', note: 'Comes back if someone other than you replies.' },
-  waiting: { title: 'Waiting for quiet window', note: 'Still active. Triage runs once each thread has been quiet for a while.' },
-};
+// Off the main list (LOWER, Lower): one footer link each (Waiting's link is in the header), opening
+// one list at a time. On the cockpit they open in the Later zone.
 
 /** Low priority leads as an outlined button; Snoozed and Done are quiet links at the far end. */
 function FooterLinks({ by, open, onToggle }: { by: Record<Lower, ItemSummary[]>; open: Lower | null; onToggle: (g: Lower) => void }) {
@@ -415,14 +413,6 @@ function FooterLinks({ by, open, onToggle }: { by: Record<Lower, ItemSummary[]>;
       ))}
     </div>
   );
-}
-
-/** "Insights APIs › Decisions" for Confluence, "Vault · Resources" for the vault. */
-function targetChip(i: ItemSummary): string | undefined {
-  if (i.lane !== 'file') return undefined;
-  if (i.triage?.confluence && i.targetHints.confluence && !i.containsPeopleObservations) return i.targetHints.confluence;
-  const v = i.targetHints.vault;
-  return v ? `Vault · ${v.split('/')[0]}` : undefined;
 }
 
 function lowerMeta(i: ItemSummary, now: Date): string | undefined {
@@ -651,15 +641,32 @@ function CommitmentsGroup() {
 
 // ---------- Page ----------
 
+/**
+ * The rows j/k walk, as they show. The list: Needs you, To file, then the footer's open list. The
+ * cockpit (CK-3.3): Now, Today, then Later as it shows, To file and This week, or the list open there.
+ */
+function cockpitOrder(needsRows: ShownRow[], fileRows: ShownRow[], by: Record<Lower, ItemSummary[]>, open: Lower | null, wide: boolean) {
+  const ids = (rows: ShownRow[]) => rows.filter((r) => !r.leaving).map((r) => r.item.id);
+  // This week is always on screen on the cockpit, so it doesn't open as a list there.
+  const listOpen = open && !(wide && open === 'week') ? open : null;
+  const list = listOpen ? by[listOpen].map((i) => i.id) : [];
+  const needs = wide ? [...ids(needsRows.filter((r) => r.item.lane === 'now')), ...ids(needsRows.filter((r) => r.item.lane !== 'now'))] : ids(needsRows);
+  const later = wide ? (listOpen ? list : [...ids(fileRows), ...by.week.map((i) => i.id)]) : ids(fileRows);
+  return { order: wide ? [...needs, ...later] : [...needs, ...later, ...list], firstNeeds: needs[0], firstLater: later[0] };
+}
+
+/** How long after g its second key counts. */
+const G_WINDOW_MS = 1_000;
+const rowEl = (id: string) => document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
 const keyOf = (q: URLSearchParams) => `${q.get('item')}:${parseType(q.get('file'))}`;
 
 /**
- * Clicks here aren't "outside" the item panel: rows switch the item; links leave the page anyway
+ * Clicks here aren't "outside" the item panel: rows, and the cockpit's deadline pins, switch the item; links leave the page anyway
  * (closing would rewrite the URL mid-navigation); the page header's and the sidebar's buttons
  * (Poll, Usage, Scope) work alongside it; and layers (toasts, dialogs, menus, the scenario drawer)
  * sit above it.
  */
-const NOT_OUTSIDE = '[data-row], [data-row-action], [data-agenda-event] button, a[href], [data-inbox-header] button, nav button, [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
+const NOT_OUTSIDE = '[data-row], [data-row-action], [data-open-item], [data-agenda-event] button, a[href], [data-inbox-header] button, nav button, [aria-live], [data-scenarios], [data-overlay], [role="dialog"], [role="menu"]';
 
 export function InboxPage() {
   const { inbox: q } = useShell();
@@ -679,6 +686,9 @@ export function InboxPage() {
   const now = useNow(60_000);
   const sort = usePrefs((s) => s.inboxSort);
   const grouped = usePrefs((s) => s.groupByChannel);
+  // The three-zone cockpit on a wide window (CK-3.1); today's list below 1600 px.
+  const wide = useWideLayout();
+  const [day, setDay] = useState<AgendaDay>('today');
 
   const by = useMemo(() => {
     const m: Record<Group | Lower, ItemSummary[]> = { needs: sortItems(all, sort, true, now), file: [], week: [], else: [], waiting: [], snoozed: [], done: [] };
@@ -700,31 +710,42 @@ export function InboxPage() {
     return m;
   }, [all]);
   // Rows hold their place (CK-1.2): the order on screen changes only where it must, and not under
-  // the open panel. The first load, and changing the sort, the grouping or the scope, start afresh.
+  // the open panel. The first load, and changing the sort, the grouping, the scope or the layout,
+  // start afresh. Each scroller has its own call, as it keeps its own rows still: the list holds
+  // both groups; on the cockpit, Needs you and Later scroll apart, and To file is in Later.
   const listRef = useRef<HTMLElement>(null);
+  const laterRef = useRef<HTMLElement>(null);
   const selItem = sel ? all.find((i) => i.id === sel) : undefined;
-  const topGroups = useMemo(() => ({ needs: by.needs, file: by.file }), [by]);
+  const topGroups = useMemo(() => (wide ? { needs: by.needs } : { needs: by.needs, file: by.file }) as Record<Group, ItemSummary[]>, [by, wide]);
+  const laterGroups = useMemo(() => (wide ? { file: by.file } : {}) as Record<'file', ItemSummary[]>, [by, wide]);
   // Rows that land even under the panel: those Frank moved himself, the open item, and those he
   // asked to see from the pill (until the panel closes).
   const userMoves = useUserMoves((s) => s.ids);
   const [released, setReleased] = useState<ReadonlySet<string>>(() => new Set());
   if (!selItem && released.size) setReleased(new Set());
   const exempt = useMemo(() => new Set([...Object.keys(userMoves), ...released, ...(sel ? [sel] : [])]), [userMoves, released, sel]);
-  const stable = useStableGroups(topGroups, listRef, { resetKey: `${sort}:${grouped}:${full}:${inbox ? 'loaded' : 'loading'}`, frozen: !!selItem, exempt });
+  const stableOpts = { resetKey: `${sort}:${grouped}:${full}:${wide}:${inbox ? 'loaded' : 'loading'}`, frozen: !!selItem, exempt };
+  const stableTop = useStableGroups(topGroups, listRef, stableOpts);
+  const stableLater = useStableGroups(laterGroups, laterRef, stableOpts);
+  const fileStable = wide ? stableLater : stableTop;
+  const stable = {
+    above: { needs: stableTop.above.needs, file: fileStable.above.file },
+    pending: { needs: stableTop.pending.needs, file: fileStable.pending.file },
+  };
   // The pill's target, scrolled to once it's on screen.
   const goTo = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     const id = goTo.current;
-    const el = id ? listRef.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`) : undefined;
+    const el = id ? rowEl(id) : undefined;
     if (!el) return;
     goTo.current = undefined;
     el.scrollIntoView({ block: 'center' });
   });
-  // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open.
-  const order = useMemo(
-    () => [...stable.rows.needs, ...stable.rows.file].filter((r) => !r.leaving).map((r) => r.item.id).concat(open ? by[open].map((i) => i.id) : []),
-    [stable.rows, by, open],
-  );
+  // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open. On the
+  // cockpit (CK-3.3): Now, Today, then Later as it shows, To file and This week or the list open there.
+  const needsRows = stableTop.rows.needs;
+  const fileRows = fileStable.rows.file;
+  const { order, firstNeeds, firstLater } = useMemo(() => cockpitOrder(needsRows, fileRows, by, open, wide), [needsRows, fileRows, by, open, wide]);
   const idx = sel ? order.indexOf(sel) : -1;
   // Where the cursor was, so j/k carry on from there after the item leaves the list.
   const [anchor, setAnchor] = useState(0);
@@ -766,11 +787,18 @@ export function InboxPage() {
   const markNew = usePrefs((s) => s.markNew);
   const clearNew = usePrefs((s) => s.clearNew);
   useEffect(() => {
-    if (stable.entered.ids.length) markNew(stable.entered.ids, api.now());
-  }, [stable.entered, markNew]);
+    if (stableTop.entered.ids.length) markNew(stableTop.entered.ids, api.now());
+  }, [stableTop.entered, markNew]);
+  useEffect(() => {
+    if (stableLater.entered.ids.length) markNew(stableLater.entered.ids, api.now());
+  }, [stableLater.entered, markNew]);
   const isNew = (id: string) => id in newItems && now.getTime() - Date.parse(newItems[id]) < NEW_FOR_MS;
-  const unseen = useMemo(() => [...stable.rows.needs, ...stable.rows.file].filter((r) => !r.leaving && r.item.id in newItems).map((r) => r.item.id), [stable.rows, newItems]);
-  useLookedAt(listRef, unseen);
+  const unseen = useMemo(() => {
+    const ids = (rows: ShownRow[]) => rows.filter((r) => !r.leaving && r.item.id in newItems).map((r) => r.item.id);
+    return wide ? { top: ids(needsRows), later: ids(fileRows) } : { top: ids([...needsRows, ...fileRows]), later: [] };
+  }, [needsRows, fileRows, newItems, wide]);
+  useLookedAt(listRef, unseen.top);
+  useLookedAt(laterRef, unseen.later);
 
   const pick = useCallback(
     (id: string | undefined) => {
@@ -778,7 +806,7 @@ export function InboxPage() {
       clearNew(id);
       setPanelOpen(true);
       setSearch({ item: id }, { replace: true });
-      const el = document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
+      const el = rowEl(id);
       el?.focus({ preventScroll: true });
       el?.scrollIntoView({ block: 'nearest' });
     },
@@ -823,10 +851,19 @@ export function InboxPage() {
     else if (!sel && open && first) setSearch({ item: first }, { replace: true });
   }, [inbox, missing, sel, first, setSearch]);
 
+  // g then n or l, within a second (CK-3.3).
+  const gAt = useRef(0);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
-      if (e.key === 'j') {
+      const afterG = Date.now() - gAt.current < G_WINDOW_MS;
+      gAt.current = 0;
+      if (afterG && (e.key === 'n' || e.key === 'l')) {
+        e.preventDefault();
+        pick(e.key === 'n' ? firstNeeds : firstLater);
+      } else if (e.key === 'g') {
+        gAt.current = Date.now();
+      } else if (e.key === 'j') {
         e.preventDefault();
         step(1);
       } else if (e.key === 'k') {
@@ -835,6 +872,13 @@ export function InboxPage() {
       } else if (e.key === 'Escape' && sel) {
         e.preventDefault();
         close();
+      } else if (e.key === 'Escape' && wide && open) {
+        // A list open in the Later zone goes back to its default view.
+        e.preventDefault();
+        setOpen(null);
+      } else if (e.key === 't' && wide) {
+        e.preventDefault();
+        setDay((d) => (d === 'today' ? 'tomorrow' : 'today'));
       } else if (e.key === 'o' && sel) {
         e.preventDefault();
         navigate(itemPath(sel));
@@ -842,7 +886,7 @@ export function InboxPage() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [step, close, sel, navigate]);
+  }, [step, close, sel, navigate, pick, firstNeeds, firstLater, wide, open]);
 
   // A click outside the panel closes it. On click rather than mousedown, so the control you
   // clicked still gets the click before the list widens.
@@ -868,31 +912,33 @@ export function InboxPage() {
   const topCount = by.needs.length + by.file.length;
   const counts = laneCounts(all);
   // Under Priority, a darker hairline closes the Now block at the top of Needs you. Grouped by
-  // channel, each Slack channel's run of rows opens with its name.
-  const row = (r: ShownRow, n: number, list: ShownRow[]) => {
+  // channel, each Slack channel's run of rows opens with its name. The cockpit has its own rows:
+  // two lines in Needs you, the summary first in Later.
+  const row = (r: ShownRow, n: number, list: ShownRow[], variant: 'list' | 'needs' | 'later' = 'list') => {
     const i = r.item;
     const key = grouped ? channelKey(i) : undefined;
     const head = key && (n === 0 || channelKey(list[n - 1].item) !== key);
+    const props = { item: i, selected: i.id === sel, isNew: !r.leaving && isNew(i.id), leaving: r.leaving, onPick: () => pick(i.id) };
     return [
       head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => !x.leaving && channelKey(x.item) === key).map((x) => x.item)} topics={openTopics.get(key) ?? 0} />,
-      <QueueRow
-        key={i.id}
-        item={i}
-        selected={i.id === sel}
-        isNew={!r.leaving && isNew(i.id)}
-        leaving={r.leaving}
-        divide={!grouped && sort === 'priority' && n > 0 && list[n - 1].item.lane === 'now' && i.lane !== 'now'}
-        onPick={() => pick(i.id)}
-      />,
+      variant === 'needs' ? (
+        <CockpitRow key={i.id} {...props} />
+      ) : variant === 'later' ? (
+        <LaterRow key={i.id} {...props} meta={isTop(i) ? undefined : lowerMeta(i, now)} />
+      ) : (
+        <QueueRow key={i.id} {...props} divide={!grouped && sort === 'priority' && n > 0 && list[n - 1].item.lane === 'now' && i.lane !== 'now'} />
+      ),
     ];
   };
-  const lowerRow = (i: ItemSummary, n: number, list: ItemSummary[]) => row({ item: i }, n, list.map((item) => ({ item })));
+  const groupRows = { needs: needsRows, file: fileRows };
+  const lowerRow = (i: ItemSummary, n: number, list: ItemSummary[]) => row({ item: i }, n, list.map((item) => ({ item })), wide ? 'later' : 'list');
+  const openItem = (id: string) => (all.some((i) => i.id === id) ? pick(id) : navigate(itemPath(id)));
   const pillItems = (g: Group) => [...stable.pending[g].map((p) => p.id), ...stable.above[g]].flatMap((id) => all.filter((i) => i.id === id));
   const goNew = (g: Group) => {
     const held = stable.pending[g].map((p) => p.id);
     if (held.length) setReleased(new Set([...released, ...held]));
     goTo.current = held[0] ?? stable.above[g][0];
-    const el = goTo.current ? listRef.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(goTo.current)}"]`) : undefined;
+    const el = goTo.current ? rowEl(goTo.current) : undefined;
     if (el) {
       goTo.current = undefined;
       el.scrollIntoView({ block: 'center' });
@@ -909,7 +955,7 @@ export function InboxPage() {
       <header data-inbox-header data-health={health?.tone} className={cx('flex h-16 shrink-0 items-center gap-2 whitespace-nowrap border-b px-6', HEALTH_BAR[health?.tone ?? 'ok'])}>
         <h1 className="m-0 text-xl font-semibold tracking-[-0.01em]">Inbox</h1>
         <CountPills counts={counts} />
-        <SortMenu />
+        {!wide && <SortMenu />}
         <span className="flex-1" />
         <PollStatus inbox={inbox} />
         <StillActive count={by.waiting.length} open={open === 'waiting'} onToggle={() => toggle('waiting')} />
@@ -935,10 +981,35 @@ export function InboxPage() {
         <UsagePopover inbox={inbox} />
       </header>
 
-      <Agenda full={full} onOpenItem={(id) => (all.some((i) => i.id === id) ? pick(id) : navigate(itemPath(id)))} />
+      {!wide && <Agenda full={full} onOpenItem={openItem} />}
       <Banners inbox={inbox} />
 
       <div className="relative flex min-h-0 flex-1">
+        {wide ? (
+          <>
+            <TimeColumn items={all} day={day} setDay={setDay} onOpenItem={openItem} />
+            <NeedsYouZone
+              rows={needsRows}
+              render={(r, n, list) => row(r, n, list, 'needs')}
+              pill={<NewPill group="needs" items={pillItems('needs')} above={stable.pending.needs.every((p) => p.above)} onGo={() => goNew('needs')} />}
+              scrollerRef={listRef}
+              sortMenu={<SortMenu />}
+              empty={inbox.firstRun ? <FirstRun inbox={inbox} /> : undefined}
+            >
+              {full && <CommitmentsGroup />}
+            </NeedsYouZone>
+            <LaterZone
+              fileRows={fileRows}
+              by={by}
+              open={open}
+              onOpen={setOpen}
+              renderFile={(r, n, list) => row(r, n, list, 'later')}
+              renderLower={lowerRow}
+              pill={<NewPill group="file" items={pillItems('file')} above={stable.pending.file.every((p) => p.above)} onGo={() => goNew('file')} />}
+              scrollerRef={laterRef}
+            />
+          </>
+        ) : (
         <section ref={listRef} aria-label="Inbox list" className="min-w-0 flex-[1_1_480px] overflow-y-auto pb-6 pt-2 [overflow-anchor:none]">
 
           {inbox.firstRun ? (
@@ -955,7 +1026,7 @@ export function InboxPage() {
                       <GroupHead dot={g.dot} title={g.title} count={by[g.id].length} />
                     </div>
                     <div className="border-b border-line-soft">
-                      {stable.rows[g.id].length ? stable.rows[g.id].flatMap(row) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
+                      {groupRows[g.id].length ? groupRows[g.id].flatMap((r, n, list) => row(r, n, list)) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
                     </div>
                   </section>
                 ))
@@ -980,6 +1051,7 @@ export function InboxPage() {
             </>
           )}
         </section>
+        )}
 
         {panel && (
           <>
@@ -990,7 +1062,7 @@ export function InboxPage() {
               data-state={closing ? 'closed' : 'open'}
               inert={closing}
               onAnimationEnd={(e) => e.target === e.currentTarget && closing && setShown(null)}
-              className="item-panel absolute inset-y-0 right-0 z-30 flex w-full max-w-[600px] flex-col"
+              className={cx('item-panel absolute inset-y-0 right-0 z-30 flex w-full flex-col', wide ? 'max-w-[640px]' : 'max-w-[600px]')}
             >
               <ItemPanel
                 item={panel.item}

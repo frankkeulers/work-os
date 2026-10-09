@@ -41,6 +41,8 @@ export interface MockControls {
   advanceClock(mins: number): void;
   setClockLondon(hhmm: string): void;
   wakeFromSleep(): void;
+  /** The cockpit's afternoon (CK-3): Outlook connected with its calendar on, at 13:48, twelve minutes before the renewal call. */
+  cockpitAfternoon(): void;
   simulatePoll(outcome: PollOutcome): void;
   setNextDraftOutcome(o: DraftOutcome): void;
   setFlag(flag: StateFlag): void;

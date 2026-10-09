@@ -80,7 +80,8 @@ export function useStableGroups<G extends string>(groups: Record<G, ItemSummary[
   const groupsKey = ids.join(',');
   const measure = useCallback(() => {
     const el = scrollerRef.current;
-    if (!el) return;
+    // No groups: the cockpit's second call while the list layout shows (Inbox).
+    if (!el || !groupsKey) return;
     const box = el.getBoundingClientRect();
     const atTop = el.scrollTop <= 0;
     const next = {} as Record<G, Viewport>;

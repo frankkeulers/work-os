@@ -61,7 +61,9 @@ The calendar is off until you turn on **Read calendar** in
 [Settings › Outlook](/settings/outlook). It reads through the same connector, so connect Outlook
 first.
 
-- **The agenda.** Today's meetings show in a strip above the inbox, the one on now picked out;
+- **The agenda.** On a wide screen, today's meetings fill the inbox's time column, with your next
+  meeting and what's due before it on top (see [Three zones](inbox.md#the-time-column)). In a
+  narrower window they show in a strip above the inbox, the one on now picked out;
   **Tomorrow** shows the next day's. Cancelled meetings and ones you declined are left out. Choose
   a meeting to open it in Outlook. When the meetings don't all fit, the strip fades at the edge and
   an arrow there scrolls to the rest.
@@ -79,7 +81,8 @@ short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it 
 
 ### Now and next
 
-Five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
+On a wide screen the time column's meeting card does this job, and the sidebar leaves it out. In a
+narrower window, five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
 the title and a countdown, on every page; on the agenda, its meeting says **in 4 min**. In the last
 two minutes the countdown turns amber. Once it starts, the sidebar shows it under **Now**, with
 when it ends, until it does. Choose a meeting there to open it in Outlook, where the Join button is.

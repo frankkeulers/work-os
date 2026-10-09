@@ -12,6 +12,7 @@ interface Prefs extends Profile {
   panelOpen: boolean; // the Inbox item panel opens on the first item until it's closed
   scope: Scope;
   navCollapsed: boolean; // the sidebar shows icons only
+  navCollapsedWide: boolean; // the same on the three-zone cockpit, where the rail is the default (CK-3.1)
   inboxSort: InboxSort;
   groupByChannel: boolean; // the Inbox lists Slack items under their channel
   avatar?: string; // the profile picture, a small square data: URL (lib/avatar.ts); initials or a person icon until set
@@ -25,6 +26,7 @@ interface Prefs extends Profile {
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
   setNavCollapsed: (collapsed: boolean) => void;
+  setNavCollapsedWide: (collapsed: boolean) => void;
   setInboxSort: (s: InboxSort) => void;
   setGroupByChannel: (on: boolean) => void;
   setAvatar: (dataUrl: string | undefined) => void;
@@ -50,6 +52,7 @@ export const usePrefs = create<Prefs>()(
       panelOpen: true,
       scope: 'mvp',
       navCollapsed: false,
+      navCollapsedWide: true,
       // Cockpit CK-1.1: Priority order and no channel groups by default. A choice already saved in
       // this browser is kept (persist merges it over these).
       inboxSort: 'priority',
@@ -61,6 +64,7 @@ export const usePrefs = create<Prefs>()(
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       setScope: (scope) => set({ scope }),
       setNavCollapsed: (navCollapsed) => set({ navCollapsed }),
+      setNavCollapsedWide: (navCollapsedWide) => set({ navCollapsedWide }),
       setInboxSort: (inboxSort) => set({ inboxSort }),
       setGroupByChannel: (groupByChannel) => set({ groupByChannel }),
       setAvatar: (avatar) => set({ avatar }),

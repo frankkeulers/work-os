@@ -1404,6 +1404,18 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emitAll();
   }
 
+  cockpitAfternoon() {
+    this.reset();
+    this.setClockLondon('13:48');
+    this.tick(); // snoozes due back by then come back
+    this.s.outlook = { connectorId: MOCK_CONNECTOR_ID, account: { name: 'Frank Keulers', address: 'frank.keulers@polestarglobal.example' }, read: true };
+    const src = this.s.settings.sources;
+    this.s.settings = { ...this.s.settings, sources: { ...src, outlook: { ...src?.outlook, enabled: true }, calendar: { ...src?.calendar, enabled: true } } };
+    void this.runPoll('manual', { threads: OUTLOOK_THREADS });
+    this.readCalendarOnce();
+    this.emitAll();
+  }
+
   wakeFromSleep() {
     this.advanceClock(180);
   }

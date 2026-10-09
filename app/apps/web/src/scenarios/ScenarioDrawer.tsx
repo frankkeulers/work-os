@@ -83,6 +83,7 @@ function Controls() {
         <Ctl onClick={() => mockControls.setClockLondon('13:56')}>13:56 (renewal call at 14:00)</Ctl>
         <Ctl onClick={() => mockControls.setClockLondon('14:28')}>14:28 (renewal call on, sign-off at 14:30)</Ctl>
         <Ctl onClick={() => mockControls.wakeFromSleep()}>Wake from 3 h sleep</Ctl>
+        <Ctl onClick={() => mockControls.cockpitAfternoon()}>13:48 with Outlook and the calendar on (cockpit)</Ctl>
       </Group>
       <Group title="Poll outcome" hint={`${s.timelinePending} scripted arrivals left`}>
         {POLLS.map(([o, l]) => (
