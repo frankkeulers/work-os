@@ -1,4 +1,4 @@
-import { londonAt, type DepState, type Item, type Message, type Ms365Connector, type Settings } from '@work-os/shared';
+import { londonAt, mondayOf, type DepState, type Item, type Message, type Ms365Connector, type Settings } from '@work-os/shared';
 import type { Logger } from '../../log';
 import { SourceError } from '../errors';
 import type { EventSearchArgs, Ms365Api } from '../ms365/client';
@@ -11,8 +11,9 @@ import { inviteBody, inviteItem, inviteItemId, inviteMessage, isCandidate, moved
 import type { CalendarSnapshot, CalendarStore, InviteGroup, SnapEvent } from './store';
 
 // The Outlook calendar source (Phase 2, R2.8, P0-12). Calendar search filters on start time and has
-// no modified cursor, so a poll looks at the whole window, from yesterday to two weeks ahead, and
-// compares it with the last poll's snapshot:
+// no modified cursor, so a poll looks at the whole window, from this week's Monday (or yesterday,
+// on a Monday) to two weeks ahead, and compares it with the last poll's snapshot. The week view
+// (cockpit CK-5.6) shows the days of this week already gone; past meetings are never read:
 //   1. searches the window, oldest first, the first page alone and the rest in one relay run;
 //   2. reads, at most MAX_READS, soonest first: someone else's new or changed meetings, then every
 //      event in an open invite (search has no answer, so only a read shows Frank has answered). New
@@ -25,6 +26,13 @@ import type { CalendarSnapshot, CalendarStore, InviteGroup, SnapEvent } from './
 // The cursor is only when the poll ran: the snapshot is the state.
 
 export const MAX_PAGES = 8; // 200 events in the window
+
+/** Where the window starts: this week's Monday, London time, or yesterday when that is earlier. */
+export function windowStart(now: Date): string {
+  const yesterday = londonAt(now, '00:00', -1);
+  const monday = londonAt(new Date(`${mondayOf(now)}T12:00:00Z`), '00:00');
+  return monday < yesterday ? monday : yesterday;
+}
 export const MAX_READS = 15; // per poll: two relay runs
 
 /** Why an invite item closed, by what happened to the last of its events. */
@@ -77,7 +85,7 @@ export class CalendarAdapter implements SourceAdapter {
     const now = ctx.now;
     const prev = this.o.store.snapshot;
     const prevById = new Map(prev?.events.map((e) => [e.id, e]) ?? []);
-    const from = londonAt(now, '00:00', -1);
+    const from = windowStart(now);
     const to = londonAt(now, '00:00', 15);
     const rows = await this.search(from, to, ctx.signal);
 

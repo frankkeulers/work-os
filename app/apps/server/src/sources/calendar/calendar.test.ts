@@ -13,7 +13,7 @@ import { FakeMs365, fakeEmail, fakeEvent } from '../ms365/fakeMs365';
 import { OutlookAdapter, RecentEmails } from '../outlook/adapter';
 import type { EventDetail } from '../ms365/types';
 import type { MeInfo } from '../outlook/normalise';
-import { CalendarAdapter, MAX_READS } from './adapter';
+import { CalendarAdapter, MAX_READS, windowStart } from './adapter';
 import { isMeetingMail } from './mail';
 import { inviteBody, inviteItemId, responseOf, snapFromRow } from './normalise';
 import { CalendarStore } from './store';
@@ -101,7 +101,7 @@ describe('the calendar adapter', () => {
     store = CalendarStore.memory();
   });
 
-  it('searches yesterday to two weeks ahead, London time, reads only meetings Frank may owe an answer to, and opens an invite item', async () => {
+  it('searches from this week’s Monday to two weeks ahead, London time, reads only meetings Frank may owe an answer to, and opens an invite item', async () => {
     const q4 = invite();
     const accepted = invite({ subject: 'Ops sync', attendees: [{ ...FRANK, response: 'accepted' }], start: at(3), end: at(4) });
     box.calendar.push(
@@ -113,7 +113,7 @@ describe('the calendar adapter', () => {
       invite({ subject: 'Focus time', attendees: [] }),
     );
     const r = await fetch();
-    expect(box.eventSearches).toEqual([[{ after: '2026-10-06T23:00:00.000Z', before: '2026-10-22T23:00:00.000Z', offset: 0 }]]);
+    expect(box.eventSearches).toEqual([[{ after: '2026-10-04T23:00:00.000Z', before: '2026-10-22T23:00:00.000Z', offset: 0 }]]); // Thursday: from Monday (CK-5.6)
     expect(box.eventReads).toEqual([[uri(accepted), uri(q4)]]); // soonest first
     expect(r.resolved).toEqual([]);
     expect(r.items).toHaveLength(1);
@@ -352,5 +352,15 @@ describe('meeting mail while the calendar is on (R2.8)', () => {
     const poll = (calendar?: () => typeof snap | undefined) => new OutlookAdapter({ api: box, account: () => FRANK, recent: new RecentEmails(), calendar }).fetchSince(undefined, { signal: new AbortController().signal, now: NOW, reason: 'scheduled' });
     expect((await poll(() => snap)).items.map((i) => i.title)).toEqual(['Pricing']);
     expect((await poll(() => undefined)).items.map((i) => i.title)).toEqual(['Q4 roadmap review', 'Pricing']);
+  });
+});
+
+describe('the calendar window (cockpit CK-5.6)', () => {
+  it('starts on this week’s Monday, London time, or yesterday when that is earlier', () => {
+    expect(windowStart(new Date('2026-10-08T12:00:00.000Z'))).toBe('2026-10-04T23:00:00.000Z'); // Thursday: Monday
+    expect(windowStart(new Date('2026-10-11T22:00:00.000Z'))).toBe('2026-10-04T23:00:00.000Z'); // Sunday night: still Monday
+    expect(windowStart(new Date('2026-10-05T09:00:00.000Z'))).toBe('2026-10-03T23:00:00.000Z'); // Monday: yesterday
+    expect(windowStart(new Date('2026-10-04T23:30:00.000Z'))).toBe('2026-10-03T23:00:00.000Z'); // Monday 00:30 in London, Sunday in UTC
+    expect(windowStart(new Date('2026-10-28T12:00:00.000Z'))).toBe('2026-10-26T00:00:00.000Z'); // after the clocks go back
   });
 });

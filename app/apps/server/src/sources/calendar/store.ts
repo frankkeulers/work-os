@@ -2,8 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { writeJsonAtomic } from '../../store/atomic';
 
-// state/calendar.json (R2.8): the calendar as the last poll saw it, from yesterday to two weeks
-// ahead. It is the agenda, and what the next poll compares against to see what moved, was
+// state/calendar.json (R2.8): the calendar as the last poll saw it, from this week's Monday to two weeks
+// ahead. It is the agenda and the week view (CK-5.6), and what the next poll compares against to see what moved, was
 // cancelled or was answered. It is not the event log: nothing here is history. Subjects, times,
 // names and addresses and category names only: never an event's body, its Teams text or its join link.
 
