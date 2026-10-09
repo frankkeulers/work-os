@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useBlocker, useNavigate, useSearchParams, type BlockerFunction } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import type { ActionType } from '@work-os/shared';
-import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
-import { parseType } from '../components/ActionPanel';
+import { api, type InboxView, type ItemSummary } from '../api';
 import { Agenda } from '../components/Agenda';
 import { SourceMark } from '../components/BrandIcon';
 import { BrandMark } from '../components/brand/BrandMark';
@@ -11,8 +10,7 @@ import { HealthBanner } from '../components/HealthBanner';
 import { HEALTH_BAR, HealthPill, usePillHealth } from '../components/HealthPill';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
-import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
-import { useApiQuery } from '../hooks/useApiQuery';
+import { Banner, Button, IconButton, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
 import { useLookedAt } from '../hooks/useLookedAt';
 import { useWideLayout } from '../hooks/useLayout';
 import { useStableGroups, type ShownRow } from '../hooks/useStableGroups';
@@ -32,6 +30,8 @@ import { TimeColumn } from './inbox/cockpit/TimeColumn';
 import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox/cockpit/zones';
 import { BatchDone, ItemPanel } from './inbox/ItemPanel';
 import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
+import { LeaveDialog, PanelSlide } from './inbox/PanelSlide';
+import { rowEl, usePanelHost } from './inbox/usePanelHost';
 
 // The two groups on screen (FR-8.1). Failed triage sits in Needs you, untriaged, so it isn't missed.
 const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'week' || i.lane === 'failed' || i.lane === 'file';
@@ -659,8 +659,6 @@ function cockpitOrder(needsRows: ShownRow[], fileRows: ShownRow[], by: Record<Lo
 
 /** How long after g its second key counts. */
 const G_WINDOW_MS = 1_000;
-const rowEl = (id: string) => document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
-const keyOf = (q: URLSearchParams) => `${q.get('item')}:${parseType(q.get('file'))}`;
 
 /**
  * Clicks here aren't "outside" the item panel: rows, and the cockpit's deadline pins, switch the item; links leave the page anyway
@@ -676,9 +674,9 @@ export function InboxPage() {
   const navigate = useNavigate();
   const full = usePrefs((s) => s.scope === 'full');
   const setPanelOpen = usePrefs((s) => s.setPanelOpen);
-  const [search, setSearch] = useSearchParams();
+  // The open item, for holding rows still under it; the panel host below reads the rest of the URL.
+  const [search] = useSearchParams();
   const sel = search.get('item');
-  const filing = parseType(search.get('file'));
 
   // Outlook and Teams are Phase 2 previews: their items only show in Full scope.
   const inScope = useCallback((i: ItemSummary) => full || isLive(i.source), [full]);
@@ -751,42 +749,6 @@ export function InboxPage() {
   const needsRows = stableTop.rows.needs;
   const fileRows = fileStable.rows.file;
   const { order, firstNeeds, firstLater } = useMemo(() => cockpitOrder(needsRows, fileRows, by, open, wide), [needsRows, fileRows, by, open, wide]);
-  const idx = sel ? order.indexOf(sel) : -1;
-  // Where the cursor was, so j/k carry on from there after the item leaves the list.
-  const [anchor, setAnchor] = useState(0);
-  if (idx >= 0 && idx !== anchor) setAnchor(idx);
-  // The panel's last content, kept on screen while it slides out.
-  const [shown, setShown] = useState<{ item: ItemSummary; view?: ItemView; pos: number } | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  const detail = useApiQuery(() => (sel ? api.getItem(sel) : Promise.resolve(undefined)), (n) => (n.topic === 'item' && n.id === sel) || n.topic === 'settings' || n.topic === 'usage', [sel]);
-
-  // Unsaved draft edits belong to one item and filing target. The blocker reads them from a ref,
-  // so a keypress straight after typing can't slip past it before the next render.
-  const editKey = keyOf(search);
-  const [dirtyState, setDirtyState] = useState({ key: '', dirty: false });
-  const dirtyRef = useRef(dirtyState);
-  const dirty = dirtyState.key === editKey && dirtyState.dirty;
-  const onDirty = useCallback(
-    (d: boolean) => {
-      dirtyRef.current = { key: editKey, dirty: d };
-      setDirtyState(dirtyRef.current);
-    },
-    [editKey],
-  );
-  const shouldBlock = useCallback<BlockerFunction>(
-    ({ currentLocation, nextLocation }) =>
-      dirtyRef.current.dirty && dirtyRef.current.key === keyOf(new URLSearchParams(currentLocation.search)) && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search),
-    [],
-  );
-  const blocker = useBlocker(shouldBlock);
-  useEffect(() => {
-    if (!dirty) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
-
   // The New dot (CK-1.3): items that entered a group since Frank last looked.
   const newItems = usePrefs((s) => s.newItems);
   const markNew = usePrefs((s) => s.markNew);
@@ -805,48 +767,22 @@ export function InboxPage() {
   useLookedAt(listRef, unseen.top);
   useLookedAt(laterRef, unseen.later);
 
-  const pick = useCallback(
-    (id: string | undefined) => {
-      if (!id) return;
-      clearNew(id);
-      setPanelOpen(true);
-      // At once, not in a transition: a key pressed straight after (j again, or e) acts on this row.
-      setSearch({ item: id }, { replace: true, flushSync: true });
-      const el = rowEl(id);
-      el?.focus({ preventScroll: true });
-      el?.scrollIntoView({ block: 'nearest' });
-    },
-    [setPanelOpen, setSearch, clearNew],
-  );
-  const step = useCallback(
-    (d: 1 | -1) => {
-      if (!order.length) return;
-      if (idx < 0) return pick(sel ? order[Math.max(0, Math.min(order.length - 1, d > 0 ? anchor : anchor - 1))] : order[0]);
-      pick(order[Math.max(0, Math.min(order.length - 1, idx + d))]);
-    },
-    [order, idx, sel, anchor, pick],
-  );
   // File in a batch (CK-4.1–4.4): ended by closing the panel or opening an item outside it.
   const [batch, setBatch] = useState<Batch | null>(null);
-  const close = useCallback(() => {
-    setBatch(null);
-    setPanelOpen(false);
-    setSearch({}, { replace: true });
-  }, [setPanelOpen, setSearch, setBatch]);
-  const doneAndNext = useCallback(() => {
-    if (!selItem) return;
-    const next = idx >= 0 ? (order[idx + 1] ?? order[idx - 1]) : order[Math.min(anchor, order.length - 1)];
-    if (selItem.status === 'open') void markDoneWithUndo(selItem);
-    if (next && next !== selItem.id) pick(next);
-    else close();
-  }, [selItem, idx, order, anchor, pick, close]);
-  const setFiling = useCallback(
-    (t: ActionType | undefined) => {
-      if (!sel) return;
-      setSearch(t ? { item: sel, file: t === 'vault_note' ? 'vault' : 'confluence' } : { item: sel }, { replace: true });
+  const host = usePanelHost({
+    items: all,
+    order,
+    notOutside: NOT_OUTSIDE,
+    onPick: (id) => {
+      clearNew(id);
+      setPanelOpen(true);
     },
-    [sel, setSearch],
-  );
+    onClose: () => {
+      setBatch(null);
+      setPanelOpen(false);
+    },
+  });
+  const { filing, setSearch, pick, step, close, doneAndNext, setFiling, onDirty, blocker, panelRef, panel, closing } = host;
 
   // The batch opens each item on its filing, its draft started, with the next item's draft
   // running ahead: only one, so stopping wastes at most one draft (CK-4.2).
@@ -940,20 +876,6 @@ export function InboxPage() {
     return () => document.removeEventListener('keydown', onKey);
   }, [step, close, sel, navigate, pick, firstNeeds, firstLater, wide, open, batch]);
 
-  // A click outside the panel closes it. On click rather than mousedown, so the control you
-  // clicked still gets the click before the list widens.
-  useEffect(() => {
-    if (!sel) return;
-    const onClick = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (!t?.isConnected || panelRef.current?.contains(t) || t.closest(NOT_OUTSIDE)) return;
-      if (!(window.getSelection()?.isCollapsed ?? true)) return; // the end of a text selection
-      close();
-    };
-    document.addEventListener('click', onClick);
-    return () => document.removeEventListener('click', onClick);
-  }, [sel, close]);
-
   useEffect(() => {
     document.title = 'Inbox · Work OS';
   }, []);
@@ -999,7 +921,6 @@ export function InboxPage() {
       el.scrollIntoView({ block: 'center' });
     }
   };
-  const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
   // In the To file header (CK-4.1). Not a click outside the panel: it opens the batch there.
   const batchButton = batchIds.length > 0 && (
     <Button size="sm" icon="forward" data-row-action onClick={() => batchFrom({ ids: batchIds, filed: 0, skipped: 0, approved: [], done: false }, 0)}>
@@ -1024,9 +945,6 @@ export function InboxPage() {
           },
         }
       : undefined;
-  if (selItem && (shown?.item !== selItem || shown.view !== view || shown.pos !== idx + 1)) setShown({ item: selItem, view, pos: idx + 1 });
-  const closing = !selItem && !!shown;
-  const panel = selItem ? { item: selItem, view, pos: idx + 1 } : shown;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
@@ -1137,33 +1055,23 @@ export function InboxPage() {
         )}
 
         {panel && (
-          <>
-            {/* Visual only: the list stays scrollable and its rows still switch the item. */}
-            <div aria-hidden="true" data-state={closing ? 'closed' : 'open'} className="item-panel-backdrop pointer-events-none absolute inset-0 z-20 bg-scrim" />
-            <div
-              ref={panelRef}
-              data-state={closing ? 'closed' : 'open'}
-              inert={closing}
-              onAnimationEnd={(e) => e.target === e.currentTarget && closing && setShown(null)}
-              className={cx('item-panel absolute inset-y-0 right-0 z-30 flex w-full flex-col', wide ? 'max-w-[640px]' : 'max-w-[600px]')}
-            >
-              <ItemPanel
-                item={panel.item}
-                view={panel.view}
-                pos={panel.pos}
-                total={order.length}
-                filing={filing}
-                setFiling={setFiling}
-                draftsBudgetHit={inbox.budgets.drafts.hit}
-                onPrev={() => step(-1)}
-                onNext={() => step(1)}
-                onClose={close}
-                onDoneNext={doneAndNext}
-                onDirty={onDirty}
-                batch={batchPanel}
-              />
-            </div>
-          </>
+          <PanelSlide closing={closing} panelRef={panelRef} onSlidOut={host.onSlidOut} className={wide ? 'max-w-[640px]' : 'max-w-[600px]'}>
+            <ItemPanel
+              item={panel.item}
+              view={panel.view}
+              pos={panel.pos}
+              total={order.length}
+              filing={filing}
+              setFiling={setFiling}
+              draftsBudgetHit={inbox.budgets.drafts.hit}
+              onPrev={() => step(-1)}
+              onNext={() => step(1)}
+              onClose={close}
+              onDoneNext={doneAndNext}
+              onDirty={onDirty}
+              batch={batchPanel}
+            />
+          </PanelSlide>
         )}
         {!panel && batch?.done && (
           <div data-state="open" className={cx('item-panel absolute inset-y-0 right-0 z-30 flex w-full flex-col', wide ? 'max-w-[640px]' : 'max-w-[600px]')}>
@@ -1172,16 +1080,7 @@ export function InboxPage() {
         )}
       </div>
 
-      {blocker.state === 'blocked' && (
-        <ConfirmDialog
-          title="Leave with unsaved edits?"
-          body="Your changes to the draft text haven’t been saved. Leaving drops them."
-          confirmLabel="Leave"
-          danger
-          onCancel={() => blocker.reset()}
-          onConfirm={() => blocker.proceed()}
-        />
-      )}
+      <LeaveDialog blocker={blocker} />
     </div>
   );
 }
