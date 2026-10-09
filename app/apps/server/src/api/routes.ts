@@ -82,6 +82,20 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(204).send();
   });
 
+  // "Reply in …" (cockpit CK-2.4): the item is read again at +2 and +6 min, so the settle check sees
+  // Frank's reply before the next poll. A topic is read through its latest piece too.
+  app.post<{ Params: { id: string } }>('/api/items/:id/replied', async (req, reply) => {
+    const id = item(req.params.id);
+    const p = d.store.projection.items;
+    const latest = (p[id].parts ?? [])
+      .map((x) => p[x])
+      .filter((x) => !!x)
+      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))[0];
+    const ids = [...new Set([id, req.params.id, ...(latest ? [latest.id] : [])])];
+    const scheduled = ids.map((x) => d.runtime?.replied(x, p[x].source) ?? false).some(Boolean);
+    return reply.headers(noStore).send({ scheduled });
+  });
+
   // Topics (amendment). Ticking off one ask, splitting a piece out of its topic, and Regroup,
   // which asks routing to merge a conversation's open topics.
   app.post<{ Params: { id: string; askId: string } }>('/api/items/:id/asks/:askId/done', async (req, reply) => {

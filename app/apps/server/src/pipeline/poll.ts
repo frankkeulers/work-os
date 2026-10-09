@@ -102,6 +102,29 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   const result = await source.fetchSince(cursor, { signal, now: d.now(), reason, ...(refetch?.length && { refetch }) });
   signal.throwIfAborted(); // asleep mid-poll: don't write half a picture
 
+  const { drafts, changed, dropped, ruleDecided } = await ingest(d, source, result.items);
+  // Items the source closes itself (an invite answered in Outlook), after their updates above.
+  let resolved = 0;
+  for (const r of result.resolved ?? []) {
+    const it = d.store.projection.items[r.itemId];
+    if (!it || it.status === 'done' || it.source !== source.id) continue;
+    drafts.push({ type: 'item.done', itemId: r.itemId, data: { by: 'source', reason: r.reason } });
+    resolved++;
+  }
+  const durationMs = Math.round(performance.now() - t0);
+  drafts.push({ type: 'source.polled', data: { source: source.id, reason, fetched: result.items.length, cursor: result.nextCursor, durationMs } });
+  crashPoint('after-items');
+  await d.store.append(...drafts);
+  crashPoint('after-events');
+  if (result.nextCursor) await d.cursors.set(source.id, result.nextCursor);
+  crashPoint('after-cursor');
+  await result.commit?.(); // the source's own state, only once what it read is saved
+  d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, dropped, ruleDecided, resolved, durationMs }, 'Polled');
+  return { fetched: result.items.length, changed, dropped, ruleDecided, resolved, cursor: result.nextCursor, durationMs };
+}
+
+/** Merges fetched items into their files and drafts their events (FR-2.8, FR-4): the poll's write path. */
+async function ingest(d: PollDeps, source: SourceAdapter, fetchedItems: Item[]): Promise<{ drafts: EventDraft[]; changed: number; dropped: number; ruleDecided: number }> {
   const identity = source.identity?.();
   const me = identity?.id;
   const rules = d.rules?.();
@@ -110,7 +133,7 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
   let changed = 0;
   let dropped = 0;
   let ruleDecided = 0;
-  for (const fetched of d.enrich ? d.enrich(result.items) : result.items) {
+  for (const fetched of d.enrich ? d.enrich(fetchedItems) : fetchedItems) {
     const prev = d.store.projection.items[fetched.id];
     // Read, merge and write under the item's lock: triage may be saving its text meanwhile.
     const r: { item?: Item; fromMeOnly?: boolean; fixed?: Extract<RuleVerdict, { kind: 'fixed' }>; sentByYou?: boolean; dropped?: boolean } = {};
@@ -166,24 +189,21 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
       ruleDecided++;
     }
   }
-  // Items the source closes itself (an invite answered in Outlook), after their updates above.
-  let resolved = 0;
-  for (const r of result.resolved ?? []) {
-    const it = d.store.projection.items[r.itemId];
-    if (!it || it.status === 'done' || it.source !== source.id) continue;
-    drafts.push({ type: 'item.done', itemId: r.itemId, data: { by: 'source', reason: r.reason } });
-    resolved++;
-  }
-  const durationMs = Math.round(performance.now() - t0);
-  drafts.push({ type: 'source.polled', data: { source: source.id, reason, fetched: result.items.length, cursor: result.nextCursor, durationMs } });
-  crashPoint('after-items');
-  await d.store.append(...drafts);
-  crashPoint('after-events');
-  if (result.nextCursor) await d.cursors.set(source.id, result.nextCursor);
-  crashPoint('after-cursor');
-  await result.commit?.(); // the source's own state, only once what it read is saved
-  d.logger?.info({ source: source.id, reason, fetched: result.items.length, changed, dropped, ruleDecided, resolved, durationMs }, 'Polled');
-  return { fetched: result.items.length, changed, dropped, ruleDecided, resolved, cursor: result.nextCursor, durationMs };
+  return { drafts, changed, dropped, ruleDecided };
+}
+
+/**
+ * One item read again now, outside the poll (cockpit CK-2.4): the same merge and events, with no
+ * source.polled and the cursor left alone. Returns how many items changed.
+ */
+export async function refreshItem(d: PollDeps, source: SourceAdapter, itemId: string, signal: AbortSignal): Promise<number> {
+  if (!source.refreshOne) return 0;
+  const fetched = await source.refreshOne(itemId, signal);
+  signal.throwIfAborted();
+  const { drafts, changed } = await ingest(d, source, fetched);
+  if (drafts.length) await d.store.append(...drafts);
+  if (changed) d.logger?.info({ source: source.id, itemId, changed }, 'Read one item again');
+  return changed;
 }
 
 function sentByYouDecision(item: Item, at: Date): LoggedDecision {

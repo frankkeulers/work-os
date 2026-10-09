@@ -33,6 +33,8 @@ export interface SourceAdapter {
   probe(signal: AbortSignal): Promise<DepState>;
   /** Frank's own ID in this source, once known: his own messages don't need triage again (§5.3). */
   identity?(): { id: string; name?: string } | undefined;
+  /** One item read again now, whatever the cursor: after "Reply in …" (cockpit CK-2.4). */
+  refreshOne?(itemId: string, signal: AbortSignal): Promise<Item[]>;
   /** A meeting's transcript, read live for drafting only and never stored (R2.3, R2.7). */
   transcript?(item: Item, signal: AbortSignal): Promise<string | undefined>;
 }

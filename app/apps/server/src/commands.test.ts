@@ -245,6 +245,31 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect((await inbox()).items.find((i) => i.id === PROD)?.doneBy).toBeUndefined();
   });
 
+  it('reads the thread again 2 and 6 minutes after Reply in Slack, without waiting for the poll (CK-2.4)', async () => {
+    const replied = await call<{ scheduled: boolean }>('POST', `/api/items/${encodeURIComponent(PROD)}/replied`);
+    expect(replied).toEqual({ status: 200, body: { scheduled: true } });
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'UFRANK', text: 'ETA wording is fine, ship it' });
+    const [searches, replies] = [slack.count('search.messages'), slack.count('conversations.replies')];
+    for (let i = 0; i < 12 * 2 - 1; i++) await tick();
+    expect(slack.count('conversations.replies')).toBe(replies); // not yet
+    await tick(); // +2 min
+    expect(slack.count('conversations.replies')).toBe(replies + 1);
+    expect(slack.count('search.messages')).toBe(searches); // one thread read, not a poll
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ lane: 'done', doneBy: 'reply' });
+    for (let i = 0; i < 12 * 4; i++) await tick(); // +6 min: read once more, nothing new
+    expect(slack.count('conversations.replies')).toBe(replies + 2);
+    expect(res.runtime.pendingReplyChecks()).toBe(0);
+  });
+
+  it('skips the reads while Slack can’t be read (CK-2.4)', async () => {
+    await call('POST', `/api/items/${encodeURIComponent(PROD)}/replied`);
+    res.runtime.health.fail('slack', { state: 'auth_failed', reason: 'invalid_auth' }); // shut until Check again
+    const replies = slack.count('conversations.replies');
+    for (let i = 0; i < 12 * 7; i++) await tick();
+    expect(slack.count('conversations.replies')).toBe(replies);
+    expect(res.runtime.pendingReplyChecks()).toBe(0);
+  });
+
   it('stops calling once the day’s budget is spent; rules still decide (CL-6)', async () => {
     const view = (await call<SettingsView>('GET', '/api/settings')).body;
     const settings = { ...view.settings, budgets: { ...view.settings.budgets, triageCallsPerDay: 1 } };

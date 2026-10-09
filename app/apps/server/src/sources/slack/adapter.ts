@@ -135,6 +135,25 @@ export class SlackAdapter implements SourceAdapter {
       if (again) drafts.push(again);
     }
 
+    return { items: await this.build(drafts, signal), nextCursor: nextCursor ?? isoToTs(sinceMs) };
+  }
+
+  /**
+   * One item read again now (cockpit CK-2.4): its thread with conversations.replies, or its DM
+   * window with conversations.history. Nothing if the conversation is excluded or unknown.
+   */
+  async refreshOne(itemId: string, signal: AbortSignal): Promise<Item[]> {
+    const [, cid, key] = itemId.split(':');
+    const s = this.o.settings.slack;
+    const me = await this.directory.identity(signal);
+    const channel = (await this.directory.conversations(signal)).get(cid) ?? this.directory.conversation(cid);
+    if (!channel || !key || channelListed(s.excludeChannels, channel)) return [];
+    const again = await this.again(channel, key, me.url, signal);
+    return again ? this.build([again], signal) : [];
+  }
+
+  /** Names the authors and members, then builds the items. */
+  private async build(drafts: ItemDraft[], signal: AbortSignal): Promise<Item[]> {
     await this.directory.resolveUsers(
       drafts.flatMap((d) => [...d.messages.flatMap((m) => (m.user ? [m.user] : [])), ...(d.channel.user ? [d.channel.user] : []), ...mentionedIds(d.messages.map(messageText))]),
       signal,
@@ -144,7 +163,7 @@ export class SlackAdapter implements SourceAdapter {
       CONCURRENCY,
       (c) => this.directory.dmMembers(c, signal),
     );
-    const items: Item[] = drafts.map((d) =>
+    return drafts.map((d) =>
       buildItem({
         ...d,
         title: this.directory.title(d.channel, d.messages.map(authorOf)),
@@ -152,7 +171,6 @@ export class SlackAdapter implements SourceAdapter {
         keep: this.keep(d.channel),
       }),
     );
-    return { items, nextCursor: nextCursor ?? isoToTs(sinceMs) };
   }
 
   /** search.messages, newest first, until a page reaches back past `since`. */

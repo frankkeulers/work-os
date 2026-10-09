@@ -16,9 +16,11 @@ export const kindLabel = (k: ItemSummary['kind']) => KIND_LABEL[k];
 
 /**
  * Opens the item in a new tab (FR-8.2): Slack's web client, or the permalink, which hands over to
- * the desktop app, as the Slack settings say.
+ * the desktop app, as the Slack settings say. `replying` (the panel's Reply in …) also asks the
+ * server to read the item again shortly, so a reply that settles it closes it soon (cockpit CK-2.4).
  */
-export function openInSource(item: { permalink: string; openUrl?: string; title: string; source: SourceId }) {
+export function openInSource(item: { id?: string; permalink: string; openUrl?: string; title: string; source: SourceId }, opts: { replying?: boolean } = {}) {
+  if (opts.replying && item.id) void api.replied(item.id).catch(() => undefined);
   if (API_MODE === 'http') {
     window.open(item.openUrl ?? item.permalink, '_blank', 'noopener,noreferrer');
     return;

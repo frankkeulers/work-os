@@ -33,6 +33,8 @@ export const RECHECK_MS = 5 * 60_000;
 export const BUDGET_RECHECK_MS = 15 * 60_000; // a spent budget frees up at midnight
 export const TRIAGE_BUG_BACKOFF_MS = 5 * 60_000;
 const ZONE_EVERY_TICKS = 12; // once a minute
+/** After "Reply in …", the item is read again this long after the click (cockpit CK-2.4). */
+export const REPLY_CHECKS_MS = [2 * 60_000, 6 * 60_000];
 
 export interface RuntimeDeps {
   clock: Clock;
@@ -52,6 +54,8 @@ export interface RuntimeDeps {
   onHealthChange?: (c: HealthChange) => void;
   /** A source started or finished polling, or joined the queue. */
   onPollChange?: () => void;
+  /** One item read again now (cockpit CK-2.4). Throws SourceError for health; resolves how many items changed. */
+  refresh?: (s: SourceAdapter, itemId: string, signal: AbortSignal) => Promise<number>;
   /** Model triage of what is due, or of `only` those items. Throws ClaudeError for health. */
   triage?: (signal: AbortSignal, only?: string[]) => Promise<TriageRun>;
   /** Regroup (topics): routing merges a conversation's open topics. Throws ClaudeError for health. */
@@ -95,6 +99,7 @@ export class Runtime {
   private catchUpSinceTriage = false; // a wake or reconnect poll since the last triage run
   private emptyRuns = { day: '', count: 0 }; // polls today whose triage found nothing eligible (usage view)
   private nextTriageAt?: number; // wall ms: when the next waiting thread goes quiet
+  private replyChecks = new Map<string, { source: SourceId; due: number[] }>(); // item → mono ms of its next reads (CK-2.4)
 
   constructor(private readonly d: RuntimeDeps) {
     this.safeMode = !!d.safeMode;
@@ -151,7 +156,10 @@ export class Runtime {
       this.track((this.probing ??= this.reprobe().finally(() => (this.probing = undefined))));
     }
     if (mono >= this.nextCheckMono) this.track(this.runChecks());
-    if (this.phase === 'running') this.scheduler.tick();
+    if (this.phase === 'running') {
+      this.scheduler.tick();
+      this.runReplyChecks();
+    }
     if (this.phase === 'running' || this.phase === 'catching_up') {
       this.maybeTriage();
       if (this.d.onTick) this.track(this.d.onTick().catch((err) => this.d.logger?.error({ err }, 'Tick work failed')));
@@ -236,6 +244,47 @@ export class Runtime {
       .sources()
       .find((s) => s.id === id)
       ?.identity?.()?.id;
+  }
+
+  /**
+   * "Reply in …" (cockpit CK-2.4): read the item again at +2 and +6 min, so Frank's reply is
+   * checked without waiting for the next poll. Says whether its source can do that.
+   */
+  replied(itemId: string, source: SourceId): boolean {
+    if (!this.d.refresh || !this.d.sources().some((s) => s.id === source && s.refreshOne)) return false;
+    const at = this.d.clock.mono();
+    this.replyChecks.set(itemId, { source, due: REPLY_CHECKS_MS.map((ms) => at + ms) });
+    return true;
+  }
+
+  /** The reads that are due. One whose source is paused, off or behind an open breaker is skipped: the poll still catches the reply. */
+  private runReplyChecks() {
+    const mono = this.d.clock.mono();
+    for (const [itemId, c] of this.replyChecks) {
+      if (c.due[0] > mono) continue;
+      while (c.due.length && c.due[0] <= mono) c.due.shift();
+      if (!c.due.length) this.replyChecks.delete(itemId);
+      const s = this.d.sources().find((x) => x.id === c.source);
+      if (s && this.canPoll(s)) this.track(this.refreshOne(s, itemId));
+    }
+  }
+
+  private async refreshOne(s: SourceAdapter, itemId: string) {
+    const signal = this.sleepSignal;
+    try {
+      const changed = await this.d.refresh!(s, itemId, signal);
+      for (const dep of s.deps) if (this.health.state(dep) !== 'ok') this.health.ok(dep);
+      if (changed) this.wantTriage(); // the settle check runs with triage
+    } catch (err) {
+      if (signal.aborted) return;
+      if (err instanceof SourceError) return this.reportFailure(err.dep, err.failure);
+      this.d.logger?.error({ err, itemId }, 'Reading an item again failed');
+    }
+  }
+
+  /** Reads still to come after "Reply in …", for tests. */
+  pendingReplyChecks(): number {
+    return [...this.replyChecks.values()].reduce((n, c) => n + c.due.length, 0);
   }
 
   /** "Poll now" (FR-2.6). */

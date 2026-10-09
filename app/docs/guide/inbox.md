@@ -115,6 +115,10 @@ after the poll that brings your reply in.
 - **Not settled**, such as "will look later" or a question back: the item stays where it is.
 - A message from someone else brings a closed item back, as it does for anything in Done.
 
+If you reply through the panel's **Reply in Slack** (or **Open thread in Slack**), Work OS reads that
+thread again 2 and 6 minutes later, so the item closes without waiting for the next poll. A reply
+you make without the button is still picked up by the poll.
+
 Replies in Outlook don't close items yet. The checks count towards the day's triage budget, and
 when Claude can't be reached nothing closes: the check is tried up to three times.
 

@@ -983,6 +983,12 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'inbox' }, { topic: 'item', id: rec.item.id });
   }
 
+  async replied(itemId: string) {
+    await this.gate(COMMAND_MS);
+    this.rec(itemId);
+    return { scheduled: false }; // the mock has no source to read again: Scenarios › Frank replies stands in
+  }
+
   async splitPiece(pieceId: string) {
     await this.gate(COMMAND_MS);
     const rec = this.rec(pieceId);

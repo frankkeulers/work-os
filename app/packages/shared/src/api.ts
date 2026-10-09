@@ -459,6 +459,8 @@ export interface WorkOsApi {
   snooze(itemId: string, untilIso: string): Promise<void>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
   retryTriage(itemId: string): Promise<void>;
+  /** "Reply in …" (cockpit CK-2.4): the item is read again at +2 and +6 min, so a reply that settles it closes it soon. */
+  replied(itemId: string): Promise<{ scheduled: boolean }>;
   /** Topics (amendment): ticks off one ask in a topic's checklist. */
   markAskDone(itemId: string, askId: string): Promise<void>;
   /** Takes a piece out of its topic: it is triaged on its own and never routed back there. */

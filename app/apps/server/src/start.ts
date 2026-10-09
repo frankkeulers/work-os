@@ -28,7 +28,7 @@ import { followSystemZone } from './runtime/tz';
 import { CursorFile } from './pipeline/cursors';
 import { newDayWatcher, returnSnoozed } from './pipeline/due';
 import { relinkMeetings, withCalendar } from './pipeline/meetings';
-import { pollSource } from './pipeline/poll';
+import { pollSource, refreshItem, type PollDeps } from './pipeline/poll';
 import { buildSources, type AdapterFactory } from './sources/registry';
 import { Ms365Relay } from './sources/ms365/client';
 import { calendarFactory } from './sources/calendar/adapter';
@@ -394,6 +394,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   });
   // At midnight, This week items due today move into Needs you (cockpit CK-3.10): tell open tabs.
   const newDay = newDayWatcher(() => publish({ topic: 'inbox' }));
+  const pollDeps: PollDeps = { store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }), refetch: takeRefetch, enrich: joinCalendar };
   const runtime: Runtime = new Runtime({
     clock,
     store,
@@ -414,7 +415,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     onHealthChange: (c) => alerts.onChange(c),
     // The sidebar shows which sources are polling (FR-2.6).
     onPollChange: () => publish({ topic: 'inbox' }),
-    poll: (s, reason, signal) => pollSource({ store, items, cursors, now, logger, rules: () => ({ rules: settings.rules, settings: settings.editable.settings }), refetch: takeRefetch, enrich: joinCalendar }, s, reason, signal),
+    poll: (s, reason, signal) => pollSource(pollDeps, s, reason, signal),
+    refresh: (s, itemId, signal) => refreshItem(pollDeps, s, itemId, signal),
     due: (at) => (newDay(at), returnSnoozed(store, at)),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
     checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings), claude: () => runtime.health.get('claude') }),

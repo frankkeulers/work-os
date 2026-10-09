@@ -104,7 +104,7 @@ function NextStepCard({ item, draftsBudgetHit, onFile, workflow }: { item: ItemS
         </div>
         <div className="flex flex-wrap gap-2">
           {p.kind === 'open' ? (
-            <Button variant="solid" icon={item.kind === 'dm' || item.kind === 'chat' ? 'dm' : 'external'} onClick={() => openInSource(item)}>
+            <Button variant="solid" icon={item.kind === 'dm' || item.kind === 'chat' ? 'dm' : 'external'} onClick={() => openInSource(item, { replying: true })}>
               {p.label}
             </Button>
           ) : (
