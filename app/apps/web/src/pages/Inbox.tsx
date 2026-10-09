@@ -20,7 +20,7 @@ import { closedByReply, useRepliedHold } from '../hooks/useRepliedHold';
 import type { AgendaDay } from '../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
 import { targetChip } from '../lib/lanes';
-import { INBOX_SORT_LABEL, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
+import { INBOX_SORT_LABEL, SOURCE_NAME, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
 import { NEW_FOR_MS, usePrefs } from '../store/prefs';
 import { useUserMoves } from '../store/userMoves';
 import { errorToast, toast } from '../store/toasts';
@@ -72,7 +72,7 @@ function PollStatus({ inbox }: { inbox: InboxView }) {
   if (poll.phase === 'polling')
     body = (
       <>
-        <Spinner size={12} /> Polling Slack…
+        <Spinner size={12} /> Polling {poll.polling ? SOURCE_NAME[poll.polling] : 'sources'}…
       </>
     );
   else if (poll.phase === 'triaging') {

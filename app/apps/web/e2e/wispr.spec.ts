@@ -103,6 +103,7 @@ test('Poll now shows a spinner on the source polling, and the others queued, in 
   await page.getByRole('button', { name: 'Poll now' }).click();
   // One source at a time: Slack first, Wispr waiting its turn.
   await expect(slack).toContainText('polling…');
+  await expect(page.getByTestId('poll-line')).toHaveText('Polling Slack…');
   await expect(slack.locator('[data-polling]')).toBeVisible();
   await expect(wispr).toContainText('queued');
   await expect(wispr.locator('[data-polling]')).toHaveCount(0);
@@ -110,6 +111,7 @@ test('Poll now shows a spinner on the source polling, and the others queued, in 
   await page.screenshot({ path: join(APP, 'screenshots/sidebar-polling-light.png'), clip: { x: 0, y: 0, width: 400, height: 520 } });
 
   await expect(wispr).toContainText('polling…');
+  await expect(page.getByTestId('poll-line')).toHaveText('Polling Wispr Flow…');
   await expect(slack.locator('[data-polling]')).toHaveCount(0);
   await expect(slack).toContainText('just now');
   await expect(wispr).toContainText('just now');
