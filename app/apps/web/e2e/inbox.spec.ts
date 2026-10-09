@@ -478,6 +478,25 @@ test('a row Frank brings back himself lands at once, even under the open panel (
   await expect(page.locator('[data-new-pill]')).toHaveCount(0);
 });
 
+test('triage details sit behind a disclosure that stays as Frank left it (CK-1.6)', async ({ page }) => {
+  await rows(page, 'Today').filter({ hasText: 'walkthrough' }).click();
+  const details = itemPanel(page).getByTestId('triage-details');
+  const toggle = details.getByRole('button', { name: 'Triage details · model' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(details).not.toContainText('Triaged');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(details).toContainText(/Triaged .* by model · .* · revision \d+/);
+  await details.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-triage-details-light.png'), animations: 'disabled' });
+
+  // Remembered in this browser, and a rule names itself.
+  await page.reload();
+  await rows(page, 'Now').filter({ hasText: 'go/no-go' }).click();
+  await expect(details.getByRole('button', { name: 'Triage details · rule vip-dm' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(details).toContainText('by rule vip-dm · no model call');
+});
+
 test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {
   await sortBy(page, 'Priority');
   const needs = group(page, 'Needs you').locator('[data-row]');

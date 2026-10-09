@@ -53,8 +53,12 @@ have been quiet for the quiet window (10 minutes by default, in [Settings › Sc
 
 ## The item panel
 
-Click a row to open it in a panel on the right. It shows the decision (attention, why, the model
-and prompt version), the next step, the asks, the thread itself and the filing actions.
+Click a row to open it in a panel on the right. It shows the decision (attention and why), the
+next step, the asks, the thread itself and the filing actions.
+
+At the bottom, **Triage details** says who decided: the model, a rule (such as "rule vip-dm"), or
+you, after a correction. Open it for the model, the prompt version, the batch, the revision and the
+time. It stays open or closed as you left it, in this browser.
 
 - **Done** (`e`) and **Done and next** (`E`) sit in the footer, with **Snooze** (`s`): an hour,
   tomorrow at 09:00, or a time you pick.

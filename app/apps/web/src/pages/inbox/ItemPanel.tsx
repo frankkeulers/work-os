@@ -400,15 +400,35 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
   );
 }
 
+// How the item was triaged, behind a disclosure (cockpit CK-1.6): who decided it at a glance, the
+// model, prompt version, batch, revision and time when opened. Open or closed is kept per browser.
 function MetaLine({ view }: { view: ItemView }) {
   const now = useNow(60_000);
+  const open = usePrefs((p) => p.triageDetailsOpen);
+  const setOpen = usePrefs((p) => p.setTriageDetailsOpen);
   const { decision: d, correction, batch, summary: s } = view;
+  let by = '';
   let text = '';
-  if (s.triage?.by === 'user' && correction) text = `Corrected by you ${fmtWhen(correction.correctedAt, now)} · in the labelled set · revision ${correction.itemRevision}`;
-  else if (d?.decidedBy === 'rule') text = `Triaged ${fmtWhen(d.decidedAt, now)} by rule ${d.ruleId} · no model call · revision ${d.itemRevision}`;
-  else if (d)
+  if (s.triage?.by === 'user' && correction) {
+    by = 'corrected by you';
+    text = `Corrected by you ${fmtWhen(correction.correctedAt, now)} · in the labelled set · revision ${correction.itemRevision}`;
+  } else if (d?.decidedBy === 'rule') {
+    by = `rule ${d.ruleId}`;
+    text = `Triaged ${fmtWhen(d.decidedAt, now)} by rule ${d.ruleId} · no model call · revision ${d.itemRevision}`;
+  } else if (d) {
+    by = 'model';
     text = [`Triaged ${fmtWhen(d.decidedAt, now)} by model`, d.model, d.promptVersion, batch && `batch of ${plural(batch.threads, 'thread')}`, `revision ${d.itemRevision}`].filter(Boolean).join(' · ');
-  return text ? <div className="pt-1 font-mono text-[11px] text-muted">{text}</div> : null;
+  }
+  if (!text) return null;
+  return (
+    <div className="pt-1" data-testid="triage-details">
+      <button type="button" aria-expanded={open} className="inline-flex min-h-7 items-center gap-1.5 text-[13px] text-muted hover:text-ink cursor-pointer" onClick={() => setOpen(!open)}>
+        <Icon name="forward" size={14} className={cx('transition-transform motion-reduce:transition-none', open && 'rotate-90')} />
+        Triage details · {by}
+      </button>
+      {open && <div className="pl-5 font-mono text-[11px] text-muted">{text}</div>}
+    </div>
+  );
 }
 
 // ---------- Panel ----------
