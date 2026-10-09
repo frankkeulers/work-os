@@ -151,6 +151,10 @@ test('the sidebar shows a meeting from five minutes before it starts until it en
   await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
   await page.screenshot({ path: join(APP, 'screenshots/inbox-meetings-now-next-dark.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+  // Hovered, a row shows its dismiss button.
+  await cue('[Customer] renewal call').hover();
+  await expect(cues.getByRole('button', { name: 'Dismiss: 14:00 [Customer] renewal call' })).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-meeting-dismiss-light.png'), animations: 'disabled', clip: { x: 0, y: 200, width: 440, height: 180 }, style: '[data-testid="os-notification"] { display: none; }' });
 
   // Collapsed, the sidebar keeps one icon with the minutes to the next, and says both.
   await page.keyboard.press('BracketLeft');
@@ -166,6 +170,21 @@ test('the sidebar shows a meeting from five minutes before it starts until it en
   await lead.blur();
   await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
   await expect(cues.locator('[data-meeting-cue]')).toHaveText([/renewal call/]);
+
+  // Dismissed, a meeting stays out of the sidebar until it ends, on every page; Undo brings it back.
+  const dismiss = cues.getByRole('button', { name: 'Dismiss: 14:00 [Customer] renewal call' });
+  await dismissToasts(page); // the settings save's own Undo
+  await cue('[Customer] renewal call').hover();
+  await dismiss.click();
+  await expect(cues).toHaveCount(0);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(cue('[Customer] renewal call')).toBeVisible();
+  await cue('[Customer] renewal call').hover();
+  await dismiss.click();
+  await expect(cues).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  await expect(meeting(page, 'renewal call')).toHaveAttribute('data-phase', 'now'); // the agenda still shows it
+  await expect(cues).toHaveCount(0);
 });
 
 test('meetings past the edge of the strip fade out under an arrow that scrolls to them', async ({ page }) => {

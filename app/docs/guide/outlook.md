@@ -89,6 +89,9 @@ when it ends, until it does. Choose a meeting there to open it in Outlook, where
 - **Meetings that overlap** each have their own line: those on now first, then those about to
   start, each with its own countdown on the agenda. With more than three, the last line says how
   many more, and opens your calendar in Outlook.
+- **Dismiss** a meeting with the × on its line (point at the line to see it). It stays out of the
+  sidebar until it ends, in this browser; the agenda still shows it, and **Undo** brings it back.
+  If the meeting is moved, it shows again at its new time.
 - Change how early a meeting shows (1 to 30 minutes) under **Upcoming meetings** in
   [Settings › Notifications](/settings/notifications).
 - Nothing pops up and nothing makes a sound. Outlook's own reminders are unchanged.

@@ -4,14 +4,17 @@ import { onTopics, useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { meetingCues, type MeetingCue } from '../lib/agenda';
 import { fmtTime } from '../lib/format';
+import { meetingKey, usePrefs } from '../store/prefs';
+import { toast } from '../store/toasts';
 import { Icon } from './icons';
-import { cx } from './ui';
+import { IconButton, cx } from './ui';
 
 // Meetings now and next, in the sidebar on every page (R2.8), for meetings Frank is going to: one
 // from a few minutes before it starts (5 by default, Settings › Notifications), and on as "Now"
 // until it ends. Overlapping meetings are a row each, those on now first. A quiet list, not an
 // alert: no sound, no motion, not announced; a countdown turns amber in the last two minutes. Each
-// row opens its meeting in Outlook, where the Join button is.
+// row opens its meeting in Outlook, where the Join button is. A meeting dismissed here stays out of
+// the sidebar until it ends (in this browser); the agenda still shows it.
 
 const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
 /** Rows shown before "+N more". */
@@ -25,16 +28,16 @@ const tint = (c: MeetingCue) => {
   return hex ? { boxShadow: `inset 3px 0 0 ${hex}`, background: `color-mix(in srgb, ${hex} 14%, var(--surface))` } : undefined;
 };
 
-function CueRow({ c }: { c: MeetingCue }) {
+function CueRow({ c, onDismiss }: { c: MeetingCue; onDismiss: () => void }) {
   const e = c.event;
   return (
-    <li data-meeting-cue={e.id} data-phase={c.phase} data-imminent={c.imminent || undefined}>
+    <li data-meeting-cue={e.id} data-phase={c.phase} data-imminent={c.imminent || undefined} className="group/cue relative">
       <a
         href={e.link ?? OUTLOOK_CALENDAR}
         target="_blank"
         rel="noreferrer"
         title={`${lineOf(c)}. Open in Outlook`}
-        className="flex flex-col gap-0.5 rounded-lg border border-line-soft bg-surface-2 py-2 pl-3 pr-2.5 !text-ink no-underline hover:border-line"
+        className="flex flex-col gap-0.5 rounded-lg border border-line-soft bg-surface-2 py-2 pl-3 pr-7 !text-ink no-underline hover:border-line"
         style={tint(c)}
       >
         <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
@@ -47,6 +50,15 @@ function CueRow({ c }: { c: MeetingCue }) {
           <span className="min-w-0 truncate">{e.title}</span>
         </span>
       </a>
+      {/* Beside the link, not in it; quiet until the row is hovered or the button has focus. */}
+      <IconButton
+        label={`Dismiss: ${fmtTime(e.start)} ${e.title}`}
+        title="Dismiss until it ends"
+        icon="x"
+        size={24}
+        className="absolute right-1 top-1 opacity-0 transition-opacity group-hover/cue:opacity-100 focus-visible:opacity-100"
+        onClick={onDismiss}
+      />
     </li>
   );
 }
@@ -54,8 +66,11 @@ function CueRow({ c }: { c: MeetingCue }) {
 export function MeetingCues({ collapsed }: { collapsed: boolean }) {
   const q = useApiQuery(() => api.getAgenda(), onTopics('inbox', 'settings', 'health'), []);
   const now = useNow(15_000);
+  const dismissed = usePrefs((s) => s.dismissedMeetings);
+  const dismiss = usePrefs((s) => s.dismissMeeting);
+  const undismiss = usePrefs((s) => s.undismissMeeting);
   const v = q.data;
-  const cues = v && v.state !== 'off' && v.state !== 'never' ? meetingCues(v.events, now, v.leadMinutes) : [];
+  const cues = v && v.state !== 'off' && v.state !== 'never' ? meetingCues(v.events, now, v.leadMinutes).filter((c) => !dismissed[meetingKey(c.event)]) : [];
   if (!cues.length) return null;
   const shown = cues.slice(0, MAX_ROWS);
   const hidden = cues.length - shown.length;
@@ -90,7 +105,14 @@ export function MeetingCues({ collapsed }: { collapsed: boolean }) {
     <section aria-label="Meetings now and next" data-meeting-cues={cues.length}>
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {shown.map((c) => (
-          <CueRow key={c.event.id} c={c} />
+          <CueRow
+            key={c.event.id}
+            c={c}
+            onDismiss={() => {
+              dismiss(c.event, now);
+              toast(`Dismissed ${c.event.title}`, { description: 'Out of the sidebar until it ends. The agenda still shows it.', action: { label: 'Undo', run: () => undismiss(c.event) } });
+            }}
+          />
         ))}
       </ul>
       {hidden > 0 && (
