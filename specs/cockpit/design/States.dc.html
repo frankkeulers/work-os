@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work OS cockpit states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1D4ED8;text-decoration:none}a:hover{color:#1E3A8A}
+</style>
+</helmet>
+<div style="width: 1728px; height: 1040px; box-sizing: border-box; padding: 48px; background: {{c.bg}}; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px; color: {{c.ink}}; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+
+<section style="background: {{c.surface}}; border: 1px solid {{c.line}}; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Auto-close after you reply</h2>
+<div style="font-size: 12px; font-weight: 600; color: {{c.muted}}; letter-spacing: 0.04em">1 · REPLY ITEM, YOU ANSWERED IN THE THREAD</div>
+<div style="border: 1px solid {{c.line}}; border-radius: 8px; padding: 10px 16px; background: {{c.greenWash}}">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{c.muted}}"><span style="width: 18px; height: 18px; border-radius: 4px; background: #4A154B; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span><span style="font-weight: 500; color: {{c.ink2}}">Matt M.</span><span>DM · 4h</span><span style="flex: 1"></span><span style="display: flex; align-items: center; gap: 4px; color: {{c.greenInk}}; font-weight: 600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>You replied 1 min ago</span></div>
+<div style="margin-top: 4px; padding-left: 26px; font-size: 15px; font-weight: 500; color: {{c.muted}}; text-decoration: line-through">Wants your MVI V2 go/no-go before Thursday’s exec sync.</div>
+</div>
+<div style="font-size: 13px; color: {{c.muted}}">The row shows the reply for 5 seconds, then leaves. Nothing else in the list moves until it has gone.</div>
+<div style="display: flex; align-items: center; gap: 12px; border: 1px solid {{c.line}}; background: {{c.surface}}; border-radius: 10px; padding: 12px 16px; width: 440px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{c.greenInk}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+<div style="flex: 1"><div style="font-weight: 600">Closed: you replied in Slack</div><div style="font-size: 13px; color: {{c.muted}}">Matt M. · MVI V2 go/no-go</div></div>
+<button style="height: 32px; border: 1px solid {{c.strong}}; background: {{c.surface}}; border-radius: 6px; padding: 0 12px; font: 500 13px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; cursor: pointer">Undo</button>
+</div>
+<div style="font-size: 12px; font-weight: 600; color: {{c.muted}}; letter-spacing: 0.04em; margin-top: 6px">2 · DECIDE ITEM, YOUR REPLY DIDN’T SETTLE IT</div>
+<div style="border: 1px solid {{c.line}}; border-radius: 8px; padding: 10px 16px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{c.muted}}"><span style="width: 18px; height: 18px; border-radius: 4px; background: #4A154B; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span><span style="font-weight: 500; color: {{c.ink2}}">#meridia-product</span><span>Thread · 1h</span><span style="flex: 1"></span><span style="padding: 2px 8px; border-radius: 4px; background: {{c.chip}}; color: {{c.chipInk}}; font-weight: 500">Decide</span><span style="padding: 2px 8px; border-radius: 4px; border: 1px solid {{c.accentLine}}; background: {{c.accentWash}}; color: {{c.accentInk}}; font-weight: 500">17:00 plan lock</span></div>
+<div style="margin-top: 4px; padding-left: 26px; font-size: 15px; font-weight: 500">Meridia IQ beta feedback; asks which three items go into Oct–Dec.</div>
+<div style="margin-top: 6px; padding-left: 26px; font-size: 13px; color: {{c.muted}}">You replied “I’ll pick after the pricing sign-off”. The choice is still open, so the item stays.</div>
+</div>
+<div style="font-size: 12px; font-weight: 600; color: {{c.muted}}; letter-spacing: 0.04em; margin-top: 6px">3 · DONE LIST SAYS WHO CLOSED WHAT</div>
+<div style="display: flex; flex-direction: column; border-top: 1px solid {{c.soft}}">
+<div style="display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid {{c.soft}}; font-size: 13px"><span style="flex: 1">Head of Sales · walkthrough slot</span><span style="padding: 1px 8px; border-radius: 4px; background: {{c.greenWash}}; color: {{c.greenInk}}; font-weight: 500">Your reply in Slack</span></div>
+<div style="display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid {{c.soft}}; font-size: 13px"><span style="flex: 1">Q4 roadmap review · invite</span><span style="padding: 1px 8px; border-radius: 4px; background: {{c.accentWash}}; color: {{c.accentInk}}; font-weight: 500">Answered in Outlook</span></div>
+<div style="display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid {{c.soft}}; font-size: 13px"><span style="flex: 1">#apidog-migration · DNS approval</span><span style="padding: 1px 8px; border-radius: 4px; background: {{c.chip}}; color: {{c.chipInk}}; font-weight: 500">Done by you</span></div>
+</div>
+</section>
+
+<section style="background: {{c.surface}}; border: 1px solid {{c.line}}; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Health, readable from your seat</h2>
+<div style="font-size: 13px; color: {{c.muted}}">One pill in the top bar. When something is wrong, the whole top bar takes the colour, so a glance from the main screen catches it.</div>
+<sc-for list="{{health}}" as="s" hint-placeholder-count="4">
+<div style="height: 56px; border-radius: 8px; border: 1px solid {{s.line}}; background: {{s.bar}}; display: flex; align-items: center; gap: 16px; padding: 0 16px">
+<span style="font-size: 18px; font-weight: 600">Inbox</span>
+<span style="flex: 1"></span>
+<span style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 16px; background: {{s.pill}}; color: {{s.ink}}; font-size: 14px; font-weight: 600"><span style="width: 10px; height: 10px; border-radius: 5px; background: {{s.dot}}"></span>{{s.label}}</span>
+<sc-if value="{{s.hasFix}}" hint-placeholder-val="{{false}}"><a href="#" style="font-size: 13px; font-weight: 600; color: {{s.ink}}">{{s.fix}}</a></sc-if>
+</div>
+</sc-for>
+<h2 style="margin: 12px 0 0; font-size: 18px; font-weight: 600">New items don’t reshuffle the list</h2>
+<div style="border: 1px solid {{c.line}}; border-radius: 8px; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px; background: {{c.accentWash}}; color: {{c.accentInk}}; font-size: 13px; font-weight: 600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"></path></svg>1 new Now item above</div>
+<div style="padding: 10px 16px; border-top: 1px solid {{c.soft}}">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{c.muted}}"><span style="width: 18px; height: 18px; border-radius: 4px; background: #0F6CBD; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">O</span><span style="font-weight: 500; color: {{c.ink2}}">Insights APIs v2 pricing</span><span>Email · 18m</span><span style="display: flex; align-items: center; gap: 4px; color: {{c.accent}}; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 3px; background: {{c.accent}}"></span>New</span></div>
+<div style="margin-top: 4px; padding-left: 26px; font-size: 15px; font-weight: 500">Three questions on Insights APIs v2 pricing to answer before the partner call.</div>
+</div>
+</div>
+<div style="font-size: 13px; color: {{c.muted}}">A new item takes its place by deadline and carries a New dot until you open it or 30 minutes pass. If it lands out of view while the panel is open, a pill points to it. Existing rows keep their position.</div>
+</section>
+
+<section style="background: {{c.surface}}; border: 1px solid {{c.line}}; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Time column</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 12px; font-weight: 600; color: {{c.muted}}; letter-spacing: 0.04em">MEETINGS</div>
+<div style="border: 1px solid {{c.line}}; background: {{c.tray}}; color: {{c.faint}}; border-radius: 6px; padding: 4px 8px; font-size: 12px">09:00 Product stand-up · past</div>
+<div style="border: 1px solid {{c.accentLine}}; background: {{c.surface}}; border-radius: 6px; padding: 4px 8px; font-size: 12px">14:30 Pricing sign-off · coming</div>
+<div style="border: 1px solid {{c.amberLine}}; background: {{c.amberWash}}; color: {{c.amberInk}}; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 600">14:00 Renewal call · starts in 2 min</div>
+<div style="border: 2px solid {{c.accent}}; background: {{c.accentWash}}; color: {{c.accentInk}}; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: 600">14:00 Renewal call · now, until 14:30</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 12px; font-weight: 600; color: {{c.muted}}; letter-spacing: 0.04em">DEADLINE PINS</div>
+<div style="height: 22px; border-radius: 4px; padding: 0 8px; display: flex; align-items: center; gap: 6px; font-size: 12px; background: {{c.redWash}}; color: {{c.redInk}}; font-weight: 600"><span style="width: 6px; height: 6px; transform: rotate(45deg); background: {{c.redInk}}"></span>Overdue · stays pinned at the now line</div>
+<div style="height: 22px; border-radius: 4px; padding: 0 8px; display: flex; align-items: center; gap: 6px; font-size: 12px; background: {{c.orangeWash}}; color: {{c.orangeInk}}"><span style="width: 6px; height: 6px; transform: rotate(45deg); background: #C2410C"></span>Within about 4 hours</div>
+<div style="height: 22px; border-radius: 4px; padding: 0 8px; display: flex; align-items: center; gap: 6px; font-size: 12px; background: {{c.accentWash}}; color: {{c.accentInk}}"><span style="width: 6px; height: 6px; transform: rotate(45deg); background: {{c.accent}}"></span>Later today</div>
+<div style="height: 22px; border-radius: 4px; padding: 0 8px; display: flex; align-items: center; gap: 6px; font-size: 12px; background: {{c.chip}}; color: {{c.chipInk}}"><b style="font-weight: 600">2</b> due 17:30 · stacked, hover lists them</div>
+<div style="font-size: 13px; color: {{c.muted}}">A pin opens its item. Items with no due time stay off the column.</div>
+</div>
+</div>
+<div style="font-size: 13px; color: {{c.muted}}">The next-meeting card always names what’s due before the meeting starts. With nothing due, it says “Nothing due before it”.</div>
+</section>
+
+<section style="background: {{c.surface}}; border: 1px solid {{c.line}}; border-radius: 12px; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Glance type scale</h2>
+<div style="font-size: 13px; color: {{c.muted}}">Larger sizes only for what you read from your seat. Everything else keeps the app’s 14px scale.</div>
+<sc-for list="{{type}}" as="t" hint-placeholder-count="6">
+<div style="display: flex; align-items: baseline; gap: 20px; border-top: 1px solid {{c.soft}}; padding-top: 10px">
+<span style="width: 70px; flex-shrink: 0; font: 400 12px 'IBM Plex Mono', monospace; color: {{c.faint}}">{{t.spec}}</span>
+<span style="font-size: {{t.size}}px; font-weight: {{t.weight}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{t.sample}}</span>
+<span style="flex: 1"></span>
+<span style="font-size: 12px; color: {{c.muted}}; white-space: nowrap">{{t.use}}</span>
+</div>
+</sc-for>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1728,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var dark = (this.props.theme ?? 'light') === 'dark';
+    var L = { bg: '#F3F4F6', surface: '#FFFFFF', tray: '#F4F6FA', ink: '#14171C', ink2: '#3A404B', muted: '#5B6270', faint: '#6B7280', line: '#E2E5EA', soft: '#EEF0F3', strong: '#D5D9E0', accent: '#1D4ED8', accentInk: '#1E40AF', accentWash: '#EEF2FF', accentLine: '#C9D4F2', orangeInk: '#9A3412', orangeWash: '#FFF1E8', redInk: '#B91C1C', redWash: '#FDF4F4', greenInk: '#15803D', greenWash: '#F0FAF3', amberInk: '#B45309', amberWash: '#FFFBEB', amberLine: '#F59E0B', chip: '#F0F1F4', chipInk: '#3A404B' };
+    var D = { bg: '#0F1115', surface: '#1A1D24', tray: '#13161C', ink: '#E8EAEE', ink2: '#C4C8D0', muted: '#9AA1AD', faint: '#8B93A0', line: '#2A2F38', soft: '#23272F', strong: '#3A404B', accent: '#8AA8FF', accentInk: '#A5B4FC', accentWash: '#1C2540', accentLine: '#2E3B62', orangeInk: '#FDBA74', orangeWash: '#3A2014', redInk: '#F87171', redWash: '#2A1818', greenInk: '#4ADE80', greenWash: '#13261B', amberInk: '#FBBF24', amberWash: '#2E2410', amberLine: '#7A5410', chip: '#23272F', chipInk: '#C4C8D0' };
+    var c = dark ? D : L;
+    var health = dark ? [
+      { bar: '#1A1D24', line: '#2A2F38', pill: '#13261B', ink: '#4ADE80', dot: '#22A559', label: 'All sources live · 2 min ago', hasFix: false, fix: '' },
+      { bar: '#172033', line: '#2E3B62', pill: '#1C2540', ink: '#A5B4FC', dot: '#8AA8FF', label: 'Catching up after sleep', hasFix: false, fix: '' },
+      { bar: '#2E2410', line: '#7A5410', pill: '#3A2C10', ink: '#FBBF24', dot: '#F59E0B', label: 'Outlook not connected · mail and calendar stale', hasFix: true, fix: 'Reconnect on claude.ai' },
+      { bar: '#2A1818', line: '#7F1D1D', pill: '#3A1A1A', ink: '#F87171', dot: '#DC2626', label: 'Safe mode · nothing is being read', hasFix: true, fix: 'Open Usage & health' }
+    ] : [
+      { bar: '#FFFFFF', line: '#E2E5EA', pill: '#F0FAF3', ink: '#15803D', dot: '#15803D', label: 'All sources live · 2 min ago', hasFix: false, fix: '' },
+      { bar: '#EFF6FF', line: '#C9D4F2', pill: '#EEF2FF', ink: '#1E40AF', dot: '#1D4ED8', label: 'Catching up after sleep', hasFix: false, fix: '' },
+      { bar: '#FFFBEB', line: '#F59E0B', pill: '#FEF3C7', ink: '#B45309', dot: '#B45309', label: 'Outlook not connected · mail and calendar stale', hasFix: true, fix: 'Reconnect on claude.ai' },
+      { bar: '#FDF4F4', line: '#B91C1C', pill: '#FCE4E4', ink: '#B91C1C', dot: '#B91C1C', label: 'Safe mode · nothing is being read', hasFix: true, fix: 'Open Usage & health' }
+    ];
+    return {
+      c: c,
+      health: health,
+      type: [
+        { spec: '28 / 600', size: 28, weight: 600, sample: '13:48', use: 'Clock' },
+        { spec: '22 / 600', size: 22, weight: 600, sample: '3 now · 6 today · 4 to file', use: 'Counts' },
+        { spec: '18 / 600', size: 18, weight: 600, sample: '14:00 [Customer] renewal call', use: 'Next meeting, zone titles' },
+        { spec: '15 / 500', size: 15, weight: 500, sample: 'Custom-domain cutover is blocked until you approve the DNS change.', use: 'Needs you summaries' },
+        { spec: '14 / 500', size: 14, weight: 500, sample: 'Decision: v2 vessel-events drops the legacy imo_str field.', use: 'Later rows' },
+        { spec: '12 / 400', size: 12, weight: 400, sample: '#apidog-migration · Thread · 26m', use: 'Meta, chips, pins' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

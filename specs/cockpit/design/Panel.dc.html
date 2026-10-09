@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work OS cockpit, item open</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1D4ED8;text-decoration:none}a:hover{color:#1E3A8A}
+</style>
+</helmet>
+<div style="position: relative; width: 1728px; height: 1000px; overflow: hidden; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px; color: {{c.ink}}">
+<dc-import name="Main" theme="{{theme}}" hint-size="1728px,1000px"></dc-import>
+
+<div style="position: absolute; left: 460px; top: 146px; width: 628px; height: 64px; background: {{c.sel}}; border-left: 3px solid {{c.accent}}; border-radius: 0; box-sizing: border-box"></div>
+<div style="position: absolute; left: 60px; top: 64px; right: 640px; bottom: 0; background: {{c.scrim}}"></div>
+
+<aside aria-label="Item" style="position: absolute; top: 64px; right: 0; width: 640px; bottom: 0; background: {{c.surface}}; border-left: 1px solid {{c.strong}}; display: flex; flex-direction: column; box-sizing: border-box">
+
+<div style="height: 52px; flex-shrink: 0; display: flex; align-items: center; gap: 4px; padding: 0 16px; border-bottom: 1px solid {{c.soft}}">
+<button aria-label="Previous item" style="width: 32px; height: 32px; border: 0; background: transparent; border-radius: 6px; color: {{c.muted}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"></path></svg></button>
+<button aria-label="Next item" style="width: 32px; height: 32px; border: 0; background: transparent; border-radius: 6px; color: {{c.muted}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></button>
+<span style="font: 400 13px 'IBM Plex Mono', monospace; color: {{c.muted}}; margin-left: 4px">1 of 9</span>
+<span style="flex: 1"></span>
+<button aria-label="Open as a full page" style="width: 32px; height: 32px; border: 0; background: transparent; border-radius: 6px; color: {{c.muted}}; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"></path></svg></button>
+<a href="{{closeHref}}" aria-label="Close" style="width: 32px; height: 32px; border-radius: 6px; color: {{c.muted}}; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+</div>
+
+<div style="flex: 1; overflow: hidden; padding: 20px 24px 0; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.muted}}">
+<span style="width: 20px; height: 20px; border-radius: 4px; background: #4A154B; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">S</span>
+<b style="font-weight: 600; color: {{c.ink}}">Matt M.</b><span>· DM · 4h ago</span>
+<span style="flex: 1"></span>
+<a href="#" style="height: 32px; border: 1px solid {{c.strong}}; border-radius: 6px; padding: 0 10px; color: {{c.ink2}}; display: flex; align-items: center; gap: 6px; font-weight: 500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"></path></svg>Open in Slack</a>
+<button aria-label="More actions" style="width: 32px; height: 32px; border: 0; background: transparent; border-radius: 6px; color: {{c.muted}}; font-size: 18px; cursor: pointer">···</button>
+</div>
+
+<div>
+<h2 style="margin: 0; font-size: 20px; font-weight: 600; line-height: 28px">Wants your MVI V2 go/no-go before Thursday’s exec sync, with a one-line reason if it’s a no.</h2>
+<div style="margin-top: 10px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.muted}}">
+<span style="padding: 2px 8px; border-radius: 4px; background: #C2410C; color: #FFFFFF; font-weight: 600">Now</span>
+<span>VIP DM with a direct question and a deadline.</span>
+</div>
+</div>
+
+<div style="border: 1px solid {{c.accentLine}}; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px">
+<span style="font-weight: 600; color: {{c.accentInk}}; letter-spacing: 0.04em">NEXT STEP</span>
+<span style="padding: 1px 8px; border-radius: 4px; background: {{c.chip}}; color: {{c.chipInk}}; font-weight: 500">Reply</span>
+<span style="padding: 1px 8px; border-radius: 4px; border: 1px solid {{c.orangeLine}}; background: {{c.orangeWash}}; color: {{c.orangeInk}}; font-weight: 500">by 14:00 · before your renewal call</span>
+</div>
+<div style="font-size: 17px; font-weight: 600">Reply to Matt M.</div>
+<div style="font-size: 14px; color: {{c.ink2}}">He needs go or no-go on MVI V2 for the 15th, and a one-line reason if no.</div>
+<div style="display: flex; gap: 8px; align-items: center">
+<a href="#" style="height: 40px; border-radius: 8px; background: {{c.accentSolid}}; color: #FFFFFF; padding: 0 16px; display: flex; align-items: center; gap: 8px; font-weight: 600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12M12 6l6 6-6 6"></path></svg>Reply in Slack</a>
+<button style="height: 40px; border: 1px solid {{c.strong}}; background: {{c.surface}}; border-radius: 8px; padding: 0 12px; font: 500 14px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; display: flex; align-items: center; gap: 6px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>Snooze until 13:55</button>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.greenInk}}; background: {{c.greenWash}}; border-radius: 6px; padding: 8px 10px">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+<span>Closes by itself when you reply in the thread. Checked 2 min after you open Slack.</span>
+</div>
+<div style="border-top: 1px solid {{c.soft}}; padding-top: 12px; display: flex; align-items: center; gap: 12px; font-size: 13px; color: {{c.muted}}">
+<span>File it · nothing suggested</span>
+<span style="flex: 1"></span>
+<button style="height: 30px; border: 0; background: transparent; font: 500 13px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; cursor: pointer">Draft Confluence entry</button>
+<button style="height: 30px; border: 0; background: transparent; font: 500 13px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; cursor: pointer">Draft vault note</button>
+</div>
+</div>
+
+<div>
+<h3 style="margin: 0 0 8px; font-size: 13px; font-weight: 600">Messages</h3>
+<div style="border-top: 1px solid {{c.soft}}; padding: 12px 0">
+<div style="font-size: 13px"><b style="font-weight: 600">Matt M.</b> <span style="font: 400 12px 'IBM Plex Mono', monospace; color: {{c.faint}}">09:32</span></div>
+<div style="margin-top: 4px; font-size: 14px; line-height: 21px">Morning Frank. Before Thursday’s exec sync I need your go/no-go on MVI V2. Are we still on for the 15th?</div>
+</div>
+<div style="border-top: 1px solid {{c.soft}}; padding: 12px 0">
+<div style="font-size: 13px"><b style="font-weight: 600">Matt M.</b> <span style="font: 400 12px 'IBM Plex Mono', monospace; color: {{c.faint}}">09:33</span></div>
+<div style="margin-top: 4px; font-size: 14px; line-height: 21px">If it’s a no-go I need the reason in one line for the board pack.</div>
+</div>
+</div>
+
+<button style="align-self: flex-start; border: 0; background: transparent; padding: 0; font: 400 13px 'IBM Plex Sans', sans-serif; color: {{c.muted}}; display: flex; align-items: center; gap: 6px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>Triage details · rule vip-dm</button>
+</div>
+
+<div style="height: 68px; flex-shrink: 0; border-top: 1px solid {{c.line}}; display: flex; align-items: center; gap: 8px; padding: 0 24px">
+<button style="height: 40px; border: 1px solid {{c.strong}}; background: {{c.surface}}; border-radius: 8px; padding: 0 12px; font: 500 14px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>Done<kbd style="font: 400 11px 'IBM Plex Mono', monospace; border: 1px solid {{c.line}}; border-radius: 3px; padding: 0 4px; color: {{c.faint}}">e</kbd></button>
+<button style="height: 40px; border: 1px solid {{c.strong}}; background: {{c.surface}}; border-radius: 8px; padding: 0 12px; font: 500 14px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>Snooze<kbd style="font: 400 11px 'IBM Plex Mono', monospace; border: 1px solid {{c.line}}; border-radius: 3px; padding: 0 4px; color: {{c.faint}}">s</kbd></button>
+<span style="flex: 1"></span>
+<button style="height: 40px; border: 1px solid {{c.strong}}; background: {{c.surface}}; border-radius: 8px; padding: 0 12px; font: 500 14px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; display: flex; align-items: center; gap: 8px; cursor: pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>Done and next<kbd style="font: 400 11px 'IBM Plex Mono', monospace; border: 1px solid {{c.line}}; border-radius: 3px; padding: 0 4px; color: {{c.faint}}">⇧E</kbd></button>
+</div>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1728,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var theme = this.props.theme ?? 'light';
+    var L = { surface: '#FFFFFF', ink: '#14171C', ink2: '#3A404B', muted: '#5B6270', faint: '#6B7280', line: '#E2E5EA', soft: '#EEF0F3', strong: '#D5D9E0', accent: '#1D4ED8', accentSolid: '#1D4ED8', accentInk: '#1E40AF', accentLine: '#C9D4F2', sel: 'rgba(29,78,216,0.08)', scrim: 'rgba(20,23,28,0.12)', orangeInk: '#9A3412', orangeWash: '#FFF1E8', orangeLine: '#F3C3A1', greenInk: '#15803D', greenWash: '#F0FAF3', chip: '#F0F1F4', chipInk: '#3A404B' };
+    var D = { surface: '#1A1D24', ink: '#E8EAEE', ink2: '#C4C8D0', muted: '#9AA1AD', faint: '#8B93A0', line: '#2A2F38', soft: '#23272F', strong: '#3A404B', accent: '#8AA8FF', accentSolid: '#2F5FE0', accentInk: '#A5B4FC', accentLine: '#2E3B62', sel: 'rgba(138,168,255,0.12)', scrim: 'rgba(0,0,0,0.4)', orangeInk: '#FDBA74', orangeWash: '#3A2014', orangeLine: '#5A3320', greenInk: '#4ADE80', greenWash: '#13261B', chip: '#23272F', chipInk: '#C4C8D0' };
+    return { theme: theme, c: theme === 'dark' ? D : L, closeHref: theme === 'dark' ? 'Main-dark.dc.html' : 'Main.dc.html' };
+  }
+}
+</script>
+</body>
+</html>

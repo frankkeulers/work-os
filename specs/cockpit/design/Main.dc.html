@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Work OS cockpit</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#1D4ED8;text-decoration:none}a:hover{color:#1E3A8A}
+</style>
+</helmet>
+<div style="width: 1728px; height: 1000px; display: flex; background: {{c.surface}}; color: {{c.ink}}; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px; overflow: hidden; box-sizing: border-box">
+
+<nav aria-label="Main" style="width: 60px; flex-shrink: 0; background: {{c.rail}}; border-right: 1px solid {{c.line}}; display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 8px; box-sizing: border-box">
+<a href="#" aria-label="Inbox, 9 need you" style="position: relative; width: 40px; height: 40px; border-radius: 8px; background: {{c.accentWash}}; color: {{c.accent}}; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l1.5 3h5l1.5-3h4"></path><path d="M5 5h14l1 8v6H4v-6z"></path></svg>
+<span style="position: absolute; top: -2px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #C2410C; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; padding: 0 4px; box-sizing: border-box">9</span>
+</a>
+<a href="#" aria-label="Usage and health: running normally" style="position: relative; width: 40px; height: 40px; border-radius: 8px; color: {{c.muted}}; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 19V11M12 19V5M19 19v-6"></path></svg>
+<span style="position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 4px; background: {{c.green}}; border: 2px solid {{c.rail}}"></span>
+</a>
+<a href="#" aria-label="Settings and rules" style="width: 40px; height: 40px; border-radius: 8px; color: {{c.muted}}; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4"></path></svg>
+</a>
+<div style="flex: 1"></div>
+<a href="#" aria-label="Guide" style="width: 40px; height: 40px; border-radius: 8px; color: {{c.muted}}; display: flex; align-items: center; justify-content: center">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h6a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h6z"></path></svg>
+</a>
+<a href="#" aria-label="Account" style="width: 32px; height: 32px; border-radius: 16px; background: {{c.chip}}; color: {{c.ink2}}; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">FK</a>
+</nav>
+
+<div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+
+<header style="height: 64px; flex-shrink: 0; border-bottom: 1px solid {{c.line}}; display: flex; align-items: center; padding: 0 24px; gap: 28px; box-sizing: border-box">
+<h1 style="margin: 0; font-size: 22px; font-weight: 600">Inbox</h1>
+<div style="display: flex; gap: 10px; align-items: center">
+<span style="display: flex; align-items: baseline; gap: 6px; padding: 4px 12px; border-radius: 8px; background: {{c.orangeWash}}; color: {{c.orangeInk}}"><b style="font-size: 22px; font-weight: 600">3</b><span style="font-size: 14px; font-weight: 500">now</span></span>
+<span style="display: flex; align-items: baseline; gap: 6px; padding: 4px 12px; border-radius: 8px; background: {{c.accentWash}}; color: {{c.accentInk}}"><b style="font-size: 22px; font-weight: 600">6</b><span style="font-size: 14px; font-weight: 500">today</span></span>
+<span style="display: flex; align-items: baseline; gap: 6px; padding: 4px 12px; border-radius: 8px; background: {{c.tealWash}}; color: {{c.tealInk}}"><b style="font-size: 22px; font-weight: 600">4</b><span style="font-size: 14px; font-weight: 500">to file</span></span>
+</div>
+<div style="flex: 1"></div>
+<span style="font-size: 13px; color: {{c.muted}}">2 still active</span>
+<a href="#" style="font-size: 13px; font-weight: 500; color: {{c.amberInk}}">Dry-run on</a>
+<span style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 16px; background: {{c.greenWash}}; color: {{c.greenInk}}; font-size: 14px; font-weight: 500"><span style="width: 10px; height: 10px; border-radius: 5px; background: {{c.green}}"></span>All sources live · 2 min ago</span>
+<button aria-label="Poll now" style="width: 32px; height: 32px; border-radius: 8px; border: 1px solid {{c.line}}; background: {{c.surface}}; color: {{c.ink2}}; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>
+</button>
+</header>
+
+<div style="flex: 1; display: flex; min-height: 0">
+
+<section aria-label="Time" style="width: 400px; flex-shrink: 0; border-right: 1px solid {{c.line}}; padding: 20px 20px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: baseline; justify-content: space-between">
+<div style="display: flex; align-items: baseline; gap: 10px"><span style="font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums">13:48</span><span style="font-size: 14px; color: {{c.muted}}">Fri 9 Oct</span></div>
+<div role="group" aria-label="Day" style="display: flex; background: {{c.seg}}; border-radius: 8px; padding: 2px">
+<button style="border: 0; background: {{c.segOn}}; border-radius: 6px; padding: 4px 10px; font: 500 13px 'IBM Plex Sans', sans-serif; color: {{c.ink}}">Today</button>
+<button style="border: 0; background: transparent; border-radius: 6px; padding: 4px 10px; font: 500 13px 'IBM Plex Sans', sans-serif; color: {{c.muted}}">Tomorrow</button>
+</div>
+</div>
+
+<a href="#" style="display: block; border: 1px solid {{c.accentLine}}; background: {{c.accentWash}}; border-radius: 10px; padding: 14px 16px; color: {{c.ink}}">
+<div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: {{c.accentInk}}; letter-spacing: 0.04em"><span>NEXT · IN 12 MIN</span><span style="font-weight: 500; letter-spacing: 0">Open in Outlook</span></div>
+<div style="font-size: 18px; font-weight: 600; margin-top: 4px">14:00 [Customer] renewal call</div>
+<div style="margin-top: 8px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: {{c.orangeInk}}"><span style="width: 8px; height: 8px; transform: rotate(45deg); background: #C2410C"></span>Due before it: Matt M. · MVI V2 go/no-go</div>
+</a>
+
+<div style="position: relative; height: 740px; flex-shrink: 0">
+<sc-for list="{{hours}}" as="h" hint-placeholder-count="11">
+<div style="position: absolute; left: 0; right: 0; top: {{h.top}}px; border-top: 1px solid {{c.soft}}"><span style="position: absolute; top: -8px; left: 0; font: 400 12px 'IBM Plex Mono', monospace; color: {{c.faint}}; background: {{c.surface}}; padding-right: 6px">{{h.label}}</span></div>
+</sc-for>
+<div style="position: absolute; left: 44px; width: 186px; top: 0; height: 418px; background: {{c.past}}"></div>
+<sc-for list="{{meetings}}" as="m" hint-placeholder-count="6">
+<div style="position: absolute; left: 44px; width: 186px; top: {{m.top}}px; height: {{m.h}}px; box-sizing: border-box; border-radius: 6px; padding: 3px 8px; border: 1px solid {{m.line}}; background: {{m.bg}}; color: {{m.ink}}; font-size: 12px; line-height: 15px; overflow: hidden; display: flex; gap: 6px"><span style="width: 3px; flex-shrink: 0; border-radius: 2px; background: {{m.cat}}"></span><span><b style="font-weight: 600">{{m.time}}</b> {{m.title}}</span></div>
+</sc-for>
+<sc-for list="{{pins}}" as="p" hint-placeholder-count="6">
+<div style="position: absolute; left: 238px; right: 0; top: {{p.top}}px; height: 22px; box-sizing: border-box; border-radius: 4px; padding: 0 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; background: {{p.bg}}; color: {{p.ink}}; white-space: nowrap; overflow: hidden"><span style="width: 6px; height: 6px; flex-shrink: 0; transform: rotate(45deg); background: {{p.dot}}"></span>{{p.label}}</div>
+</sc-for>
+<div style="position: absolute; left: 36px; right: 0; top: 417px; border-top: 2px solid {{c.red}}"><span style="position: absolute; left: -36px; top: -9px; font: 500 11px 'IBM Plex Mono', monospace; color: #FFFFFF; background: {{c.red}}; border-radius: 3px; padding: 1px 3px">13:48</span></div>
+</div>
+</section>
+
+<section aria-label="Needs you" style="flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid {{c.line}}">
+<div style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 24px; box-sizing: border-box">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #C2410C"></span>
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Needs you</h2>
+<span style="font-size: 14px; color: {{c.muted}}">9</span>
+<div style="flex: 1"></div>
+<span style="font-size: 13px; color: {{c.muted}}">By deadline</span>
+</div>
+
+<div style="padding: 6px 24px; font-size: 12px; font-weight: 600; color: {{c.orangeInk}}; letter-spacing: 0.04em; background: {{c.nowRow}}; border-top: 1px solid {{c.orangeLine}}">NOW · 3</div>
+<sc-for list="{{now}}" as="r" hint-placeholder-count="3">
+<a href="Panel.dc.html" style="display: block; padding: 10px 24px; background: {{r.rowBg}}; border-top: 1px solid {{r.rowLine}}; color: {{c.ink}}">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{c.muted}}">
+<span style="width: 18px; height: 18px; border-radius: 4px; background: {{r.markBg}}; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{r.mark}}</span>
+<span style="font-weight: 500; color: {{c.ink2}}">{{r.where}}</span><span>{{r.meta}}</span>
+<sc-if value="{{r.isNew}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; color: {{c.accent}}; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 3px; background: {{c.accent}}"></span>New</span></sc-if>
+<span style="flex: 1"></span>
+<span style="padding: 2px 8px; border-radius: 4px; background: {{r.needBg}}; color: {{r.needInk}}; font-weight: 500">{{r.need}}</span>
+<span style="padding: 2px 8px; border-radius: 4px; border: 1px solid {{r.dueLine}}; background: {{r.dueBg}}; color: {{r.dueInk}}; font-weight: 500">{{r.due}}</span>
+</div>
+<div style="margin-top: 4px; padding-left: 26px; font-size: 15px; font-weight: 500; line-height: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.sum}}</div>
+</a>
+</sc-for>
+
+<div style="padding: 6px 24px; font-size: 12px; font-weight: 600; color: {{c.accentInk}}; letter-spacing: 0.04em; background: {{c.rail}}; border-top: 1px solid {{c.strong}}">TODAY · 6</div>
+<sc-for list="{{today}}" as="r" hint-placeholder-count="6">
+<a href="Panel.dc.html" style="display: block; padding: 10px 24px; background: {{r.rowBg}}; border-top: 1px solid {{r.rowLine}}; color: {{c.ink}}">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{c.muted}}">
+<span style="width: 18px; height: 18px; border-radius: 4px; background: {{r.markBg}}; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{r.mark}}</span>
+<span style="font-weight: 500; color: {{c.ink2}}">{{r.where}}</span><span>{{r.meta}}</span>
+<sc-if value="{{r.isNew}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; color: {{c.accent}}; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 3px; background: {{c.accent}}"></span>New</span></sc-if>
+<span style="flex: 1"></span>
+<span style="padding: 2px 8px; border-radius: 4px; background: {{r.needBg}}; color: {{r.needInk}}; font-weight: 500">{{r.need}}</span>
+<span style="padding: 2px 8px; border-radius: 4px; border: 1px solid {{r.dueLine}}; background: {{r.dueBg}}; color: {{r.dueInk}}; font-weight: 500">{{r.due}}</span>
+</div>
+<div style="margin-top: 4px; padding-left: 26px; font-size: 15px; font-weight: 500; line-height: 21px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.sum}}</div>
+</a>
+</sc-for>
+
+<div style="flex: 1; border-top: 1px solid {{c.soft}}"></div>
+<div style="height: 48px; flex-shrink: 0; border-top: 1px solid {{c.line}}; display: flex; align-items: center; gap: 8px; padding: 0 24px; font-size: 13px; color: {{c.muted}}">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{c.greenInk}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+<span><b style="font-weight: 600; color: {{c.ink2}}">7 closed by your replies</b> today · latest 2 min ago: Head of Sales, DM</span>
+<span style="flex: 1"></span>
+<a href="#" style="color: {{c.accent}}">Review</a>
+</div>
+</section>
+
+<section aria-label="Later" style="width: 440px; flex-shrink: 0; display: flex; flex-direction: column; background: {{c.later}}">
+<div style="height: 56px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 24px; box-sizing: border-box">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: {{c.faint}}"></span>
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Later</h2>
+<span style="font-size: 14px; color: {{c.muted}}">9</span>
+<div style="flex: 1"></div>
+<span style="font-size: 13px; color: {{c.muted}}">Once a day</span>
+</div>
+
+<div style="padding: 8px 24px; display: flex; align-items: center; border-top: 1px solid {{c.line}}">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: {{c.teal}}; margin-right: 8px"></span>
+<h3 style="margin: 0; font-size: 13px; font-weight: 600">To file</h3><span style="margin-left: 6px; font-size: 12px; color: {{c.muted}}">4</span>
+<span style="flex: 1"></span>
+<button style="height: 28px; border: 1px solid {{c.strong}}; background: {{c.surface}}; border-radius: 6px; padding: 0 10px; font: 500 13px 'IBM Plex Sans', sans-serif; color: {{c.ink2}}; display: flex; align-items: center; gap: 6px; cursor: pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5l8 7-8 7"></path></svg>File in a batch</button>
+</div>
+<sc-for list="{{file}}" as="f" hint-placeholder-count="4">
+<a href="Panel.dc.html" style="display: block; padding: 9px 24px; border-top: 1px solid {{c.soft}}; color: {{c.ink}}">
+<div style="font-size: 14px; font-weight: 500; line-height: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.sum}}</div>
+<div style="margin-top: 4px; display: flex; gap: 8px; align-items: center; font-size: 12px; color: {{c.muted}}"><span>{{f.where}}</span><span style="flex: 1"></span><span style="padding: 1px 8px; border-radius: 4px; border: 1px solid {{c.tealLine}}; background: {{c.tealWash}}; color: {{c.tealInk}}; font-weight: 500">{{f.target}}</span></div>
+</a>
+</sc-for>
+
+<div style="padding: 8px 24px; margin-top: 8px; display: flex; align-items: center; border-top: 1px solid {{c.line}}">
+<span style="width: 8px; height: 8px; border-radius: 4px; background: {{c.grey}}; margin-right: 8px"></span>
+<h3 style="margin: 0; font-size: 13px; font-weight: 600">This week</h3><span style="margin-left: 6px; font-size: 12px; color: {{c.muted}}">3</span>
+</div>
+<sc-for list="{{week}}" as="w" hint-placeholder-count="3">
+<a href="Panel.dc.html" style="display: block; padding: 9px 24px; border-top: 1px solid {{c.soft}}; color: {{c.ink}}">
+<div style="font-size: 14px; font-weight: 500; line-height: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{w.sum}}</div>
+<div style="margin-top: 4px; display: flex; gap: 8px; align-items: center; font-size: 12px; color: {{c.muted}}"><span>{{w.where}}</span><span style="flex: 1"></span><span style="padding: 1px 8px; border-radius: 4px; background: {{c.chip}}; color: {{c.chipInk}}; font-weight: 500">{{w.need}}</span><span style="padding: 1px 8px; border-radius: 4px; border: 1px solid {{c.line}}; color: {{c.muted}}; font-weight: 500">{{w.due}}</span></div>
+</a>
+</sc-for>
+
+<a href="#" style="display: flex; align-items: center; gap: 8px; padding: 12px 24px; margin-top: 8px; border-top: 1px solid {{c.line}}; font-size: 13px; color: {{c.ink2}}">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>
+<b style="font-weight: 600">2 snoozed</b><span style="color: {{c.muted}}">· next back 15:00</span>
+</a>
+
+<div style="flex: 1"></div>
+<div style="padding: 16px 24px; border-top: 1px solid {{c.line}}; display: flex; align-items: center; gap: 12px">
+<a href="#" style="height: 36px; border: 1px solid {{c.strong}}; background: {{c.surface}}; border-radius: 8px; padding: 0 12px; font-size: 13px; color: {{c.ink2}}; display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13h4l1.5 3h5l1.5-3h4"></path><path d="M5 5h14l1 8v6H4v-6z"></path></svg><b style="font-weight: 600">14 low priority</b> · check triage</a>
+<span style="flex: 1"></span>
+<a href="#" style="font-size: 13px; color: {{c.muted}}">12 done today</a>
+</div>
+</section>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["light","dark"],"default":"light"},"$preview":{"width":1728,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var dark = (this.props.theme ?? 'light') === 'dark';
+    var L = { surface: '#FFFFFF', rail: '#F8F9FB', later: '#FCFCFD', past: '#FAFAFB', tray: '#F4F6FA', ink: '#14171C', ink2: '#3A404B', muted: '#5B6270', faint: '#6B7280', grey: '#9CA3AF', line: '#E2E5EA', soft: '#EEF0F3', strong: '#D5D9E0', accent: '#1D4ED8', accentInk: '#1E40AF', accentWash: '#EEF2FF', accentLine: '#C9D4F2', orangeInk: '#9A3412', orangeWash: '#FFF1E8', orangeLine: '#F3C3A1', nowRow: '#FFF8F3', nowLine: '#F7DCC8', teal: '#0F766E', tealInk: '#0F5B53', tealWash: '#E6F4F1', tealLine: '#A9D8CF', red: '#B91C1C', redInk: '#B91C1C', redWash: '#FDF4F4', redLine: '#F3C9C9', green: '#15803D', greenInk: '#15803D', greenWash: '#F0FAF3', amberInk: '#B45309', chip: '#F0F1F4', chipInk: '#3A404B', seg: '#EEF1F6', segOn: '#FFFFFF' };
+    var D = { surface: '#1A1D24', rail: '#20242C', later: '#171A20', past: '#16191F', tray: '#13161C', ink: '#E8EAEE', ink2: '#C4C8D0', muted: '#9AA1AD', faint: '#8B93A0', grey: '#6B7280', line: '#2A2F38', soft: '#23272F', strong: '#3A404B', accent: '#8AA8FF', accentInk: '#A5B4FC', accentWash: '#1C2540', accentLine: '#2E3B62', orangeInk: '#FDBA74', orangeWash: '#3A2014', orangeLine: '#5A3320', nowRow: '#24170F', nowLine: '#3A2418', teal: '#2DD4BF', tealInk: '#5EEAD4', tealWash: '#12302C', tealLine: '#1F4A44', red: '#DC2626', redInk: '#F87171', redWash: '#2A1818', redLine: '#5A2626', green: '#22A559', greenInk: '#4ADE80', greenWash: '#13261B', amberInk: '#FBBF24', chip: '#23272F', chipInk: '#C4C8D0', seg: '#2A2F38', segOn: '#343A46' };
+    var c = dark ? D : L;
+    var PX = 72;
+    var hours = [];
+    for (var i = 8; i <= 18; i++) { hours.push({ top: (i - 8) * PX, label: (i < 10 ? '0' : '') + i + ':00' }); }
+    var past = { bg: c.tray, line: c.line, ink: c.faint };
+    var up = { bg: c.surface, line: c.accentLine, ink: c.ink };
+    function m(t, h, time, title, cat, s) { return { top: t, h: h, time: time, title: title, cat: cat, bg: s.bg, line: s.line, ink: s.ink }; }
+    var meetings = [
+      m(72, 34, '09:00', 'Product stand-up', c.grey, past),
+      m(108, 52, '09:30', 'MVI V2 launch readiness', '#7C3AED', past),
+      m(216, 34, '11:00', 'Apidog migration check-in', c.teal, past),
+      m(432, 34, '14:00', '[Customer] renewal call', '#C2410C', up),
+      m(468, 34, '14:30', 'Pricing sign-off', c.accent, up),
+      m(612, 34, '16:30', 'Data Products weekly', c.grey, up)
+    ];
+    var o = { bg: c.orangeWash, ink: c.orangeInk, dot: '#C2410C' };
+    var b = { bg: c.accentWash, ink: c.accentInk, dot: c.accent };
+    function p(t, label, s) { return { top: t - 11, label: label, bg: s.bg, ink: s.ink, dot: s.dot }; }
+    var pins = [
+      p(432, '14:00 Matt · go/no-go', o),
+      p(504, '15:00 Approve DNS cutover', o),
+      p(576, '16:00 Licensing sign-off', o),
+      p(612, '16:30 v2 pricing email', b),
+      p(648, '17:00 IQ plan lock', b),
+      p(684, '17:30 Labs gate · invite', b)
+    ];
+    var marks = { S: '#4A154B', O: '#0F6CBD', C: '#5B6270', W: '#3A404B' };
+    var dueO = { dueBg: c.orangeWash, dueInk: c.orangeInk, dueLine: c.orangeLine };
+    var dueB = { dueBg: c.accentWash, dueInk: c.accentInk, dueLine: c.accentLine };
+    var dueR = { dueBg: c.redWash, dueInk: c.redInk, dueLine: c.redLine };
+    var dueG = { dueBg: c.rail, dueInk: c.muted, dueLine: c.line };
+    function row(mark, where, meta, sum, need, due, d, opts) {
+      opts = opts || {};
+      return { mark: mark, markBg: marks[mark], where: where, meta: meta, sum: sum, need: need, due: due,
+        dueBg: d.dueBg, dueInk: d.dueInk, dueLine: d.dueLine,
+        needBg: opts.failed ? c.redWash : c.chip, needInk: opts.failed ? c.redInk : c.chipInk,
+        rowBg: opts.now ? c.nowRow : c.surface, rowLine: opts.now ? c.nowLine : c.soft, isNew: !!opts.isNew };
+    }
+    var now = [
+      row('S', 'Matt M.', 'DM · 4h', 'Wants your MVI V2 go/no-go before Thursday’s exec sync, with a one-line reason if it’s a no.', 'Reply', 'by 14:00', dueO, { now: true }),
+      row('S', '#apidog-migration', 'Thread · 26m', 'Custom-domain cutover is blocked until you approve the DNS change.', 'Approve', 'by 15:00', dueO, { now: true }),
+      row('S', '#mvi-launch', 'Thread · 34m', 'Release notes are blocked on your sign-off of the data-licensing wording.', 'Approve', 'by 16:00', dueO, { now: true })
+    ];
+    var today = [
+      row('S', '#data-products-ops', 'Thread · 1h', 'Ingestion lag thread could not be triaged. Open it to retry.', 'Triage failed', 'retry', dueR, { failed: true }),
+      row('O', 'Insights APIs v2 pricing', 'Email · 18m', 'Three questions on Insights APIs v2 pricing to answer before the partner call.', 'Reply', '16:30', dueB, { isNew: true }),
+      row('S', '#meridia-product', 'Thread · 1h', 'Meridia IQ beta feedback; asks which three items go into Oct–Dec.', 'Decide', '17:00 plan lock', dueB),
+      row('S', '#pole-star-labs', 'Thread · 2h', 'Graduation request for a Labs prototype; needs the gate checklist.', 'Review', '17:30', dueB),
+      row('C', 'Q4 roadmap review', 'Invite · 50m', 'Matt invited you for tomorrow 10:00 and asked for the Insights APIs usage numbers.', 'Decide', '17:30', dueB),
+      row('W', 'MVI V2 readiness review', 'Meeting · 1h', 'Two action items for you: confirm the rollback owner and share the comms plan.', 'Actions', 'today', dueG)
+    ];
+    var file = [
+      { sum: 'Decision: v2 vessel-events drops the legacy imo_str field.', where: '#insights-api · 4h', target: 'Insights APIs › Decisions' },
+      { sum: 'Roadmap ownership agreed ahead of Jan–Mar planning.', where: '#product-leads · 4h', target: 'Product org › Roadmap process' },
+      { sum: 'How-to: running Claude Code on the subscription with no API key.', where: '#ai-adoption · 5h', target: 'Vault · Resources' },
+      { sum: 'Meridia IQ beta stays free until GA, then per-vessel tiers.', where: '#meridia-product · 17h', target: 'Meridia › Decisions' }
+    ];
+    var week = [
+      { sum: 'Data products team lead flags two overloaded engineers before MVI V2.', where: 'DM · 3h', need: 'Decide', due: 'Thu 09:00' },
+      { sum: 'Jan–Mar OKR drafts due from each product lead.', where: '#product-leads · 6h', need: 'Prepare', due: 'Fri 16 Oct' },
+      { sum: 'Wants a 15-minute Insights APIs v2 walkthrough for sales.', where: 'Head of Sales · DM · 2h', need: 'Reply', due: 'this week' }
+    ];
+    return { c: c, hours: hours, meetings: meetings, pins: pins, now: now, today: today, file: file, week: week };
+  }
+}
+</script>
+</body>
+</html>
