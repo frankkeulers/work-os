@@ -695,10 +695,10 @@ export function InboxPage() {
   const wide = useWideLayout();
   const [day, setDay] = useState<AgendaDay>('today');
 
-  // Items Frank's reply just closed stay in Needs you for 5 s as "You replied" (CK-2.5).
+  // Items Frank's reply just closed stay where they were for 5 s as "You replied" (CK-2.5).
   const replied = useRepliedHold(all, !!inbox);
   const by = useMemo(() => {
-    const m: Record<Group | Lower, ItemSummary[]> = { needs: [...sortItems(all, sort, true, now), ...replied], file: [], week: [], else: [], waiting: [], snoozed: [], done: [], replied: [] };
+    const m: Record<Group | Lower, ItemSummary[]> = { needs: [...sortItems(all, sort, true, now), ...replied.filter((i) => i.lane !== 'week')], file: [], week: replied.filter((i) => i.lane === 'week'), else: [], waiting: [], snoozed: [], done: [], replied: [] };
     for (const i of all) if (i.lane in m) m[i.lane as Group | Lower].push(i);
     for (const g of ['file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
     if (grouped) for (const g of ['needs', 'file', 'else', 'waiting'] as const) m[g] = groupByChannel(m[g]);
@@ -975,8 +975,8 @@ export function InboxPage() {
     const props = { item: i, selected: i.id === sel, isNew: !r.leaving && isNew(i.id), leaving: r.leaving, onPick: () => pick(i.id) };
     return [
       head && <ChannelHead key={`head:${i.id}`} item={i} items={list.filter((x) => !x.leaving && channelKey(x.item) === key).map((x) => x.item)} topics={openTopics.get(key) ?? 0} />,
-      // Held in Needs you for a moment after Frank's reply closed it (CK-2.5).
-      !lower && closedByReply(i) ? (
+      // Held in Needs you or This week for a moment after Frank's reply closed it (CK-2.5).
+      closedByReply(i) && (!lower || i.lane === 'week') ? (
         <RepliedRow key={i.id} {...props} compact={variant === 'list'} />
       ) : variant === 'needs' ? (
         <CockpitRow key={i.id} {...props} />

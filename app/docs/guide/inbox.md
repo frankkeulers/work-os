@@ -118,8 +118,8 @@ after the poll that brings your reply in.
 
 What you see when a reply closes an item:
 
-- The row stays where it was for five seconds, washed green and struck through, reading **✓ You
-  replied just now**, then it goes.
+- The row stays where it was, in Needs you or in This week, for five seconds, washed green and
+  struck through, reading **✓ You replied just now**, then it goes.
 - A toast says **Closed: you replied in Slack**, with **Undo** to bring the item straight back.
 - Under Needs you, a line counts the day's closes: **2 closed by your replies today · latest 4 min
   ago: …**. **Review** opens the list **Closed by your replies**; on a narrower window the line sits

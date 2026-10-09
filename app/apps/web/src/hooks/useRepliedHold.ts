@@ -3,28 +3,26 @@ import { api, type ItemSummary } from '../api';
 import { SOURCE_NAME } from '../lib/next';
 import { errorToast, toast } from '../store/toasts';
 
-// Closed by Frank's reply (cockpit CK-2.5): an item that leaves Needs you because his reply settled
-// it stays in its row for 5 s as "You replied", then goes the way any row goes (CK-1.2). A toast
-// says so, with Undo.
+// Closed by Frank's reply (cockpit CK-2.5): an item that leaves Needs you or This week because his
+// reply settled it stays in its row for 5 s as "You replied", then goes the way any row goes
+// (CK-1.2). A toast says so, with Undo.
 
 export const REPLIED_HOLD_MS = 5000;
 
-/** In Needs you, or Later's This week: where a reply can close an item from. */
+/** In Needs you, or Later's This week: where a reply can close an item from, and where it is held. */
 const AWAITS = new Set<ItemSummary['lane']>(['now', 'today', 'week']);
-/** Held where they were: Needs you only. */
-const HELD = new Set<ItemSummary['lane']>(['now', 'today']);
 
 export const closedByReply = (i: ItemSummary) => i.status === 'done' && i.doneBy === 'reply';
 
 interface State {
   input: readonly ItemSummary[];
-  /** Open items a reply can close, by the lane each was in; unset until the first load. */
-  open?: ReadonlyMap<string, ItemSummary['lane']>;
+  /** Open items a reply can close, as they were; unset until the first load. */
+  open?: ReadonlyMap<string, ItemSummary>;
   held: ItemSummary[];
   fresh: ItemSummary[];
 }
 
-/** The items to hold in Needs you as "You replied": their latest state, in the lane they left. */
+/** The items to hold as "You replied": their latest state, in the lane they left. */
 export function useRepliedHold(items: readonly ItemSummary[], loaded: boolean): ItemSummary[] {
   const [st, setSt] = useState<State>({ input: items, held: [], fresh: [] });
   if (st.input !== items) {
@@ -35,13 +33,14 @@ export function useRepliedHold(items: readonly ItemSummary[], loaded: boolean): 
     // Undo brings it straight back: only what is still closed by reply stays held.
     const kept = st.held.flatMap((h) => {
       const now = byId.get(h.id);
-      return now && closedByReply(now) && !freshIds.has(h.id) ? [{ ...now, lane: h.lane }] : [];
+      return now && closedByReply(now) && !freshIds.has(h.id) ? [{ ...now, lane: h.lane, next: h.next }] : [];
     });
+    // In the lane it left, with the next step it had: This week sorts by its due time.
     const held = fresh.flatMap((i) => {
-      const lane = was?.get(i.id);
-      return lane && HELD.has(lane) ? [{ ...i, lane }] : [];
+      const prev = was?.get(i.id);
+      return prev ? [{ ...i, lane: prev.lane, next: prev.next }] : [];
     });
-    setSt({ input: items, open: loaded ? new Map(items.filter((i) => i.status === 'open' && AWAITS.has(i.lane)).map((i) => [i.id, i.lane])) : undefined, held: [...kept, ...held], fresh });
+    setSt({ input: items, open: loaded ? new Map(items.filter((i) => i.status === 'open' && AWAITS.has(i.lane)).map((i) => [i.id, i])) : undefined, held: [...kept, ...held], fresh });
   }
 
   // A toast for each, then the row goes after 5 s. Timers outlive the next update; only leaving the page clears them.

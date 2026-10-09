@@ -102,6 +102,24 @@ test('J54: Undo a close, and a failed check closes nothing (CK-2.3, CK-2.6)', as
   await expect(row().locator('[data-reply-note]')).toHaveCount(0);
 });
 
+test('your reply settles a This week item — "You replied" in This week for a moment, then it leaves (CK-2.5)', async ({ page }) => {
+  await afternoon(page);
+  const week = zone(page, 'Later').getByRole('region', { name: 'This week', exact: true });
+  const first = week.locator('[data-row]').first();
+  const id = (await first.getAttribute('data-row'))!;
+  // Frank replies to the one open in the panel.
+  await first.click();
+  await expect(panel(page)).toBeVisible();
+  await control(page, 'Settles it');
+  const row = week.locator(`[data-row="${id}"]`);
+  await expect(row).toHaveAttribute('data-replied');
+  await expect(row).toHaveAttribute('data-lane', 'week');
+  await expect(row).toContainText(/You replied (just now|\d+ min ago)/);
+  await expect(page.getByRole('status').filter({ hasText: 'Closed: you replied in Slack' })).toBeVisible();
+  await expect(zone(page, 'Needs you').locator(`[data-row="${id}"]`)).toHaveCount(0);
+  await expect(row).toHaveCount(0, { timeout: 8000 });
+});
+
 test('with closing on reply off, a settled reply asks "Mark done?" and closes nothing (CK-2.7)', async ({ page }) => {
   await afternoon(page);
   await page.goto('/settings/rules');
