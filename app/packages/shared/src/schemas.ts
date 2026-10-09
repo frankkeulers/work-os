@@ -404,6 +404,8 @@ export const Settings = z.object({
   notifications: z.object({
     enabled: z.boolean(),
     quietHours: timeRange,
+    // Amendment (R2.8): how long before a meeting the sidebar and agenda show it as next; 5 when unset.
+    meetingLeadMinutes: z.number().int('Whole minutes only').min(1, 'At least 1 minute').max(30, 'At most 30 minutes').optional(),
   }),
   dryRun: z.boolean(),
   sources: z.partialRecord(SourceId, SourceSchedule.partial()).optional(),
@@ -442,6 +444,10 @@ const SOURCE_DEFAULTS: Record<SourceId, SourceSchedule> = {
 };
 
 /** A source's schedule with defaults filled in. Slack's defaults are the global schedule. */
+/** Minutes before a meeting that it shows as next (R2.8). */
+export const MEETING_LEAD_DEFAULT = 5;
+export const meetingLead = (s: Pick<Settings, 'notifications'>) => s.notifications.meetingLeadMinutes ?? MEETING_LEAD_DEFAULT;
+
 export function sourceSchedule(settings: Pick<Settings, 'schedule' | 'sources'>, id: SourceId): SourceSchedule {
   const base =
     id === 'slack'

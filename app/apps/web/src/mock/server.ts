@@ -24,6 +24,7 @@ import {
   reopen,
   routeTopic,
   categoryTags,
+  meetingLead,
   sourceSchedule,
   seenChanges,
   snooze,
@@ -844,14 +845,15 @@ export class MockServer implements WorkOsApi, MockControls {
   /** The seed week's calendar, once Outlook is connected and the calendar is on (R2.8). */
   async getAgenda(): Promise<AgendaView> {
     await this.gate(QUERY_MS);
-    if (!this.s.outlook || !sourceSchedule(this.s.settings, 'calendar').enabled) return { state: 'off', events: [] };
+    const leadMinutes = meetingLead(this.s.settings);
+    if (!this.s.outlook || !sourceSchedule(this.s.settings, 'calendar').enabled) return { state: 'off', events: [], leadMinutes };
     // A Wispr Flow meeting joined to an event is its notes; an open invite item is its "Not answered".
     const joined = (source: Item['source'], open: boolean) =>
       new Map(Object.values(this.s.items).flatMap((r) => (r.item.source === source && r.item.meeting?.calendar && (!open || r.status === 'open') ? [[r.item.meeting.calendar.eventId, r.item.id] as const] : [])));
     const notes = joined('wispr', false);
     const invites = joined('calendar', true);
     const events = CALENDAR.map((e) => ({ ...e, ...(notes.has(e.id) && { notesItemId: notes.get(e.id) }), ...(invites.has(e.id) && { inviteItemId: invites.get(e.id) }), ...(CALENDAR_CATEGORIES[e.id] && { categories: this.categoryTagsOf(e.id) }) }));
-    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events };
+    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events, leadMinutes };
   }
 
   /** Turns Outlook mail and calendar off: both read through the connector. */

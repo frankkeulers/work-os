@@ -145,6 +145,8 @@ export interface AgendaView {
   polledAt?: string;
   /** Today's, then tomorrow's, soonest first. */
   events: AgendaEvent[];
+  /** How many minutes before a meeting it shows as next, in the sidebar and on its chip. */
+  leadMinutes: number;
 }
 
 export interface BudgetLine {

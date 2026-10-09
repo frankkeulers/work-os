@@ -34,8 +34,8 @@ let items: ItemFiles;
 let lifecycle: Lifecycle;
 let storeClock: Date; // when events happen; the views always look at NOW
 
-async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; connectors?: Settings['connectors']; wispr?: ViewDeps['wispr']; outlook?: ViewDeps['outlook']; calendar?: ViewDeps['calendar']; categoryColors?: Record<string, OutlookColor> } = {}) {
-  await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }), ...(opts.connectors && { connectors: opts.connectors }), ...(opts.categoryColors && { calendar: { categoryColors: opts.categoryColors } }) }, rules: DEFAULT_RULES });
+async function build(opts: { webDir?: string; guideDir?: string; earlier?: ViewDeps['earlier']; promptSources?: ViewDeps['promptSources']; sources?: Settings['sources']; connectors?: Settings['connectors']; wispr?: ViewDeps['wispr']; outlook?: ViewDeps['outlook']; calendar?: ViewDeps['calendar']; categoryColors?: Record<string, OutlookColor>; meetingLeadMinutes?: number } = {}) {
+  await initDataDir(dir, { settings: { ...defaultSettings(dir), ...(opts.sources && { sources: opts.sources }), ...(opts.connectors && { connectors: opts.connectors }), ...(opts.categoryColors && { calendar: { categoryColors: opts.categoryColors } }), ...(opts.meetingLeadMinutes && { notifications: { ...defaultSettings(dir).notifications, meetingLeadMinutes: opts.meetingLeadMinutes } }) }, rules: DEFAULT_RULES });
   const config = { ...resolveConfig({ WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' }), forceDryRun: false };
   const { logger } = createLogger({ dir: join(dir, 'logs') });
   lifecycle = new Lifecycle();
@@ -767,21 +767,26 @@ describe('the agenda (R2.8)', () => {
 
   it('is off while the calendar is off, or Outlook was never connected', async () => {
     await build({ connectors, calendar: () => snap() });
-    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'off', events: [] });
+    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'off', events: [], leadMinutes: 5 });
   });
 
   it('is off without a connector, even with the calendar switched on', async () => {
     await build({ sources, calendar: () => snap() });
-    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'off', events: [] });
+    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'off', events: [], leadMinutes: 5 });
   });
 
   it('says when the calendar has not been read yet', async () => {
     await build({ connectors, sources, calendar: () => undefined });
-    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'never', events: [] });
+    expect((await get('/api/calendar/agenda')).json()).toEqual({ state: 'never', events: [], leadMinutes: 5 });
   });
 
   it('says the agenda is stale once the last read is over three polls old', async () => {
     await build({ connectors, sources, calendar: () => snap({ polledAt: '2026-10-05T07:29:00.000Z' }) });
     expect((await get('/api/calendar/agenda')).json<AgendaView>().state).toBe('stale');
+  });
+
+  it('says how long before a meeting it shows as next: 5 minutes, or what Settings has', async () => {
+    await build({ connectors, sources, calendar: () => snap(), meetingLeadMinutes: 10 });
+    expect((await get('/api/calendar/agenda')).json<AgendaView>().leadMinutes).toBe(10);
   });
 });

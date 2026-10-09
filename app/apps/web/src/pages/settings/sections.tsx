@@ -1,6 +1,6 @@
 import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { OutlookColor, categoryColor, colorLabel, sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
+import { OutlookColor, categoryColor, colorLabel, meetingLead, sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type OutlookStatusView, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
@@ -749,6 +749,24 @@ function NotificationsSection({ s, full, set, type, flush, err }: Ctx) {
             value={s.notifications.quietHours}
             onBlur={flush}
             onChange={(e) => type((x) => (x.notifications.quietHours = e.target.value))}
+          />
+        </Row>
+      </Group>
+      {/* R2.8: a quiet cue, not a notification, so neither the switch nor quiet hours turn it off. */}
+      <Group title="Upcoming meetings">
+        <Row
+          label="Show the next meeting from"
+          help="In the sidebar and on the agenda, for meetings you’ve accepted or organised. Needs Outlook Calendar on. Outlook’s own reminders are unchanged."
+          error={err('notifications.meetingLeadMinutes')}
+        >
+          <NumInput
+            label="Minutes before a meeting it shows as next"
+            suffix="min before"
+            width="w-16"
+            value={meetingLead(s)}
+            invalid={!!err('notifications.meetingLeadMinutes')}
+            onBlur={flush}
+            onChange={(v) => type((x) => (x.notifications.meetingLeadMinutes = v ?? NaN))}
           />
         </Row>
       </Group>

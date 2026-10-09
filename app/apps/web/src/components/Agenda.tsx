@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { api } from '../api';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
-import { dayEvents, phaseOf, wantsAnswer, type AgendaDay } from '../lib/agenda';
+import { dayEvents, headsUp, nextUp, phaseOf, wantsAnswer, type AgendaDay, type NextUp } from '../lib/agenda';
 import { fmtAgo, fmtTime } from '../lib/format';
 import { Icon } from './icons';
 import { FutureButton, IconButton, Segmented, cx } from './ui';
@@ -15,7 +15,7 @@ import { FutureButton, IconButton, Segmented, cx } from './ui';
 
 const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
 
-function AgendaChip({ e, phase, onOpenItem }: { e: AgendaEvent; phase: 'past' | 'now' | 'later'; onOpenItem: (id: string) => void }) {
+function AgendaChip({ e, phase, soon, onOpenItem }: { e: AgendaEvent; phase: 'past' | 'now' | 'later'; soon?: NextUp; onOpenItem: (id: string) => void }) {
   const when = e.allDay ? 'All day' : fmtTime(e.start);
   const tag = 'inline-flex min-h-7 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-xs font-medium hover:bg-bg';
   const categories = e.categories ?? [];
@@ -27,6 +27,7 @@ function AgendaChip({ e, phase, onOpenItem }: { e: AgendaEvent; phase: 'past' | 
     <li
       data-agenda-event={e.id}
       data-phase={phase}
+      data-soon={soon ? '' : undefined}
       data-category-color={categories[0]?.color}
       className={cx('flex shrink-0 items-center gap-0.5 rounded-lg border pl-2 pr-0.5', categories.length > 0 && 'pl-3', phase === 'now' ? 'border-accent-line bg-accent-wash' : 'border-line-soft bg-surface', phase === 'past' && 'opacity-60')}
       style={hex ? { boxShadow: `inset 4px 0 0 ${hex}`, background: `color-mix(in srgb, ${hex} 14%, var(--surface))` } : undefined}
@@ -35,6 +36,8 @@ function AgendaChip({ e, phase, onOpenItem }: { e: AgendaEvent; phase: 'past' | 
         <span className="font-mono text-xs text-ink-2">{when}</span>
         <span className="truncate">{e.title}</span>
         {phase === 'now' && <span className="rounded bg-accent-bg px-1 text-[10px] font-semibold text-on-solid no-underline">Now</span>}
+        {/* About to start (R2.8): a quiet countdown, amber in the last two minutes. */}
+        {soon && <span className={cx('rounded border px-1 text-[10px] font-semibold no-underline', soon.imminent ? 'border-amber-fg text-amber-fg' : 'border-line text-ink-2')}>in {soon.minutes} min</span>}
         {named && <span className="sr-only">, {named}</span>}
       </a>
       {wantsAnswer(e) &&
@@ -87,12 +90,18 @@ function StateNote({ v, now }: { v: AgendaView; now: Date }) {
 
 export function Agenda({ full, onOpenItem }: { full: boolean; onOpenItem: (id: string) => void }) {
   const q = useApiQuery(() => api.getAgenda(), onTopics('inbox', 'settings', 'health'), []);
-  const now = useNow(60_000);
+  const now = useNow(15_000); // the countdown on a meeting about to start
   const [day, setDay] = useState<AgendaDay>('today');
   const listRef = useRef<HTMLOListElement>(null);
   const v = q.data;
   const list = v ? dayEvents(v.events, now, day) : [];
   const more = useMoreAround(listRef, `${day}:${list.map((e) => e.id).join(',')}`);
+  const next = v && day === 'today' ? nextUp(v.events, now, v.leadMinutes) : undefined;
+  const soonStart = next?.event.start;
+  // A meeting about to start comes into view, though the strip was scrolled elsewhere or it sat past the edge.
+  useEffect(() => {
+    if (soonStart) listRef.current?.querySelector('[data-soon]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [soonStart]);
   if (!v || (v.state === 'off' && !full)) return null;
   const page = (dir: 1 | -1) => listRef.current?.scrollBy({ left: dir * listRef.current.clientWidth * 0.8, behavior: 'smooth' });
   const arrow = 'absolute top-1/2 -translate-y-1/2 bg-surface shadow-sm';
@@ -124,7 +133,7 @@ export function Agenda({ full, onOpenItem }: { full: boolean; onOpenItem: (id: s
           <>
             <ol ref={listRef} aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 flex list-none gap-1.5 overflow-x-auto p-0 py-0.5">
               {list.map((e) => (
-                <AgendaChip key={e.id} e={e} phase={day === 'today' ? phaseOf(e, now) : 'later'} onOpenItem={onOpenItem} />
+                <AgendaChip key={e.id} e={e} phase={day === 'today' ? phaseOf(e, now) : 'later'} soon={next && headsUp(e) && e.start === soonStart ? next : undefined} onOpenItem={onOpenItem} />
               ))}
             </ol>
             {/* Meetings past either edge fade out under an arrow that scrolls to them. */}

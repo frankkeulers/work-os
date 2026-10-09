@@ -77,6 +77,20 @@ them; change either under **Calendar** in [Settings › Outlook](/settings/outlo
 short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it reads; it shows on
 [Usage](/usage). If the last read is old, the strip says when it was.
 
+### Before a meeting
+
+Five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
+the title and a countdown, on every page; on the agenda, its meeting says **in 4 min**. In the last
+two minutes the countdown turns amber. Choose the line to open the meeting in Outlook, where the
+Join button is. It goes when the meeting starts, and the agenda marks it Now.
+
+- It's for meetings you've accepted, accepted tentatively or organised. Not ones you declined or
+  haven't answered, all-day events, or ones shown as Free.
+- When two start together, it shows one and says **+1 more**.
+- Change how early it shows (1 to 30 minutes) under **Upcoming meetings** in
+  [Settings › Notifications](/settings/notifications).
+- Nothing pops up and nothing makes a sound. Outlook's own reminders are unchanged.
+
 ### Categories
 
 The Outlook categories on your meetings come with the calendar. A meeting with one has that

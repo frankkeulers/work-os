@@ -13,6 +13,7 @@ import { Avatar } from './Avatar';
 import { BrandIcon, SourceMark } from './BrandIcon';
 import { problemsOf } from './HealthBanner';
 import { Icon, type IconName } from './icons';
+import { NextMeeting } from './NextMeeting';
 import { Dot, IconButton, PhaseTag, Segmented, cx, phaseToast, usePopover, type Phase } from './ui';
 
 export type ShellContext = { inbox: QueryState<InboxView> };
@@ -270,6 +271,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
           <NavItem to="/usage" icon="usage" label="Usage & health" status={status} collapsed={collapsed} />
           <NavItem to="/settings" icon="settings" label="Settings & rules" collapsed={collapsed} />
         </div>
+        <NextMeeting collapsed={collapsed} />
         <div className="flex flex-col gap-2">
           {collapsed ? <div className="mx-2 border-t border-line-soft" /> : <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Sources</div>}
           {sources.map(({ id, health }) => {

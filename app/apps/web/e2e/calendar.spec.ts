@@ -104,6 +104,50 @@ test('Outlook categories: their colours are picked in Settings and show on the a
   await expect(page.getByTestId('calendar-categories').getByRole('listitem')).toHaveText(['Planning', 'Product']);
 });
 
+test('a meeting about to start shows in the sidebar and on its agenda chip, quietly (R2.8)', async ({ page }) => {
+  await turnOn(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  const next = page.getByRole('region', { name: 'Next meeting' });
+  await expect(meeting(page, 'Product weekly')).toBeVisible();
+  await expect(next).toHaveCount(0); // 09:45: nothing starts within five minutes
+
+  // The scenarios drawer moves the mock clock to four minutes before the renewal call.
+  await page.keyboard.press('Backquote');
+  const drawer = page.getByRole('complementary', { name: 'Scenarios' });
+  await drawer.getByRole('group', { name: 'Scenario tab' }).getByRole('button', { name: 'Controls' }).click();
+  await drawer.getByRole('button', { name: '13:56 (renewal call at 14:00)', exact: true }).click();
+  await page.keyboard.press('Backquote');
+  await expect(drawer).toHaveCount(0);
+
+  await expect(next).toContainText(/in [34] min/); // the mock clock runs on in real time
+  await expect(next).toContainText('[Customer] renewal call');
+  await expect(next).not.toHaveAttribute('data-imminent');
+  await expect(next.getByRole('link')).toHaveAttribute('href', /itemid=AAMkMOCKRENEWAL/);
+  await expect(meeting(page, 'renewal call')).toHaveAttribute('data-soon', '');
+  await expect(meeting(page, 'renewal call')).toContainText(/in [34] min/);
+  await expect(meeting(page, 'Product weekly')).not.toHaveAttribute('data-soon');
+  await dismissToasts(page);
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-next-meeting-light.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-next-meeting-dark.png'), animations: 'disabled', style: '[data-testid="os-notification"] { display: none; }' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+
+  // Collapsed, the sidebar keeps it as an icon with the minutes.
+  await page.keyboard.press('BracketLeft');
+  await expect(next).toContainText(/Next meeting, in [34] min: 14:00 \[Customer\] renewal call/);
+  await page.keyboard.press('BracketLeft');
+
+  // On every page; and Settings › Notifications sets how early it shows.
+  await page.goto('/settings/notifications');
+  await expect(next).toBeVisible();
+  const lead = page.getByLabel('Minutes before a meeting it shows as next');
+  await expect(lead).toHaveValue('5');
+  await lead.fill('1');
+  await lead.blur();
+  await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
+  await expect(next).toHaveCount(0);
+});
+
 test('meetings past the edge of the strip fade out under an arrow that scrolls to them', async ({ page }) => {
   await turnOn(page);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();

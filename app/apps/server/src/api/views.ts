@@ -8,6 +8,7 @@ import {
   isWorkHours,
   londonAt,
   londonParts,
+  meetingLead,
   sourceSchedule,
   summaryOf,
   topicItem,
@@ -190,9 +191,10 @@ async function notesByEvent(d: ViewDeps, since: string): Promise<Map<string, str
 export async function agendaView(d: ViewDeps): Promise<AgendaView> {
   const settings = d.settings.editable.settings;
   const schedule = sourceSchedule(settings, 'calendar');
-  if (!schedule.enabled || !settings.connectors?.ms365) return { state: 'off', events: [] };
+  const leadMinutes = meetingLead(settings);
+  if (!schedule.enabled || !settings.connectors?.ms365) return { state: 'off', events: [], leadMinutes };
   const snap = d.calendar?.();
-  if (!snap) return { state: 'never', events: [] };
+  if (!snap) return { state: 'never', events: [], leadMinutes };
   const now = d.now();
   const from = londonAt(now, '00:00');
   const to = londonAt(now, '00:00', 2);
@@ -222,7 +224,7 @@ export async function agendaView(d: ViewDeps): Promise<AgendaView> {
     });
   const status = d.runtime?.sourceStatus('calendar').status;
   const stale = now.getTime() - Date.parse(snap.polledAt) > STALE_POLLS * schedule.intervalWorkMinutes * 60_000;
-  return { state: status === 'auth_failed' ? 'auth_failed' : stale ? 'stale' : 'ok', polledAt: snap.polledAt, events };
+  return { state: status === 'auth_failed' ? 'auth_failed' : stale ? 'stale' : 'ok', polledAt: snap.polledAt, events, leadMinutes };
 }
 
 /** Every enabled source, in wake order (R2.1). Slack is always listed: the inbox is built around it. */

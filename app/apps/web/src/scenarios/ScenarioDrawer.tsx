@@ -80,6 +80,7 @@ function Controls() {
         <Ctl onClick={() => mockControls.advanceClock(60)}>+1 h</Ctl>
         <Ctl onClick={() => mockControls.setClockLondon('09:00')}>Tomorrow 09:00</Ctl>
         <Ctl onClick={() => mockControls.setClockLondon('19:30')}>19:30 (quiet hours)</Ctl>
+        <Ctl onClick={() => mockControls.setClockLondon('13:56')}>13:56 (renewal call at 14:00)</Ctl>
         <Ctl onClick={() => mockControls.wakeFromSleep()}>Wake from 3 h sleep</Ctl>
       </Group>
       <Group title="Poll outcome" hint={`${s.timelinePending} scripted arrivals left`}>
