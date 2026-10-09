@@ -56,14 +56,17 @@ test('on first load the light shows attention without playing needs you', async 
 
 test('Inbox zero plays checking sources while a poll runs, and finishes its cycle when it ends', async ({ page }) => {
   await inboxZero(page);
-  const mark = page.getByTestId('inbox-zero').locator('svg.bm');
+  const card = page.getByTestId('inbox-zero');
+  const mark = card.locator('svg.bm');
+  const height = (await card.boundingBox())!.height;
   await ctl(page, 'Nothing eligible').click();
   await expect(mark).toHaveClass(/\bbm-ck\b/);
+  // The hop is a transform inside a fixed viewBox: the card never changes size.
+  expect((await card.boundingBox())!.height).toBe(height);
   await expect(page.getByTestId('poll-line')).toContainText('Nothing new, no Claude call', { timeout: 10_000 });
   // One 4.8s cycle at most after the poll ends.
   await expect(mark).not.toHaveClass(/\bbm-ck\b/, { timeout: 6_000 });
-  const card = page.getByTestId('inbox-zero');
-  expect((await card.boundingBox())!.height).toBeGreaterThan(0);
+  expect((await card.boundingBox())!.height).toBe(height);
 });
 
 test('the sidebar mark plays filed when a filing is written to the sandbox', async ({ page }) => {
