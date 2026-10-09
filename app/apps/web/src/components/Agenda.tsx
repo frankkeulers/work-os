@@ -133,12 +133,13 @@ export function Agenda({ full, onOpenItem }: { full: boolean; onOpenItem: (id: s
       <div className="relative min-w-0 flex-1">
         {list.length ? (
           <>
-            <ol ref={listRef} aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 flex list-none gap-1.5 overflow-x-auto p-0 py-0.5">
+            <ol ref={listRef} aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 flex list-none gap-1.5 overflow-x-auto p-0 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {list.map((e) => (
                 <AgendaChip key={e.id} e={e} phase={day === 'today' ? phaseOf(e, now) : 'later'} soon={soon.get(e.id)} onOpenItem={onOpenItem} />
               ))}
             </ol>
-            {/* Meetings past either edge fade out under an arrow that scrolls to them. */}
+            {/* Meetings past either edge fade out under an arrow that scrolls to them; the strip has no
+                scrollbar of its own, though a trackpad or Shift and the wheel still scroll it. */}
             {more.before && (
               <>
                 <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-linear-to-r from-bg via-bg/80 to-transparent" />

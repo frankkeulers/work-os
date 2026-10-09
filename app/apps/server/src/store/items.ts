@@ -6,8 +6,8 @@ import { writeJsonAtomic } from './atomic';
 
 // items/<source>/<id>.json: an item's raw content and the decision's free text (PLAN.md §4.3).
 // This is the only place message text and its paraphrases live, so retention can delete them
-// together. Full items are cached in a small LRU; the short texts the inbox shows are kept for
-// every item that has been read or written.
+// together. Full items are cached in a small LRU; the short texts the inbox shows, and a
+// meeting's calendar event and categories (R2.8), are kept for every item read or written.
 
 export const StoredItem = z.object({
   item: Item,
@@ -18,12 +18,18 @@ export type StoredItem = z.infer<typeof StoredItem>;
 
 export const LRU_SIZE = 64;
 
+export interface ItemCalendar {
+  eventId: string;
+  categories?: string[];
+}
+
 /** A file name for an id: everything outside [A-Za-z0-9._-] is escaped, so an id can't name a path. */
 export const fileNameFor = (id: string) => `${id.replace(/[^A-Za-z0-9._-]/g, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`)}.json`;
 
 export class ItemFiles {
   private lru = new Map<string, StoredItem | null>(); // null: no file
   private texts = new Map<string, DecisionText>();
+  private calendars = new Map<string, ItemCalendar>();
 
   constructor(private readonly dir: string) {}
 
@@ -83,6 +89,7 @@ export class ItemFiles {
     await rm(this.path(source, id), { force: true });
     this.lru.delete(id);
     this.texts.delete(id);
+    this.calendars.delete(id);
   }
 
   /** Whether the item still has its file, without reading it. */
@@ -115,6 +122,11 @@ export class ItemFiles {
     return this.texts.get(id);
   }
 
+  /** A meeting's or invite's calendar event and the categories the item kept, for the inbox (R2.8). */
+  calendarOf(id: string): ItemCalendar | undefined {
+    return this.calendars.get(id);
+  }
+
   /** Reads the texts for these items in the background of a start, a few files at a time. */
   async preload(items: { id: string; source: string }[], concurrency = 16) {
     const queue = items.filter((i) => !this.texts.has(i.id));
@@ -136,6 +148,12 @@ export class ItemFiles {
         next: stored.text?.next,
         firstMessage: stored.item.messages[0]?.text,
       });
-    } else this.texts.set(id, {});
+      const cal = stored.item.meeting?.calendar;
+      if (cal) this.calendars.set(id, { eventId: cal.eventId, ...(cal.categories && { categories: cal.categories }) });
+      else this.calendars.delete(id);
+    } else {
+      this.texts.set(id, {});
+      this.calendars.delete(id);
+    }
   }
 }

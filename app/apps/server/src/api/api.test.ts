@@ -781,6 +781,11 @@ describe('the agenda (R2.8)', () => {
     }
     expect((await get(`/api/items/${encodeURIComponent('wispr:Stand-up')}`)).json<ItemView>().calendarCategories).toEqual(view.events[0].categories);
     expect((await get(`/api/items/${encodeURIComponent('wispr:Last week')}`)).json<ItemView>().calendarCategories).toEqual([{ name: 'Customer', color: 'darkRed' }]);
+    // The inbox rows have them too, for the dot beside the title.
+    const rows = (await get('/api/inbox')).json<InboxView>().items;
+    expect(rows.find((r) => r.id === 'wispr:Stand-up')?.calendarCategories).toEqual(view.events[0].categories);
+    expect(rows.find((r) => r.id === 'wispr:Last week')?.calendarCategories).toEqual([{ name: 'Customer', color: 'darkRed' }]);
+    expect(rows.filter((r) => r.calendarCategories)).toHaveLength(2);
   });
 
   it('is off while the calendar is off, or Outlook was never connected', async () => {

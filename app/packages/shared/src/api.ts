@@ -65,6 +65,7 @@ export interface ItemSummary {
   doneAt?: string;
   pieces: number; // amendment (topics): threads and stretches of chat in the topic; 1 for a lone piece
   asksDone: string[]; // amendment (topics): asks in next.asks Frank ticked off, by askId
+  calendarCategories?: CategoryTag[]; // amendment (R2.8): an invite's or a joined meeting's Outlook categories, while the calendar is read
 }
 
 export type PollPhase = 'idle' | 'polling' | 'triaging';

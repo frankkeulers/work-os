@@ -174,8 +174,9 @@ test('meetings past the edge of the strip fade out under an arrow that scrolls t
   const later = agenda(page).getByRole('button', { name: 'Later meetings' });
   const earlier = agenda(page).getByRole('button', { name: 'Earlier meetings' });
   await expect(meeting(page, 'Product weekly')).toBeVisible();
-  // Today's five meetings don't fit: the last runs past the edge.
+  // Today's six meetings don't fit: the last runs past the edge. The strip has no scrollbar of its own.
   await expect(later).toBeVisible();
+  await expect(agenda(page).getByRole('list', { name: 'Today’s meetings' })).toHaveCSS('scrollbar-width', 'none');
   await expect(earlier).toHaveCount(0);
   await dismissToasts(page);
   await page.screenshot({ path: join(APP, 'screenshots/inbox-agenda-scroll-light.png'), animations: 'disabled' });
@@ -247,6 +248,10 @@ test('an invite you haven’t answered is an item to answer in Outlook, with not
   await setScope(page, 'Full'); // the calendar shows in Full scope until it goes live (B7)
   const row = page.locator('[data-row^="calendar:"]');
   await expect(row).toContainText('Q4 roadmap review', { timeout: 10_000 });
+  // A dot for each of its Outlook categories beside its title; nothing else in the inbox is on the calendar.
+  await expect(row.locator('[data-row-categories]')).toHaveAttribute('data-row-categories', 'Planning, Product');
+  await expect(row.locator('[data-row-categories] > span')).toHaveCount(2);
+  await expect(page.locator('[data-row-categories]')).toHaveCount(1);
 
   await agenda(page).getByRole('button', { name: 'Tomorrow' }).click();
   await meeting(page, 'Q4 roadmap review').getByRole('button', { name: 'Not answered' }).click();

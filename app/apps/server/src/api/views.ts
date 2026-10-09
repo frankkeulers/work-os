@@ -300,8 +300,8 @@ export function inboxView(d: ViewDeps): InboxView {
     .filter((i) => !i.topicOf) // a part shows in its topic
     .filter((i) => i.status !== 'done' || !i.doneAt || i.doneAt >= cutoff)
     .filter((i) => !inExcludedChannel(i, s.slack.excludeChannels))
-    .map((i) =>
-      withOpenUrl(
+    .map((i) => {
+      const row = withOpenUrl(
         d,
         summaryOf(i, i, {
           actions: actions.get(i.id) ?? [],
@@ -310,8 +310,10 @@ export function inboxView(d: ViewDeps): InboxView {
           triageBudgetHit: b.triage.hit,
           text: d.items.text(i.id) ?? {},
         }),
-      ),
-    )
+      );
+      const calendarCategories = calendarCategoriesOf(d, d.items.calendarOf(i.id));
+      return calendarCategories ? { ...row, calendarCategories } : row;
+    })
     .sort((a, b2) => b2.lastActivityAt.localeCompare(a.lastActivityAt));
   const source = slackHealth(d);
   return {
@@ -332,8 +334,7 @@ export function inboxView(d: ViewDeps): InboxView {
  * A meeting's or invite's Outlook categories while the calendar is read (R2.8): the event's own
  * now, when the snapshot still has it, else those the item kept.
  */
-function calendarCategoriesOf(d: ViewDeps, item: Item): CategoryTag[] | undefined {
-  const cal = item.meeting?.calendar;
+function calendarCategoriesOf(d: ViewDeps, cal: { eventId: string; categories?: string[] } | undefined): CategoryTag[] | undefined {
   const s = d.settings.editable.settings;
   if (!cal || !sourceSchedule(s, 'calendar').enabled) return undefined;
   const live = d.calendar?.()?.events.find((e) => e.id === cal.eventId);
@@ -389,7 +390,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
     contentExpired: true,
     schemaVersion: 1,
   };
-  const calendarCategories = calendarCategoriesOf(d, item);
+  const calendarCategories = calendarCategoriesOf(d, item.meeting?.calendar);
   // Who is in the DM, for the header. Nice to have: a Slack failure leaves it out.
   const members = it.kind === 'dm' && d.members ? await d.members(item).catch(() => undefined) : undefined;
   const decision: TriageDecision | undefined = it.decision && {

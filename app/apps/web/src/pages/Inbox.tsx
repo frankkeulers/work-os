@@ -5,7 +5,7 @@ import { api, type InboxView, type ItemSummary, type ItemView } from '../api';
 import { parseType } from '../components/ActionPanel';
 import { Agenda } from '../components/Agenda';
 import { SourceMark } from '../components/BrandIcon';
-import { ItemMarkers, itemPath, kindLabel, markDoneWithUndo, markManyDoneWithUndo } from '../components/item';
+import { CategoryDot, ItemMarkers, itemPath, kindLabel, markDoneWithUndo, markManyDoneWithUndo } from '../components/item';
 import { HealthBanner } from '../components/HealthBanner';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
@@ -447,7 +447,18 @@ function QueueRow({ item, selected, fresh, divide, onPick }: { item: ItemSummary
           <SourceMark source={item.source} size={18} />
         </span>
         <span className="flex min-w-[110px] flex-[0_1_170px] flex-col gap-px">
-          <span className="truncate text-xs font-medium text-ink-2">{item.title}</span>
+          <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-2">
+            {/* An invite's or a joined meeting's Outlook categories (R2.8), as on the agenda. */}
+            {item.calendarCategories?.length ? (
+              <span data-row-categories={item.calendarCategories.map((c) => c.name).join(', ')} title={item.calendarCategories.map((c) => c.name).join(', ')} className="flex shrink-0 gap-0.5">
+                {item.calendarCategories.map((c) => (
+                  <CategoryDot key={c.name} color={c.color} />
+                ))}
+              </span>
+            ) : null}
+            <span className="truncate">{item.title}</span>
+            {item.calendarCategories?.length ? <span className="sr-only">, {item.calendarCategories.map((c) => c.name).join(', ')}</span> : null}
+          </span>
           <span className="text-[11px] text-muted">
             {kindLabel(item.kind)} · {ago}
             {item.pieces > 1 && <span data-pieces={item.pieces}> · {plural(item.pieces, 'part')}</span>}

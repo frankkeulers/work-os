@@ -96,8 +96,9 @@ when it ends, until it does. Choose a meeting there to open it in Outlook, where
 ### Categories
 
 The Outlook categories on your meetings come with the calendar. A meeting with one has that
-category's colour down its left edge on the agenda, and a light shade of it behind, and an invite or a Wispr Flow meeting joined to
-it lists its categories under the summary.
+category's colour down its left edge on the agenda, and a light shade of it behind. An invite or a
+Wispr Flow meeting joined to it has a dot in each category's colour beside its title in the inbox,
+and lists its categories under the summary.
 
 Work OS can read a category's name but not the colour you gave it in Outlook: the connector doesn't
 offer your category list. Pick the same colours under **Category colours** in

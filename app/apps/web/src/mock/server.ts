@@ -469,13 +469,15 @@ export class MockServer implements WorkOsApi, MockControls {
 
   private summaryOf(rec: ItemRec, budgets: BudgetState): ItemSummary {
     const d = rec.decision;
-    return summaryOf(rec.item, rec, {
+    const row = summaryOf(rec.item, rec, {
       actions: this.actionsFor(rec.item.id),
       quietMinutes: this.s.settings.triage.quietMinutes,
       now: this.iso(),
       triageBudgetHit: budgets.triage.hit,
       text: { summary: d?.summary, reason: d?.reason, next: d?.next, firstMessage: rec.item.messages[0]?.text },
     });
+    const calendarCategories = this.categoryTagsOf(rec.item.meeting?.calendar?.eventId);
+    return calendarCategories ? { ...row, calendarCategories } : row;
   }
 
   async getHealth(): Promise<HealthView> {
