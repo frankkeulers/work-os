@@ -68,6 +68,7 @@ Work OS is a tool you glance at many times a day. Each screen should show what n
 - **Where this differs from the spec:**
   - The viewBox depends on size alone: the tight crop `6 6 52 52` at 32px and below, `-4 -8 72 72` above. Swapping it when an animation starts would make the tile jump.
   - The play-once animations drop the motion preview's idle lead-in, so the pop starts at once (needs you 3.6s becomes 2.95s, filed 4s becomes 2.4s).
+  - The favicon is a self-contained badge (an ink tile with the socket and lines filled light, like the app icon), not the outline mark with a `prefers-color-scheme` variant. Chrome doesn't reliably apply that media query to tab icons, and on a dark tab strip the light-mode outline disappeared.
   - Filed is detected by comparing each inbox load with the one before, not in ActionPanel, so a batch that moves on before its write lands still plays it. The item page has no sidebar, so a filing made there doesn't play.
 
 ## Settings (applied)
