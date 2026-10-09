@@ -140,8 +140,11 @@ Pressing Done within 30 minutes of a check that said "not settled" is kept as a 
 check missed a close. [Usage & health](/usage) shows how often your replies close items (C1) and
 how often you undo a close (C2), over the last 14 days.
 
-Replies in Outlook don't close items yet. The checks count towards the day's triage budget, and
-when Claude can't be reached nothing closes: the check is tried up to three times.
+Replies in Outlook are checked only once you turn that on in
+[Settings › Triage rules](rules.md#when-you-reply); they are then picked up by the next mail poll,
+with no early read. The same page turns closing off: the check still runs, and the row asks **Mark
+done?** instead. The checks count towards the day's triage budget, and when Claude can't be reached
+nothing closes: the check is tried up to three times.
 
 ## The item panel
 

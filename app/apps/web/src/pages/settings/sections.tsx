@@ -1,6 +1,6 @@
 import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { OutlookColor, categoryColor, colorLabel, meetingLead, sourceSchedule, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
+import { OutlookColor, categoryColor, closeOnReply, colorLabel, meetingLead, sourceSchedule, type SourceId, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type OutlookStatusView, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
@@ -48,8 +48,21 @@ export interface Ctx {
 
 // ---------- Triage rules ----------
 
-function RulesSection({ rules, view, full, setRules, ruleError }: Ctx) {
+/** Closing on reply (cockpit CK-2.7): one switch, and the sources whose replies are checked. */
+const REPLY_SOURCES = [
+  { id: 'slack', label: 'Slack', help: 'Your replies in a thread, DM or group DM.' },
+  { id: 'outlook', label: 'Outlook', help: 'Your replies in a mail conversation. Best turned on once Slack has closed items without an Undo for a week.' },
+] as const satisfies { id: SourceId; label: string; help: string }[];
+
+function RulesSection({ s, rules, view, full, set, setRules, ruleError }: Ctx) {
   const [edit, setEdit] = useState<RuleEdit>(null);
+  const close = closeOnReply(s);
+  const setClose = (fn: (c: ReturnType<typeof closeOnReply>) => void) =>
+    set((x) => {
+      const c = closeOnReply(x);
+      fn(c);
+      x.triage.closeOnReply = { enabled: c.enabled, sources: Object.fromEntries(REPLY_SOURCES.map(({ id }) => [id, c.sources[id]])) };
+    });
   return (
     <>
       <SectionHeader
@@ -68,6 +81,23 @@ function RulesSection({ rules, view, full, setRules, ruleError }: Ctx) {
       <p className="m-0 mt-4 text-xs text-muted">
         Labelled set: {view.labelCount} examples, {view.correctionCount} from your corrections. <Link to="/usage">Run an eval</Link> after big rule changes.
       </p>
+      <Group title="When you reply">
+        <Row
+          label="Close items when your reply settles them"
+          help={
+            close.enabled
+              ? 'After you reply, a short check asks whether your reply settles what was asked. If it does, the item goes to Done, with Undo.'
+              : 'The check still runs, but nothing closes: the row says “You replied · Mark done?”.'
+          }
+        >
+          <Switch label="Close items when your reply settles them" checked={close.enabled} onChange={(v) => setClose((c) => (c.enabled = v))} />
+        </Row>
+        {REPLY_SOURCES.map(({ id, label, help }) => (
+          <Row key={id} label={`Check replies in ${label}`} help={help}>
+            <Switch label={`Check replies in ${label}`} checked={close.sources[id]} onChange={(v) => setClose((c) => (c.sources[id] = v))} />
+          </Row>
+        ))}
+      </Group>
       {full && (
         <>
           <FutureRow title="More conditions" phase="P2" marks={['outlook', 'teams']}>
@@ -1635,7 +1665,7 @@ export interface SectionDef {
 const under = (...prefixes: string[]) => (path: string) => prefixes.some((p) => path === p || path.startsWith(`${p}.`));
 
 export const SECTIONS: SectionDef[] = [
-  { id: 'rules', label: 'Triage rules', group: 'Inbox', View: RulesSection, owns: under('rules') },
+  { id: 'rules', label: 'Triage rules', group: 'Inbox', View: RulesSection, owns: under('rules', 'settings.triage.closeOnReply') },
   { id: 'people', label: 'People', group: 'Inbox', View: PeopleSection, owns: under('settings.people') },
   { id: 'schedule', label: 'Schedule', group: 'Inbox', View: ScheduleSection, owns: under('settings.schedule.workHours', 'settings.triage.quietMinutes') },
   { id: 'notifications', label: 'Notifications', group: 'Inbox', View: NotificationsSection, owns: under('settings.notifications') },

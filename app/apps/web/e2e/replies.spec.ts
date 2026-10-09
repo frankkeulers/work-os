@@ -102,6 +102,31 @@ test('J54: Undo a close, and a failed check closes nothing (CK-2.3, CK-2.6)', as
   await expect(row().locator('[data-reply-note]')).toHaveCount(0);
 });
 
+test('with closing on reply off, a settled reply asks "Mark done?" and closes nothing (CK-2.7)', async ({ page }) => {
+  await afternoon(page);
+  await page.goto('/settings/rules');
+  await expect(page.getByRole('heading', { name: 'When you reply', exact: true })).toBeVisible();
+  const group = page.getByRole('main', { name: 'Triage rules' });
+  const close = group.getByRole('switch', { name: 'Close items when your reply settles them' });
+  await expect(close).toHaveAttribute('aria-checked', 'true');
+  await expect(group.getByRole('switch', { name: 'Check replies in Slack' })).toHaveAttribute('aria-checked', 'true');
+  await expect(group.getByRole('switch', { name: 'Check replies in Outlook' })).toHaveAttribute('aria-checked', 'false');
+  await close.click();
+  await expect(page.getByRole('status').filter({ hasText: 'Changes saved' })).toBeVisible();
+  await expect(close).toHaveAttribute('aria-checked', 'false');
+  await expect(group).toContainText('The check still runs, but nothing closes');
+  await page.addStyleTag({ content: `${HIDE} [role="status"] { display: none !important; }` });
+  await page.screenshot({ path: join(APP, 'screenshots/settings-close-on-reply-light.png') });
+
+  await page.goto('/');
+  await expect(page.getByTestId('poll-line')).not.toContainText(/Polling|Triaging/);
+  const row = await reply(page, 'Settles it', '[data-reply-note="settled"]');
+  await expect(row().locator('[data-reply-note="settled"]')).toHaveText('You replied · Mark done?');
+  await expect(row()).not.toHaveAttribute('data-replied');
+  await expect(page.getByRole('status').filter({ hasText: 'Closed: you replied' })).toHaveCount(0);
+  await expect(page.getByTestId('replies-line')).toHaveCount(0);
+});
+
 test('J52, dark: "You replied" in the dark theme', async ({ page }) => {
   await afternoon(page);
   await reply(page, 'Settles it', '[data-replied]');

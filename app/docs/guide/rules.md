@@ -3,7 +3,7 @@ title: Triage rules
 group: Inbox
 order: 40
 summary: Rules that decide before Claude does, or set a floor for its decision.
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 Rules run before Claude, in order. **The first rule that matches decides**; the rest are skipped.
@@ -45,6 +45,18 @@ source.
 | Drop | Ignored, and not stored. |
 | Ask the model | Claude decides; with a minimum, it can raise the level but never go below it. |
 | To file | Claude still reads it (for the summary and where to file it), but it needs nothing from you, so it lands in To file. |
+
+## When you reply
+
+Under the rules, **When you reply** sets what happens after you answer an item in its source. See
+[When you reply](inbox.md#when-you-reply) for what you see in the inbox.
+
+- **Close items when your reply settles them** (on by default): after a short check finds that
+  your reply settles what was asked, the item goes to Done by itself. Off, the check still runs,
+  but nothing closes: the row says **You replied · Mark done?** and you press Done.
+- **Check replies in Slack** (on) and **Check replies in Outlook** (off): the sources whose replies
+  are checked at all. Outlook is best turned on once Slack has closed items for a week without you
+  needing Undo.
 
 ## The defaults
 
