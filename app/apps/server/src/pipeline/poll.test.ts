@@ -90,7 +90,9 @@ describe('mergeItem', () => {
   it('takes an edited message’s new text', () => {
     const edited = mergeItem(item([msg('1', 30)]), item([{ ...msg('1', 30), text: 'fixed typo' }]), 1);
     expect(edited.item.messages[0].text).toBe('fixed typo');
-    expect(edited.newIds).toEqual([]);
+    expect(edited).toMatchObject({ newIds: [], edited: true, item: { revision: 1 } });
+    expect(mergeItem(item([msg('1', 30)]), item([msg('1', 30)]), 1).edited).toBe(false);
+    expect(mergeItem(item([msg('1', 30)]), item([msg('2', 20)]), 1).edited).toBe(false); // new, not edited
   });
 });
 
@@ -136,6 +138,27 @@ describe('pollSource (FR-2.8)', () => {
     ]);
     expect((await d.items.read('slack', ID))?.item.messages.map((m) => m.id)).toEqual(['1', '2', '3']);
     expect(store.projection.items[ID]).toMatchObject({ revision: 3, newReplies: true, triageState: 'pending' });
+  });
+
+  it('saves a message whose text changed under the same ID, at the same revision, so it isn’t triaged again', async () => {
+    // A Slack edit, or a summary Wispr Flow rewrites under "summary".
+    next = { items: [item([msg('1', 30), msg('2', 20)])], nextCursor: '5' };
+    await pollSource(d, source, 'first', signal());
+    const stored = (await d.items.read('slack', ID))!;
+    await d.items.write({ ...stored, text: { summary: 'Asks for a go/no-go', reason: 'VIP' } });
+    const before = structuredClone(store.projection.items[ID]);
+    next = { items: [item([msg('1', 30), { ...msg('2', 20), text: 'rewritten' }], { title: '#product-launch' })], nextCursor: '6' };
+    expect((await pollSource(d, source, 'scheduled', signal())).changed).toBe(1);
+    const file = (await d.items.read('slack', ID))!;
+    expect(file.item.messages.map((m) => m.text)).toEqual(['text 1', 'rewritten']);
+    expect(file.item.revision).toBe(1);
+    expect(file.text?.summary).toBe('Asks for a go/no-go');
+    const ups = (await events()).filter((e) => e.type === 'item.upserted');
+    expect(ups.map((e) => e.data.revision)).toEqual([1, 1]);
+    expect(store.projection.items[ID]).toEqual({ ...before, title: '#product-launch' }); // triage state as it was
+
+    const again = await pollSource(d, source, 'scheduled', signal());
+    expect(again.changed).toBe(0); // the same text again changes nothing
   });
 
   it('keeps the decision’s text when an item gets new messages', async () => {

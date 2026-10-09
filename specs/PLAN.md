@@ -526,7 +526,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 **FR-2.7** Polling interval comes from settings (default 10 min in work hours, 60 min outside). The scheduler detects a wake by comparing wall-clock time with monotonic time on a 5-second tick: a gap of more than 30 s, with a changed kernel wake time, is a wake. It then polls within 1 minute, or as soon as the network returns if it is still offline (FR-14.2). The earlier rule, a clock jump larger than 2× the interval, missed a 1-hour sleep when the off-hours interval is 60 minutes. A manual clock change is not treated as a wake.
 
-**FR-2.8** Polling is idempotent. Message `ts` is the dedupe key. The cursor only advances after the items are persisted.
+**FR-2.8** Polling is idempotent. Message `ts` is the dedupe key. The cursor only advances after the items are persisted. A message whose text changed under the same ID (a Slack edit, a Wispr Flow summary rewritten) is saved and logged at the same revision, so it is not triaged again.
 
 **FR-2.9** On HTTP 429, honour `Retry-After`. Other failures back off exponentially with jitter and emit `source.failed`. Failures are classified as offline, captive portal, rate limited, auth failed or server error (FR-14.3). Being offline is not a source failure: the cursor stays put and polling resumes when the network returns. The UI shows source health.
 

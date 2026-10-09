@@ -3,7 +3,7 @@ title: Wispr Flow meetings
 group: Inbox
 order: 45
 summary: Meeting notes from Wispr Flow's Notetaker in the inbox, triaged on their summary, and filed from there.
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 Wispr Flow's Notetaker records your meetings on the Mac and writes a summary, a transcript and
@@ -30,6 +30,8 @@ reading; meetings already in the inbox stay.
 - **Finished meetings only.** A meeting still being processed is picked up on a later poll.
 - **The inbox keeps** the meeting's summary, your own notes and its action items. Triage reads
   these. A meeting is "for your information" unless something in it falls to you.
+- **A summary Wispr Flow rewrites** replaces the old one in the inbox on the next poll. The meeting
+  isn’t triaged again for it, though it is when you first add notes to it.
 - **The transcript is never stored.** When you draft a vault note or a Confluence entry from a
   meeting, Work OS reads the transcript from Wispr Flow for that draft only. If it can't, the draft
   is written from the summary and notes instead.

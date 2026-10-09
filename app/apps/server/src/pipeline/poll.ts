@@ -9,7 +9,8 @@ import { meFrom, ruleDecision, ruleReason, ruleVerdict, type RuleVerdict } from 
 
 // One poll of one source (FR-2.8). Idempotent: message IDs (Slack ts) are the dedupe key, so a
 // replayed or overlapping fetch changes nothing, and an item's revision only moves when it has a
-// message it didn't have before. The write order makes a crash at any point safe:
+// message it didn't have before. A message whose text changed under the same ID (a Slack edit, a
+// summary Wispr Flow rewrites) is saved and logged at the same revision: not triaged again. The write order makes a crash at any point safe:
 //   1. item files (each written atomically);
 //   2. one append: the item.upserted events and source.polled with the cursor (one fsync);
 //   3. cursors.json.
@@ -54,13 +55,14 @@ const EXCERPT_MAX = 110;
 const excerpt = (text = '') => (text.length > EXCERPT_MAX ? `${text.slice(0, EXCERPT_MAX - 1)}…` : text);
 
 /** Merges a fetched item into what is stored: the union of messages, by ID. */
-export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision: number | undefined): { item: Item; newIds: string[] } {
+export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision: number | undefined): { item: Item; newIds: string[]; edited: boolean } {
   const known = new Set(stored?.messages.map((m) => m.id) ?? []);
   const newIds = fetched.messages.filter((m) => !known.has(m.id)).map((m) => m.id);
   // A message stored empty (an app's post read before its blocks were) whose text has now arrived
   // is new content: triage it again.
   const was = new Map(stored?.messages.map((m) => [m.id, m.text]) ?? []);
   const filled = fetched.messages.some((m) => was.get(m.id) === '' && m.text !== '');
+  const edited = fetched.messages.some((m) => was.has(m.id) && was.get(m.id) !== m.text);
   const byId = new Map((stored?.messages ?? []).map((m) => [m.id, m]));
   for (const m of fetched.messages) byId.set(m.id, m); // an edited message replaces its old text
   const messages = [...byId.values()].sort((a, b) => a.ts.localeCompare(b.ts) || a.id.localeCompare(b.id)).slice(-MAX_STORED_MESSAGES);
@@ -77,6 +79,7 @@ export function mergeItem(stored: Item | undefined, fetched: Item, prevRevision:
     .at(-1)!;
   return {
     newIds,
+    edited,
     item: {
       ...fetched,
       participants: participants.map((p) => fetched.participants.find((q) => q.id === p.id) ?? p), // fresher names
@@ -113,8 +116,13 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
     const r: { item?: Item; fromMeOnly?: boolean; fixed?: Extract<RuleVerdict, { kind: 'fixed' }>; sentByYou?: boolean; dropped?: boolean } = {};
     await d.items.update(fetched.source, fetched.id, (stored) => {
       // Without the file (retention, or a crash before it was written) the merge starts afresh.
-      const { item, newIds } = mergeItem(stored?.item, fetched, prev?.revision);
-      if (prev && item.revision === prev.revision) return undefined; // nothing the log doesn't have
+      const { item, newIds, edited } = mergeItem(stored?.item, fetched, prev?.revision);
+      if (prev && item.revision === prev.revision) {
+        if (!edited || !stored) return undefined; // nothing the log doesn't have
+        // Only text that changed: saved, and logged at the same revision so it isn't triaged again.
+        r.item = item;
+        return { item, text: stored.text, schemaVersion: 1 as const };
+      }
       const byId = new Map(item.messages.map((m) => [m.id, m]));
       // Recovering a file the log never heard of: who wrote what is unknown, so triage it again.
       const fromMeOnly = !!prev && !!me && newIds.length > 0 && newIds.every((id) => byId.get(id)?.authorId === me);

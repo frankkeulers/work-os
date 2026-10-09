@@ -9,7 +9,8 @@ export { fixedTs };
 // is never stored; the drafters fetch it when asked (fullContent).
 //
 // Message IDs are fixed ("summary", "notes", "todos"), so a summary Wispr rewrites replaces the
-// stored text without counting as new content: a meeting is triaged once, when it is finalised.
+// stored text (the poll saves it) without counting as new content: a meeting is triaged once, when
+// it is finalised.
 
 export const ITEM_PREFIX = 'wispr:';
 /** Frank in Wispr Flow items: the author of his own notes. */
