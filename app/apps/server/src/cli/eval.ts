@@ -9,12 +9,16 @@ import { macKeychain } from '../config/keychain';
 import { loadSettings } from '../config/settings';
 import { SettingsState } from '../config/settingsState';
 import { runEval, saveReport } from '../pipeline/eval';
+import { SETTLE_EVAL_MIN_LABELS, runSettleEval, saveSettleReport, type SettleEvalReport } from '../pipeline/evalSettle';
 import { acquireLock } from '../runtime/lock';
 import { API_KEY_FIX, apiKeySet } from '../runtime/refuse';
 import { readLabels } from '../store/labels';
+import { latestSettleLabels, readSettleLabels } from '../store/settleLabels';
 
 // npm run eval (FR-6.1, FR-6.3): the triage prompt and model over labels/triage.jsonl, scored and
-// saved to logs/eval-<timestamp>.json. `-- --source outlook` scores one source's labels alone (R2.2). It calls Claude on the subscription login, like the server.
+// saved to logs/eval-<timestamp>.json. `-- --source outlook` scores one source's labels alone (R2.2).
+// `-- --purpose settle` runs the settle prompt over labels/settle.jsonl instead (cockpit CK-2.6),
+// once it holds 30 labelled checks. It calls Claude on the subscription login, like the server.
 // It takes the lock, so it never shares the usage log with a running server; while the server
 // runs, use Usage › Run eval instead. Prints scores and counts only, never thread text.
 
@@ -35,6 +39,28 @@ function print(r: EvalReport, file: string) {
   console.log(`Saved ${file}`);
 }
 
+function printSettle(r: SettleEvalReport, file: string) {
+  const scored = r.labelCount - r.failed;
+  console.log(`Settle eval of ${r.labelCount} labelled checks · ${r.model} · prompt ${r.promptVersion}`);
+  if (r.failed) console.log(`${r.failed} check(s) got no usable answer and are not scored.`);
+  console.log('');
+  console.log(`  right now       ${String(r.correct).padStart(4)} of ${scored}`);
+  console.log(`  false closes    ${String(r.falseCloses).padStart(4)}   (an ask you still owed, closed)`);
+  console.log(`  missed closes   ${String(r.missedCloses).padStart(4)}   (left open after your reply settled it)`);
+  for (const [source, s] of Object.entries(r.bySource)) console.log(`  ${source.padEnd(8)} ${s.correct} of ${s.labelCount} right`);
+  console.log('');
+  console.log(`Tokens ${r.tokens.toLocaleString('en-GB')} · cost-equivalent $${r.costEquivalent.toFixed(4)}`);
+  console.log(`Saved ${file}`);
+}
+
+/** `--purpose triage|settle`: which prompt to score. */
+function purposeArg(argv: string[]): 'triage' | 'settle' | Error {
+  const i = argv.indexOf('--purpose');
+  if (i < 0) return 'triage';
+  const v = argv[i + 1];
+  return v === 'triage' || v === 'settle' ? v : new Error('--purpose takes triage or settle');
+}
+
 /** `--source <id>`: one source's labels only. */
 function sourceArg(argv: string[]): SourceId | undefined | Error {
   const i = argv.indexOf('--source');
@@ -45,8 +71,9 @@ function sourceArg(argv: string[]): SourceId | undefined | Error {
 
 async function main(): Promise<number> {
   const source = sourceArg(process.argv.slice(2));
-  if (source instanceof Error) {
-    console.error(source.message);
+  const purpose = purposeArg(process.argv.slice(2));
+  if (source instanceof Error || purpose instanceof Error) {
+    console.error((source instanceof Error ? source : (purpose as Error)).message);
     return EXIT.config;
   }
   if (apiKeySet(process.env)) {
@@ -71,6 +98,20 @@ async function main(): Promise<number> {
   }
   let usage: UsageLog | undefined;
   try {
+    if (purpose === 'settle') {
+      const settle = await readSettleLabels(p.settleLabels);
+      const n = latestSettleLabels(settle).length;
+      if (n < SETTLE_EVAL_MIN_LABELS) {
+        console.error(`The settle eval runs once ${p.settleLabels} holds ${SETTLE_EVAL_MIN_LABELS} labelled checks; it has ${n}. Undo a wrong close, or press Done soon after a reply the check missed, to add one.`);
+        return EXIT.config;
+      }
+      const settings = (await SettingsState.create(config.dataDir, await loadSettings(config.dataDir), config.forceDryRun)).editable.settings;
+      usage = await UsageLog.open(p.logs);
+      const claude = new ClaudeAdapter({ usage, settings: () => settings, secrets: macKeychain(), now: () => new Date(), cwd: join(config.dataDir, 'sandbox'), client: `work-os-eval/${config.version}` });
+      const report = await runSettleEval({ claude, settings, prompt: await loadPromptFile(config.dataDir, 'settle'), now: () => new Date() }, settle);
+      printSettle(report, await saveSettleReport(p.logs, report));
+      return EXIT.ok;
+    }
     const records = await readLabels(p.labels);
     if (!records.length) {
       console.error(`No labelled threads in ${p.labels} yet. Correct a triage in the inbox to add one.`);

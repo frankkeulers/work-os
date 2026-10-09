@@ -109,7 +109,8 @@ reply settles what was asked. It is a short check, separate from triage, and it 
 after the poll that brings your reply in.
 
 - **Settled:** the item closes by itself and goes to Done. If the check got it wrong, reopen it
-  from Done.
+  from Done. Each reopen is kept as a label, as corrections are for triage, so a change to the
+  settle prompt can be measured (`npm run eval -- --purpose settle`, once there are 30).
 - **Partly settled:** in a topic, the asks your reply settled are ticked off, and the next open
   one becomes the next step.
 - **Not settled**, such as "will look later" or a question back: the item stays where it is.
@@ -118,6 +119,10 @@ after the poll that brings your reply in.
 If you reply through the panel's **Reply in Slack** (or **Open thread in Slack**), Work OS reads that
 thread again 2 and 6 minutes later, so the item closes without waiting for the next poll. A reply
 you make without the button is still picked up by the poll.
+
+Pressing Done within 30 minutes of a check that said "not settled" is kept as a label too: the
+check missed a close. [Usage & health](/usage) shows how often your replies close items (C1) and
+how often you undo a close (C2), over the last 14 days.
 
 Replies in Outlook don't close items yet. The checks count towards the day's triage budget, and
 when Claude can't be reached nothing closes: the check is tried up to three times.

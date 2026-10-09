@@ -5,6 +5,8 @@ import {
   correct,
   failTriage,
   markDone,
+  countClose,
+  countUndo,
   markNotified,
   markSeen,
   newItemFlags,
@@ -158,6 +160,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       failTriage(item, e.data.attempts);
       break;
     case 'item.done':
+      countClose((p.closes ??= {}), item, e.at, e.data);
       markDone(item, e.at, e.data);
       break;
     case 'settle.checked':
@@ -167,6 +170,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       settleFailed(item, e.data.attempts);
       break;
     case 'item.reopened':
+      countUndo((p.closes ??= {}), item, e.at);
       reopen(item);
       break;
     case 'item.snoozed':

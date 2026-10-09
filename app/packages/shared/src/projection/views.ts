@@ -1,9 +1,9 @@
-import type { BudgetState, ClosedByReply, ItemSummary } from '../api';
+import type { BudgetState, ClosedByReply, Criterion, ItemSummary } from '../api';
 import { effectiveTriage, laneFor, viewLane } from '../lanes';
 import type { ActionType, NextStep, Settings, UsageRecord } from '../schemas';
 import { askId } from './topics';
 import { londonParts } from '../time';
-import type { ActionState, ItemFlags, ItemMeta } from './state';
+import type { ActionState, CloseStats, ItemFlags, ItemMeta } from './state';
 
 // Read-side views built from the projection. The server and the mock build the inbox the same way.
 
@@ -143,4 +143,33 @@ export function budgetsOf(
     baseline,
     pctOfBaseline: baseline ? Math.round((cost / baseline) * 100) : null,
   };
+}
+
+/** C1 and C2 look back this many days. */
+export const CLOSE_CRITERIA_DAYS = 14;
+
+/**
+ * C1, the share of Needs you exits closed by Frank's reply, and C2, the share of those closes he
+ * undid within 24 h (cockpit CK-2.8), over the last 14 days.
+ */
+export function replyCloseCriteria(closes: Record<string, CloseStats> | undefined, now: Date): Criterion[] {
+  const since = londonParts(new Date(now.getTime() - (CLOSE_CRITERIA_DAYS - 1) * 86_400_000)).dateKey;
+  const t = { exits: 0, byReply: 0, undone: 0 };
+  for (const [day, c] of Object.entries(closes ?? {})) {
+    if (day < since) continue;
+    t.exits += c.exits;
+    t.byReply += c.byReply;
+    t.undone += c.undone;
+  }
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const c1 = t.exits ? t.byReply / t.exits : undefined;
+  const c2 = t.byReply ? t.undone / t.byReply : undefined;
+  return [
+    c1 === undefined
+      ? { id: 'C1', name: 'Needs you closed by your reply', value: '—', target: '≥ 40%', status: 'pending', statusLabel: 'Nothing closed yet' }
+      : { id: 'C1', name: 'Needs you closed by your reply', value: pct(c1), target: '≥ 40%', status: c1 >= 0.4 ? 'on_track' : 'at_risk', statusLabel: `${t.byReply} of ${t.exits} in ${CLOSE_CRITERIA_DAYS} days` },
+    c2 === undefined
+      ? { id: 'C2', name: 'False closes', value: '—', target: '≤ 2%', status: 'pending', statusLabel: 'No reply closes yet' }
+      : { id: 'C2', name: 'False closes', value: pct(c2), target: '≤ 2%', status: c2 <= 0.02 ? 'on_track' : 'at_risk', statusLabel: `${t.undone} of ${t.byReply} undone` },
+  ];
 }

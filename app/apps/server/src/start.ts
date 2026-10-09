@@ -60,6 +60,7 @@ import { runSettle, type SettleDeps } from './pipeline/settle';
 import { correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
 import { LabelStore } from './store/labels';
+import { SettleLabelStore } from './store/settleLabels';
 import { DraftStore } from './store/drafts';
 import { ActionService } from './actions/service';
 import type { Notice } from '@work-os/shared';
@@ -317,6 +318,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   const settleDeps: SettleDeps = { ...triageDeps, prompt: () => loadPromptFile(config.dataDir, 'settle') };
   const labels = await LabelStore.open(paths(config.dataDir).labels);
   lifecycle.onStop('labels', () => labels.close());
+  const settleLabels = await SettleLabelStore.open(paths(config.dataDir).settleLabels);
+  lifecycle.onStop('settle-labels', () => settleLabels.close());
   const correct = (id: string, input: Parameters<typeof correctTriage>[2]) =>
     correctTriage({ store, items, labels, now, me: triageDeps.me, keepLastMessages: () => settings.editable.settings.triage.keepLastMessages }, id, input);
   const evals = await Evals.open({
@@ -463,6 +466,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     },
     usage: () => usage.records(),
     labels,
+    settleLabels,
     correct,
     evals,
     actions,

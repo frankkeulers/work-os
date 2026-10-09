@@ -21,6 +21,7 @@ export const paths = (dataDir: string) => ({
   refused: join(dataDir, 'state/refused.json'),
   logs: join(dataDir, 'logs'),
   labels: join(dataDir, 'labels/triage.jsonl'),
+  settleLabels: join(dataDir, 'labels/settle.jsonl'),
 });
 
 const exists = (p: string) =>

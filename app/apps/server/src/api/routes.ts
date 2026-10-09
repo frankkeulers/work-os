@@ -46,21 +46,27 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return anchorOf(d.store.projection.items, id);
   };
   // Many at once (a channel's items, or all of Low priority): one write, skipping those already there.
+  // Frank's Done or Undo may say the settle check was wrong: labelled from the state before (CK-2.6).
+  const doneOrReopen = async (type: 'item.done' | 'item.reopened', ids: string[]) => {
+    const before = ids.map((id) => ({ ...d.store.projection.items[id] }));
+    await d.store.append(...ids.map((itemId) => ({ type, itemId, data: undefined })));
+    await d.settleLabels?.label(d, before, type === 'item.done' ? 'done' : 'reopened').catch(() => 0); // a label is never worth failing the click
+  };
   const many = (type: 'item.done' | 'item.reopened') => async (req: { body: unknown }) => {
     const body = ItemIds.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { ids } with at least one item ID.', [{ path: 'ids', message: 'Pick at least one item' }]);
     const ids = [...new Set(body.data.ids)].map(item).filter((id) => (d.store.projection.items[id].status === 'done') === (type === 'item.reopened'));
-    if (ids.length) await d.store.append(...ids.map((itemId) => ({ type, itemId, data: undefined })));
+    if (ids.length) await doneOrReopen(type, ids);
     return { count: ids.length };
   };
   app.post('/api/items/done', many('item.done'));
   app.post('/api/items/reopen', many('item.reopened'));
   app.post<{ Params: { id: string } }>('/api/items/:id/done', async (req, reply) => {
-    await d.store.append({ type: 'item.done', itemId: item(req.params.id), data: undefined });
+    await doneOrReopen('item.done', [item(req.params.id)]);
     return reply.code(204).send();
   });
   app.post<{ Params: { id: string } }>('/api/items/:id/reopen', async (req, reply) => {
-    await d.store.append({ type: 'item.reopened', itemId: item(req.params.id), data: undefined });
+    await doneOrReopen('item.reopened', [item(req.params.id)]);
     return reply.code(204).send();
   });
   app.post<{ Params: { id: string } }>('/api/items/:id/snooze', async (req, reply) => {

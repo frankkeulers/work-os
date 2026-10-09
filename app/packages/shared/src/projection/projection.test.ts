@@ -4,7 +4,7 @@ import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
 import { askId, conversationOf } from './topics';
-import { budgetsOf, closedByReply, openNext, summaryOf } from './views';
+import { budgetsOf, closedByReply, openNext, replyCloseCriteria, summaryOf } from './views';
 
 const ITEM = 'slack:C1:1791189720.000100';
 const T0 = '2026-10-05T08:00:00.000Z';
@@ -484,5 +484,38 @@ describe('settle checks on Frank’s replies (cockpit CK-2.1–2.3)', () => {
     ];
     expect(closedByReply(rows, '2026-10-05T12:48:00.000Z')).toEqual({ today: 2, latestAt: '2026-10-05T12:40:00.000Z', latestTitle: 'Head of Sales' });
     expect(closedByReply([], '2026-10-05T12:48:00.000Z')).toEqual({ today: 0 });
+  });
+});
+
+describe('C1 and C2: closes by reply (cockpit CK-2.8)', () => {
+  const reply = { by: 'reply' as const, source: 'slack' as const, messageId: 'm', check: 'settle-1' };
+
+  it('counts Needs you exits, those closed by Frank’s reply, and reply closes he undid within a day', () => {
+    const { events, add } = log();
+    const other = { itemId: 'slack:C1:2' };
+    const low = { itemId: 'slack:C1:3' };
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 1, decided(1)).add('item.done', 30, reply); // closed by reply
+    add('item.reopened', 90, undefined); // undone within 24 h: a false close
+    add('item.upserted', 0, upserted(1), other).add('triage.decided', 1, { decision: toLoggedDecision({ ...decision(1, 'now'), itemId: other.itemId }) }, other).add('item.done', 40, undefined, other); // by hand
+    add('item.upserted', 0, upserted(1), low).add('triage.decided', 1, { decision: toLoggedDecision({ ...decision(1, 'none'), itemId: low.itemId }) }, low).add('item.done', 50, undefined, low); // Low priority: not an exit
+    expect(replay(events).closes).toEqual({ '2026-10-05': { exits: 2, byReply: 1, undone: 1 } });
+
+    // Reopened a day later: not counted as undone.
+    const late = log();
+    late.add('item.upserted', 0, upserted(1)).add('triage.decided', 1, decided(1)).add('item.done', 30, reply).add('item.reopened', 30 + 25 * 60, undefined);
+    expect(replay(late.events).closes).toEqual({ '2026-10-05': { exits: 1, byReply: 1, undone: 0 } });
+  });
+
+  it('reads the last 14 days into C1 and C2', () => {
+    const now = new Date('2026-10-09T12:00:00.000Z');
+    expect(replyCloseCriteria(undefined, now).map((c) => [c.id, c.status])).toEqual([
+      ['C1', 'pending'],
+      ['C2', 'pending'],
+    ]);
+    const c = replyCloseCriteria({ '2026-10-09': { exits: 10, byReply: 4, undone: 0 }, '2026-10-01': { exits: 10, byReply: 1, undone: 1 }, '2026-09-20': { exits: 50, byReply: 0, undone: 0 } }, now);
+    expect(c).toEqual([
+      { id: 'C1', name: 'Needs you closed by your reply', value: '25%', target: '≥ 40%', status: 'at_risk', statusLabel: '5 of 20 in 14 days' },
+      { id: 'C2', name: 'False closes', value: '20%', target: '≤ 2%', status: 'at_risk', statusLabel: '1 of 5 undone' },
+    ]);
   });
 });

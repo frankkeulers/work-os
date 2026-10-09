@@ -245,6 +245,36 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect((await inbox()).items.find((i) => i.id === PROD)?.doneBy).toBeUndefined();
   });
 
+  it('labels a close Frank undoes, and a Done soon after a check that said not settled, and counts C1 and C2 (CK-2.6, CK-2.8)', async () => {
+    const labels = async () =>
+      (await readFile(join(dir, 'labels/settle.jsonl'), 'utf8').catch(() => ''))
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as { origin: string; settled: boolean; itemId: string; check: { reply: { text: string }[] } });
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'UFRANK', text: 'Looks fine to me' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ lane: 'done', doneBy: 'reply' });
+    expect((await call('POST', `/api/items/${encodeURIComponent(PROD)}/reopen`)).status).toBe(204);
+    expect(await labels()).toMatchObject([{ origin: 'undo', settled: false, itemId: PROD, check: { reply: [{ text: 'Looks fine to me' }] } }]);
+
+    // Back open: a holding reply leaves it, and Frank closes it himself straight after.
+    slack.post('C01PROD', { ts: isoToTs(START + 2 * MIN), thread_ts: P, user: 'UFRANK', text: 'Will look later' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ lane: 'today', replyCheck: { allSettled: false } });
+    await call('POST', `/api/items/${encodeURIComponent(PROD)}/done`);
+    expect((await labels()).map((l) => [l.origin, l.settled])).toEqual([
+      ['undo', false],
+      ['manual_done', true],
+    ]);
+    const c = (await call<UsageView>('GET', '/api/usage')).body.criteria;
+    expect(c.filter((x) => x.id === 'C1' || x.id === 'C2').map((x) => [x.id, x.value])).toEqual([
+      ['C1', '50%'],
+      ['C2', '100%'],
+    ]);
+  });
+
   it('reads the thread again 2 and 6 minutes after Reply in Slack, without waiting for the poll (CK-2.4)', async () => {
     const replied = await call<{ scheduled: boolean }>('POST', `/api/items/${encodeURIComponent(PROD)}/replied`);
     expect(replied).toEqual({ status: 200, body: { scheduled: true } });

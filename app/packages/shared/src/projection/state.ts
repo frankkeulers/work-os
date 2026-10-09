@@ -74,11 +74,20 @@ export interface SourceState {
   cursor?: string;
 }
 
+/** One London day's closes (cockpit C1, C2): Needs you exits, those closed by Frank's reply, and reply closes he undid within 24 h. */
+export interface CloseStats {
+  exits: number;
+  byReply: number;
+  undone: number;
+}
+
 export interface Projection {
   lastSeq: number;
   items: Record<string, ItemState>;
   actions: Record<string, ActionState>;
   sources: Partial<Record<SourceId, SourceState>>;
+  /** By London date, the last 30 days. Absent in a snapshot written before it existed. */
+  closes?: Record<string, CloseStats>;
 }
 
 export const emptyProjection = (): Projection => ({ lastSeq: 0, items: {}, actions: {}, sources: {} });

@@ -1,7 +1,8 @@
 import type { EventData, LoggedDecision } from '../events';
 import { effectiveTriage } from '../lanes';
 import { SETTLE_MAX_ATTEMPTS, type TriageCorrection } from '../schemas';
-import type { ItemFlags } from './state';
+import { londonParts } from '../time';
+import type { CloseStats, ItemFlags } from './state';
 
 // Item state transitions. Each one changes the flags in place and does no I/O, so the server's
 // reducer and the mock run exactly the same rules. The caller logs the matching event.
@@ -135,4 +136,30 @@ export const seenChanges = (s: ItemFlags) => (s.newReplies && s.triageState === 
 export function markSeen(s: ItemFlags) {
   if (s.newReplies && s.triageState === 'triaged') s.newReplies = false;
   s.backFromSnooze = false;
+}
+
+// ---------------------------------------------------------------- close counts (cockpit C1, C2)
+
+export const CLOSE_STATS_DAYS = 30;
+const DAY_MS = 86_400_000;
+
+function closeDay(closes: Record<string, CloseStats>, at: string): CloseStats {
+  const cutoff = londonParts(new Date(Date.parse(at) - CLOSE_STATS_DAYS * DAY_MS)).dateKey;
+  for (const k of Object.keys(closes)) if (k < cutoff) delete closes[k];
+  return (closes[londonParts(at).dateKey] ??= { exits: 0, byReply: 0, undone: 0 });
+}
+
+/** Before item.done: an open item leaving Needs you (or This week) counts as an exit, and as a reply close if his reply closed it. */
+export function countClose(closes: Record<string, CloseStats>, s: ItemFlags, at: string, by?: EventData<'item.done'>) {
+  const a = effectiveTriage(s.decision, s.correction)?.attention;
+  if (s.status !== 'open' || (a !== 'now' && a !== 'today')) return;
+  const day = closeDay(closes, at);
+  day.exits++;
+  if (by?.by === 'reply') day.byReply++;
+}
+
+/** Before item.reopened: a reply close Frank undoes within 24 h is a false close, counted on the day it closed. */
+export function countUndo(closes: Record<string, CloseStats>, s: ItemFlags, at: string) {
+  if (s.status !== 'done' || s.doneBy !== 'reply' || !s.doneAt || Date.parse(at) - Date.parse(s.doneAt) > DAY_MS) return;
+  closeDay(closes, s.doneAt).undone++;
 }

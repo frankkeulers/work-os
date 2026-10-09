@@ -6,6 +6,7 @@ import {
   budgetsOf,
   categoryTags,
   closedByReply,
+  replyCloseCriteria,
   isWorkHours,
   londonAt,
   londonParts,
@@ -54,6 +55,7 @@ import type { WisprLink } from '../sources/wispr/link';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { LabelStore } from '../store/labels';
+import type { SettleLabelStore } from '../store/settleLabels';
 import type { RecoveryReport, Store } from '../store/store';
 import { mpdmTitle } from '../sources/slack/directory';
 import { channelListed, webClientUrl } from '../sources/slack/normalise';
@@ -83,6 +85,8 @@ export interface ViewDeps {
   /** The labelled set (FR-6.2) and "Correct triage" itself. */
   labels?: LabelStore;
   correct?: (id: string, input: CorrectionInput) => Promise<{ labelCount: number }>;
+  /** What the settle check got wrong, from Frank's Undo or a Done soon after it (cockpit CK-2.6). */
+  settleLabels?: SettleLabelStore;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */
   evals?: Evals;
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
@@ -478,7 +482,7 @@ export function usageView(d: ViewDeps): UsageView {
     byPurpose: [...groups.values()].sort((x, y) => y.costEquivalent - x.costEquivalent),
     source: slackHealth(d),
     sources: enabledSources(d),
-    criteria: criteria(last, b),
+    criteria: [...criteria(last, b), ...replyCloseCriteria(d.store.projection.closes, d.now())],
     ...(last && { lastEval: last }),
     evalRunning: d.evals?.running ?? false,
   };

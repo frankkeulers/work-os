@@ -33,6 +33,8 @@ import {
   summaryOf,
   closedByReply,
   conversationOf,
+  replay,
+  replyCloseCriteria,
   toLoggedDecision,
   topicItem,
   topicPiecesView,
@@ -712,10 +714,19 @@ export class MockServer implements WorkOsApi, MockControls {
       byPurpose: [...group.values()].sort((a, b) => b.costEquivalent - a.costEquivalent),
       source: this.sourceHealth(),
       sources: [this.sourceHealth(), ...this.outlookHealth(), ...this.wisprHealth()],
-      criteria: this.criteria(last, budgets),
+      criteria: [...this.criteria(last, budgets), ...replyCloseCriteria(this.closes(), this.now())],
       lastEval: last,
       evalRunning: this.s.evalRunning,
     };
+  }
+
+  /** The close counts behind C1 and C2, from the mock's own event log, as the server's projection keeps them. */
+  private closes() {
+    try {
+      return replay(this.s.events).closes;
+    } catch {
+      return undefined; // a staged preset whose log doesn't replay
+    }
   }
 
   private criteria(last: EvalReport | undefined, budgets: BudgetState): Criterion[] {
