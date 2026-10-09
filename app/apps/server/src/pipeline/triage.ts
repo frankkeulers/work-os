@@ -1,4 +1,4 @@
-import { Attention, NextStep, askId, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type SourceId, type TriageDecision } from '@work-os/shared';
+import { Attention, NextStep, askId, londonAt, londonParts, toLoggedDecision, type EarlierView, type EventDraft, type Item, type Me, type Rule, type Settings, type SourceId, type TriageDecision } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
@@ -6,6 +6,7 @@ import type { Prompt } from '../claude/prompts';
 import type { Logger } from '../log';
 import { DEADLINES } from '../net/http';
 import type { ItemFiles } from '../store/items';
+import type { SnapEvent } from '../sources/calendar/store';
 import type { Store } from '../store/store';
 import { triageQueue } from './eligibility';
 import { ruleVerdict } from './rules';
@@ -60,6 +61,8 @@ export interface TriageDeps {
   budgetHit: () => boolean;
   /** The topics prompt (amendment). Without it, routing is off and every piece is its own topic. */
   topicsPrompt?: () => Promise<Prompt>;
+  /** Frank's timed meetings today, while the calendar is read (cockpit CK-3.9). */
+  meetings?: (now: Date) => TodayMeeting[];
 }
 
 export interface TriageRun {
@@ -71,8 +74,41 @@ export interface TriageRun {
   nextReadyAt?: Date;
 }
 
-export function renderBatch(threads: TriageThread[], now: Date): string {
-  return [`Now: ${now.toISOString()}`, `Triage ${threads.length === 1 ? 'this thread' : `these ${threads.length} threads`}. Answer with the JSON only.`, '<threads>', JSON.stringify(threads), '</threads>'].join('\n');
+/** A meeting the model can resolve "before the exec sync" against (cockpit CK-3.9): its title and start. */
+export interface TodayMeeting {
+  title: string;
+  start: string;
+}
+
+const MAX_MEETINGS = 15;
+const hhmm = (d: Date | string) => {
+  const p = londonParts(d);
+  return `${String(p.hours).padStart(2, '0')}:${String(p.minutes).padStart(2, '0')}`;
+};
+
+/** Frank's timed meetings today, London time: not cancelled, declined, all-day or shown as free. Titles only. */
+export function meetingsToday(events: readonly SnapEvent[], now: Date): TodayMeeting[] {
+  const from = Date.parse(londonAt(now, '00:00'));
+  const to = Date.parse(londonAt(now, '00:00', 1));
+  return events
+    .filter((e) => !e.cancelled && !e.allDay && e.response !== 'declined' && e.showAs?.toLowerCase() !== 'free')
+    .filter((e) => Date.parse(e.start) >= from && Date.parse(e.start) < to)
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+    .slice(0, MAX_MEETINGS)
+    .map((e) => ({ title: e.subject || '(no title)', start: e.start }));
+}
+
+/** The user message: the time (UTC and London, for deadlines), today's meetings if any, then the threads. */
+export function renderBatch(threads: TriageThread[], now: Date, meetings: readonly TodayMeeting[] = []): string {
+  const calendar = meetings.length ? ['<calendar>', JSON.stringify(meetings.map((m) => ({ title: m.title, start: m.start, london: hhmm(m.start) }))), '</calendar>'] : [];
+  return [
+    `Now: ${now.toISOString()} (${londonParts(now).weekday} ${hhmm(now)} in London)`,
+    ...calendar,
+    `Triage ${threads.length === 1 ? 'this thread' : `these ${threads.length} threads`}. Answer with the JSON only.`,
+    '<threads>',
+    JSON.stringify(threads),
+    '</threads>',
+  ].join('\n');
 }
 
 /**
@@ -144,6 +180,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
           prompt: renderBatch(
             batch.map((x) => x.thread),
             at,
+            d.meetings?.(at),
           ),
           promptVersion: prompt.version,
           timeoutMs: DEADLINES.triage,

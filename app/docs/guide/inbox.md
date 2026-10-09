@@ -22,6 +22,11 @@ Each row reads left to right: where it happened and how long ago, the one-line s
 three chips: what it needs (reply, decide, review…), a deadline (orange within about four hours,
 blue later today) and, in To file, where it should go.
 
+Triage reads deadlines from what people write, in London time: "by end of day" is 17:30 today,
+"by Thursday" 17:30 on Thursday, "this week" 17:00 on Friday, and a stated time wins. "Before the
+exec sync" is that meeting's start when the [Outlook calendar](outlook.md) is on and has it;
+otherwise the chip says "before the exec sync" without a time.
+
 The header counts what's waiting, large enough to read from across the desk: **3 now · 6 today ·
 4 to file** (Today includes items whose triage failed). Click a count to scroll to those rows.
 On the right, the health pill says whether Work OS is reading everything; see

@@ -55,7 +55,7 @@ import { noConfluence } from './actions/fakeConfluence';
 import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
 import { routeTopics } from './pipeline/topics';
-import { runTriage, type TriageDeps } from './pipeline/triage';
+import { meetingsToday, runTriage, type TriageDeps } from './pipeline/triage';
 import { correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
 import { LabelStore } from './store/labels';
@@ -305,6 +305,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     me: (source: SourceId = 'slack') => meFrom(runtime.whoAmI(source)),
     prompt: () => loadPromptFile(config.dataDir, 'triage'),
     topicsPrompt: () => loadPromptFile(config.dataDir, 'topics'),
+    // Today's meetings, for deadlines such as "before the exec sync" (cockpit CK-3.9).
+    meetings: (at) => (calendarMe() ? meetingsToday(calendar.snapshot?.events ?? [], at) : []),
     earlier: (item, signal) => earlier.forItem(item, signal),
     budgetHit: () => {
       const b = budgetsOf(usage.records(), settings.editable.settings, now());

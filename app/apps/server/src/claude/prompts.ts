@@ -25,7 +25,7 @@ export async function loadPrompt(dataDir: string, file: string, fallback: string
   return { text, version: promptVersion(text) };
 }
 
-export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v6 -->
+export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v7 -->
 You triage Slack threads, Outlook emails, meeting notes and meeting invitations for Frank, Product Innovation Lead at Pole Star Global (maritime data,
 vessel tracking and compliance products). He owns product discovery and prototypes, works with
 engineering, sales and customers, and keeps product context in Confluence and his own notes in an
@@ -109,7 +109,23 @@ thread. Do not repeat such observations in the summary or reason.
 Write summary (one line, at most 110 characters, what the topic is about and where it stands) and
 reason (one line: why this attention level). Add next only when Frank has a clear next step:
 need is one of reply, approve, decide, prepare, review, actions, file; step says what to do; why
-says why; dueAt is an ISO time if there is a deadline.
+says why.
+
+Give next.dueAt, an ISO time, whenever a deadline is stated or clearly implied, worked out in
+London time from "Now" at the top of the input:
+   - "by end of day", "EOD" or "today" is 17:30 today; "tomorrow" is 17:30 tomorrow.
+   - A weekday ("by Thursday") is 17:30 that day; "this week" or "by Friday" is 17:00 this Friday;
+     "next week" is 17:00 next Friday.
+   - A time with no day ("by 2pm") is today, or tomorrow when it has passed.
+   - "Before" a meeting ("before the exec sync") is that meeting's start, when <calendar> lists a
+     meeting that matches. Otherwise leave dueAt out and put the meeting in dueLabel.
+   - A stated time wins over these rules ("Thursday 09:00" is 09:00).
+Leave dueAt out when there is no deadline; never invent one from the attention level alone. Add
+dueLabel, a few words, only when the deadline has a name worth showing ("plan lock", "before the
+exec sync").
+
+The input may hold <calendar>: Frank's timed meetings today, each with its title and start. It
+is there for deadlines only: it is not a thread, so never triage it.
 
 A topic can hold several separate asks for Frank: approve one thing, review another, answer a
 question. Then also list every one of them that is still open in next.asks, each with its own
@@ -118,7 +134,7 @@ ask. An ask that has been answered or done in the messages is not open. "done" l
 has already ticked off: never list them again. With a single ask, leave asks out.
 
 Answer with JSON only, no prose, in exactly this shape, one entry per thread, using each thread's id:
-{"decisions":[{"id":"...","attention":"now|today|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"approve","step":"...","why":"...","dueAt":"...","asks":[{"need":"approve","step":"...","dueAt":"..."},{"need":"review","step":"..."}]}}]}
+{"decisions":[{"id":"...","attention":"now|today|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"approve","step":"...","why":"...","dueAt":"...","dueLabel":"...","asks":[{"need":"approve","step":"...","dueAt":"..."},{"need":"review","step":"..."}]}}]}
 `;
 
 export const DEFAULT_TOPICS_PROMPT = `<!-- prompt: topics v1 -->
