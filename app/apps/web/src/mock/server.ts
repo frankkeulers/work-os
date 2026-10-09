@@ -14,6 +14,7 @@ import {
   isSnoozeDue,
   isWorkHours,
   londonParts,
+  pollIntervalMinutes,
   markAskDone,
   markDone,
   markNotified,
@@ -242,6 +243,9 @@ export class MockServer implements WorkOsApi, MockControls {
 
     const src = this.s.source;
     if (this.s.flags.firstRun || src.status === 'auth_failed' || this.polling) return;
+    // Quietly stuck, in safe mode, or stopping: nothing is read (cockpit CK-1.7).
+    const h = this.s.flags.health;
+    if (h === 'stale' || h === 'safe' || h === 'stopping') return;
     if (src.status === 'backoff') {
       if (src.retryAt && src.retryAt > now) return;
       src.status = 'healthy';
@@ -488,7 +492,7 @@ export class MockServer implements WorkOsApi, MockControls {
     await sleep(QUERY_MS);
     const f = this.s.flags;
     const since = this.s.checkedAt;
-    const dep = (id: DependencyHealth['id'], state: DependencyHealth['state'], reason?: string): DependencyHealth => ({ id, state, since, failures: state === 'ok' ? 0 : 1, reason });
+    const dep = (id: DependencyHealth['id'], state: DependencyHealth['state'], reason?: string, fix?: string): DependencyHealth => ({ id, state, since, failures: state === 'ok' ? 0 : 1, reason, fix });
     const slack = this.s.source.status;
     const deps = [
       dep('network', 'ok'),
@@ -496,13 +500,16 @@ export class MockServer implements WorkOsApi, MockControls {
       dep('claude', f.startupFailure === 'claude_login' ? 'auth_failed' : 'ok'),
       dep('keychain', f.startupFailure === 'slack_token' ? 'degraded' : 'ok', f.startupFailure === 'slack_token' ? 'Slack token missing' : undefined),
       dep('storage', 'ok'),
+      ...(f.health === 'ms365'
+        ? [dep('ms365', 'auth_failed', 'connector needs-auth', 'The Microsoft 365 connector needs signing in again. Reconnect it on claude.ai (Settings → Connectors), then choose Check again.')]
+        : []),
     ];
     const pending = Object.values(this.s.actions).filter((a) => a.status === 'approved' || a.status === 'executing');
     return {
       connection: f.connection,
       startupFailure: f.startupFailure,
-      mode: deps.some((d) => d.state !== 'ok') ? 'degraded' : 'normal',
-      phase: 'running',
+      mode: f.health === 'safe' ? 'safe' : deps.some((d) => d.state !== 'ok') ? 'degraded' : 'normal',
+      phase: f.health === 'catching_up' ? 'catching_up' : f.health === 'stopping' ? 'stopping' : 'running',
       deps,
       checks: this.startupChecks(),
       checkedAt: this.s.checkedAt,
@@ -553,6 +560,7 @@ export class MockServer implements WorkOsApi, MockControls {
       mode: this.s.settings.slack.fetchMode,
       lastPollAt: src.lastPollAt,
       nextPollAt: src.nextPollAt,
+      intervalMinutes: pollIntervalMinutes(this.s.settings, 'slack', this.now()),
       retryAt: src.retryAt,
       rateLimitedToday: src.rateLimitedToday,
       cursor: src.cursor,
@@ -562,7 +570,7 @@ export class MockServer implements WorkOsApi, MockControls {
 
   /** Outlook's lines in the inbox health, mail and calendar, once each is turned on (R2.5, R2.8). */
   private outlookHealth(): SourceHealth[] {
-    return (['outlook', 'calendar'] as const).filter((id) => sourceSchedule(this.s.settings, id).enabled).map((id) => ({ id, status: 'healthy', lastPollAt: this.s.source.lastPollAt, rateLimitedToday: 0 }));
+    return (['outlook', 'calendar'] as const).filter((id) => sourceSchedule(this.s.settings, id).enabled).map((id) => ({ id, status: 'healthy', lastPollAt: this.s.source.lastPollAt, intervalMinutes: pollIntervalMinutes(this.s.settings, id, this.now()), rateLimitedToday: 0 }));
   }
 
   /** Wispr Flow's line in the inbox health, once it is turned on (R2.7). */
@@ -574,6 +582,7 @@ export class MockServer implements WorkOsApi, MockControls {
         id: 'wispr',
         status: connected ? 'healthy' : 'auth_failed',
         lastPollAt: this.s.source.lastPollAt,
+        intervalMinutes: pollIntervalMinutes(this.s.settings, 'wispr', this.now()),
         rateLimitedToday: 0,
         ...(!connected && { message: 'Not signed in to Wispr Flow. Reconnect in Settings › Sources › Wispr Flow.' }),
       },
@@ -1472,6 +1481,20 @@ export class MockServer implements WorkOsApi, MockControls {
         break;
       case 'filevault_off':
         f.fileVaultOff = !f.fileVaultOff;
+        break;
+      case 'health_normal':
+        f.health = undefined;
+        break;
+      case 'health_catching_up':
+      case 'health_stopping':
+      case 'health_safe':
+      case 'health_ms365':
+        f.health = flag === 'health_catching_up' ? 'catching_up' : flag === 'health_stopping' ? 'stopping' : flag === 'health_safe' ? 'safe' : 'ms365';
+        break;
+      case 'health_stale':
+        // The server stopped polling 34 minutes ago without a word.
+        f.health = 'stale';
+        this.s.source = { ...this.s.source, lastPollAt: addMins(this.iso(), -34) };
         break;
       case 'rebuilt_notice':
         f.rebuiltNotice = f.rebuiltNotice ? undefined : `Inbox state rebuilt from the event log at startup: snapshot.json was unreadable. ${this.s.events.length.toLocaleString('en-GB')} events replayed.`;

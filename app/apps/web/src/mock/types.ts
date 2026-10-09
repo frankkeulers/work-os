@@ -108,7 +108,12 @@ export interface MockFlags {
   fileVaultOff: boolean;
   firstRun: boolean;
   rebuiltNotice?: string;
+  /** The server's state for the health pill (cockpit CK-1.7); unset: running normally. */
+  health?: MockHealth;
 }
+
+/** stale: the server has quietly stopped polling; ms365: the Microsoft 365 connector needs signing in again. */
+export type MockHealth = 'catching_up' | 'stopping' | 'safe' | 'stale' | 'ms365';
 
 export interface MockState {
   schemaVersion: number;

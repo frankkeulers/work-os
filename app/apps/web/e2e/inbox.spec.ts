@@ -497,6 +497,56 @@ test('triage details sit behind a disclosure that stays as Frank left it (CK-1.6
   await expect(details).toContainText('by rule vip-dm · no model call');
 });
 
+test('J51 the top bar’s health pill: live, stale, a connector down, catching up, safe mode, stopping (CK-1.7)', async ({ page }) => {
+  const header = page.locator('[data-inbox-header]');
+  const pill = page.getByTestId('health-pill');
+  const setHealth = async (name: string) => {
+    await openControls(page);
+    await page.getByRole('complementary', { name: 'Scenarios' }).getByRole('button', { name, exact: true }).click();
+    await closeDrawer(page);
+  };
+
+  await expect(pill).toHaveAttribute('data-tone', 'ok');
+  await expect(pill).toContainText(/^All sources live · (just now|\d+ min ago)$/);
+  await expect(header).toHaveAttribute('data-health', 'ok');
+
+  // The server quietly stopped polling: Slack's last read is past twice its 10-minute interval.
+  await setHealth('Slack stale');
+  await expect(pill).toHaveAttribute('data-tone', 'warn');
+  await expect(pill).toContainText('Slack stale · last read 34 min ago');
+  await expect(header).toHaveAttribute('data-health', 'warn');
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-health-stale-light.png') });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-health-stale-dark.png'), animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+
+  await setHealth('Outlook signed out');
+  await expect(pill).toContainText('Outlook not connected · mail and calendar stale');
+  await expect(pill.getByRole('link', { name: 'Reconnect on claude.ai' })).toHaveAttribute('href', 'https://claude.ai/settings/connectors');
+  await header.screenshot({ path: join(APP, 'screenshots/inbox-health-connector-light.png') });
+
+  await setHealth('Catching up');
+  await expect(pill).toHaveAttribute('data-tone', 'info');
+  await expect(pill).toContainText('Catching up after sleep');
+  await expect(header).toHaveAttribute('data-health', 'info');
+
+  await setHealth('Safe mode');
+  await expect(pill).toHaveAttribute('data-tone', 'bad');
+  await expect(pill).toContainText('Safe mode · nothing is being read');
+  await expect(pill.getByRole('link', { name: 'Open Usage & health' })).toHaveAttribute('href', '/usage#health');
+  await header.screenshot({ path: join(APP, 'screenshots/inbox-health-safe-light.png') });
+
+  await setHealth('Stopping');
+  await expect(pill).toHaveAttribute('data-tone', 'idle');
+  await expect(pill).toContainText('Stopping');
+  await expect(header).toHaveAttribute('data-health', 'idle');
+
+  // Back to normal: the mock polls again, and the pill is green with a plain bar.
+  await setHealth('Running normally');
+  await expect(pill).toHaveAttribute('data-tone', 'ok', { timeout: 10_000 });
+  await expect(header).toHaveAttribute('data-health', 'ok');
+});
+
 test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {
   await sortBy(page, 'Priority');
   const needs = group(page, 'Needs you').locator('[data-row]');

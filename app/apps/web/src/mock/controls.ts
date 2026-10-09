@@ -20,7 +20,13 @@ export type StateFlag =
   | 'claude_login'
   | 'startup_ok'
   | 'filevault_off'
-  | 'rebuilt_notice';
+  | 'rebuilt_notice'
+  | 'health_normal'
+  | 'health_catching_up'
+  | 'health_stopping'
+  | 'health_safe'
+  | 'health_stale'
+  | 'health_ms365';
 
 export interface ControlsState {
   clock: string;

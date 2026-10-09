@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Message, Ms365Connector, Rule, Rules, Settings, SettingsFile, isValidRegex, sourceSchedule, upgradeSettings } from './schemas';
+import { Message, Ms365Connector, Rule, Rules, Settings, SettingsFile, isValidRegex, pollIntervalMinutes, sourceSchedule, upgradeSettings } from './schemas';
 
 describe('rule validation (FR-4.1)', () => {
   it('accepts slash-delimited and bare regular expressions', () => {
@@ -45,6 +45,17 @@ describe('per-source schedules (R2.1)', () => {
     expect(sourceSchedule({ schedule }, 'slack')).toEqual({ enabled: true, intervalWorkMinutes: 15, intervalOffMinutes: 90 });
     expect(sourceSchedule({ schedule }, 'outlook')).toEqual({ enabled: false, intervalWorkMinutes: 30, intervalOffMinutes: 120 });
     expect(sourceSchedule({ schedule }, 'wispr')).toEqual({ enabled: false, intervalWorkMinutes: 180, intervalOffMinutes: null });
+  });
+
+  it('gives the interval in force: work hours, off hours, or none', () => {
+    const sources = { outlook: { enabled: true } };
+    const monMorning = '2026-10-05T09:00:00Z';
+    const monNight = '2026-10-05T21:00:00Z';
+    expect(pollIntervalMinutes({ schedule }, 'slack', monMorning)).toBe(15);
+    expect(pollIntervalMinutes({ schedule }, 'slack', monNight)).toBe(90);
+    expect(pollIntervalMinutes({ schedule, sources }, 'outlook', monNight)).toBe(120);
+    expect(pollIntervalMinutes({ schedule }, 'outlook', monMorning)).toBeUndefined(); // off
+    expect(pollIntervalMinutes({ schedule, sources: { wispr: { enabled: true } } }, 'wispr', monNight)).toBeUndefined(); // no off-hours polls
   });
 
   it('lets settings override single fields', () => {

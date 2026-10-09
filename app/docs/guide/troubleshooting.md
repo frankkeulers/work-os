@@ -2,8 +2,8 @@
 title: Troubleshooting
 group: Help
 order: 80
-summary: What the health banner means, storing tokens, and what to do when something stops.
-updated: 2026-10-08
+summary: What the health pill and banner mean, storing tokens, and what to do when something stops.
+updated: 2026-10-09
 ---
 
 ## Health
@@ -22,6 +22,23 @@ top of the inbox names the problem and the fix, with **Check again** to try at o
 
 You are told by notification about a problem at most once every four hours per service, never in
 quiet hours, and only about being offline after 30 minutes awake in work hours.
+
+### The health pill
+
+The pill at the right of the inbox's top bar tells you, from across the desk, whether Work OS is
+reading everything. When something needs a look, the whole top bar takes its colour.
+
+| Pill | Means |
+|---|---|
+| Green, "All sources live · 2 min ago" | Every source read on time; the time is the oldest last read. The bar stays plain. |
+| Blue, "Catching up after sleep" | The Mac woke up; Work OS is reading what fell due. |
+| Amber, naming what's down and what's stale | A dependency has a problem, for example "Outlook not connected · mail and calendar stale". The fix is beside it as a link. |
+| Amber, "Slack stale · last read 34 min ago" | A source hasn't been read for more than twice its interval (work or off hours), with no error. Work OS may have stopped polling quietly; open Usage & health, or choose **Poll now**. |
+| Red, "Safe mode · nothing is being read" | See [Safe mode](#safe-mode). |
+| Grey, "Stopping" | The server is shutting down. |
+
+The banner still names problems you need to act on, and the dot beside Usage & health in the
+sidebar stays.
 
 ## Keychain tokens
 

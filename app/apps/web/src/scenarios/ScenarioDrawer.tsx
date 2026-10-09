@@ -107,6 +107,14 @@ function Controls() {
         <Ctl on={s.slack === 'backoff'} onClick={() => flag('slack_429')}>429 back-off</Ctl>
         <Ctl on={s.slack === 'auth_failed'} onClick={() => flag('slack_auth')}>Auth failure</Ctl>
       </Group>
+      <Group title="Health pill" hint="what the top bar shows from across the desk">
+        <Ctl on={!f.health} onClick={() => flag('health_normal')}>Running normally</Ctl>
+        <Ctl on={f.health === 'catching_up'} onClick={() => flag('health_catching_up')}>Catching up</Ctl>
+        <Ctl on={f.health === 'stale'} onClick={() => flag('health_stale')}>Slack stale</Ctl>
+        <Ctl on={f.health === 'ms365'} onClick={() => flag('health_ms365')}>Outlook signed out</Ctl>
+        <Ctl on={f.health === 'safe'} onClick={() => flag('health_safe')}>Safe mode</Ctl>
+        <Ctl on={f.health === 'stopping'} onClick={() => flag('health_stopping')}>Stopping</Ctl>
+      </Group>
       <Group title="Server">
         <Ctl on={f.connection === 'up'} onClick={() => flag('server_up')}>Up</Ctl>
         <Ctl on={f.connection === 'down'} onClick={() => flag('server_down')}>Down</Ctl>

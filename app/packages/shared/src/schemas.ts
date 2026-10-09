@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { OutlookColor } from './categories';
+import { isWorkHours } from './time';
 
 // Shared contract between the web app and the future server (PLAN.md §4.4).
 // Additions beyond §4.4 are marked "amendment" and listed in JOURNEYS.md.
@@ -454,6 +455,13 @@ export function sourceSchedule(settings: Pick<Settings, 'schedule' | 'sources'>,
       ? { enabled: true, intervalWorkMinutes: settings.schedule.intervalWorkMinutes, intervalOffMinutes: settings.schedule.intervalOffMinutes }
       : SOURCE_DEFAULTS[id];
   return { ...base, ...settings.sources?.[id] };
+}
+
+/** The minutes between a source's polls at `at` (work or off hours); undefined when it doesn't poll then. */
+export function pollIntervalMinutes(settings: Pick<Settings, 'schedule' | 'sources'>, id: SourceId, at: Date | string): number | undefined {
+  const s = sourceSchedule(settings, id);
+  if (!s.enabled) return undefined;
+  return (isWorkHours(at, settings.schedule.workHours) ? s.intervalWorkMinutes : s.intervalOffMinutes) ?? undefined;
 }
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------

@@ -128,6 +128,8 @@ describe('request guard (FR-3.3)', () => {
     expect(inbox.sources[1]).toMatchObject({ id: 'wispr', status: 'never', message: 'Not polled yet.' });
     expect(inbox.sources[1].mode).toBeUndefined();
     expect(inbox.source).toMatchObject({ id: 'slack', mode: 'search' });
+    // The interval in force, for the health pill's staleness rule (cockpit CK-1.7): Monday 10:00 is work hours.
+    expect(inbox.sources.map((x) => x.intervalMinutes)).toEqual([10, 180]);
     expect((await get('/api/usage')).json<UsageView>().sources.map((x) => x.id)).toEqual(['slack', 'wispr']);
   });
 

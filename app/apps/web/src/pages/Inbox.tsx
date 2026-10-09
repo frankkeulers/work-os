@@ -7,6 +7,7 @@ import { Agenda } from '../components/Agenda';
 import { SourceMark } from '../components/BrandIcon';
 import { CategoryDot, ItemMarkers, itemPath, kindLabel, markDoneWithUndo, markManyDoneWithUndo } from '../components/item';
 import { HealthBanner } from '../components/HealthBanner';
+import { HEALTH_BAR, HealthPill, usePillHealth } from '../components/HealthPill';
 import { Icon } from '../components/icons';
 import { useShell } from '../components/Shell';
 import { Banner, Button, ConfirmDialog, IconButton, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../components/ui';
@@ -857,6 +858,7 @@ export function InboxPage() {
   useEffect(() => {
     document.title = 'Inbox · Work OS';
   }, []);
+  const health = usePillHealth(inbox);
 
   if (!inbox) return <div className="p-8 text-muted">{q.error ? 'Could not load the inbox.' : 'Loading…'}</div>;
 
@@ -901,7 +903,7 @@ export function InboxPage() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       {/* 64px, the height of the sidebar's header, so the two line up. */}
-      <header data-inbox-header className="flex h-16 shrink-0 items-center gap-2 border-b border-line px-6">
+      <header data-inbox-header data-health={health?.tone} className={cx('flex h-16 shrink-0 items-center gap-2 whitespace-nowrap border-b px-6', HEALTH_BAR[health?.tone ?? 'ok'])}>
         <h1 className="m-0 text-xl font-semibold tracking-[-0.01em]">Inbox</h1>
         <CountPills counts={counts} />
         <SortMenu />
@@ -925,6 +927,7 @@ export function InboxPage() {
             <span className="font-mono text-[10px] text-violet-fg">P4</span>
           </label>
         )}
+        {health && <HealthPill health={health} />}
         <PollButton inbox={inbox} />
         <UsagePopover inbox={inbox} />
       </header>

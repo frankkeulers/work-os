@@ -9,7 +9,7 @@ import {
   londonAt,
   londonParts,
   meetingLead,
-  sourceSchedule,
+  pollIntervalMinutes, sourceSchedule,
   summaryOf,
   topicItem,
   topicPiecesView,
@@ -146,6 +146,7 @@ function actionsByItem(d: ViewDeps): Map<string, ActionState[]> {
 export function sourceHealth(d: ViewDeps, id: SourceId): SourceHealth {
   const src = d.store.projection.sources[id];
   const mode = id === 'slack' ? d.settings.editable.settings.slack.fetchMode : undefined;
+  const intervalMinutes = pollIntervalMinutes(d.settings.editable.settings, id, d.now());
   if (d.runtime) {
     const st = d.runtime.sourceStatus(id);
     return {
@@ -154,6 +155,7 @@ export function sourceHealth(d: ViewDeps, id: SourceId): SourceHealth {
       ...(mode && { mode }),
       lastPollAt: src?.lastPollAt,
       nextPollAt: d.runtime.scheduler.nextPollAt(id),
+      ...(intervalMinutes !== undefined && { intervalMinutes }),
       retryAt: st.retryAt,
       rateLimitedToday: 0,
       cursor: src?.cursor,
@@ -165,6 +167,7 @@ export function sourceHealth(d: ViewDeps, id: SourceId): SourceHealth {
     status: src?.lastPollAt ? 'healthy' : 'never',
     ...(mode && { mode }),
     lastPollAt: src?.lastPollAt,
+    ...(intervalMinutes !== undefined && { intervalMinutes }),
     rateLimitedToday: 0,
     cursor: src?.cursor,
     message: src?.lastPollAt ? undefined : 'Not polled yet.',

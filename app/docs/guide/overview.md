@@ -3,7 +3,7 @@ title: What Work OS does
 group: Start here
 order: 10
 summary: A local inbox that reads Slack, decides what needs you, and files what is worth keeping.
-updated: 2026-10-08
+updated: 2026-10-09
 ---
 
 Work OS runs on your Mac and reads the Slack conversations you are in, and, once you connect them,
@@ -44,7 +44,9 @@ See [Dev and prod](dev-and-prod.md) and [Settings › Write targets](/settings/w
 
 ## Where to look when something is off
 
-The banner at the top of the inbox says when a dependency (Slack, Claude, Confluence, the
-Keychain, the network) has a problem, with what to do about it. The dot beside Usage & health in
+The pill at the right of the inbox's top bar says whether Work OS is reading everything: green
+when all is well, amber when something is down or stale, red in safe mode. The banner below it says
+when a dependency (Slack, Claude, Confluence, the Keychain, the network) has a problem, with what
+to do about it. The dot beside Usage & health in
 the sidebar shows the same at a glance: green when all is well, amber with a problem, red in safe
 mode. Hover it for the reason. [Usage & health](/usage) has the detail. [Troubleshooting](troubleshooting.md) covers the common cases.

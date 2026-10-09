@@ -90,6 +90,8 @@ export interface SourceHealth {
   mode?: Settings['slack']['fetchMode']; // Slack only
   lastPollAt?: string;
   nextPollAt?: string;
+  /** Minutes between polls now (work or off hours); unset when it doesn't poll now. Stale after 2× (cockpit CK-1.7). */
+  intervalMinutes?: number;
   retryAt?: string;
   rateLimitedToday: number;
   cursor?: string;

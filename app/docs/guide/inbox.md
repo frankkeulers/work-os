@@ -22,6 +22,8 @@ blue later today) and, in To file, where it should go.
 
 The header counts what's waiting, large enough to read from across the desk: **3 now · 6 today ·
 4 to file** (Today includes items whose triage failed). Click a count to scroll to those rows.
+On the right, the health pill says whether Work OS is reading everything; see
+[Troubleshooting](troubleshooting.md#health).
 
 The **Sort** menu starts on **Priority**: Now first, then failed triage, then Today by deadline. It
 can also order by newest or oldest, and **Group by channel** gathers items under their channel or
