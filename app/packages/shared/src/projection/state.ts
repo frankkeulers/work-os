@@ -17,6 +17,7 @@ export interface ItemFlags<D extends LoggedDecision = LoggedDecision> {
   decision?: D;
   correction?: TriageCorrection;
   correctedFrom?: Attention; // shown when a re-triage replaced Frank's correction
+  confirmed?: number; // the decision's revision Frank said was right ("Triage was right")
   snoozedUntil?: string;
   doneAt?: string;
   newReplies: boolean; // new messages since the last triage, not yet seen

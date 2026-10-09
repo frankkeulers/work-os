@@ -452,6 +452,33 @@ function MetaLine({ view }: { view: ItemView }) {
   );
 }
 
+// ---------- Triage was right ----------
+
+/** A model's or a rule's decision on the thread as it is now: what "Triage was right" can label. */
+const canConfirm = (item: ItemSummary) => item.triageState === 'triaged' && !!item.triage && item.triage.by !== 'user' && !item.confirmed;
+
+const confirmTriage = (item: ItemSummary) =>
+  api.confirmTriage(item.id).then((r) => toast(`Labelled as right · labelled set now ${r.labelCount}`, { tone: 'success' }), errorToast);
+
+/**
+ * Beside the decision: says triage got it right, so the labelled set holds what it gets right as
+ * well as Frank's corrections, and the eval scores both (FR-6.1).
+ */
+function TriageRight({ item }: { item: ItemSummary }) {
+  if (item.confirmed)
+    return (
+      <span data-confirmed className="inline-flex items-center gap-1 text-[13px] text-green-fg">
+        <Icon name="check" size={13} strokeWidth={2.5} /> Right · labelled
+      </span>
+    );
+  if (!canConfirm(item)) return null;
+  return (
+    <button type="button" title="Add this decision to the labelled set as right (y)" className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted hover:bg-track hover:text-ink cursor-pointer" onClick={() => void confirmTriage(item)}>
+      <Icon name="check" size={13} /> Triage was right <Kbd>y</Kbd>
+    </button>
+  );
+}
+
 // ---------- Panel ----------
 
 export function ItemPanel({
@@ -525,6 +552,9 @@ export function ItemPanel({
       } else if (e.key === 'c') {
         e.preventDefault();
         setCorrecting((c) => !c);
+      } else if (e.key === 'y' && canConfirm(item)) {
+        e.preventDefault();
+        void confirmTriage(item);
       } else if (e.key === 'ArrowRight' && batch) {
         e.preventDefault();
         batch.onSkip();
@@ -617,6 +647,7 @@ export function ItemPanel({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-ink-2">
             <LaneChip lane={item.lane} />
             {item.reason && <span>{item.reason}</span>}
+            <TriageRight item={item} />
           </div>
           <ItemMarkers item={item} />
           {item.source === 'wispr' && view?.item.meeting?.calendar && <OnCalendar calendar={view.item.meeting.calendar} />}

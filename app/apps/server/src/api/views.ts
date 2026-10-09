@@ -86,6 +86,7 @@ export interface ViewDeps {
   /** The labelled set (FR-6.2) and "Correct triage" itself. */
   labels?: LabelStore;
   correct?: (id: string, input: CorrectionInput) => Promise<{ labelCount: number }>;
+  confirm?: (id: string) => Promise<{ labelCount: number }>;
   /** What the settle check got wrong, from Frank's Undo or a Done soon after it (cockpit CK-2.6). */
   settleLabels?: SettleLabelStore;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */

@@ -133,6 +133,12 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!body.success) throw new HttpError('validation', 'Send { attention, confluence, vault }.');
     return reply.headers(noStore).send(await d.correct(id, body.data));
   });
+  // "Triage was right": the decision joins the labelled set as it stands.
+  app.post<{ Params: { id: string } }>('/api/items/:id/confirm', async (req, reply) => {
+    const id = item(req.params.id);
+    if (!d.confirm) throw new HttpError('unavailable', 'Confirming triage is not available.');
+    return reply.headers(noStore).send(await d.confirm(id));
+  });
 
   // Actions (FR-9.x): drafted in the background, written by the outbox after approval.
   const actions = () => {

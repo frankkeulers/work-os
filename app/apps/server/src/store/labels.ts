@@ -6,7 +6,8 @@ import { JsonlAppender } from './jsonl';
 // labels/triage.jsonl: the labelled set (FR-6.1, FR-6.2). One line per label, appended; the latest
 // line for an item is its label. Each line carries the thread as the model sees it, so the eval
 // can re-run triage after the item's raw content has gone to retention. Lines come from
-// corrections in the UI and, later, from the Phase 0 labelled set (P0-4).
+// corrections in the UI, from "Triage was right" (the decision as it stood, so the set holds
+// what triage gets right too), and, later, from the Phase 0 labelled set (P0-4).
 
 const Label = z.object({ attention: Attention, confluence: z.boolean(), vault: z.boolean() });
 
@@ -20,7 +21,7 @@ export const LabelThread = z.object({
 
 export const LabelRecord = z.object({
   at: z.iso.datetime(),
-  origin: z.enum(['correction', 'import']),
+  origin: z.enum(['correction', 'confirmed', 'import']),
   itemId: z.string().min(1),
   itemRevision: z.number().int().positive(),
   source: SourceId,
@@ -57,6 +58,7 @@ export function latestLabels(records: LabelRecord[]): LabelRecord[] {
 export class LabelStore {
   private items = new Set<string>();
   private corrections = 0;
+  private confirmations = 0;
   private appender = new JsonlAppender();
 
   private constructor(readonly file: string) {}
@@ -67,9 +69,9 @@ export class LabelStore {
     return s;
   }
 
-  /** Labelled threads (distinct items), and how many lines came from corrections. */
+  /** Labelled threads (distinct items), and how many lines came from corrections and from "Triage was right". */
   get counts() {
-    return { labels: this.items.size, corrections: this.corrections };
+    return { labels: this.items.size, corrections: this.corrections, confirmations: this.confirmations };
   }
 
   /** Resolves once the line is on disk. */
@@ -89,5 +91,6 @@ export class LabelStore {
   private count(r: LabelRecord) {
     this.items.add(r.itemId);
     if (r.origin === 'correction') this.corrections++;
+    if (r.origin === 'confirmed') this.confirmations++;
   }
 }

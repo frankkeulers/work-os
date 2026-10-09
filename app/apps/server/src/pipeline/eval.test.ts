@@ -64,7 +64,7 @@ describe('labelled set', () => {
     await store.append(label('b', 'today'));
     await store.append(label('a', 'now', '2026-10-06T10:00:00.000Z'));
     await store.close();
-    expect(store.counts).toEqual({ labels: 2, corrections: 3 });
+    expect(store.counts).toEqual({ labels: 2, corrections: 3, confirmations: 0 });
     const latest = latestLabels(await store.all());
     expect(latest.map((l) => [l.itemId, l.label.attention])).toEqual([
       ['a', 'now'],

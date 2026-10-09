@@ -69,6 +69,8 @@ export const EventPayloads = {
   'topic.askDone': z.object({ askId: z.string().min(1), by: z.enum(['user', 'reply']).optional() }), // on an anchor: Frank ticked off one ask, or his reply settled it (cockpit CK-2.3)
   'triage.decided': z.object({ decision: LoggedDecision }),
   'triage.corrected': z.object({ correction: TriageCorrection }),
+  // Frank said the decision for this revision was right; the labelled set gains it as a label.
+  'triage.confirmed': z.object({ revision }),
   'triage.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
   // Cockpit (CK-2.2): a settle check ran on Frank's reply. `through` is the latest activity it saw;
   // `settled` the asks it found settled, by askId. The reasons stay with the item's content.

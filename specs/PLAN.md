@@ -360,6 +360,7 @@ interface Action {
 
 type EventType =
   | 'item.upserted' | 'triage.decided' | 'triage.corrected'
+  | 'triage.confirmed'           // Frank said the decision for this revision was right (FR-6.2)
   | 'item.done'                  // data, when not Frank's click: { by: 'source' | 'reply', ... } (cockpit CK-2.2)
   | 'item.reopened' | 'item.snoozed'
   | 'item.unsnoozed'             // the snooze time passed (FR-8.3)
@@ -600,7 +601,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 
 **FR-6.1** `npm run eval` runs triage over `labels/triage.jsonl` and reports precision and recall per category, the confusion matrix for attention, and tokens and cost-equivalent used. `npm run eval -- --purpose settle` runs the settle check over `labels/settle.jsonl` (once it holds 30 labels) and reports false closes and missed closes (cockpit CK-2.6).
 
-**FR-6.2** In the UI, Frank can correct any decision with one click (attention level, confluence y/n, vault y/n). Corrections append to `labels/triage.jsonl` and emit `triage.corrected`.
+**FR-6.2** In the UI, Frank can correct any decision with one click (attention level, confluence y/n, vault y/n). Corrections append to `labels/triage.jsonl` and emit `triage.corrected`. **Triage was right** (`y`) appends the decision as it stands (origin `confirmed`) and emits `triage.confirmed { revision }`, so the labelled set holds what triage gets right as well as its mistakes; the latest line per item counts.
 
 **FR-6.3** The eval report is saved to `logs/eval-<timestamp>.json` so prompt changes can be compared.
 

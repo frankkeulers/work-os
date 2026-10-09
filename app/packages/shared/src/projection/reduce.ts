@@ -2,6 +2,7 @@ import type { WorkEvent } from '../events';
 import { emptyProjection, type ActionState, type Projection } from './state';
 import {
   applyDecision,
+  confirm,
   correct,
   failTriage,
   markDone,
@@ -156,6 +157,9 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       break;
     case 'triage.corrected':
       correct(item, e.data.correction);
+      break;
+    case 'triage.confirmed':
+      confirm(item, e.data.revision);
       break;
     case 'triage.failed':
       failTriage(item, e.data.attempts);

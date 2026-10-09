@@ -4,7 +4,7 @@ import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
 import { askId, conversationOf } from './topics';
-import { budgetsOf, closedByReply, filedAll, openNext, replyCloseCriteria, summaryOf } from './views';
+import { budgetsOf, closedByReply, confirmedNow, filedAll, openNext, replyCloseCriteria, summaryOf } from './views';
 
 const ITEM = 'slack:C1:1791189720.000100';
 const T0 = '2026-10-05T08:00:00.000Z';
@@ -122,6 +122,18 @@ describe('reduce', () => {
     expect(replay(events).items[ITEM]).toMatchObject({ triageState: 'triaged', failCount: 2, correction: { attention: 'now' } });
     add('item.upserted', 20, upserted(2, false, 20)).add('triage.decided', 30, decided(2));
     expect(replay(events).items[ITEM]).toMatchObject({ correctedFrom: 'now', decision: { itemRevision: 2 } });
+  });
+
+  it('keeps "triage was right" for the decision it was said of, until a correction or a re-triage', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 1, decided(1)).add('triage.confirmed', 2, { revision: 1 });
+    expect(confirmedNow(replay(events).items[ITEM])).toBe(true);
+    add('item.upserted', 3, upserted(2, false, 3)).add('triage.decided', 4, decided(2));
+    expect(confirmedNow(replay(events).items[ITEM])).toBe(false); // a new decision, not yet confirmed
+    add('triage.confirmed', 5, { revision: 2 });
+    expect(confirmedNow(replay(events).items[ITEM])).toBe(true);
+    add('triage.corrected', 6, { correction: { itemId: ITEM, itemRevision: 2, attention: 'now', confluence: false, vault: false, correctedAt: at(6) } });
+    expect(confirmedNow(replay(events).items[ITEM])).toBe(false); // his correction stands instead
   });
 
   it('records notifications so an item is notified once (FR-11.2)', () => {

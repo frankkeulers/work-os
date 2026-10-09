@@ -196,6 +196,15 @@ shows "Corrected by you". Every correction is kept as a label: the eval in
 [Usage & health](/usage) measures triage against them, so corrections make the next prompt
 change measurable.
 
+When a decision is right, say so: **Triage was right** beside it (or `y`) keeps the decision as
+a label too, and reads **Right · labelled**. Nothing moves. Corrections alone only hold the cases
+triage got wrong, so the eval would score the hard cases only; a mix of both gives a fairer score.
+It is offered for decisions by the model or a rule on the thread as it is now, not for your own
+corrections or while new messages wait to be triaged. A later correction replaces it.
+
+The eval needs labels to run. Aim for about 30 before reading much into it, a mix of corrections
+and confirmations, from both Slack and Outlook if you use both.
+
 ## Keeping it open
 
 The cockpit is made to stay open on your screen all day.

@@ -12,6 +12,7 @@ import {
   applyActionEvent,
   applyDecision,
   budgetsOf,
+  confirm,
   correct,
   costOf,
   failTriage,
@@ -978,6 +979,20 @@ export class MockServer implements WorkOsApi, MockControls {
     this.s.labelCount += 1;
     this.s.correctionCount += 1;
     this.event('triage.corrected', { correction }, { itemId });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId }, { topic: 'settings' });
+    return { labelCount: this.s.labelCount };
+  }
+
+  async confirmTriage(itemId: string) {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(itemId);
+    const eff = effectiveTriage(rec.decision, rec.correction);
+    if (!rec.decision || !eff) throw new ApiError('conflict', 'This item hasn’t been triaged yet.');
+    if (eff.by === 'user') throw new ApiError('conflict', 'This is your own correction, already in the labelled set.');
+    if (rec.decision.itemRevision < rec.item.revision) throw new ApiError('conflict', 'New messages since it was triaged. Confirm once it has been triaged again.');
+    confirm(rec, rec.decision.itemRevision);
+    this.s.labelCount += 1;
+    this.event('triage.confirmed', { revision: rec.decision.itemRevision }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId }, { topic: 'settings' });
     return { labelCount: this.s.labelCount };
   }

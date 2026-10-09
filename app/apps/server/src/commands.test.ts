@@ -467,6 +467,29 @@ describe('corrections, labels and the eval (FR-6, FR-7.2, Story 6.1)', () => {
     expect((await call<SettingsView>('GET', '/api/settings')).body).toMatchObject({ labelCount: 1, correctionCount: 2 });
   });
 
+  it('adds the decision as it stands when Frank says triage was right, and the item stays put', async () => {
+    const confirm = (id: string) => call<{ labelCount: number } & ApiErrorBody>('POST', `/api/items/${encodeURIComponent(id)}/confirm`);
+    const before = (await inbox()).items.find((i) => i.id === DM)!;
+    expect(before).toMatchObject({ lane: 'else', triage: { attention: 'none', by: 'model' } });
+    expect(before.confirmed).toBeUndefined();
+    expect(await confirm(DM)).toMatchObject({ status: 200, body: { labelCount: 1 } });
+    const after = (await inbox()).items.find((i) => i.id === DM)!;
+    expect(after).toMatchObject({ lane: 'else', confirmed: true, triage: { by: 'model' } });
+    const label = JSON.parse((await labelLines())[0]);
+    expect(label).toMatchObject({ origin: 'confirmed', itemId: DM, label: { attention: 'none', confluence: false, vault: false }, was: { attention: 'none', by: 'model' } });
+    expect(label.thread).toMatchObject({ id: DM, messages: [{ author: 'Dana Lee' }] });
+    expect((await call<SettingsView>('GET', '/api/settings')).body).toMatchObject({ labelCount: 1, correctionCount: 0 });
+
+    // A later correction wins: the item is no longer "confirmed", and its own correction can't be confirmed.
+    await correct(DM, { attention: 'today', confluence: false, vault: false });
+    expect((await inbox()).items.find((i) => i.id === DM)?.confirmed).toBeUndefined();
+    const again = await confirm(DM);
+    expect(again.status).toBe(409);
+    expect(again.body.message).toMatch(/your own correction/);
+    expect(await labelLines()).toHaveLength(2);
+    expect((await confirm('slack:nope')).status).toBe(404);
+  });
+
   it('refuses a malformed correction and an unknown item', async () => {
     expect((await correct(DM, { attention: 'soon', confluence: false, vault: false })).status).toBe(422);
     expect((await correct('slack:nope', { attention: 'now', confluence: false, vault: false })).status).toBe(404);

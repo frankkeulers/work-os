@@ -83,6 +83,10 @@ export function openNext(next: NextStep | undefined, asksDone: string[] = []): N
   return { need: first.need, step: first.step, why: '', ...(first.dueAt && { dueAt: first.dueAt }), ...(first.dueLabel && { dueLabel: first.dueLabel }), asks: next.asks };
 }
 
+/** Frank said the decision standing now was right: same revision, and not overridden by his correction. */
+export const confirmedNow = (s: Pick<ItemFlags, 'confirmed' | 'decision' | 'correction'>) =>
+  s.confirmed !== undefined && !!s.decision && s.confirmed === s.decision.itemRevision && effectiveTriage(s.decision, s.correction)?.by !== 'user';
+
 export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>, s: ItemFlags, ctx: SummaryContext): ItemSummary {
   const d = s.decision;
   const quietUntil = s.triageState === 'pending' ? new Date(Date.parse(meta.lastActivityAt) + ctx.quietMinutes * MIN).toISOString() : undefined;
@@ -104,6 +108,7 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
     next,
     triage: effectiveTriage(d, s.correction),
     correctedFrom: s.correctedFrom,
+    ...(confirmedNow(s) && { confirmed: true }),
     containsPeopleObservations: d?.containsPeopleObservations ?? false,
     targetHints: { confluence: d?.confluence.targetHint, vault: d?.vault.targetHint },
     actions: actionSummaries(ctx.actions, meta.revision),

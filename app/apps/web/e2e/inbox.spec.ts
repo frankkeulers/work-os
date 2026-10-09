@@ -109,6 +109,29 @@ test('J04 correct triage in the panel moves the item and grows the labelled set'
   await expect(rows(page, 'Today')).toHaveCount(0);
 });
 
+test('triage was right: the decision joins the labelled set as it stands, by button or y', async ({ page }) => {
+  const row = rows(page, 'Now').first();
+  const id = (await row.getAttribute('data-row'))!;
+  await row.click();
+  const right = itemPanel(page).getByRole('button', { name: /Triage was right/ });
+  await itemPanel(page).screenshot({ path: join(APP, 'screenshots/inbox-triage-right-light.png'), animations: 'disabled' });
+  await right.click();
+  await expect(page.getByText('Labelled as right · labelled set now 201')).toBeVisible();
+  await expect(itemPanel(page).locator('[data-confirmed]')).toHaveText('Right · labelled');
+  await expect(right).toHaveCount(0);
+  await expect(group(page, 'Needs you').locator(`[data-row="${id}"][data-lane="now"]`)).toBeVisible(); // nothing moves
+  const hide = await page.addStyleTag({ content: '[role="status"] { display: none !important; }' });
+  await itemPanel(page).screenshot({ path: join(APP, 'screenshots/inbox-triage-right-done-light.png'), animations: 'disabled' });
+  await hide.evaluate((e) => e.remove());
+
+  // y on the next item.
+  await page.keyboard.press('j');
+  await expect(itemPanel(page).getByRole('button', { name: /Triage was right/ })).toBeVisible();
+  await page.keyboard.press('y');
+  await expect(page.getByText('Labelled as right · labelled set now 202')).toBeVisible();
+  await expect(itemPanel(page).locator('[data-confirmed]')).toBeVisible();
+});
+
 test('J03 snooze for an hour, then it comes back marked', async ({ page }) => {
   const summary = (await itemPanel(page).getByRole('heading', { level: 2 }).textContent())!;
   await itemPanel(page).getByRole('button', { name: /^Snooze s$/ }).click();

@@ -91,6 +91,11 @@ export function correct(s: ItemFlags, c: TriageCorrection) {
   if (s.triageState === 'failed') s.triageState = 'triaged';
 }
 
+/** Frank said the decision for this revision was right. */
+export function confirm(s: ItemFlags, revision: number) {
+  s.confirmed = revision;
+}
+
 /** Closes an item; `by` is the item.done event's data: none when Frank pressed Done. */
 export function markDone(s: ItemFlags, at: string, by?: EventData<'item.done'>) {
   s.status = 'done';

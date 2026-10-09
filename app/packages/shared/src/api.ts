@@ -55,6 +55,7 @@ export interface ItemSummary {
   next?: NextStep; // the model's suggested next step (amendment)
   triage?: EffectiveTriage;
   correctedFrom?: Attention; // shown when a re-triage replaced Frank's correction
+  confirmed?: boolean; // Frank said this decision was right: it is in the labelled set
   containsPeopleObservations: boolean;
   targetHints: { confluence?: string; vault?: string };
   actions: Partial<Record<ActionType, ActionSummary>>; // latest action per type
@@ -460,6 +461,8 @@ export interface WorkOsApi {
   reopenMany(itemIds: string[]): Promise<{ count: number }>;
   snooze(itemId: string, untilIso: string): Promise<void>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
+  /** "Triage was right": the decision as it stands joins the labelled set, so the eval sees what triage gets right too. */
+  confirmTriage(itemId: string): Promise<{ labelCount: number }>;
   retryTriage(itemId: string): Promise<void>;
   /** "Reply in …" (cockpit CK-2.4): the item is read again at +2 and +6 min, so a reply that settles it closes it soon. */
   replied(itemId: string): Promise<{ scheduled: boolean }>;
