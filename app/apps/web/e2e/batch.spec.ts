@@ -44,6 +44,11 @@ test('J60: file in a batch — each item on its filing, approve moves on, the ne
 
   await page.addStyleTag({ content: HIDE });
   await toFile(page).screenshot({ path: join(APP, 'screenshots/cockpit-file-batch-button-light.png'), animations: 'disabled' });
+  // Every toast from here on, to show the batch's own drafts don't announce themselves.
+  await page.evaluate(() => {
+    const seen: string[] = ((window as unknown as { toasts: string[] }).toasts = []);
+    new MutationObserver(() => document.querySelectorAll('[role="status"]').forEach((t) => seen.includes(t.textContent!) || seen.push(t.textContent!))).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
   await toFile(page).getByRole('button', { name: 'File in a batch' }).click();
   await expect(pos(page)).toHaveText(`Filing 1 of ${ids.length}`);
   expect(current(page)).toBe(ids[0]);
@@ -75,6 +80,7 @@ test('J60: file in a batch — each item on its filing, approve moves on, the ne
   for (let n = 3; n <= ids.length; n++) await panel(page).getByRole('button', { name: /^Skip/ }).click();
   const done = page.getByRole('complementary', { name: 'Filing done' });
   await expect(done.getByTestId('batch-tally')).toHaveText(`1 filed · ${ids.length - 1} skipped`);
+  expect(await page.evaluate(() => (window as unknown as { toasts: string[] }).toasts.filter((t) => t.includes('draft ready')))).toEqual([]);
   await page.screenshot({ path: join(APP, 'screenshots/cockpit-batch-done-light.png'), animations: 'disabled' });
   await page.keyboard.press('Escape');
   await expect(done).toHaveCount(0);

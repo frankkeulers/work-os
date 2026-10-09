@@ -172,7 +172,8 @@ reads **Filing 1 of 4**.
   To file by itself. Filing one item on its own still leaves it open, as before.
 - **Skip** (`→`) leaves the item in To file and moves on. **Discard** works as usual.
 - The next item's draft runs while you review the current one, so it is usually ready when you
-  get there. Only one runs ahead: stopping part-way wastes at most one draft.
+  get there. Only one runs ahead: stopping part-way wastes at most one draft. The batch's drafts
+  don't raise a "draft ready" toast, and neither does a draft for the item open in the panel.
 - At the end the panel shows what happened, such as **3 filed · 1 skipped**. `Esc` closes it.
   `Esc` part-way, or opening another item, stops the batch; the rest stay in To file.
 

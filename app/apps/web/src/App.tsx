@@ -12,6 +12,7 @@ import { SettingsPage } from './pages/Settings';
 import { StartupFailedScreen, UnreachableScreen } from './pages/SystemScreens';
 import { UsagePage } from './pages/Usage';
 import { ScenarioDrawer } from './scenarios/ScenarioDrawer';
+import { takeQuiet } from './store/quietDrafts';
 import { usePrefs } from './store/prefs';
 import { toast, useToasts } from './store/toasts';
 
@@ -33,14 +34,18 @@ function useNoticeToasts() {
   const location = useLocation();
   const navigate = useNavigate();
   const path = useRef(location.pathname);
+  const search = useRef(location.search);
   useEffect(() => {
     path.current = location.pathname;
-  }, [location.pathname]);
+    search.current = location.search;
+  }, [location.pathname, location.search]);
+  // Already in front of Frank: the item's page, or the inbox panel open on it.
+  const showing = (itemId: string) => path.current === `/item/${encodeURIComponent(itemId)}` || (path.current === '/' && new URLSearchParams(search.current).get('item') === itemId);
   useEffect(
     () =>
       api.subscribe((n) => {
         if (n.topic === 'notification') useToasts.getState().notify({ itemId: n.itemId, title: n.title, summary: n.summary });
-        if (n.topic === 'draft_ready' && path.current !== `/item/${encodeURIComponent(n.itemId)}`) {
+        if (n.topic === 'draft_ready' && !takeQuiet(n.itemId) && !showing(n.itemId)) {
           toast(`${TYPE_LABEL[n.type].short} draft ready · ${n.title}`, {
             tone: 'success',
             action: { label: 'Review', run: () => navigate(`/item/${encodeURIComponent(n.itemId)}`) },

@@ -23,6 +23,7 @@ import { targetChip } from '../lib/lanes';
 import { INBOX_SORT_LABEL, SOURCE_NAME, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
 import { NEW_FOR_MS, usePrefs } from '../store/prefs';
 import { useUserMoves } from '../store/userMoves';
+import { quietDraft } from '../store/quietDrafts';
 import { errorToast, toast } from '../store/toasts';
 import { DoneByChip, DueChip, NeedTag, StatusChip } from './inbox/chips';
 import { CockpitRow, LaterRow, RepliedRow, ReplyNote } from './inbox/cockpit/rows';
@@ -855,7 +856,10 @@ export function InboxPage() {
   const batchIds = useMemo(() => fileRows.filter((r) => !r.leaving && batchable(r.item)).map((r) => r.item.id), [fileRows]);
   const fileOn = useCallback(
     (item: ItemSummary, type: ActionType) => {
-      if (needsDraft(item, type, budgetHit)) void api.requestDraft(item.id, type).catch(errorToast);
+      if (needsDraft(item, type, budgetHit)) {
+        quietDraft(item.id);
+        void api.requestDraft(item.id, type).catch(errorToast);
+      }
       clearNew(item.id);
       setPanelOpen(true);
       setSearch({ item: item.id, file: type === 'vault_note' ? 'vault' : 'confluence' }, { replace: true });
@@ -873,10 +877,13 @@ export function InboxPage() {
         setSearch({}, { replace: true });
         return;
       }
-      setBatch(b);
+      setBatch({ ...b, approved: [] });
       fileOn(cur, filingFor(cur)!);
       const next = ahead && filingFor(ahead);
-      if (ahead && next && needsDraft(ahead, next, budgetHit)) void api.requestDraft(ahead.id, next).catch(errorToast);
+      if (ahead && next && needsDraft(ahead, next, budgetHit)) {
+        quietDraft(ahead.id);
+        void api.requestDraft(ahead.id, next).catch(errorToast);
+      }
     },
     [all, fileOn, budgetHit, setPanelOpen, setSearch, setBatch],
   );
@@ -997,7 +1004,7 @@ export function InboxPage() {
   const view = detail.data && detail.data.summary.id === sel ? detail.data : undefined;
   // In the To file header (CK-4.1). Not a click outside the panel: it opens the batch there.
   const batchButton = batchIds.length > 0 && (
-    <Button size="sm" icon="forward" data-row-action onClick={() => batchFrom({ ids: batchIds, filed: 0, skipped: 0, done: false }, 0)}>
+    <Button size="sm" icon="forward" data-row-action onClick={() => batchFrom({ ids: batchIds, filed: 0, skipped: 0, approved: [], done: false }, 0)}>
       File in a batch
     </Button>
   );
@@ -1010,9 +1017,12 @@ export function InboxPage() {
           // Its other suggested filing next, if any; then the next item.
           onApproved: (t: ActionType) => {
             const cur = all.find((i) => i.id === batch.ids[batchPos]);
-            const other = cur && filingFor(cur, t);
-            if (cur && other) fileOn(cur, other);
-            else batchFrom({ ...batch, filed: batch.filed + 1 }, batchPos + 1);
+            const approved = [...batch.approved, t];
+            const other = cur && filingFor(cur, approved);
+            if (cur && other) {
+              setBatch({ ...batch, approved });
+              fileOn(cur, other);
+            } else batchFrom({ ...batch, filed: batch.filed + 1 }, batchPos + 1);
           },
         }
       : undefined;

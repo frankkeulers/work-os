@@ -32,8 +32,10 @@ describe('file in a batch (CK-4.1–4.4)', () => {
     const i = item({});
     expect(openFilings(i)).toEqual(['confluence_entry', 'vault_note']);
     expect(filingFor(i)).toBe('confluence_entry');
-    expect(filingFor(i, 'confluence_entry')).toBe('vault_note');
-    expect(filingFor(item({ triage: { attention: 'none', confluence: true, vault: false, by: 'model' } }), 'confluence_entry')).toBeUndefined();
+    expect(filingFor(i, ['confluence_entry'])).toBe('vault_note');
+    expect(filingFor(item({ triage: { attention: 'none', confluence: true, vault: false, by: 'model' } }), ['confluence_entry'])).toBeUndefined();
+    // Both approved before the inbox shows the first as writing: nothing left, so the batch moves on.
+    expect(filingFor(i, ['confluence_entry', 'vault_note'])).toBeUndefined();
   });
 
   it('leaves out what is filed or being written, and Confluence for people observations (FR-10.1)', () => {
