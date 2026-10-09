@@ -94,6 +94,8 @@ test('Outlook categories: their colours are picked in Settings and show on the a
 
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
   await expect(meeting(page, 'renewal call')).toHaveAttribute('data-category-color', 'darkRed');
+  // A light shade of it behind the chip: dark red (117, 11, 28) mixed into the white surface.
+  await expect(meeting(page, 'renewal call')).toHaveCSS('background-color', /^(rgb\(235, 220, 222\)|color\(srgb 0\.9[0-9]* 0\.8[0-9]* 0\.8[0-9]*\))$/);
   await expect(meeting(page, 'Product stand-up')).not.toHaveAttribute('data-category-color');
   await agenda(page).getByRole('button', { name: 'Tomorrow' }).click();
   // In MVP scope the invite isn't in the list (the calendar isn't live yet), so it opens on its own page.

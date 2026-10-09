@@ -20,14 +20,16 @@ function AgendaChip({ e, phase, onOpenItem }: { e: AgendaEvent; phase: 'past' | 
   const tag = 'inline-flex min-h-7 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-xs font-medium hover:bg-bg';
   const categories = e.categories ?? [];
   const named = categories.map((c) => c.name).join(', ');
-  // A meeting with Outlook categories has the first one's colour down its left edge, as in Outlook.
+  // A meeting with Outlook categories has the first one's colour down its left edge, as in Outlook,
+  // and a light shade of it behind (mixed into the surface, so it stays dark in the dark theme).
+  const hex = categories.length ? OUTLOOK_COLORS[categories[0].color] : undefined;
   return (
     <li
       data-agenda-event={e.id}
       data-phase={phase}
       data-category-color={categories[0]?.color}
       className={cx('flex shrink-0 items-center gap-0.5 rounded-lg border pl-2 pr-0.5', categories.length > 0 && 'pl-3', phase === 'now' ? 'border-accent-line bg-accent-wash' : 'border-line-soft bg-surface', phase === 'past' && 'opacity-60')}
-      style={categories.length ? { boxShadow: `inset 4px 0 0 ${OUTLOOK_COLORS[categories[0].color]}` } : undefined}
+      style={hex ? { boxShadow: `inset 4px 0 0 ${hex}`, background: `color-mix(in srgb, ${hex} 14%, var(--surface))` } : undefined}
     >
       <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" title={`${e.title}${e.organizer ? ` · ${e.organizer}` : ''}${named ? ` · ${named}` : ''}: open in Outlook`} className="flex min-h-9 max-w-[280px] items-center gap-1.5 pr-1.5 !text-ink no-underline hover:underline">
         <span className="font-mono text-xs text-ink-2">{when}</span>

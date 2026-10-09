@@ -80,7 +80,7 @@ short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it 
 ### Categories
 
 The Outlook categories on your meetings come with the calendar. A meeting with one has that
-category's colour down its left edge on the agenda, and an invite or a Wispr Flow meeting joined to
+category's colour down its left edge on the agenda, and a light shade of it behind, and an invite or a Wispr Flow meeting joined to
 it lists its categories under the summary.
 
 Work OS can read a category's name but not the colour you gave it in Outlook: the connector doesn't
