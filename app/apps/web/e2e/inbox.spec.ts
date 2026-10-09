@@ -542,6 +542,9 @@ test('J51 the top bar’s health pill: live, stale, a connector down, catching u
   await expect(pill).toHaveAttribute('data-tone', 'warn');
   await expect(pill).toContainText('Slack stale · last read 34 min ago');
   await expect(header).toHaveAttribute('data-health', 'warn');
+  // The sidebar agrees: Slack's last-read time is amber, not green.
+  const slackNav = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /^Slack/ });
+  await expect(slackNav.locator('[data-stale]')).toHaveText('34m ago');
   await page.screenshot({ path: join(APP, 'screenshots/inbox-health-stale-light.png') });
   await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
   await page.screenshot({ path: join(APP, 'screenshots/inbox-health-stale-dark.png'), animations: 'disabled' });
@@ -572,6 +575,7 @@ test('J51 the top bar’s health pill: live, stale, a connector down, catching u
   await setHealth('Running normally');
   await expect(pill).toHaveAttribute('data-tone', 'ok', { timeout: 10_000 });
   await expect(header).toHaveAttribute('data-health', 'ok');
+  await expect(slackNav.locator('[data-stale]')).toHaveCount(0);
 });
 
 test('J23 failed triage sits in Needs you after the Now rows, and Retry moves it to its lane', async ({ page }) => {

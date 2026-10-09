@@ -76,6 +76,16 @@ const more = (label: string, n: number) => (n > 1 ? `${label} (+${n - 1} more)` 
  * a source whose last poll is older than twice its interval: a server that has quietly stopped
  * polling. Otherwise all is well, with the time of the oldest read.
  */
+/**
+ * A source that should have read by now and hasn't: its last poll is older than twice its interval,
+ * and it isn't polling or waiting its turn. The pill and the sidebar's dots share it.
+ */
+export function isStale(s: SourceHealth, now: Date, poll?: Pick<PollStatus, 'polling' | 'queued'>): boolean {
+  if (s.intervalMinutes === undefined || !s.lastPollAt || s.status === 'never') return false;
+  if (poll?.polling === s.id || poll?.queued?.includes(s.id)) return false;
+  return now.getTime() - Date.parse(s.lastPollAt) > 2 * s.intervalMinutes * 60_000;
+}
+
 export function pillHealth(h: Pick<HealthView, 'mode' | 'phase' | 'deps'>, sources: readonly SourceHealth[], now: Date, poll?: Pick<PollStatus, 'polling' | 'queued'>): PillHealth {
   if (h.mode === 'safe') return { tone: 'bad', label: 'Safe mode · nothing is being read', fix: { label: 'Open Usage & health', to: '/usage#health' } };
   if (h.phase === 'stopping') return { tone: 'idle', label: 'Stopping' };
@@ -88,10 +98,8 @@ export function pillHealth(h: Pick<HealthView, 'mode' | 'phase' | 'deps'>, sourc
     return { tone: 'warn', label: more(`${PILL_DEP[d.id]} ${depWord(d)}${stale ? ` · ${stale}` : ''}`, down.length), fix: depFix(d) };
   }
 
-  // Sources that poll now, and aren't polling or waiting their turn this minute.
   const polling = sources.filter((s) => s.intervalMinutes !== undefined && s.lastPollAt && s.status !== 'never');
-  const busy = (s: SourceHealth) => poll?.polling === s.id || !!poll?.queued?.includes(s.id);
-  const stale = polling.filter((s) => !busy(s) && now.getTime() - Date.parse(s.lastPollAt!) > 2 * s.intervalMinutes! * 60_000);
+  const stale = polling.filter((s) => isStale(s, now, poll));
   if (stale.length) {
     const s = stale[0];
     return { tone: 'warn', label: more(`${SOURCE_NAME[s.id]} stale · last read ${fmtAgoLong(s.lastPollAt!, now)}`, stale.length), fix: HEALTH_FIX };

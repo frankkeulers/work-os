@@ -6,7 +6,7 @@ import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
 import { useWideLayout } from '../hooks/useLayout';
 import { useNow } from '../hooks/useNow';
 import { fmtAgo } from '../lib/format';
-import { appHealth, type AppHealth } from '../lib/health';
+import { appHealth, isStale, type AppHealth } from '../lib/health';
 import { isLive } from '../lib/next';
 import { shownName } from '../lib/profile';
 import { usePrefs, type Scope, type Theme } from '../store/prefs';
@@ -294,7 +294,9 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
             const name = SOURCE_NAME[id];
             const turn = pollTurn(id, inbox?.poll);
             const label = health ? sourceLabel(id, health, now, turn) : '';
-            const dot = health ? SLACK_DOT[health.status] : 'var(--gray-mid)';
+            // A source the health pill calls stale is amber here too, though its last poll went well.
+            const stale = !!health && health.status === 'healthy' && isStale(health, now, inbox?.poll);
+            const dot = health ? (stale ? 'var(--amber)' : SLACK_DOT[health.status]) : 'var(--gray-mid)';
             return (
               <NavLink
                 key={id}
@@ -321,7 +323,7 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
                     ) : (
                       <Dot color={dot} />
                     )}
-                    <span className={cx('font-mono text-[11px]', health?.status === 'auth_failed' ? 'text-red-fg' : health?.status === 'backoff' ? 'text-amber-fg' : 'text-muted')}>{label}</span>
+                    <span className={cx('font-mono text-[11px]', health?.status === 'auth_failed' ? 'text-red-fg' : health?.status === 'backoff' || stale ? 'text-amber-fg' : 'text-muted')} {...(stale && { 'data-stale': true })}>{label}</span>
                   </>
                 )}
                 {collapsed && <span className="sr-only">{label}</span>}

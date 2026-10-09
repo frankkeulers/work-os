@@ -33,7 +33,7 @@ reading everything. When something needs a look, the whole top bar takes its col
 | Green, "All sources live · 2 min ago" | Every source read on time; the time is the oldest last read. The bar stays plain. |
 | Blue, "Catching up after sleep" | The Mac woke up; Work OS is reading what fell due. |
 | Amber, naming what's down and what's stale | A dependency has a problem, for example "Outlook not connected · mail and calendar stale". The fix is beside it as a link. |
-| Amber, "Slack stale · last read 34 min ago" | A source hasn't been read for more than twice its interval (work or off hours), with no error. Work OS may have stopped polling quietly; open Usage & health, or choose **Poll now**. |
+| Amber, "Slack stale · last read 34 min ago" | A source hasn't been read for more than twice its interval (work or off hours), with no error. Work OS may have stopped polling quietly; open Usage & health, or choose **Poll now**. The source's dot and last-read time in the sidebar turn amber too. |
 | Red, "Safe mode · nothing is being read" | See [Safe mode](#safe-mode). |
 | Grey, "Stopping" | The server is shutting down. |
 
