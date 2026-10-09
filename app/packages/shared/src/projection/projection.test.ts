@@ -4,7 +4,7 @@ import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
 import { askId, conversationOf } from './topics';
-import { budgetsOf, closedByReply, openNext, replyCloseCriteria, summaryOf } from './views';
+import { budgetsOf, closedByReply, filedAll, openNext, replyCloseCriteria, summaryOf } from './views';
 
 const ITEM = 'slack:C1:1791189720.000100';
 const T0 = '2026-10-05T08:00:00.000Z';
@@ -152,6 +152,35 @@ describe('reduce', () => {
     expect(replay(events).actions['act-1'].status).toBe('executing'); // the outbox reconciles this after a crash (FR-14.5)
     add('action.failed', 5, { reason: 'unreachable' }, ids);
     expect(replay(events).actions['act-1']).toMatchObject({ status: 'failed', failureReason: 'unreachable', updatedAt: at(5) });
+  });
+
+  it('keeps an approval from a batch, and knows when every suggested filing is written (CK-4.4)', () => {
+    const { events, add } = log();
+    const vault = { itemId: ITEM, actionId: 'act-v' };
+    const conf = { itemId: ITEM, actionId: 'act-c' };
+    add('item.upserted', 0, upserted(1))
+      .add('triage.decided', 1, decided(1, 'none'))
+      .add('action.requested', 2, { type: 'vault_note', revision: 1 }, vault)
+      .add('action.drafted', 3, { type: 'vault_note', revision: 1, draftRef: 'drafts/act-v.json', tokens: 900, target: { path: 'Inbox/x.md' } }, vault)
+      .add('action.approved', 4, { markDoneWhenFiled: true }, vault);
+    let p = replay(events);
+    expect(p.actions['act-v']).toMatchObject({ status: 'approved', markDoneWhenFiled: true });
+    const newest = () => Object.values(p.actions).reverse();
+    expect(filedAll(p.items[ITEM], newest())).toBe(false);
+    add('action.executed', 5, { dryRun: true, path: 'Inbox/x.md' }, vault);
+    p = replay(events);
+    expect(filedAll(p.items[ITEM], newest())).toBe(true); // the decision suggests the vault only
+    // Corrected to Confluence as well: not filed until that is written too.
+    add('triage.corrected', 6, { correction: { itemId: ITEM, itemRevision: 1, attention: 'none', confluence: true, vault: true, correctedAt: at(6) } });
+    p = replay(events);
+    expect(filedAll(p.items[ITEM], newest())).toBe(false);
+    add('action.requested', 7, { type: 'confluence_entry', revision: 1 }, conf).add('action.drafted', 8, { type: 'confluence_entry', revision: 1, draftRef: 'drafts/act-c.json', tokens: 900, target: { pageId: '42', baseVersion: 7 } }, conf);
+    add('action.approved', 9, undefined, conf).add('action.executed', 10, { dryRun: true, pageId: '42' }, conf);
+    p = replay(events);
+    expect(p.actions['act-c'].markDoneWhenFiled).toBeUndefined();
+    expect(filedAll(p.items[ITEM], newest())).toBe(true);
+    // Nothing suggested: nothing to have filed.
+    expect(filedAll({ decision: undefined, correction: undefined }, newest())).toBe(false);
   });
 
   it('ignores events for actions and items it never saw', () => {

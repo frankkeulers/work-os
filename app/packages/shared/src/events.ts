@@ -83,7 +83,8 @@ export const EventPayloads = {
     target: ActionTarget, // where the approved write goes, checked again before it runs
   }),
   'action.edited': none,
-  'action.approved': none,
+  // Approved while filing in a batch (cockpit CK-4.4): the item is marked done once every filing it suggests is written.
+  'action.approved': z.object({ markDoneWhenFiled: z.literal(true).optional() }).strict().optional(),
   // Synced before every write attempt, so a write interrupted by sleep or a crash is reconciled, not repeated (FR-14.5).
   'action.executing': z.object({ attempt: z.number().int().positive(), expectedHash: z.string().optional() }),
   'action.executed': z.object({

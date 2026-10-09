@@ -475,7 +475,8 @@ export interface WorkOsApi {
   saveDraftEdit(actionId: string, content: string): Promise<void>;
   redraft(actionId: string): Promise<Action>;
   discardAction(actionId: string): Promise<void>;
-  approveAction(actionId: string): Promise<void>;
+  /** `markDoneWhenFiled`: approved while filing in a batch; the item is done once all its filings are written (cockpit CK-4.4). */
+  approveAction(actionId: string, opts?: { markDoneWhenFiled?: boolean }): Promise<void>;
 
   runEval(): Promise<void>;
   rebuildState(): Promise<{ events: number }>;

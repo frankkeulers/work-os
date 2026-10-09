@@ -1,4 +1,4 @@
-import { CorrectionBody, DraftEdit, DraftRequest, ItemIds, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SettingsSaved, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, CorrectionBody, DraftEdit, DraftRequest, ItemIds, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SettingsSaved, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -169,7 +169,9 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(204).send();
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/approve', async (req, reply) => {
-    await actions().approve(req.params.id);
+    const body = ApproveRequest.safeParse(req.body ?? {});
+    if (!body.success) throw new HttpError('validation', 'Send nothing, or { markDoneWhenFiled }.');
+    await actions().approve(req.params.id, body.data);
     return reply.code(202).send();
   });
 

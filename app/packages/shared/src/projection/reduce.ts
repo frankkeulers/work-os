@@ -63,6 +63,7 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
       break;
     case 'action.approved':
       a.status = 'approved';
+      if (e.data?.markDoneWhenFiled) a.markDoneWhenFiled = true;
       break;
     case 'action.executing':
       a.status = 'executing';

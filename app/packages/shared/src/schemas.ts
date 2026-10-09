@@ -165,6 +165,7 @@ export const Action = z.object({
   error: z.string().optional(),
   failureReason: FailureReason.optional(),
   supersedes: z.string().optional(), // previous action, when re-drafted after a conflict
+  markDoneWhenFiled: z.boolean().optional(), // approved in a batch: the item is done once all its filings are written (cockpit CK-4.4)
   createdAt: isoDate,
   updatedAt: isoDate,
 });

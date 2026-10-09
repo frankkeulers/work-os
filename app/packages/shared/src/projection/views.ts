@@ -22,6 +22,19 @@ export function currentAction<A extends ActionLike>(actions: readonly A[], type:
   return actions.find((a) => a.type === type && a.status !== 'discarded' && !replaced.has(a.id));
 }
 
+/**
+ * Every filing the triage suggests has been written (cockpit CK-4.4): what marks an item filed in a
+ * batch done. Confluence doesn't count for a thread with observations about people (FR-10.1).
+ * `actions` must be newest first.
+ */
+export function filedAll(it: Pick<ItemFlags, 'decision' | 'correction'>, actions: readonly ActionLike[]): boolean {
+  const eff = effectiveTriage(it.decision, it.correction);
+  const types: ActionType[] = [];
+  if (eff?.confluence && !it.decision?.containsPeopleObservations) types.push('confluence_entry');
+  if (eff?.vault) types.push('vault_note');
+  return types.length > 0 && types.every((t) => currentAction(actions, t)?.status === 'done');
+}
+
 /** An entry's version: the entries of its type filed before it, plus one. Failed, retried and discarded drafts don't count. */
 export function entryVersion(actions: readonly ActionLike[], a: ActionLike): number {
   return 1 + actions.filter((b) => b.type === a.type && b.status === 'done' && b.id !== a.id && b.createdAt < a.createdAt).length;

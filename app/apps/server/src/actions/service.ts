@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId } from '@work-os/shared';
-import { londonParts, topicItem } from '@work-os/shared';
+import { filedAll, londonParts, topicItem } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeError, ClaudeOutputError } from '../claude/errors';
@@ -210,14 +210,15 @@ export class ActionService {
     });
   }
 
-  async approve(id: string) {
+  /** `markDoneWhenFiled`: approved while filing in a batch (cockpit CK-4.4). */
+  async approve(id: string, opts: { markDoneWhenFiled?: boolean } = {}) {
     const a = this.action(id);
     if (a.status !== 'ready') throw new HttpError('conflict', 'This draft is no longer ready to approve.');
     await this.d.store.append({
       type: 'action.approved',
       itemId: a.itemId,
       actionId: id,
-      data: undefined,
+      data: opts.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined,
     });
     this.pump();
   }
@@ -542,7 +543,15 @@ export class ActionService {
 
   private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; pageId?: string; pageVersion?: number }) {
     await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, result: message }));
-    await this.d.store.append({ type: 'action.executed', itemId: a.itemId, actionId: a.id, data });
+    // Filed in a batch (CK-4.4): the write that completes the item's filings also marks it done, in the same append.
+    const it = this.d.store.projection.items[a.itemId];
+    const mine = Object.values(this.actions)
+      .filter((b) => b.itemId === a.itemId)
+      .map((b) => (b.id === a.id ? { ...b, status: 'done' as const } : b))
+      .reverse()
+      .sort((x, y) => y.createdAt.localeCompare(x.createdAt));
+    const close = a.markDoneWhenFiled && it?.status === 'open' && filedAll(it, mine);
+    await this.d.store.append({ type: 'action.executed', itemId: a.itemId, actionId: a.id, data }, ...(close ? [{ type: 'item.done' as const, itemId: a.itemId, data: undefined }] : []));
     this.attempts.delete(a.id);
     this.retryAt.delete(a.id);
   }

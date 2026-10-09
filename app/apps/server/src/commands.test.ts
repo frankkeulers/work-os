@@ -565,6 +565,42 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect((await call<ApiErrorBody>('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(409);
   });
 
+  it('marks an item filed in a batch done once every filing it suggests is written, in the same append (CK-4.4)', async () => {
+    await useVault();
+    const correct = (confluence: boolean) => call('POST', `/api/items/${encodeURIComponent(PROD)}/correction`, { attention: 'none', confluence, vault: true });
+    const approveAndWrite = async (body?: object) => {
+      const r = await request();
+      expect((await call('POST', `/api/actions/${r.body.id}/approve`, body)).status).toBe(202);
+      await res.actions.settled();
+      expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'done' });
+      return r.body.id;
+    };
+
+    // Approved on its own: single filing keeps today's behaviour, and the item stays open.
+    expect((await correct(false)).status).toBe(200);
+    await approveAndWrite();
+    expect((await item()).summary.status).toBe('open');
+
+    // In a batch, with Confluence still to file: the vault note alone doesn't close it.
+    expect((await correct(true)).status).toBe(200);
+    await rm(join(dir, 'sandbox/vault'), { recursive: true, force: true });
+    await approveAndWrite({ markDoneWhenFiled: true });
+    expect((await item()).summary.status).toBe('open');
+
+    // In a batch, with the vault the only filing: done as the write lands.
+    expect((await correct(false)).status).toBe(200);
+    await rm(join(dir, 'sandbox/vault'), { recursive: true, force: true });
+    const id = await approveAndWrite({ markDoneWhenFiled: true });
+    expect((await item()).summary).toMatchObject({ status: 'done', lane: 'done' });
+    const log = (await readdir(join(dir, 'events'))).filter((f) => f.endsWith('.jsonl')).sort();
+    const events = (await readFile(join(dir, 'events', log.at(-1)!), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
+    const [executed, done] = events.slice(-2);
+    expect(executed).toMatchObject({ type: 'action.executed', actionId: id });
+    expect(done).toMatchObject({ type: 'item.done', itemId: PROD });
+    expect(done.seq).toBe(executed.seq + 1);
+    expect((await call<ApiErrorBody>('POST', `/api/actions/${id}/approve`, { markDoneWhenFiled: 'yes' })).status).toBe(422);
+  });
+
   it('re-drafts instead of writing when the note changed after drafting', async () => {
     await useVault();
     await writeFile(join(vault, 'Projects/Product.md'), NOTE);

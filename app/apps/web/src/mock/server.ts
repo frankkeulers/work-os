@@ -5,6 +5,7 @@ import {
   askId,
   awaitsReply,
   effectiveTriage,
+  filedAll,
   settleChecked,
   settleFailed,
   anchorOf,
@@ -1198,11 +1199,11 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
   }
 
-  async approveAction(actionId: string) {
+  async approveAction(actionId: string, opts: { markDoneWhenFiled?: boolean } = {}) {
     await this.gate(COMMAND_MS);
     const a = this.action(actionId);
     if (a.status !== 'ready') throw new ApiError('conflict', 'This draft is no longer ready to approve.');
-    this.event('action.approved', undefined, { itemId: a.itemId, actionId });
+    this.event('action.approved', opts.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
     void this.execute(actionId, 500);
   }
@@ -1256,6 +1257,12 @@ export class MockServer implements WorkOsApi, MockControls {
       this.event('action.executed', { dryRun: dry, path: where }, { itemId: a.itemId, actionId });
     }
     this.s.results[actionId] = msg;
+    // Filed in a batch (CK-4.4): done once every filing it suggests is written.
+    const mine = Object.values(this.s.actions).filter((b) => b.itemId === a.itemId).reverse();
+    if (a.markDoneWhenFiled && rec.status === 'open' && filedAll(rec, mine)) {
+      markDone(rec, this.iso());
+      this.event('item.done', undefined, { itemId: a.itemId });
+    }
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
   }
 

@@ -32,6 +32,9 @@ export const CorrectionBody = z.object({ attention: z.enum(['now', 'today', 'non
 /** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
 export const DraftRequest = z.object({ type: z.enum(['vault_note', 'confluence_entry']) }).strict();
 
+/** POST /api/actions/:id/approve (FR-9.4); from a batch, the item is done once all its filings are written (cockpit CK-4.4). */
+export const ApproveRequest = z.object({ markDoneWhenFiled: z.boolean().optional() }).strict();
+
 /** PUT /api/prompts/:id (FR-1.7): the new text, and the version it was edited from. */
 export const PromptSave = z.object({ text: z.string().max(200_000).refine((t) => t.trim().length > 0, 'The file can’t be empty'), baseVersion: z.string().min(1) }).strict();
 export type PromptSave = z.infer<typeof PromptSave>;

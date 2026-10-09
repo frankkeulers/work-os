@@ -92,6 +92,24 @@ describe('draft and approval outcomes', () => {
     expect(v.results[actionId]).toContain('sandbox/vault/Resources/Claude Code/Subscription auth.md');
   });
 
+  it('marks an item approved in a batch done once all its filings are written; a single approval leaves it open (CK-4.4)', async () => {
+    await settle(server.approveAction(await draft('f4', 'vault_note')), 3000);
+    expect((await view('f4')).summary.status).toBe('open');
+
+    // f1 suggests Confluence too, its entry not yet filed: the vault note alone doesn't close it.
+    const f1 = await view('f1');
+    expect(f1.summary.triage).toMatchObject({ confluence: true, vault: true });
+    await settle(server.approveAction(f1.actions.find((a) => a.type === 'vault_note')!.id, { markDoneWhenFiled: true }), 3000);
+    expect((await view('f1')).summary.status).toBe('open');
+
+    // f4 suggests the vault only: done as the write lands.
+    const again = await draft('f4', 'vault_note');
+    await settle(server.approveAction(again, { markDoneWhenFiled: true }), 3000);
+    const v = await view('f4');
+    expect(v.actions[0]).toMatchObject({ id: again, status: 'done' });
+    expect(v.summary).toMatchObject({ status: 'done', lane: 'done' });
+  });
+
   it('re-drafts instead of writing when the page changed (FR-10.5)', async () => {
     server.setNextDraftOutcome('confluence_conflict');
     const f1 = await view('f1');
