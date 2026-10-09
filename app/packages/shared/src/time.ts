@@ -86,3 +86,10 @@ export function londonAt(d: Date, hhmm: string, days = 0): string {
   if (offsetMins > MINUTES_IN_DAY / 2) offsetMins -= MINUTES_IN_DAY;
   return new Date(guess.getTime() - offsetMins * 60_000).toISOString();
 }
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** The Monday of the London week `d` falls in, as YYYY-MM-DD (cockpit CK-5.6). */
+export function mondayOf(d: Date): string {
+  return londonParts(londonAt(d, '12:00', -WEEKDAYS.indexOf(londonParts(d).weekday))).dateKey;
+}

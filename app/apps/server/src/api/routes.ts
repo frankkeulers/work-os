@@ -1,4 +1,4 @@
-import { ApproveRequest, CorrectionBody, DraftEdit, DraftRequest, ItemIds, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SettingsSaved, type SourceId, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, CorrectionBody, DraftEdit, DraftRequest, ItemIds, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -9,7 +9,7 @@ import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { agendaView, healthView, inboxView, itemView, knownCategories, settingsView, usageView, type ViewDeps } from './views';
+import { agendaView, healthView, inboxView, itemView, knownCategories, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
 
@@ -195,6 +195,13 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
 
   app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));
   app.get('/api/calendar/agenda', async (_req, reply) => reply.headers(noStore).send(await agendaView(d)));
+  // A source's history (cockpit CK-5.1) and the calendar week (CK-5.6).
+  app.get<{ Params: { source: string } }>('/api/sources/:source/items', async (req, reply) => {
+    const source = SourceId.safeParse(req.params.source);
+    if (!source.success) throw new HttpError('not_found', 'No such source.');
+    return reply.headers(noStore).send(sourceView(d, source.data));
+  });
+  app.get<{ Querystring: { start?: string } }>('/api/calendar/week', async (req, reply) => reply.headers(noStore).send(await weekView(d, req.query.start)));
 
   app.get<{ Params: { id: string } }>('/api/items/:id', async (req, reply) => {
     const view = await itemView(d, req.params.id);

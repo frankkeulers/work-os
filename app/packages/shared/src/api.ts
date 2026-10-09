@@ -170,6 +170,45 @@ export interface AgendaView {
   leadMinutes: number;
 }
 
+/**
+ * A row in a source's history (cockpit CK-5.1): every item stored for the source, whatever triage
+ * made of it. Done ones of any age, excluded channels' and expired ones too; parts stay in their topic.
+ */
+export interface SourceRow extends ItemSummary {
+  /** The people in it by name, Frank left out. */
+  people: string[];
+  messageCount: number;
+  /** A Slack channel now under "Never read these channels": fetched before it was excluded. */
+  excluded?: boolean;
+  /** Older than the retention period: its text is gone, its metadata stays. */
+  expired?: boolean;
+}
+
+export interface SourceItemsView {
+  source: SourceId;
+  /** Newest activity first. */
+  items: SourceRow[];
+}
+
+/** A meeting in the calendar week (cockpit CK-5.6). Cancelled and declined ones show too, marked. */
+export interface WeekEvent extends AgendaEvent {
+  cancelled?: boolean;
+  /** Who is invited, by name or address. */
+  attendees?: string[];
+}
+
+/** One week of the calendar snapshot, Monday to Sunday, London time (CK-5.6). */
+export interface WeekView {
+  state: AgendaView['state'];
+  polledAt?: string;
+  /** The Monday, as YYYY-MM-DD. */
+  weekStart: string;
+  /** What the snapshot holds: weeks outside it aren't kept. */
+  held?: { from: string; to: string };
+  /** Soonest first. */
+  events: WeekEvent[];
+}
+
 export interface BudgetLine {
   used: number;
   limit: number;
@@ -452,6 +491,10 @@ export interface WorkOsApi {
   getOutlookStatus(): Promise<OutlookStatusView>;
   /** Today's and tomorrow's meetings from Outlook Calendar (R2.8). */
   getAgenda(): Promise<AgendaView>;
+  /** Every item stored for one source, triage or not (cockpit CK-5.1). */
+  getSourceItems(source: SourceId): Promise<SourceItemsView>;
+  /** The calendar week starting on the Monday given (YYYY-MM-DD), or this week (CK-5.6). */
+  getWeek(weekStart?: string): Promise<WeekView>;
 
   pollNow(): Promise<void>;
   markDone(itemId: string): Promise<void>;

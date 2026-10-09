@@ -1,4 +1,4 @@
-import type { AgendaEvent } from '@work-os/shared';
+import type { AgendaEvent, WeekEvent } from '@work-os/shared';
 
 // Outlook Calendar (R2.8) in the seed week, as the agenda strip shows it once the calendar is on.
 // Day 5 is Mon 5 Oct; the seed clock is 09:45, so the stand-up is over and the launch check is on.
@@ -9,7 +9,7 @@ const london = (day: number, hhmm: string) => {
   return new Date(Date.UTC(2026, 9, day, h - 1, m)).toISOString();
 };
 const link = (id: string) => `https://outlook.office365.com/owa/?itemid=${id}&exvsurl=1&path=/calendar/item`;
-const event = (id: string, title: string, day: number, from: string, to: string, over: Partial<AgendaEvent> = {}): AgendaEvent => ({
+const event = (id: string, title: string, day: number, from: string, to: string, over: Partial<WeekEvent> = {}): WeekEvent => ({
   id,
   title,
   start: london(day, from),
@@ -42,3 +42,15 @@ export const CALENDAR_CATEGORIES: Record<string, string[]> = {
   AAMkMOCKWEEKLY: ['Product'],
   AAMkMOCKQ4: ['Planning', 'Product'],
 };
+
+/**
+ * The rest of the seed week, for the calendar week view only (cockpit CK-5.6): the agenda shows
+ * today and tomorrow. A cancelled and a declined meeting show here, marked, as nothing is hidden.
+ */
+export const CALENDAR_WEEK: WeekEvent[] = [
+  event('AAMkMOCKONEONE', '1:1 with Head of Product', 7, '11:00', '11:30', { organizer: 'Head of Product', attendees: ['Head of Product', 'Frank Keulers'] }),
+  event('AAMkMOCKDESIGN', 'Fleet map design review', 7, '14:00', '15:00', { organizer: 'Design lead', response: 'declined', attendees: ['Design lead', 'Frontend lead', 'Frank Keulers'] }),
+  event('AAMkMOCKCUSTOMER', '[Customer] quarterly review', 8, '10:00', '11:30', { organizer: 'Account lead, [Customer]', attendees: ['Account lead, [Customer]', 'Head of Sales', 'Frank Keulers'] }),
+  event('AAMkMOCKRETRO', 'Sprint retro', 8, '15:30', '16:15', { organizer: 'Delivery manager', cancelled: true }),
+  event('AAMkMOCKDEMO', 'Friday demo', 9, '16:00', '16:45', { response: 'organizer' }),
+];

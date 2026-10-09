@@ -23,7 +23,9 @@ import {
   inTimeRange,
   isSnoozeDue,
   isWorkHours,
+  londonAt,
   londonParts,
+  mondayOf,
   pollIntervalMinutes,
   markAskDone,
   markDone,
@@ -78,7 +80,11 @@ import {
   type SettingsSaved,
   type SettingsView,
   type SourceHealth,
+  type SourceId,
+  type SourceItemsView,
+  type SourceRow,
   type StartupCheck,
+  type WeekView,
   type UsagePurpose,
   type UsageRecord,
   type UsageRow,
@@ -96,7 +102,7 @@ import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, SettleOutcome, StateFlag } from './controls';
 import { buildDraft } from './drafts';
-import { CALENDAR, CALENDAR_CATEGORIES } from './seed/calendar';
+import { CALENDAR, CALENDAR_CATEGORIES, CALENDAR_WEEK } from './seed/calendar';
 import { inMockScope, mockCatalogue } from './seed/catalogue';
 import { ME } from './me';
 import { FRANK } from './seed/people';
@@ -908,6 +914,44 @@ export class MockServer implements WorkOsApi, MockControls {
     const invites = joined('calendar', true);
     const events = CALENDAR.map((e) => ({ ...e, ...(notes.has(e.id) && { notesItemId: notes.get(e.id) }), ...(invites.has(e.id) && { inviteItemId: invites.get(e.id) }), ...(CALENDAR_CATEGORIES[e.id] && { categories: this.categoryTagsOf(e.id) }) }));
     return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), events, leadMinutes };
+  }
+
+  /** A source's history (cockpit CK-5.1): every record for it, done ones of any age included. */
+  async getSourceItems(source: SourceId): Promise<SourceItemsView> {
+    await this.gate(QUERY_MS);
+    const budgets = this.budgets();
+    const expiredBefore = new Date(this.now().getTime() - this.s.settings.retentionDays * 86_400_000).toISOString();
+    const exclude = this.s.settings.slack.excludeChannels.map((c) => c.replace(/^#/, ''));
+    const items = Object.values(this.s.items)
+      .filter((r) => r.item.source === source && !r.topicOf)
+      .map((r): SourceRow => ({
+        ...this.summaryOf(r, budgets),
+        people: [...new Set(r.item.participants.filter((p) => p.id !== FRANK).map((p) => p.name || p.id))],
+        messageCount: r.item.messageCount,
+        ...(source === 'slack' && r.item.kind !== 'dm' && exclude.includes(r.item.title.replace(/^#/, '')) && { excluded: true }),
+        ...(r.item.lastActivityAt < expiredBefore && { expired: true }),
+      }))
+      .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+    return { source, items };
+  }
+
+  /** The seed's calendar week (CK-5.6): the agenda's meetings plus the rest of the week, cancelled and declined ones too. */
+  async getWeek(weekStart?: string): Promise<WeekView> {
+    await this.gate(QUERY_MS);
+    const monday = mondayOf(weekStart ? new Date(`${weekStart}T12:00:00Z`) : this.now());
+    if (!this.s.outlook || !sourceSchedule(this.s.settings, 'calendar').enabled) return { state: 'off', weekStart: monday, events: [] };
+    const from = londonAt(new Date(`${monday}T12:00:00Z`), '00:00');
+    const to = londonAt(new Date(`${monday}T12:00:00Z`), '00:00', 7);
+    const joined = (source: Item['source']) =>
+      new Map(Object.values(this.s.items).flatMap((r) => (r.item.source === source && r.item.meeting?.calendar ? [[r.item.meeting.calendar.eventId, r.item.id] as const] : [])));
+    const notes = joined('wispr');
+    const invites = joined('calendar');
+    const events = [...CALENDAR, ...CALENDAR_WEEK]
+      .filter((e) => e.end > from && e.start < to)
+      .map((e) => ({ ...e, ...(notes.has(e.id) && { notesItemId: notes.get(e.id) }), ...(invites.has(e.id) && { inviteItemId: invites.get(e.id) }), ...(CALENDAR_CATEGORIES[e.id] && { categories: this.categoryTagsOf(e.id) }) }))
+      .sort((a, b) => a.start.localeCompare(b.start));
+    const held = { from: londonAt(new Date(`${mondayOf(this.now())}T12:00:00Z`), '00:00'), to: londonAt(this.now(), '00:00', 15) };
+    return { state: 'ok', polledAt: this.s.source.lastPollAt ?? this.iso(), weekStart: monday, held, events };
   }
 
   /** Turns Outlook mail and calendar off: both read through the connector. */

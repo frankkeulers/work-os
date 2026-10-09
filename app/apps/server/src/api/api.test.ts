@@ -2,7 +2,7 @@ import { brotliCompressSync, gunzipSync } from 'node:zlib';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { categoryColor, type AgendaView, type ApiErrorBody, type EarlierView, type EventData, type EventDraft, type InboxView, type Item, type ItemView, type OutlookColor, type OutlookStatusView, type PromptFileView, type Settings, type SettingsView, type UsageView, type WorkEvent } from '@work-os/shared';
+import { categoryColor, type AgendaView, type ApiErrorBody, type EarlierView, type EventData, type EventDraft, type InboxView, type Item, type ItemView, type OutlookColor, type OutlookStatusView, type PromptFileView, type Settings, type SettingsView, type SourceItemsView, type UsageView, type WeekView, type WorkEvent } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initDataDir, paths } from '../config/dataDir';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
@@ -275,6 +275,36 @@ describe('views', () => {
     await put('/api/settings', { settings: { ...s.settings, slack: { ...s.settings.slack, excludeChannels: ['#tech-all'] } }, rules: s.rules });
     const inbox = (await get('/api/inbox')).json<InboxView>();
     expect(inbox.items.map((i) => i.title)).toEqual(['Matt, Ankush']);
+  });
+
+  it('lists a source’s whole history: old done items and excluded channels’ too, flagged, and only that source (CK-5.1)', async () => {
+    await store.append(upsert({ participants: [{ id: 'U1', name: 'Dana Lee' }, { id: 'U2', name: 'Sam Ray' }, { id: 'U1', name: 'Dana Lee' }] }));
+    const old = 'slack:C2:1790000000.000100';
+    storeClock = new Date('2026-09-20T09:00:00.000Z'); // done a fortnight ago: gone from the inbox
+    await store.append({ ...upsert({ lastActivityAt: '2026-09-20T08:00:00.000Z' }), itemId: old }, { type: 'item.done', itemId: old, data: undefined });
+    const expired = 'slack:C4:1780000000.000100';
+    await store.append({ ...upsert({ lastActivityAt: '2026-08-01T08:00:00.000Z' }), itemId: expired }); // past the 30-day retention
+    const excluded = 'slack:C5:1790000000.000200';
+    await store.append({ ...upsert({ title: '#tech-all', lastActivityAt: '2026-10-05T08:00:00.000Z' }), itemId: excluded });
+    await store.append({ ...upsert({ source: 'outlook', kind: 'email', title: 'Renewal' }), itemId: 'outlook:AAQk1' });
+    const s = (await get('/api/settings')).json<SettingsView>();
+    await put('/api/settings', { settings: { ...s.settings, slack: { ...s.settings.slack, excludeChannels: ['#tech-all'] } }, rules: s.rules });
+
+    const res = await get('/api/sources/slack/items');
+    expect(res.headers['cache-control']).toBe('no-store');
+    const view = res.json<SourceItemsView>();
+    expect(view.source).toBe('slack');
+    expect(view.items.map((i) => i.id)).toEqual([ITEM, excluded, old, expired]);
+    expect(view.items[0]).toMatchObject({ people: ['Dana Lee', 'Sam Ray'], messageCount: 2, status: 'open' });
+    expect(view.items[0]).not.toHaveProperty('excluded');
+    expect(view.items[1].excluded).toBe(true);
+    expect(view.items[2]).toMatchObject({ status: 'done', lane: 'done' });
+    expect(view.items[3].expired).toBe(true);
+    expect((await get('/api/inbox')).json<InboxView>().items.map((i) => i.id)).toEqual([ITEM, 'outlook:AAQk1', expired]);
+
+    expect((await get('/api/sources/outlook/items')).json<SourceItemsView>().items.map((i) => i.id)).toEqual(['outlook:AAQk1']);
+    expect((await get('/api/sources/wispr/items')).json<SourceItemsView>().items).toEqual([]);
+    expect((await get('/api/sources/gong/items')).statusCode).toBe(404);
   });
 
   it('logs item.seen when opening clears a flag, and only then', async () => {
@@ -788,6 +818,27 @@ describe('the agenda (R2.8)', () => {
     expect(rows.find((r) => r.id === 'wispr:Stand-up')?.calendarCategories).toEqual(view.events[0].categories);
     expect(rows.find((r) => r.id === 'wispr:Last week')?.calendarCategories).toEqual([{ name: 'Customer', color: 'darkRed' }]);
     expect(rows.filter((r) => r.calendarCategories)).toHaveLength(2);
+  });
+
+  it('shows a whole week, Monday to Sunday, with cancelled and declined meetings marked and any invite linked (CK-5.6)', async () => {
+    await build({ connectors, sources, calendar: () => snap() });
+    await store.append({ ...upsert({ source: 'calendar', kind: 'event', title: 'Answered elsewhere' }), itemId: 'calendar:done' }, { type: 'item.done', itemId: 'calendar:done', data: undefined });
+    const view = (await get('/api/calendar/week')).json<WeekView>();
+    expect(view).toMatchObject({ state: 'ok', weekStart: '2026-10-05', held: { from: '2026-10-03T23:00:00.000Z', to: '2026-10-19T23:00:00.000Z' } });
+    // Sunday's meeting is last week's; Wednesday's midnight is this week's.
+    expect(view.events.map((e) => e.id)).toEqual(['Stand-up', 'Declined', 'Cancelled', 'Weekly', 'Renewal review', 'Answered elsewhere', 'Wednesday']);
+    expect(view.events[1].response).toBe('declined');
+    expect(view.events[2].cancelled).toBe(true);
+    expect(view.events[0]).not.toHaveProperty('cancelled');
+    expect(view.events[5].inviteItemId).toBe('calendar:done'); // done, but still there to open
+    expect(view.events[4]).not.toHaveProperty('inviteItemId'); // no item behind it
+
+    // Any day names its week. Another week shows what the snapshot holds of it: last week, only Sunday.
+    expect((await get('/api/calendar/week?start=2026-10-07')).json<WeekView>().weekStart).toBe('2026-10-05');
+    const last = (await get('/api/calendar/week?start=2026-09-28')).json<WeekView>();
+    expect(last.weekStart).toBe('2026-09-28');
+    expect(last.events.map((e) => e.id)).toEqual(['Yesterday']);
+    expect((await get('/api/calendar/week?start=next')).statusCode).toBe(422);
   });
 
   it('is off while the calendar is off, or Outlook was never connected', async () => {

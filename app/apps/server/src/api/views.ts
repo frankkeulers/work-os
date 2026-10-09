@@ -12,6 +12,7 @@ import {
   londonAt,
   londonParts,
   meetingLead,
+  mondayOf,
   pollIntervalMinutes, sourceSchedule,
   summaryOf,
   topicItem,
@@ -37,6 +38,10 @@ import {
   type SettingsView,
   type SourceHealth,
   type SourceId,
+  type SourceItemsView,
+  type SourceRow,
+  type WeekEvent,
+  type WeekView,
   type StartupCheck,
   type TriageDecision,
   type UsagePurpose,
@@ -51,7 +56,7 @@ import type { ActionService } from '../actions/service';
 import type { Evals } from '../pipeline/eval';
 import { readTopic } from '../pipeline/topics';
 import { SOURCE_PRIORITY } from '../sources/types';
-import type { CalendarSnapshot } from '../sources/calendar/store';
+import type { CalendarSnapshot, SnapEvent } from '../sources/calendar/store';
 import type { Ms365Link } from '../sources/ms365/link';
 import type { WisprLink } from '../sources/wispr/link';
 import type { Runtime } from '../runtime/runtime';
@@ -202,6 +207,25 @@ async function notesByEvent(d: ViewDeps, since: string): Promise<Map<string, str
   return out;
 }
 
+/** A snapshot event as the agenda and the week show it, with its notes and invite items when it has them. */
+function agendaEvent(d: ViewDeps, e: SnapEvent, links: { notes?: string; invite?: string }): AgendaEvent {
+  const organizer = e.organizer?.name ?? e.organizer?.address;
+  return {
+    id: e.id,
+    title: e.subject || '(no title)',
+    start: e.start,
+    end: e.end,
+    allDay: e.allDay,
+    ...(e.showAs && { showAs: e.showAs }),
+    ...(organizer && { organizer }),
+    ...(e.link && { link: e.link }),
+    ...((e.isOrganizer || e.response) && { response: e.isOrganizer ? 'organizer' : e.response }),
+    ...(links.invite && { inviteItemId: links.invite }),
+    ...(links.notes && { notesItemId: links.notes }),
+    ...(e.categories && { categories: categoryTags(e.categories, d.settings.editable.settings.calendar?.categoryColors) }),
+  };
+}
+
 /** Today's and tomorrow's meetings from the calendar snapshot (R2.8): not cancelled, not declined. */
 export async function agendaView(d: ViewDeps): Promise<AgendaView> {
   const settings = d.settings.editable.settings;
@@ -217,29 +241,54 @@ export async function agendaView(d: ViewDeps): Promise<AgendaView> {
   const notes = await notesByEvent(d, from);
   const events = snap.events
     .filter((e) => !e.cancelled && e.response !== 'declined' && e.end > from && e.start < to)
-    .map((e): AgendaEvent => {
+    .map((e) => {
       const invite = inviteOf.get(e.id);
-      const open = invite && d.store.projection.items[invite]?.status === 'open' ? invite : undefined;
-      const organizer = e.organizer?.name ?? e.organizer?.address;
-      const notesItemId = notes.get(e.id);
-      return {
-        id: e.id,
-        title: e.subject || '(no title)',
-        start: e.start,
-        end: e.end,
-        allDay: e.allDay,
-        ...(e.showAs && { showAs: e.showAs }),
-        ...(organizer && { organizer }),
-        ...(e.link && { link: e.link }),
-        ...((e.isOrganizer || e.response) && { response: e.isOrganizer ? 'organizer' : e.response }),
-        ...(open && { inviteItemId: open }),
-        ...(notesItemId && { notesItemId }),
-        ...(e.categories && { categories: categoryTags(e.categories, settings.calendar?.categoryColors) }),
-      };
+      return agendaEvent(d, e, { notes: notes.get(e.id), invite: invite && d.store.projection.items[invite]?.status === 'open' ? invite : undefined });
     });
   const status = d.runtime?.sourceStatus('calendar').status;
   const stale = now.getTime() - Date.parse(snap.polledAt) > STALE_POLLS * schedule.intervalWorkMinutes * 60_000;
   return { state: status === 'auth_failed' ? 'auth_failed' : stale ? 'stale' : 'ok', polledAt: snap.polledAt, events, leadMinutes };
+}
+
+/** YYYY-MM-DD: a week's Monday as the week view's URL gives it. */
+const WEEK_START = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * One week of the calendar, Monday to Sunday, London time (cockpit CK-5.6). Unlike the agenda it
+ * keeps cancelled and declined meetings, marked, and links an invite item whatever its state. The
+ * snapshot holds this week and the next two, so other weeks come back empty with what it holds.
+ */
+export async function weekView(d: ViewDeps, weekStart?: string): Promise<WeekView> {
+  const settings = d.settings.editable.settings;
+  const schedule = sourceSchedule(settings, 'calendar');
+  const now = d.now();
+  if (weekStart !== undefined && (!WEEK_START.test(weekStart) || Number.isNaN(Date.parse(`${weekStart}T12:00:00Z`)))) {
+    throw new HttpError('validation', 'Send start as YYYY-MM-DD.');
+  }
+  const monday = mondayOf(weekStart ? new Date(`${weekStart}T12:00:00Z`) : now);
+  if (!schedule.enabled || !settings.connectors?.ms365) return { state: 'off', weekStart: monday, events: [] };
+  const snap = d.calendar?.();
+  if (!snap) return { state: 'never', weekStart: monday, events: [] };
+  const day = new Date(`${monday}T12:00:00Z`);
+  const from = londonAt(day, '00:00');
+  const to = londonAt(day, '00:00', 7);
+  const inviteOf = new Map(snap.invites.flatMap((g) => g.eventIds.map((id) => [id, g.itemId] as const)));
+  const notes = await notesByEvent(d, from);
+  const events = snap.events
+    .filter((e) => e.end > from && e.start < to)
+    .map((e): WeekEvent => {
+      const invite = inviteOf.get(e.id);
+      const attendees = e.attendees.map((a) => a.name ?? a.address).filter((a): a is string => !!a);
+      return {
+        ...agendaEvent(d, e, { notes: notes.get(e.id), invite: invite && d.store.projection.items[invite] ? invite : undefined }),
+        ...(e.cancelled && { cancelled: true }),
+        ...(attendees.length && { attendees }),
+      };
+    })
+    .sort((a, b) => a.start.localeCompare(b.start));
+  const status = d.runtime?.sourceStatus('calendar').status;
+  const stale = now.getTime() - Date.parse(snap.polledAt) > STALE_POLLS * schedule.intervalWorkMinutes * 60_000;
+  return { state: status === 'auth_failed' ? 'auth_failed' : stale ? 'stale' : 'ok', polledAt: snap.polledAt, weekStart: monday, held: { from: snap.from, to: snap.to }, events };
 }
 
 /** Every enabled source, in wake order (R2.1). Slack is always listed: the inbox is built around it. */
@@ -310,25 +359,12 @@ export function inboxView(d: ViewDeps): InboxView {
   const s = d.settings.editable.settings;
   const b = budgets(d);
   const cutoff = new Date(now.getTime() - DONE_VISIBLE_DAYS * 86_400_000).toISOString();
-  const actions = actionsByItem(d);
+  const row = rowBuilder(d, nowIso, b);
   const items = Object.values(d.store.projection.items)
     .filter((i) => !i.topicOf) // a part shows in its topic
     .filter((i) => i.status !== 'done' || !i.doneAt || i.doneAt >= cutoff)
     .filter((i) => !inExcludedChannel(i, s.slack.excludeChannels))
-    .map((i) => {
-      const row = withOpenUrl(
-        d,
-        summaryOf(i, i, {
-          actions: actions.get(i.id) ?? [],
-          quietMinutes: s.triage.quietMinutes,
-          now: nowIso,
-          triageBudgetHit: b.triage.hit,
-          text: d.items.text(i.id) ?? {},
-        }),
-      );
-      const calendarCategories = calendarCategoriesOf(d, d.items.calendarOf(i.id));
-      return calendarCategories ? { ...row, calendarCategories } : row;
-    })
+    .map(row)
     .sort((a, b2) => b2.lastActivityAt.localeCompare(a.lastActivityAt));
   const source = slackHealth(d);
   return {
@@ -350,6 +386,50 @@ export function inboxView(d: ViewDeps): InboxView {
  * A meeting's or invite's Outlook categories while the calendar is read (R2.8): the event's own
  * now, when the snapshot still has it, else those the item kept.
  */
+/** An item's inbox row: its summary, Open in's URL and its calendar categories. */
+function rowBuilder(d: ViewDeps, nowIso: string, b: BudgetState) {
+  const s = d.settings.editable.settings;
+  const actions = actionsByItem(d);
+  return (i: ItemState): ItemSummary => {
+    const row = withOpenUrl(
+      d,
+      summaryOf(i, i, {
+        actions: actions.get(i.id) ?? [],
+        quietMinutes: s.triage.quietMinutes,
+        now: nowIso,
+        triageBudgetHit: b.triage.hit,
+        text: d.items.text(i.id) ?? {},
+      }),
+    );
+    const calendarCategories = calendarCategoriesOf(d, d.items.calendarOf(i.id));
+    return calendarCategories ? { ...row, calendarCategories } : row;
+  };
+}
+
+/**
+ * A source's history (cockpit CK-5.1): every item stored for it, newest first, whatever triage made
+ * of it. Unlike the inbox it keeps done items of any age and excluded channels' items (flagged).
+ * A topic's parts stay in it: the topic's panel shows every piece.
+ */
+export function sourceView(d: ViewDeps, source: SourceId): SourceItemsView {
+  const now = d.now();
+  const s = d.settings.editable.settings;
+  const row = rowBuilder(d, now.toISOString(), budgets(d));
+  const me = d.meId?.(source);
+  const expiredBefore = new Date(now.getTime() - s.retentionDays * 86_400_000).toISOString();
+  const items = Object.values(d.store.projection.items)
+    .filter((i) => i.source === source && !i.topicOf)
+    .map((i): SourceRow => ({
+      ...row(i),
+      people: [...new Set(i.participants.filter((p) => p.id !== me).map((p) => p.name || p.id))],
+      messageCount: i.messageCount,
+      ...(inExcludedChannel(i, s.slack.excludeChannels) && { excluded: true }),
+      ...(i.lastActivityAt < expiredBefore && { expired: true }),
+    }))
+    .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
+  return { source, items };
+}
+
 function calendarCategoriesOf(d: ViewDeps, cal: { eventId: string; categories?: string[] } | undefined): CategoryTag[] | undefined {
   const s = d.settings.editable.settings;
   if (!cal || !sourceSchedule(s, 'calendar').enabled) return undefined;

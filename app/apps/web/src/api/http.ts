@@ -1,4 +1,4 @@
-import type { Action, ActionType, AgendaView, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, UsageView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -137,6 +137,8 @@ export class HttpApi implements WorkOsApi {
   getWisprStatus = () => this.get<WisprStatusView>('/api/sources/wispr');
   getOutlookStatus = () => this.get<OutlookStatusView>('/api/sources/outlook');
   getAgenda = () => this.get<AgendaView>('/api/calendar/agenda');
+  getSourceItems = (source: SourceId) => this.get<SourceItemsView>(`/api/sources/${source}/items`);
+  getWeek = (weekStart?: string) => this.get<WeekView>(`/api/calendar/week${weekStart ? `?start=${weekStart}` : ''}`);
 
   pollNow = () => this.post('/api/poll');
   connectWispr = () => this.post<WisprConnectView>('/api/sources/wispr/connect');

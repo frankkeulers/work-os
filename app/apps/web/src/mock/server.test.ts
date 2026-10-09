@@ -48,6 +48,32 @@ describe('inbox commands', () => {
   });
 });
 
+describe('source views (cockpit CK-5.1, CK-5.6)', () => {
+  it('lists every item of one source, done ones and topic anchors included, newest first', async () => {
+    await settle(server.markDone(id('t3')));
+    const inbox = await settle(server.getInbox());
+    const view = await settle(server.getSourceItems('slack'));
+    expect(view.items.length).toBeGreaterThan(0);
+    expect(view.items.every((i) => i.source === 'slack')).toBe(true);
+    expect(view.items.map((i) => i.id)).toEqual(inbox.items.filter((i) => i.source === 'slack').map((i) => i.id));
+    expect(view.items.find((i) => i.id === id('t3'))?.status).toBe('done');
+    const times = view.items.map((i) => i.lastActivityAt);
+    expect(times).toEqual([...times].sort().reverse());
+    expect(view.items.every((i) => !i.people.includes('Frank Keulers'))).toBe(true);
+  });
+
+  it('shows the whole calendar week, cancelled and declined meetings marked', async () => {
+    expect((await settle(server.getWeek())).state).toBe('off');
+    server.cockpitAfternoon();
+    const week = await settle(server.getWeek(), 2000);
+    expect(week.weekStart).toBe('2026-10-05');
+    expect(week.events.some((e) => e.cancelled)).toBe(true);
+    expect(week.events.some((e) => e.response === 'declined')).toBe(true);
+    expect(new Set(week.events.map((e) => e.start.slice(0, 10))).size).toBeGreaterThan(2);
+    expect((await settle(server.getWeek('2026-10-12'))).events).toEqual([]);
+  });
+});
+
 describe('polling and triage', () => {
   it('waits for the quiet window, then triages in one batched call (§5.3)', async () => {
     const usageBefore = (await settle(server.getUsage())).today.triageCalls;
