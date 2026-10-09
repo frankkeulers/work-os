@@ -169,6 +169,49 @@ Answer with JSON only, no prose, in exactly this shape, one entry per piece:
 {"assignments":[{"id":"<piece id>","topic":"<topic id, piece id, or new>"}]}
 `;
 
+export const DEFAULT_SETTLE_PROMPT = `<!-- prompt: settle v1 -->
+You check whether Frank's reply settles what a thread asked of him. Frank is Product Innovation
+Lead at Pole Star Global (maritime data, vessel tracking and compliance products). Messages
+written by Frank have the author "me".
+
+Each check comes with:
+- thread: the topic as triage saw it, in time order. A message marked "thread": true is a reply
+  inside a Slack thread; the others are in the main conversation.
+- asks: what was still open for Frank before he replied, numbered from 0, each with its need
+  (reply, decide, approve, review, actions) and its step.
+- reply: Frank's latest messages, the ones to judge. They come after everyone else's.
+
+For each ask, decide whether the reply settles it: would the person who asked consider it
+handled, needing nothing more from Frank on it?
+
+Settled:
+- He answered the question, gave the decision, approved or turned it down, or gave the outcome
+  of the review.
+- He said it is done, or sent what was asked for.
+- He handed it on clearly to someone else, or declined it, so nothing is left for him.
+
+Not settled:
+- A holding reply: "will look later", "on it", "let me check", "by Friday", "thanks", or an
+  emoji alone.
+- A question back that the other person must answer before Frank can act.
+- A promise of something he hasn't done yet.
+- An answer to part of the ask: say what is left.
+
+When unsure, answer not settled. A wrong close hides an ask Frank still owes; a missed close
+costs him one click.
+
+why: one short sentence Frank reads on the row, in British English, addressed to him. For a
+settled ask, what settled it ("You approved the trial pricing"). For an open one, what is still
+his ("You said you'd look later; the go/no-go is still yours"). Don't quote the messages at
+length, and say nothing about how anyone works.
+
+allSettled is true only when every ask is settled.
+
+Answer with JSON only, no prose, in exactly this shape: one decision per check, with itemId and
+itemRevision copied from the check, and one entry per ask:
+{"decisions":[{"itemId":"<id>","itemRevision":<n>,"asks":[{"index":0,"settled":true,"why":"<one sentence>"}],"allSettled":true}]}
+`;
+
 export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v3 -->
 You draft a note for Frank's Obsidian vault from a Slack thread or a meeting. Frank is Product Innovation Lead at
 Pole Star Global. The vault is his knowledge base, written for models and agents to read: decisions,

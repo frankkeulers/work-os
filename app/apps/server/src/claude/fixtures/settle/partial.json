@@ -1,0 +1,11 @@
+{
+  "about": "A topic with two asks: the reply settles the first, so it ticks off and the second becomes the next step.",
+  "reply": ["Let's take bulk export, AIS gaps and the alerts API for FQ3."],
+  "answer": {
+    "asks": [
+      { "index": 0, "settled": true, "why": "You picked the three FQ3 items." },
+      { "index": 1, "settled": false, "why": "Who owns bulk export is still open." }
+    ],
+    "allSettled": false
+  }
+}

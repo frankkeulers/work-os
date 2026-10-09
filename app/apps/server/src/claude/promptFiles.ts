@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import type { PromptFileId, PromptFileView, PromptSourceView } from '@work-os/shared';
 import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
-import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, type Prompt } from './prompts';
+import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, type Prompt } from './prompts';
 
-// Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the six prompts and the two
+// Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the seven prompts and the two
 // filing guidance files. Each is written on first run, read on every call (empty or missing → the
 // built-in default) and editable in Settings. A file that still holds an earlier built-in default,
 // byte for byte once trimmed, is replaced by the current one at start; an edited file is left alone.
@@ -40,6 +40,15 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Puts each new thread or stretch of chat in the open topic it continues, or starts a new one.',
     usedBy: 'Topic routing and Regroup',
     defaultText: DEFAULT_TOPICS_PROMPT,
+    previousDefaults: [],
+  },
+  {
+    id: 'settle',
+    file: 'prompts/settle.md',
+    label: 'Settle check',
+    description: 'Decides whether your reply settles a thread’s open asks, so the item can close by itself.',
+    usedBy: 'Closing items on your reply',
+    defaultText: DEFAULT_SETTLE_PROMPT,
     previousDefaults: [],
   },
   {

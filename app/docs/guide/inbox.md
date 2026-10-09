@@ -102,6 +102,22 @@ each; a snoozed item comes back at its time, marked "Back from snooze".
 Threads still being written show as **N still active** in the header. They are triaged once they
 have been quiet for the quiet window (10 minutes by default, in [Settings › Schedule](/settings/schedule)).
 
+## When you reply
+
+When you answer an item from Needs you or This week in Slack, Work OS asks Claude whether your
+reply settles what was asked. It is a short check, separate from triage, and it runs straight
+after the poll that brings your reply in.
+
+- **Settled:** the item closes by itself and goes to Done. If the check got it wrong, reopen it
+  from Done.
+- **Partly settled:** in a topic, the asks your reply settled are ticked off, and the next open
+  one becomes the next step.
+- **Not settled**, such as "will look later" or a question back: the item stays where it is.
+- A message from someone else brings a closed item back, as it does for anything in Done.
+
+Replies in Outlook don't close items yet. The checks count towards the day's triage budget, and
+when Claude can't be reached nothing closes: the check is tried up to three times.
+
 ## The item panel
 
 Click a row to open it in a panel on the right. It shows the decision (attention and why), the

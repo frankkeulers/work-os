@@ -1,0 +1,5 @@
+{
+  "about": "A plain answer settles the one ask: the item closes.",
+  "reply": ["Yes, go ahead with the 14:00 slot. Pricing as in the deck."],
+  "answer": { "asks": [{ "index": 0, "settled": true, "why": "You approved the 14:00 slot and the pricing." }], "allSettled": true }
+}

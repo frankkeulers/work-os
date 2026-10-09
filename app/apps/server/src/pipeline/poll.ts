@@ -121,7 +121,7 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
         if (!edited || !stored) return undefined; // nothing the log doesn't have
         // Only text that changed: saved, and logged at the same revision so it isn't triaged again.
         r.item = item;
-        return { item, text: stored.text, schemaVersion: 1 as const };
+        return { ...stored, item };
       }
       const byId = new Map(item.messages.map((m) => [m.id, m]));
       // Recovering a file the log never heard of: who wrote what is unknown, so triage it again.
@@ -137,7 +137,7 @@ export async function pollSource(d: PollDeps, source: SourceAdapter, reason: Pol
       // A rule's decision replaces the text of any earlier one, which described older messages.
       const summary = excerpt(item.messages[0]?.text) || item.title;
       const text = fixed ? { summary, reason: ruleReason(fixed) } : sentByYou ? { summary, reason: 'You sent this and nobody has answered yet.' } : stored?.text;
-      return { item, text, schemaVersion: 1 as const };
+      return { item, text, ...(stored?.settle && { settle: stored.settle }), schemaVersion: 1 as const };
     });
     if (r.dropped) dropped++;
     if (!r.item) continue;

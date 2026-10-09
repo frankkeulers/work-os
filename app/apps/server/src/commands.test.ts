@@ -222,22 +222,27 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('ok');
   });
 
-  it('waits for the quiet window, then triages again; Frank’s own replies need no call', async () => {
+  it('waits for the quiet window, then triages again; Frank’s own replies need no triage, only a settle check (CK-2.2)', async () => {
+    const triageCalls = () => claude.calls.filter((c) => c.prompt.includes('<threads>'));
     slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'UFRANK', text: 'Looks fine to me' });
     await call('POST', '/api/poll');
     await res.runtime.settled();
     await tick();
-    expect(claude.calls).toHaveLength(1);
+    expect(triageCalls()).toHaveLength(1);
+    expect(claude.calls).toHaveLength(2);
+    expect(claude.calls[1].prompt).toContain('<checks>');
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ lane: 'done', doneBy: 'reply', doneSource: 'slack' }); // his reply settled it
     slack.post('C01PROD', { ts: isoToTs(START + 2 * MIN), thread_ts: P, user: 'U02DANA', text: 'Great, shipping it. Go/no-go?' });
     await call('POST', '/api/poll');
     await res.runtime.settled();
-    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ triageState: 'pending', lane: 'today' }); // keeps its lane meanwhile
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ triageState: 'pending', lane: 'done' }); // back once triaged (JOURNEYS open question 1)
     for (let i = 0; i < 12 * 9; i++) await tick(); // quiet at +12 min; now about +9
-    expect(claude.calls).toHaveLength(1);
+    expect(triageCalls()).toHaveLength(1);
     for (let i = 0; i < 12 * 4; i++) await tick();
-    expect(claude.calls).toHaveLength(2);
-    expect(claude.calls[1].prompt).toContain('Go/no-go?');
+    expect(triageCalls()).toHaveLength(2);
+    expect(triageCalls()[1].prompt).toContain('Go/no-go?');
     expect(await lanes()).toMatchObject({ '#product': 'now' });
+    expect((await inbox()).items.find((i) => i.id === PROD)?.doneBy).toBeUndefined();
   });
 
   it('stops calling once the day’s budget is spent; rules still decide (CL-6)', async () => {

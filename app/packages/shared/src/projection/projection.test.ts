@@ -421,6 +421,11 @@ describe('settle checks on Frank’s replies (cockpit CK-2.1–2.3)', () => {
     expect(back).toMatchObject({ status: 'open' });
     expect(back.doneBy).toBeUndefined();
     expect(back.replyCheck).toBeUndefined();
+
+    // Or someone else writes: it comes back with the next decision, no longer closed by anyone.
+    add('item.done', 23, { by: 'reply', source: 'slack', messageId: '1791190000.000200', check: 'settle-2' }).add('item.upserted', 30, upserted(3, false, 30)).add('triage.decided', 40, decided(3));
+    expect(replay(events).items[ITEM]).toMatchObject({ status: 'open', newReplies: true });
+    expect(replay(events).items[ITEM].doneBy).toBeUndefined();
   });
 
   it('ticks the settled asks of a topic and keeps it open on the first one left', () => {

@@ -1,6 +1,6 @@
 import type { PromptFileId, PromptSourceView } from '@work-os/shared';
 
-// The eight prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
+// The nine prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
 // Shortened stand-ins for the server's built-in defaults: the shape matters here, not the wording.
 
 export interface SeedPromptFile {
@@ -45,6 +45,21 @@ You sort Slack conversations into topics for Frank, Product Innovation Lead at P
 Slack cuts a conversation into pieces: reply threads, and DM chat after 30 minutes of quiet.
 For every new piece, answer which topic it belongs to: an open topic's id, another new piece's
 id, or "new". The same topic means the same decision, deliverable, workstream or question.
+
+Answer with JSON only, no prose.`,
+  },
+  {
+    id: 'settle',
+    label: 'Settle check',
+    description: 'Decides whether your reply settles a thread’s open asks, so the item can close by itself.',
+    usedBy: 'Closing items on your reply',
+    path: 'config/prompts/settle.md',
+    defaultText: `<!-- prompt: settle v1 -->
+You check whether Frank's reply settles what a thread asked of him.
+
+For each open ask, decide whether his latest messages settle it: answered, decided, approved,
+done or handed on. A holding reply ("will look later", "on it", an emoji) settles nothing.
+When unsure, answer not settled.
 
 Answer with JSON only, no prose.`,
   },

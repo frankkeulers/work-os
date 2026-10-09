@@ -1,0 +1,5 @@
+{
+  "about": "A holding reply settles nothing: the item stays, with the reason on its row.",
+  "reply": ["Will look later today"],
+  "answer": { "asks": [{ "index": 0, "settled": false, "why": "You said you’d look later; the go/no-go is still yours." }], "allSettled": false }
+}

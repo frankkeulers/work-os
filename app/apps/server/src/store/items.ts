@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Item, NextStep, type DecisionText } from '@work-os/shared';
+import { Item, NextStep, SettleDecision, type DecisionText } from '@work-os/shared';
 import { z } from 'zod';
 import { writeJsonAtomic } from './atomic';
 
@@ -9,9 +9,27 @@ import { writeJsonAtomic } from './atomic';
 // together. Full items are cached in a small LRU; the short texts the inbox shows, and a
 // meeting's calendar event and categories (R2.8), are kept for every item read or written.
 
+/**
+ * The last settle check on Frank's reply (cockpit CK-2.3, CK-2.6): what the model saw and what it
+ * answered, kept for the row's "still open" line and for a label if Frank undoes a close.
+ */
+export const SettleSnapshot = z.object({
+  at: z.string(),
+  batchId: z.string(),
+  model: z.string(),
+  promptVersion: z.string(),
+  /** The check as sent: the thread, the open asks and Frank's reply. */
+  input: z.record(z.string(), z.unknown()),
+  decision: SettleDecision,
+  /** Why the first ask still open is open; absent when every ask settled. */
+  why: z.string().optional(),
+});
+export type SettleSnapshot = z.infer<typeof SettleSnapshot>;
+
 export const StoredItem = z.object({
   item: Item,
   text: z.object({ summary: z.string(), reason: z.string(), next: NextStep.optional() }).optional(),
+  settle: SettleSnapshot.optional(),
   schemaVersion: z.literal(1),
 });
 export type StoredItem = z.infer<typeof StoredItem>;
@@ -147,6 +165,7 @@ export class ItemFiles {
         reason: stored.text?.reason,
         next: stored.text?.next,
         firstMessage: stored.item.messages[0]?.text,
+        ...(stored.settle?.why && { settleWhy: stored.settle.why }),
       });
       const cal = stored.item.meeting?.calendar;
       if (cal) this.calendars.set(id, { eventId: cal.eventId, ...(cal.categories && { categories: cal.categories }) });

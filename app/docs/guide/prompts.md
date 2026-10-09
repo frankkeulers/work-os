@@ -3,7 +3,7 @@ title: Prompts and guidance
 group: Settings
 order: 70
 summary: The text files every Claude call reads, and how to change them safely.
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 Every Claude call reads its instructions from a text file in the data folder, fresh each time. You
@@ -13,6 +13,7 @@ can read and edit them all in [Settings › Prompts](/settings/prompts).
 |---|---|
 | Triage | triage and the eval |
 | Topics | joining pieces into topics, and Regroup |
+| Settle check | closing an item when your reply settles it |
 | Draft vault note | vault drafts |
 | Pick Confluence page | the first step of a Confluence draft |
 | Draft Confluence entry | the second step of a Confluence draft |

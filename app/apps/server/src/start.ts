@@ -56,6 +56,7 @@ import { UsageLog } from './claude/usage';
 import { meFrom } from './pipeline/rules';
 import { routeTopics } from './pipeline/topics';
 import { meetingsToday, runTriage, type TriageDeps } from './pipeline/triage';
+import { runSettle, type SettleDeps } from './pipeline/settle';
 import { correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
 import { LabelStore } from './store/labels';
@@ -313,6 +314,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       return b.triage.hit || b.cost.hit;
     },
   };
+  const settleDeps: SettleDeps = { ...triageDeps, prompt: () => loadPromptFile(config.dataDir, 'settle') };
   const labels = await LabelStore.open(paths(config.dataDir).labels);
   lifecycle.onStop('labels', () => labels.close());
   const correct = (id: string, input: Parameters<typeof correctTriage>[2]) =>
@@ -398,7 +400,14 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     settings,
     logger,
     sources: () => buildSources(settings.settings, factories),
-    triage: (signal, only) => runTriage(triageDeps, signal, { only }),
+    // After triage, the settle checks on Frank's replies (cockpit CK-2.2): the same run, so they
+    // share its breaker, its one-at-a-time and its timing after every poll.
+    triage: async (signal, only) => {
+      const r = await runTriage(triageDeps, signal, { only });
+      if (only) return r;
+      const settled = await runSettle(settleDeps, signal);
+      return { ...r, calls: r.calls + settled.calls };
+    },
     regroup: (signal, conversation) => routeTopics({ ...triageDeps, topicsPrompt: triageDeps.topicsPrompt! }, signal, { regroup: conversation }),
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),

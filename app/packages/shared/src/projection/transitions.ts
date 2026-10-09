@@ -61,6 +61,7 @@ export function applyDecision<D extends LoggedDecision>(s: ItemFlags<D>, d: D) {
   if (s.status === 'done' && s.newReplies) {
     s.status = 'open';
     s.doneAt = undefined;
+    s.doneBy = s.doneSource = s.doneReason = undefined;
   }
   if (s.status === 'snoozed' && d.attention === 'now') {
     s.status = 'open';
