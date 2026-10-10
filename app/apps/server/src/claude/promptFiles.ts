@@ -82,10 +82,10 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     id: 'draft-confluence',
     file: 'prompts/draft-confluence.md',
     label: 'Draft Confluence entry',
-    description: 'Drafts an entry for one of the picked Confluence pages, or declines when none fits.',
+    description: 'Drafts an entry for one of the picked Confluence pages after checking what they already hold, or declines when none fits.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_CONFLUENCE_PROMPT,
-    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20', '4b97acd122e6f9a3cee48ea30d36baa1854a88b3', '3ca183c57f1c9a9b7d4947e27635de168a942cc5', '9fcb308e51e3a5be56ce00af2c4fdbb13053053a'], // draft-confluence v1, v2, v3, v4
+    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20', '4b97acd122e6f9a3cee48ea30d36baa1854a88b3', '3ca183c57f1c9a9b7d4947e27635de168a942cc5', '9fcb308e51e3a5be56ce00af2c4fdbb13053053a', 'aaa55dfbfecf01da7f0121a5a0342ac62ce618ce'], // draft-confluence v1, v2, v3, v4, v5
   },
   {
     id: 'people-check',

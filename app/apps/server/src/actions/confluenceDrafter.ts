@@ -1,10 +1,11 @@
-import type { ConfluenceDraft, Item, Me, Settings } from '@work-os/shared';
+import type { ConfluenceDraft, ConfluenceFiledDraft, Item, Me, Settings } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import type { Prompt } from '../claude/prompts';
 import { DEADLINES } from '../net/http';
 import type { ConfluenceApi, Page } from './confluenceApi';
 import { buildCatalogue, type CatalogueEntry } from './confluenceCatalogue';
+import { findOnPages, type FiledSection } from './alreadyFiled';
 import { DraftError } from './errors';
 import { entryStorage } from './markdown';
 import { findHeading, outline, textOf } from './storage';
@@ -18,6 +19,9 @@ import { draftThread } from './vaultDrafter';
 // title and Markdown; code checks the page and section exist, records the page version (FR-10.3),
 // and a Haiku call checks the entry identifies no one before anyone sees it (FR-10.4). People in the
 // thread never block the draft: it anonymises them (FR-10.1, amended 2026-10-10).
+// Before the draft, code finds the sections of the picked pages that already link to this thread,
+// and the outlines show each section's latest entries; the draft adds only what the page lacks, or
+// answers alreadyFiled (FR-10.7).
 
 export const ConfluenceEntryAnswer = z.object({
   pageId: z.string().min(1),
@@ -32,7 +36,14 @@ export const ConfluenceNoFitAnswer = z.object({
   suggestedHome: z.string().max(200).optional(),
 });
 
-export const ConfluenceAnswer = z.union([ConfluenceNoFitAnswer, ConfluenceEntryAnswer]);
+export const ConfluenceFiledAnswer = z.object({
+  alreadyFiled: z.literal(true),
+  pageId: z.string().min(1),
+  section: z.string().min(1),
+  why: z.string().min(1).max(400),
+});
+
+export const ConfluenceAnswer = z.union([ConfluenceNoFitAnswer, ConfluenceFiledAnswer, ConfluenceEntryAnswer]);
 
 export const MAX_CANDIDATES = 3;
 
@@ -65,6 +76,8 @@ export interface ConfluenceDraftDeps {
   onStage?: (stage: number) => void;
   /** A meeting's transcript, read live for this draft (R2.3). */
   transcript?: string;
+  /** The links of the topic's pieces (itemLinks), which mark an entry already filed from it (FR-10.7). */
+  links: string[];
 }
 
 /** The catalogue as the picker sees it: one compact object per page. */
@@ -86,7 +99,7 @@ export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[
 
 const noFit = (a: { reason: string; suggestedHome?: string }) => new DraftError(a.suggestedHome?.trim() ? `${a.reason} Suggested home: ${a.suggestedHome.trim()}.` : a.reason, 'no_fit');
 
-export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routing: string, now: Date, transcript?: string): string {
+export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routing: string, now: Date, transcript?: string, filed: FiledSection[] = []): string {
   const thread = draftThread(item, me, transcript);
   const outlines = pages.map((p) => {
     let budget = OUTLINE_CHARS;
@@ -99,6 +112,9 @@ export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routi
     '<confluence-pages>',
     JSON.stringify(outlines),
     '</confluence-pages>',
+    '<already-filed>',
+    filed.length ? filed.map((f) => JSON.stringify(f)).join('\n') : 'No section of these pages links to this thread or meeting.',
+    '</already-filed>',
     '<thread>',
     JSON.stringify(thread),
     '</thread>',
@@ -106,7 +122,7 @@ export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routi
   ].join('\n');
 }
 
-export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, me: Me): Promise<{ draft: ConfluenceDraft }> {
+export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, me: Me): Promise<{ draft: ConfluenceDraft | ConfluenceFiledDraft }> {
   const t0 = performance.now();
   const model = d.settings.models.draftConfluence;
   const catalogue = await buildCatalogue(d.api, d.settings.confluence, d.signal);
@@ -143,6 +159,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
     }
   }
   if (!pages.length) throw new DraftError('None of the picked Confluence pages could be read.', 'allow_list');
+  const filed = findOnPages(pages, d.links);
   d.onStage?.(3);
 
   const r = await d.claude.structured(
@@ -150,7 +167,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
       purpose: 'draft_confluence',
       model,
       system: d.prompt.text,
-      prompt: renderConfluenceRequest(item, me, pages, d.routing, d.now(), d.transcript),
+      prompt: renderConfluenceRequest(item, me, pages, d.routing, d.now(), d.transcript, filed),
       promptVersion: d.prompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,
@@ -164,6 +181,18 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
   if (!page) throw new DraftError(`The draft targets page ${a.pageId}, which is not one of the picked pages.`, 'allow_list');
   const section = findHeading(page.storage, a.section);
   if (!section) throw new DraftError(`The draft would file under “${a.section}”, but ${page.title} has no such section.`);
+  const meta = (usage: typeof r.usage) => ({
+    model,
+    promptVersion: d.prompt.version,
+    durationMs: Math.round(performance.now() - t0),
+    tokens: usage.reduce((n, u) => n + u.inputTokens + u.outputTokens + u.cacheTokens, 0),
+    edited: false,
+  });
+  const ancestorIds = catalogue.find((c) => c.id === page.id)?.ancestorIds;
+  // Nothing to file: no entry, so no people check either.
+  if ('alreadyFiled' in a) {
+    return { draft: { kind: 'confluence_filed', pageId: page.id, pageTitle: page.title, ancestorIds, section: section.text, baseVersion: page.version, why: a.why.trim(), ...meta([...pick.usage, ...r.usage]) } };
+  }
 
   // FR-10.4: a second, cheap look at the entry itself, before it is shown. It blocks this draft only.
   d.onStage?.(4);
@@ -183,22 +212,20 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
   if (check.value.containsPeopleObservations) {
     throw new DraftError(`The draft still identifies a person (${check.value.reason}). Nothing will be written to Confluence. Re-draft, or edit it out.`, 'people_check');
   }
-  const tokens = [...pick.usage, ...r.usage, ...check.usage].reduce((n, u) => n + u.inputTokens + u.outputTokens + u.cacheTokens, 0);
+  // The backstop: an entry beside a section that already links to the thread is shown with a warning.
+  const possibleDuplicates = filed.map((f) => ({ pageId: f.pageId, pageTitle: f.pageTitle, section: f.section, why: 'already links to this thread' }));
   return {
     draft: {
       kind: 'confluence',
       pageId: page.id,
       pageTitle: page.title,
-      ancestorIds: catalogue.find((c) => c.id === page.id)?.ancestorIds,
+      ancestorIds,
       section: section.text,
       baseVersion: page.version,
       title: a.title,
       content: a.content,
-      model,
-      promptVersion: d.prompt.version,
-      durationMs: Math.round(performance.now() - t0),
-      tokens,
-      edited: false,
+      ...meta([...pick.usage, ...r.usage, ...check.usage]),
+      ...(possibleDuplicates.length && { possibleDuplicates }),
     },
   };
 }

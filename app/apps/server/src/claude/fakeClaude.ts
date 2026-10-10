@@ -109,8 +109,13 @@ export function confluencePickFor(prompt: string) {
   return page ? { candidates: [{ pageId: page.id, why: 'The first page that is not an index.' }] } : { noFit: true, reason: 'The catalogue is empty.' };
 }
 
-/** An entry for the first page offered in a Confluence draft request. */
+/** A Confluence draft: alreadyFiled when a section already links to the thread (FR-10.7), otherwise an entry for the first page offered. */
 export function confluenceEntryFor(prompt: string) {
+  const filed = (/<already-filed>\n([\s\S]*?)\n<\/already-filed>/.exec(prompt)?.[1] ?? '')
+    .split('\n')
+    .filter((l) => l.startsWith('{'))
+    .map((l) => JSON.parse(l) as { pageId: string; section: string });
+  if (filed[0]) return { alreadyFiled: true, pageId: filed[0].pageId, section: filed[0].section, why: 'The section already has the entry for this thread.' };
   const pages = JSON.parse(/<confluence-pages>\n([\s\S]*?)\n<\/confluence-pages>/.exec(prompt)?.[1] ?? '[]') as { pageId: string; sections: { level: number; heading: string }[] }[];
   const t = JSON.parse(/<thread>\n([\s\S]*?)\n<\/thread>/.exec(prompt)?.[1] ?? '{}') as { title?: string; permalink?: string; messages?: { text: string }[] };
   const page = pages[0];

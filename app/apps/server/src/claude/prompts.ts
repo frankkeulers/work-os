@@ -332,7 +332,7 @@ Use the second shape when nothing fileable survives the exclusion screen, the th
 context, or the right home is not in the catalogue.
 `;
 
-export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v5 -->
+export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v6 -->
 You draft an entry for one of Pole Star Global's Confluence context pages from a Slack thread or a meeting, for
 Frank, Product Innovation Lead. The pages are the context corpus that the PSPD pipeline and the
 Product Knowledge Desk read. Messages written by Frank have the author "me".
@@ -341,6 +341,15 @@ The pages below were picked from the live catalogue as the likely homes for this
 first. Follow the routing guidance below: the exclusion screen, the attribution ladder, provenance
 tiers, how to choose the business unit, and where each kind of fact goes. Choose the page and
 section from these pages only, and use each page's outline to avoid repeating what is there.
+
+First, check whether the page already holds this. Never file the same thread or meeting twice.
+- <already-filed> lists the sections of these pages that already link to this thread or meeting,
+  with their text. Each outline excerpt shows the start of a section and its end, where the latest
+  entries are.
+- The same facts can already be there from another source: a meeting's Slack thread, or another
+  recording of it. Compare the facts, not the wording.
+- Write only what the page lacks. If it lacks nothing, answer "alreadyFiled" with the page and
+  section that hold it and one line on why.
 
 Write a short entry: what was decided or learnt, why, and what follows from it, ending with its
 tier, date and a link back to the thread or meeting (its permalink).
@@ -363,8 +372,10 @@ HTML. Code turns it into the page's format.
 Answer with JSON only, no prose, in one of these shapes:
 {"pageId":"<one of the page ids below>","section":"<a heading from that page's outline, copied exactly>","title":"<a short entry title>","content":"<the entry in Markdown>"}
 {"noFit":true,"reason":"<one line: why nothing should be filed here>","suggestedHome":"<the right page, if you know it>"}
+{"alreadyFiled":true,"pageId":"<the page that holds it>","section":"<its heading, copied exactly>","why":"<one line: what is already there>"}
 Use the second shape when none of these pages is the right home, nothing fileable survives the
-exclusion screen, or the thread is not context.
+exclusion screen, or the thread is not context. Use the third when the page already holds
+everything worth filing from this thread or meeting.
 `;
 
 export const DEFAULT_PEOPLE_CHECK_PROMPT = `<!-- prompt: people-check v2 -->

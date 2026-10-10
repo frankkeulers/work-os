@@ -844,7 +844,7 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(draftCall.options).toMatchObject({ tools: [], mcpServers: {} });
     expect(draftCall.prompt).toContain('"pageId":"1234567"');
     expect(draftCall.prompt).not.toContain('"pageId":"1100000"');
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v5 -->/);
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v6 -->/);
     expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
     expect(check.system).toMatch(/^<!-- prompt: people-check v2 -->/);
     expect(check.options.model).toBe('claude-haiku-5-5');
@@ -894,6 +894,59 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'no_fit', error: expect.stringMatching(/^The thread is about DP pricing, which is not in the catalogue. Suggested home: DP - Pricing./) });
     expect(claude.calls.length - before).toBe(1); // the pick only
     expect(confluence.calls).toHaveLength(0); // no page read
+  });
+
+  describe('checks what the page already holds (FR-10.7)', () => {
+    // The page already has this thread's entry, as Work OS writes it: the permalink, & escaped.
+    const filePage = async () => {
+      const link = (await item()).item.permalink.replaceAll('&', '&amp;');
+      const page = confluence.pages.get('1234567')!;
+      page.storage = page.storage.replace('<h2>Open questions</h2>', `<h3>Release notes</h3><p>Draft is up. (Tier B, 2026-10-06, <a href="${link}">#product thread</a>)</p><h2>Open questions</h2>`);
+    };
+
+    it('offers the section that already links to the thread, skips the people check, and writes nothing on approval', async () => {
+      await filePage();
+      const r = await request();
+      const [, draftCall] = claude.calls.slice(-2);
+      expect(draftCall.prompt).toContain('<already-filed>\n{"pageId":"1234567","pageTitle":"MVI V2 PRD","section":"Release notes","text":"Draft is up. (Tier B, 2026-10-06, #product thread )"}\n</already-filed>');
+      expect(claude.calls.some((c) => c.prompt.startsWith('<entry>'))).toBe(false); // no people check
+      let v = await item();
+      expect(v.drafts[r.body.id]).toMatchObject({ kind: 'confluence_filed', pageId: '1234567', pageTitle: 'MVI V2 PRD', section: 'Release notes', baseVersion: 7 });
+      expect(v.actions[0]).toMatchObject({ status: 'ready', target: { pageId: '1234567', baseVersion: 7 } });
+
+      expect((await approve(r.body.id)).status).toBe(202);
+      v = await item();
+      expect(v.actions[0].status).toBe('done');
+      expect(v.results[r.body.id]).toBe('Already on MVI V2 PRD under Release notes. Nothing was written. Logged action.executed.');
+      expect(confluence.pages.get('1234567')!.version).toBe(7);
+      expect(confluence.calls.filter((c) => c.method === 'PUT')).toHaveLength(0);
+      await expect(readdir(join(dir, 'sandbox/confluence'))).rejects.toThrow(); // not even a dry-run preview
+    });
+
+    it('counts as filed in a batch: approving it marks the item done (CK-4.4)', async () => {
+      expect((await call('POST', `/api/items/${encodeURIComponent(PROD)}/correction`, { attention: 'none', confluence: true, vault: false })).status).toBe(200);
+      await filePage();
+      const r = await request();
+      expect((await call('POST', `/api/actions/${r.body.id}/approve`, { markDoneWhenFiled: true })).status).toBe(202);
+      await res.actions.settled();
+      expect((await item()).summary.status).toBe('done');
+    });
+
+    it('keeps an entry the model still writes, with the section shown as a possible duplicate', async () => {
+      await filePage();
+      claude.nextTexts.push(PICK, JSON.stringify({ pageId: '1234567', section: 'Decisions', title: 'Release notes', content: 'The release notes draft is up.' }));
+      const r = await request();
+      expect((await item()).drafts[r.body.id]).toMatchObject({ kind: 'confluence', possibleDuplicates: [{ pageId: '1234567', pageTitle: 'MVI V2 PRD', section: 'Release notes', why: 'already links to this thread' }] });
+    });
+
+    it('tells the draft when nothing on the page links to the thread, and shows the latest entries of each section', async () => {
+      const page = confluence.pages.get('1234567')!;
+      page.storage = page.storage.replace('<h2>Open questions</h2>', `<p>${'Older entry. '.repeat(60)}</p><p>Latest: licence wording agreed.</p><h2>Open questions</h2>`);
+      await request();
+      const [, draftCall] = claude.calls.slice(-3);
+      expect(draftCall.prompt).toContain('<already-filed>\nNo section of these pages links to this thread or meeting.\n</already-filed>');
+      expect(draftCall.prompt).toContain('Latest: licence wording agreed.');
+    });
   });
 
   it('fails as no_fit when the draft call declines the picked pages', async () => {

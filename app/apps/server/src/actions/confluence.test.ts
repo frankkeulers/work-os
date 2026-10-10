@@ -6,7 +6,8 @@ import { marker, planConfluenceWrite } from './confluenceExecutor';
 import { buildCatalogue, inScope, scopeCql, type ConfluenceScope } from './confluenceCatalogue';
 import { FAKE_CONFLUENCE_CREDS, FakeConfluence, parseCql } from './fakeConfluence';
 import { entryStorage, inline, markdownToStorage } from './markdown';
-import { findHeading, headings, insertIntoSection, outline, textOf } from './storage';
+import { findOnPages } from './alreadyFiled';
+import { findHeading, headings, insertIntoSection, outline, sectionsLinking, textOf } from './storage';
 
 // Confluence filing against a fake Confluence (FR-10.3, FR-10.5, FR-10.6, FR-14.5). Never the real site.
 
@@ -38,6 +39,36 @@ describe('storage format', () => {
     expect(out).toContain('<p>x</p><p>NEW</p><h2>Open questions</h2>');
     expect(insertIntoSection(PAGE, 'Nope', 'x')).toBeUndefined();
     expect(textOf('<p>a&nbsp;&lt;b&gt; &#65;</p>')).toBe('a <b> A');
+  });
+});
+
+describe('what a page already holds (FR-10.7)', () => {
+  const THREAD = 'https://psg.slack.com/archives/C01PROD/p1728031234000100?thread_ts=1728031234.000100&cid=C01PROD';
+  const LONG = `<h2>Decisions</h2><p>${'Older entry. '.repeat(60)}</p><p>Latest: bulk export ships first.</p><h2>Log</h2>`;
+
+  it('shows the start and the end of a long section, where the latest entries are', () => {
+    const ex = outline(LONG)[0].excerpt;
+    expect(ex.startsWith('Older entry. Older entry.')).toBe(true);
+    expect(ex).toContain('… ');
+    expect(ex.endsWith('Latest: bulk export ships first.')).toBe(true);
+    expect(ex.length).toBeLessThanOrEqual(600);
+  });
+
+  it('finds the section holding the thread’s link, with & escaped as storage writes it', () => {
+    const page = `<h1>MVI V2</h1><h2>Decisions</h2><p>Bulk export first. (Tier B, 2026-10-07, <a href="${THREAD.replaceAll('&', '&amp;')}">#product thread</a>)</p><h3>Detail</h3><p>x</p><h2>Open questions</h2><p>Pricing?</p>`;
+    expect(sectionsLinking(page, [THREAD])).toEqual([{ heading: 'Decisions', text: 'Bulk export first. (Tier B, 2026-10-07, #product thread ) Detail x' }]);
+    expect(sectionsLinking(page, ['https://psg.slack.com/archives/C01PROD/p999'])).toEqual([]);
+    // The nearest heading above the link: a link under a subsection belongs to it.
+    expect(sectionsLinking(`<h2>Decisions</h2><h3>Export</h3><p><a href="${THREAD}">t</a></p>`, [THREAD]).map((x) => x.heading)).toEqual(['Export']);
+  });
+
+  it('lists every picked page’s sections that link to any piece of the topic', () => {
+    const pages = [
+      { id: '1', title: 'MVI V2 PRD', version: 3, versionMessage: '', storage: `<h2>Decisions</h2><p><a href="https://x/a">a</a></p><h2>Log</h2><p><a href="https://x/b">b</a></p>` },
+      { id: '2', title: 'Insights', version: 9, versionMessage: '', storage: '<h2>Decisions</h2><p>Nothing linked.</p>' },
+    ];
+    expect(findOnPages(pages, ['https://x/a', 'https://x/b']).map((f) => [f.pageId, f.section])).toEqual([['1', 'Decisions'], ['1', 'Log']]);
+    expect(findOnPages(pages, [])).toEqual([]);
   });
 });
 

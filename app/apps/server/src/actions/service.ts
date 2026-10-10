@@ -409,6 +409,7 @@ export class ActionService {
                   signal,
                   onStage: (n) => this.stage(a.id, n),
                   transcript,
+                  links: content.links,
                 },
                 content.item,
                 this.d.me(content.item.source),
@@ -474,6 +475,11 @@ export class ActionService {
     const stored = await this.d.drafts.read(a.id);
     if (!stored?.draft) return this.fail(a, 'draft_missing', 'The draft file is missing, so nothing was written. Re-draft to try again.');
     if (stored.draft.kind === 'confluence') return this.executeConfluence(a, stored.draft);
+    if (stored.draft.kind === 'confluence_filed') {
+      // FR-10.7: already on the page, so nothing is written, in dry-run or not.
+      const d = stored.draft;
+      return this.done(a, `Already on ${d.pageTitle} under ${d.section}. Nothing was written. Logged action.executed.`, { dryRun: this.d.dryRun(), pageId: d.pageId, unchanged: true });
+    }
     return this.executeVault(a, stored);
   }
 

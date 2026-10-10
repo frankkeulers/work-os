@@ -81,13 +81,38 @@ function sectionEnd(storage: string, all: Heading[], i: number): number {
   return next ? next.start : storage.length;
 }
 
-/** The page's sections with a short excerpt of each, for the drafter to choose from. */
-export function outline(storage: string, excerptChars = 300): { level: number; heading: string; excerpt: string }[] {
+/**
+ * The page's sections with an excerpt of each, for the drafter to choose from: the start of the
+ * section and its end, where the latest entries are, so the draft can see what was filed lately
+ * (FR-10.7).
+ */
+export function outline(storage: string, o: { head?: number; tail?: number } = {}): { level: number; heading: string; excerpt: string }[] {
+  const head = o.head ?? 150;
+  const tail = o.tail ?? 450;
   const all = headings(storage);
   return all.map((h, i) => {
     const text = textOf(storage.slice(h.end, sectionEnd(storage, all, i)));
-    return { level: h.level, heading: h.text, excerpt: text.length > excerptChars ? `${text.slice(0, excerptChars - 1)}…` : text };
+    return { level: h.level, heading: h.text, excerpt: text.length > head + tail ? `${text.slice(0, head - 1)}… ${text.slice(-(tail - 1))}` : text };
   });
+}
+
+/**
+ * The sections that hold one of `links` (FR-10.7): for each, the nearest heading above the link and
+ * that section's text. Hrefs in storage escape "&" as "&amp;", so both spellings are looked for.
+ */
+export function sectionsLinking(storage: string, links: string[]): { heading: string; text: string }[] {
+  const all = headings(storage);
+  const found = new Map<number, { heading: string; text: string }>();
+  for (const link of links) {
+    for (const spelling of new Set([link, link.replaceAll('&', '&amp;')])) {
+      for (let at = storage.indexOf(spelling); at >= 0; at = storage.indexOf(spelling, at + spelling.length)) {
+        const i = all.findLastIndex((h) => h.start < at);
+        if (i < 0 || found.has(i)) continue;
+        found.set(i, { heading: all[i].text, text: textOf(storage.slice(all[i].end, sectionEnd(storage, all, i))) });
+      }
+    }
+  }
+  return [...found.entries()].sort(([a], [b]) => a - b).map(([, v]) => v);
 }
 
 /** Inserts `content` at the end of the section under `heading`. Undefined if there's no such heading. */
