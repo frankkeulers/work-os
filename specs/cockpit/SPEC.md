@@ -420,11 +420,13 @@ Each row carries its people (Frank left out) and message count as well as the us
 - A meeting opens its Wispr Flow notes in the panel; failing that, its invite item, whatever its state; failing that, a read-only card (time, organiser, invitees, your answer, categories, Open in Outlook).
 - The calendar snapshot now starts at this week's Monday (or yesterday, on a Monday), so the days already gone this week show. Past meetings are never read. Weeks outside the snapshot say so.
 
+**CK-5.8 Filter by state.** A row of chips under the top bar shows or hides each state, with its count: Needs you (Now, Today and failed triage), This week, To file, Low priority, Waiting, Snoozed and Done. On the calendar the states are Going, Not answered, Declined and Cancelled. Done is hidden to begin with, as finished work is rarely what Frank comes looking for; every other state shows, and on the calendar all four do. One click on **Done** brings done items back. Once Frank changes the filter, his choice is kept per source in this browser. The header says "15 of 33 items" while anything is hidden, and **Show all** brings everything back. Hiding the open item's state leaves its panel open; `j`/`k` walk only the rows shown.
+
 **CK-5.7 The sidebar.** A source in the sidebar opens its history at `/source/:id`. Its dot and label still show health; health itself is on Usage & health and one click away from the history's header ("Health ›").
 
 > **Story 5.1** As Frank, I want to see everything a source has brought in, whatever triage made of it, so that I can find last week's meeting notes or a thread I marked done without searching Slack.
 >
-> - Given a thread I marked done ten days ago, when I open Slack in the sidebar, then it's there under its channel, marked Done by you.
+> - Given a thread I marked done ten days ago, when I open Slack in the sidebar and show Done, then it's there under its channel, marked Done by you.
 > - Given a Wispr Flow meeting from last week, when I open it from Wispr Flow's history, then I can file it to the vault from the panel.
 > - Given Thursday's 1:1 with no notes, when I click it in the calendar week, then a card shows who was invited and opens it in Outlook.
 
@@ -434,6 +436,7 @@ Each row carries its people (Frank left out) and message count as well as the us
 - `GET /api/sources/:source/items` (`sourceView`) and `GET /api/calendar/week?start=YYYY-MM-DD` (`weekView`) in `apps/server/src/api/views.ts`; the mock implements both.
 - The panel's host (the URL state, the item query, the unsaved-edit guard, the click outside and the slide-out) moved out of `Inbox.tsx` into `usePanelHost` and `PanelSlide`, which the Inbox and `pages/Source.tsx` share.
 - The calendar week reuses the time column's meeting layout (`placeMeetings`) and its past shading.
+- The state filter (CK-5.8) keeps its choice in the browser's prefs (`sourceHidden`), like the Inbox's sort; `pages/source/filters.ts` maps lanes and answers to states.
 - The mock seed adds the rest of the seed week to the calendar (including a cancelled and a declined meeting) for the week view only; the agenda is unchanged.
 
 ---

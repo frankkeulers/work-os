@@ -188,7 +188,7 @@ time. It stays open or closed as you left it, in this browser.
 The inbox shows what triage thinks needs you. To look something up, click a source in the
 sidebar: [Slack](/source/slack), Outlook, Wispr Flow or the calendar. Each lists everything Work OS
 has stored from it, newest first, whatever triage made of it. Items you marked done weeks ago are
-there, and so are channels you've since excluded, flagged **Excluded channel**. Older than the
+there behind the **Done** filter, and so are channels you've since excluded, flagged **Excluded channel**. Older than the
 retention period, an item keeps its title and link but its text is gone ("text expired").
 
 - **Slack** groups the items by channel or DM, with the most recent conversation first.
@@ -200,7 +200,10 @@ retention period, an item keeps its title and link but its text is gone ("text e
   link to Outlook. The arrows move a week at a time. The calendar keeps this week and the next two,
   so earlier weeks are empty.
 
-Each row says where triage put it: its lane, **Done by you**, or **Filed · Confluence**. A row
+Each row says where triage put it: its lane, **Done by you**, or **Filed · Confluence**. The chips
+under the top bar show or hide each state. Done is hidden to begin with: click **Done** to bring
+back what's finished. The calendar's chips are Going, Not answered, Declined and Cancelled, all shown
+to begin with. Your choice is kept for that source in this browser; **Show all** shows everything. A row
 opens the same panel as in the inbox, so you can reply, file to the vault or Confluence, or mark it
 done from here. `j`, `k`, `o` and `Esc` work as they do there. The source's dot in the sidebar
 still shows its health; **Health ›** in the page's top bar opens

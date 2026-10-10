@@ -159,3 +159,44 @@ export function whenOf(iso: string, now: Date): string {
   if (londonParts(iso).dateKey === londonParts(now).dateKey) return fmtTime(iso);
   return days < 6 ? `${londonParts(iso).weekday} ${fmtTime(iso)}` : `${fmtDayDate(iso).replace(/^\w+ /, '')} ${fmtTime(iso)}`;
 }
+
+/**
+ * Show or hide each state (cockpit CK-5.8). A chip with nothing in it stays out of the way unless
+ * it's the one hiding things.
+ */
+export function StateFilter({ states, counts, hidden, onChange }: { states: { id: string; label: string; dot: string }[]; counts: Partial<Record<string, number>>; hidden: readonly string[]; onChange: (hidden: string[]) => void }) {
+  const chips = states.filter((s) => (counts[s.id] ?? 0) > 0 || hidden.includes(s.id));
+  if (!chips.length) return null;
+  const hiddenCount = hidden.reduce((n, id) => n + (counts[id] ?? 0), 0);
+  return (
+    <div role="group" aria-label="Filter by state" data-state-filter className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line-soft px-6 py-2">
+      <span className="mr-0.5 text-xs text-muted">Show</span>
+      {chips.map((s) => {
+        const shown = !hidden.includes(s.id);
+        return (
+          <button
+            key={s.id}
+            type="button"
+            aria-pressed={shown}
+            data-filter-state={s.id}
+            title={`${shown ? 'Hide' : 'Show'} ${s.label.toLowerCase()}`}
+            onClick={() => onChange(shown ? [...hidden, s.id] : hidden.filter((h) => h !== s.id))}
+            className={cx(
+              'inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium cursor-pointer',
+              shown ? 'border-line bg-surface text-ink hover:bg-surface-2' : 'border-dashed border-line bg-transparent text-muted line-through hover:text-ink-2',
+            )}
+          >
+            <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={shown ? { background: s.dot } : { boxShadow: `inset 0 0 0 1.5px ${s.dot}` }} />
+            {s.label}
+            <span className="font-mono text-[11px] text-muted no-underline">{counts[s.id] ?? 0}</span>
+          </button>
+        );
+      })}
+      {hidden.length > 0 && (
+        <button type="button" onClick={() => onChange([])} className="ml-1 inline-flex min-h-7 items-center rounded-lg px-2 text-xs font-medium text-accent cursor-pointer hover:bg-accent-wash">
+          {hiddenCount ? `${plural(hiddenCount, 'hidden', 'hidden')} · Show all` : 'Show all'}
+        </button>
+      )}
+    </div>
+  );
+}

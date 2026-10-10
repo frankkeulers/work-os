@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { SourceId } from '@work-os/shared';
 import type { InboxSort } from '../lib/next';
 import type { Profile } from '../lib/profile';
 
@@ -22,6 +23,8 @@ interface Prefs extends Profile {
   newItems: Record<string, string>;
   /** The panel's Triage details row is open (CK-1.6). */
   triageDetailsOpen: boolean;
+  /** States hidden on each source's history (cockpit CK-5.8); unset, the default (Done hidden on the lists). */
+  sourceHidden: Partial<Record<SourceId, string[]>>;
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
@@ -37,6 +40,7 @@ interface Prefs extends Profile {
   markNew: (ids: string[], at: Date) => void;
   clearNew: (id: string) => void;
   setTriageDetailsOpen: (open: boolean) => void;
+  setSourceHidden: (source: SourceId, hidden: string[]) => void;
 }
 
 /** How long the New dot lasts without being looked at (CK-1.3). */
@@ -60,6 +64,7 @@ export const usePrefs = create<Prefs>()(
       dismissedMeetings: {},
       newItems: {},
       triageDetailsOpen: false,
+      sourceHidden: {},
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       setScope: (scope) => set({ scope }),
@@ -92,6 +97,7 @@ export const usePrefs = create<Prefs>()(
           return { newItems: rest };
         }),
       setTriageDetailsOpen: (triageDetailsOpen) => set({ triageDetailsOpen }),
+      setSourceHidden: (source, hidden) => set((s) => ({ sourceHidden: { ...s.sourceHidden, [source]: hidden } })),
     }),
     { name: 'workos.prefs' },
   ),

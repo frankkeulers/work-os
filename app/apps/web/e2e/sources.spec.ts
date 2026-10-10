@@ -67,12 +67,15 @@ test('J63: Slack’s history — every conversation, newest first, done items to
     heads.push(times[0]);
   }
   expect(heads).toEqual([...heads].sort().reverse());
-  // Nothing hidden: the done item is here, with who closed it, and every row says where triage put it.
+  // Done is filtered out to begin with (CK-5.8); every row says where triage put it.
   const done = page.locator(`[data-row="${doneId}"]`);
-  await expect(done).toHaveAttribute('data-status', 'done');
-  await expect(done).toContainText('Done by you');
+  await expect(done).toHaveCount(0);
   await expect(page.locator('[data-row]').first().locator('[data-state-chips]')).not.toBeEmpty();
   await shoot(page, 'source-slack');
+  // One click shows it: still there, with who closed it.
+  await page.getByRole('group', { name: 'Filter by state' }).locator('[data-filter-state="done"]').click();
+  await expect(done).toHaveAttribute('data-status', 'done');
+  await expect(done).toContainText('Done by you');
 
   // A row opens the Inbox's panel, filing included; filing from here marks the row Filed.
   const row = page.locator('[data-row]').filter({ hasText: 'imo_str' }).first();
@@ -172,4 +175,57 @@ test('Wispr Flow’s meeting notes, newest first; a note opens with its notes an
   await note.click();
   await expect(panel(page).getByRole('heading', { name: 'From the meeting notes' })).toBeVisible();
   await expect(panel(page).getByRole('region', { name: /File it|Also file/ })).toBeVisible();
+});
+
+test('the state filter: Done hidden to begin with; a choice stays for that source until Show all; the calendar hides cancelled meetings (CK-5.8)', async ({ page }) => {
+  await inbox(page);
+  const first = page.locator('[data-group="needs"] [data-row]').first();
+  await first.locator('..').getByRole('button', { name: /^Mark done:/ }).click();
+  await nav(page).getByRole('link', { name: /^Slack/ }).click();
+
+  // Done is out to begin with; the header and the filter say so.
+  const filter = page.getByRole('group', { name: 'Filter by state' });
+  const done = filter.locator('[data-filter-state="done"]');
+  await expect(done).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-row]').first()).toBeVisible();
+  await expect(page.locator('[data-row][data-status="done"]')).toHaveCount(0);
+  const open = await page.locator('[data-row]').count();
+  const doneCount = Number(await done.locator('.font-mono').textContent());
+  expect(doneCount).toBeGreaterThan(0);
+  const total = open + doneCount;
+  await expect(page.locator('[data-source-header]')).toContainText(`${open} of ${total} items`);
+  await expect(filter.getByRole('button', { name: `${doneCount} hidden · Show all` })).toBeVisible();
+
+  // Show it, and everything is there.
+  await done.click();
+  await expect(done).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-row][data-status="done"]')).toHaveCount(doneCount);
+  await expect(page.locator('[data-row]')).toHaveCount(total);
+  await expect(page.locator('[data-source-header]')).toContainText(`${total} items`);
+
+  // Filtering leaves the open item open.
+  await page.locator('[data-row]').first().click();
+  await expect(panel(page)).toBeVisible();
+  await filter.locator('[data-filter-state="else"]').click();
+  await expect(panel(page)).toBeVisible();
+  await expect(page.locator('[data-row][data-lane="else"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await shoot(page, 'source-filter', false);
+
+  // The choice is kept for Slack in this browser: Done shown, Low priority hidden; Show all clears it.
+  await page.reload();
+  await expect(page.locator('[data-filter-state="done"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-filter-state="else"]')).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('group', { name: 'Filter by state' }).getByRole('button', { name: /Show all$/ }).click();
+  await expect(page.locator('[data-row]')).toHaveCount(total);
+
+  // The calendar: its own states, all shown to begin with; Cancelled hidden, Declined still there.
+  await control(page, '13:48 with Outlook and the calendar on (cockpit)');
+  await expect(nav(page).getByRole('link', { name: /^Calendar/ })).toBeVisible({ timeout: 15_000 });
+  await nav(page).getByRole('link', { name: /^Calendar/ }).click();
+  const week = page.locator('[data-calendar-week]');
+  await expect(week.locator('[data-week-event="AAMkMOCKRETRO"]')).toBeVisible();
+  await page.getByRole('group', { name: 'Filter by state' }).locator('[data-filter-state="cancelled"]').click();
+  await expect(week.locator('[data-week-event="AAMkMOCKRETRO"]')).toHaveCount(0);
+  await expect(week.locator('[data-week-event="AAMkMOCKDESIGN"]')).toBeVisible();
 });
