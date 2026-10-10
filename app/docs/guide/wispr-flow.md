@@ -35,7 +35,8 @@ reading; meetings already in the inbox stay.
 - **The transcript is never stored.** When you draft a vault note or a Confluence entry from a
   meeting, Work OS reads the transcript from Wispr Flow for that draft only. If it can't, the draft
   is written from the summary and notes instead.
-- **Confluence entries never hold observations about people**, from a transcript or anywhere else.
+- **Confluence entries never identify people**, from a transcript or anywhere else. The draft
+  leaves them out and keeps the decisions and facts.
 - Work OS only reads. It never changes anything in Wispr Flow.
 
 The first time you connect, Work OS reads the last seven days of meetings.

@@ -39,11 +39,14 @@ watch:
 3. **Drafting the entry.** Claude reads only those pages' outlines and writes a short entry under
    an existing section: the fact, why, what follows, its provenance tier, the date and a link back
    to Slack.
-4. **People check.** A second, cheap check (Haiku) blocks the draft if it describes named people:
-   their performance, behaviour or circumstances. Nothing about people goes to Confluence.
+4. **People check.** A second, cheap check (Haiku) reads the entry as it would be written and
+   blocks it if it still identifies anyone, by name or by a description that points to one person.
 
-Items flagged as containing observations about people cannot be drafted to Confluence at all; the
-panel offers a vault note instead.
+A thread that mentions people can still be filed. The draft leaves them out and keeps the facts,
+the way the psg-context-builder skill does: "two engineers are overloaded, so the export work may
+move" becomes "the export work may move to after launch", and "<name> decided" becomes "the Data
+Products team decided". If the people check still blocks a draft, choose **Re-draft**, or edit the
+name out. The observations themselves belong in your vault.
 
 The routing guidance (which business unit, which kind of fact goes where) is a file you can edit:
 see [Prompts and guidance](prompts.md).

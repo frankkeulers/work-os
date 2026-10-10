@@ -45,8 +45,8 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | ID | Journey | Steps | Watch for | FR | Notes |
 |---|---|---|---|---|---|
 | J10 | Happy path | Open the imo_str decision item. Click the page title (it opens Confluence in a new tab). Review the ready Confluence draft and approve. Then try the same from the Inbox panel: select the item and click Review Confluence entry. | Are the target page, section and base version obvious? Is the dry-run wording clear? Is Discard noticeable without shouting? | FR-10.2, FR-10.3, FR-10.5 | The seed page IDs are made up, so pole-star.atlassian.net will say the page doesn't exist. |
-| J11 | Blocked: people observations | Open the overloaded-engineers item (Today). | The Confluence button is disabled. Is the reason clear? Is the vault the obvious alternative? | FR-10.1, NF-2 | |
-| J12 | Blocked: people check | Start J12. Draft a Confluence entry on the Labs graduation item. | The draft is blocked at the people-check step. Is "Draft vault note instead" helpful? | FR-10.4 | |
+| J11 | People mentioned: anonymised draft | Open the overloaded-engineers item (Today). Draft a Confluence entry. | The Confluence button is available. Does the draft keep the product fact (the export work may move) and leave out the people? | FR-10.1, NF-2 | |
+| J12 | Blocked: people check | Start J12. Draft a Confluence entry on the Labs graduation item. | The draft is blocked at the people-check step. Is Re-draft the obvious next step? | FR-10.4 | |
 | J13 | Version conflict | Start J13. Draft and approve a Confluence entry on the Labs graduation item. | Page v42 changed to v44. Does the re-draft explain what happened? | FR-10.5 | |
 | J14 | Scope refusal | Open the roadmap ownership item (File). Its drafted page sits under an excluded page (Product org). Approve anyway. | Is the red chip noticed before approving? Does the refusal point to Settings › Write targets? | FR-10.6 | |
 | J15 | Discard and re-draft | On a ready draft, edit the text, then click Re-draft, then Discard. Try to leave the page with unsaved edits. | Are the confirmations proportionate? | FR-9.3 | |

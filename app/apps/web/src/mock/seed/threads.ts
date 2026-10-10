@@ -169,7 +169,7 @@ export const SEED_THREADS: ThreadSeed[] = [
         baseVersion: 12,
         title: '5 Oct 2026 · MVI V2 export work may move to after launch',
         content:
-          'Open question: whether the MVI V2 export work moves to after launch, to protect the launch date. The Data Products team has proposed it; a decision is due this week.\n\nTier B, 2026-10-05. Source: Slack DM',
+          'Open question: whether the MVI V2 export work moves to after launch, to protect the launch date. The Data Products team has proposed it; a decision is due this week.\n\nTier B, 2026-10-05.',
       },
       vault: {
         kind: 'vault_append',
