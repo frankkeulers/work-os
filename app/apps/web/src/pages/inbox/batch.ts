@@ -20,9 +20,9 @@ export interface Batch {
   done: boolean;
 }
 
-/** The suggested filings still to approve, Confluence first; none for people observations' Confluence (FR-10.1). */
+/** The suggested filings still to approve, Confluence first. */
 export function openFilings(item: ItemSummary): ActionType[] {
-  return suggestedTypes(item).filter((t) => !(t === 'confluence_entry' && item.containsPeopleObservations) && draftState(item, t) !== 'done' && draftState(item, t) !== 'writing');
+  return suggestedTypes(item).filter((t) => draftState(item, t) !== 'done' && draftState(item, t) !== 'writing');
 }
 
 /** An item the batch can take: open, in To file, with a filing still to approve. */

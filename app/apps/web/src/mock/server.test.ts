@@ -41,10 +41,9 @@ describe('inbox commands', () => {
     expect(server.getEvents()[0].type).toBe('triage.corrected');
   });
 
-  it('refuses Confluence drafts for people observations (FR-10.1)', async () => {
-    const err = await settle(server.requestDraft(id('t4'), 'confluence_entry').catch((e) => e));
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).status).toBe(403);
+  it('drafts Confluence for a thread that mentions people (FR-10.1, amended)', async () => {
+    const a = await settle(server.requestDraft(id('t4'), 'confluence_entry'));
+    expect(a).toMatchObject({ type: 'confluence_entry', status: 'drafting' });
   });
 });
 
@@ -180,11 +179,23 @@ describe('draft and approval outcomes', () => {
     expect((await settle(server.getConfluenceCatalogue())).pages.map((p) => p.id)).toContain('48213377');
   });
 
-  it('blocks a Confluence draft that fails the people check (FR-10.4)', async () => {
+  it('blocks a Confluence draft that fails the people check, and a re-draft goes through (FR-10.4)', async () => {
     server.setNextDraftOutcome('people_check');
     const actionId = await draft('t2', 'confluence_entry');
     const a = (await view('t2')).actions.find((x) => x.id === actionId)!;
     expect(a.failureReason).toBe('people_check');
+    const again = await settle(server.redraft(actionId));
+    await run(8000);
+    expect((await view('t2')).actions.find((x) => x.id === again.id)?.status).toBe('ready');
+  });
+
+  it('drafts an anonymised Confluence entry for a thread that mentions people (FR-10.1, amended)', async () => {
+    const actionId = await draft('t4', 'confluence_entry');
+    const v = await view('t4');
+    expect(v.actions.find((x) => x.id === actionId)?.status).toBe('ready');
+    const d = v.drafts[actionId];
+    expect(d?.kind === 'confluence' && d.content).toMatch(/Data Products team/);
+    expect(d?.kind === 'confluence' && d.content).not.toMatch(/overloaded|burning out|team lead/i);
   });
 });
 

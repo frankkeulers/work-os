@@ -49,12 +49,7 @@ const STATE_LABEL: Record<Exclude<DraftState, 'none'>, (t: ActionType) => string
 
 export function draftButton(item: ItemSummary, type: ActionType, draftsBudgetHit: boolean): DraftButton {
   const state = draftState(item, type);
-  let disabledReason: string | undefined;
-  if (type === 'confluence_entry' && item.containsPeopleObservations) {
-    disabledReason = 'Mentions named people, so it can only go to the private vault (FR-10.1).';
-  } else if (state === 'none' && draftsBudgetHit) {
-    disabledReason = 'Drafts budget reached for today.';
-  }
+  const disabledReason = state === 'none' && draftsBudgetHit ? 'Drafts budget reached for today.' : undefined;
   return { type, state, label: state === 'none' ? TYPE_LABEL[type].draft : STATE_LABEL[state](type), disabledReason };
 }
 
@@ -81,22 +76,20 @@ export function cardActions(item: ItemSummary, draftsBudgetHit: boolean): CardAc
   const all: ActionType[] = ['confluence_entry', 'vault_note'];
   const suggested = suggestedTypes(item);
   const btn = (t: ActionType) => draftButton(item, t, draftsBudgetHit);
-  // Confluence is never offered for people observations; other disabled drafts stay visible with their reason.
-  const usable = suggested.filter((t) => !(t === 'confluence_entry' && item.containsPeopleObservations));
-  if (item.lane === 'file' && usable.length) {
+  if (item.lane === 'file' && suggested.length) {
     // Prefer a filing that is still open over one already filed.
-    const ordered = [...usable].sort((a, b) => Number(draftState(item, a) === 'done') - Number(draftState(item, b) === 'done'));
+    const ordered = [...suggested].sort((a, b) => Number(draftState(item, a) === 'done') - Number(draftState(item, b) === 'done'));
     const [p, s] = ordered;
     return { primary: { kind: 'draft', button: btn(p) }, secondary: s ? btn(s) : undefined, overflowDrafts: all.filter((t) => t !== p && t !== s).map(btn) };
   }
-  const sec = usable[0];
+  const sec = suggested[0];
   return { primary: { kind: 'slack' }, secondary: sec ? btn(sec) : undefined, overflowDrafts: all.filter((t) => t !== sec).map(btn) };
 }
 
 /** "Insights APIs › Decisions" for Confluence, "Vault · Resources" for the vault. */
 export function targetChip(i: ItemSummary): string | undefined {
   if (i.lane !== 'file') return undefined;
-  if (i.triage?.confluence && i.targetHints.confluence && !i.containsPeopleObservations) return i.targetHints.confluence;
+  if (i.triage?.confluence && i.targetHints.confluence) return i.targetHints.confluence;
   const v = i.targetHints.vault;
   return v ? `Vault · ${v.split('/')[0]}` : undefined;
 }

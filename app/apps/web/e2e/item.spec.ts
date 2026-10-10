@@ -49,13 +49,14 @@ test('J13 Confluence version conflict re-drafts instead of writing', async ({ pa
   await expect(panel(page).getByRole('button', { name: 'Approve and write to sandbox' })).toBeEnabled();
 });
 
-test('J11 people observations: Confluence is blocked, vault offered instead', async ({ page }) => {
+test('J11 people mentioned: the Confluence draft leaves them out', async ({ page }) => {
   await startJourney(page, 'J11');
   await panel(page).getByRole('tab', { name: /Confluence entry/ }).click();
-  await expect(panel(page).getByText('Vault only.')).toBeVisible();
-  await panel(page).getByRole('button', { name: 'Draft vault note instead' }).click();
-  await expect(panel(page).getByRole('tab', { name: /Vault note/ })).toHaveAttribute('aria-selected', 'true');
-  await expect(panel(page).getByTestId('drafting')).toBeVisible();
+  await expect(panel(page).getByText('Vault only.')).toHaveCount(0);
+  await panel(page).getByRole('button', { name: 'Draft Confluence entry' }).click();
+  await expect(panel(page).getByRole('button', { name: 'Approve and write to sandbox' })).toBeVisible(DRAFT_TIMEOUT);
+  await expect(panel(page).getByText(/The Data Products team has proposed it/)).toBeVisible();
+  await expect(panel(page).getByText(/overloaded|burning out/)).toHaveCount(0);
 });
 
 test('J12 people check blocks a Confluence draft', async ({ page }) => {
@@ -65,6 +66,7 @@ test('J12 people check blocks a Confluence draft', async ({ page }) => {
   await expect(panel(page).getByText('People check blocked this entry.')).toBeVisible(DRAFT_TIMEOUT);
   await expect(panel(page).getByRole('tab', { name: /Confluence entry/ })).toContainText('Failed');
   await expect(panel(page).getByRole('button', { name: 'Approve and write to sandbox' })).toHaveCount(0);
+  await expect(panel(page).getByRole('button', { name: 'Re-draft' })).toBeEnabled();
 });
 
 test('J08 edit a vault append, then the leave guard and re-draft confirmation', async ({ page }) => {

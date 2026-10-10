@@ -39,11 +39,10 @@ describe('cardActions (design guide §3)', () => {
     expect(a.secondary?.type).toBe('vault_note');
   });
 
-  it('never offers Confluence as an action for people observations (FR-10.1)', () => {
+  it('offers Confluence for a thread that mentions people: the draft anonymises them (FR-10.1, amended)', () => {
     const a = cardActions(item({ lane: 'file', containsPeopleObservations: true, triage: { attention: 'none', confluence: true, vault: true, by: 'model' } }), false);
-    expect(a.primary.kind === 'draft' && a.primary.button.type).toBe('vault_note');
-    const conf = a.overflowDrafts.find((d) => d.type === 'confluence_entry');
-    expect(conf?.disabledReason).toMatch(/named people/);
+    expect(a.primary.kind === 'draft' && a.primary.button).toMatchObject({ type: 'confluence_entry', disabledReason: undefined });
+    expect(a.secondary?.type).toBe('vault_note');
   });
 
   it('puts the still-open filing first when one is already filed', () => {

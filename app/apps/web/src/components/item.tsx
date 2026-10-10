@@ -193,15 +193,13 @@ export function CorrectForm({
   const [conf, setConf] = useState(!!t?.confluence);
   const [vault, setVault] = useState(!!t?.vault);
   const [busy, setBusy] = useState(false);
-  const toggle = (on: boolean, label: string, set: (v: boolean) => void, disabled?: string) => (
+  const toggle = (on: boolean, label: string, set: (v: boolean) => void) => (
     <button
       type="button"
       aria-pressed={on}
-      disabled={!!disabled}
-      title={disabled}
       onClick={() => set(!on)}
       className={cx(
-        'min-h-10 rounded-lg border px-3.5 text-[13px] font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
+        'min-h-10 rounded-lg border px-3.5 text-[13px] font-medium cursor-pointer',
         on ? 'border-teal bg-teal-wash text-ink' : 'border-line-strong bg-surface text-ink',
       )}
     >
@@ -227,7 +225,7 @@ export function CorrectForm({
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-ink-2">File to</span>
         <div className="flex gap-2">
-          {toggle(conf, 'Confluence', setConf, item.containsPeopleObservations ? 'Mentions named people: vault only' : undefined)}
+          {toggle(conf, 'Confluence', setConf)}
           {toggle(vault, 'Vault', setVault)}
         </div>
       </div>
@@ -259,9 +257,9 @@ export function CorrectForm({
     </Button>
   );
   if (layout === 'panel') {
-    const check = (on: boolean, label: string, set: (v: boolean) => void, disabled?: string) => (
-      <label title={disabled} className={cx('inline-flex min-h-8 items-center gap-2 text-[13px]', disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer')}>
-        <input type="checkbox" className="h-4 w-4 accent-[var(--accent-bg)]" checked={on} disabled={!!disabled} onChange={(e) => set(e.target.checked)} />
+    const check = (on: boolean, label: string, set: (v: boolean) => void) => (
+      <label className="inline-flex min-h-8 cursor-pointer items-center gap-2 text-[13px]">
+        <input type="checkbox" className="h-4 w-4 accent-[var(--accent-bg)]" checked={on} onChange={(e) => set(e.target.checked)} />
         {label}
       </label>
     );
@@ -288,7 +286,7 @@ export function CorrectForm({
           />
           <span className="text-xs font-medium text-ink-2">Suggest filing</span>
           <span className="flex flex-wrap gap-x-4">
-            {check(conf, 'Confluence', setConf, item.containsPeopleObservations ? 'Mentions named people: vault only' : undefined)}
+            {check(conf, 'Confluence', setConf)}
             {check(vault, 'Vault', setVault)}
           </span>
         </div>

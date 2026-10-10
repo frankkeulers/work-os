@@ -38,10 +38,10 @@ describe('file in a batch (CK-4.1–4.4)', () => {
     expect(filingFor(i, ['confluence_entry', 'vault_note'])).toBeUndefined();
   });
 
-  it('leaves out what is filed or being written, and Confluence for people observations (FR-10.1)', () => {
+  it('leaves out what is filed or being written, and keeps Confluence for a thread that mentions people (FR-10.1, amended)', () => {
     expect(openFilings(item({ actions: { confluence_entry: action('confluence_entry', 'done') } }))).toEqual(['vault_note']);
     expect(openFilings(item({ actions: { vault_note: action('vault_note', 'approved') } }))).toEqual(['confluence_entry']);
-    expect(openFilings(item({ containsPeopleObservations: true }))).toEqual(['vault_note']);
+    expect(openFilings(item({ containsPeopleObservations: true }))).toEqual(['confluence_entry', 'vault_note']);
     // A ready or drafting filing is still to approve.
     expect(openFilings(item({ actions: { vault_note: action('vault_note', 'ready'), confluence_entry: action('confluence_entry', 'drafting') } }))).toEqual(['confluence_entry', 'vault_note']);
   });

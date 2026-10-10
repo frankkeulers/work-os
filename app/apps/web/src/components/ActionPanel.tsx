@@ -385,7 +385,6 @@ export function ActionPanel({
   const version = action ? entryVersion(view.actions, action) : 1;
   const draft = action ? view.drafts[action.id] : undefined;
   const prev = action?.supersedes ? view.actions.find((a) => a.id === action.supersedes) : undefined;
-  const peopleBlocked = type === 'confluence_entry' && s.containsPeopleObservations;
   const budgetHit = view.budgets.drafts.hit;
   // Picked from the live catalogue, so in scope when drafted; excluded since if it or a page above
   // it is now on the exclude list. The executor checks the full scope again at write time.
@@ -449,18 +448,7 @@ export function ActionPanel({
   if (!action) {
     const hint = type === 'vault_note' ? s.targetHints.vault : s.targetHints.confluence;
     const suggested = type === 'vault_note' ? s.triage?.vault : s.triage?.confluence;
-    body = peopleBlocked ? (
-      <div className="flex flex-col gap-3">
-        <Banner tone="warn" icon="lock">
-          <strong>Vault only.</strong> This thread contains observations about named people, so it can’t go to Confluence (FR-10.1). Your private vault is fine.
-        </Banner>
-        <div>
-          <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
-            Draft vault note instead
-          </Button>
-        </div>
-      </div>
-    ) : (
+    body = (
       <div className="flex flex-col gap-3">
         <p className="m-0 text-sm leading-relaxed text-ink-2">
           {suggested ? (
@@ -490,7 +478,10 @@ export function ActionPanel({
             <strong>People check blocked this entry.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
-            <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
+            <Button variant="solid" icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
+              Re-draft
+            </Button>
+            <Button icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
               Draft vault note instead
             </Button>
             <Button icon="x" onClick={discard}>
@@ -658,7 +649,7 @@ export function ActionPanel({
           </div>
           {checksOpen && <ChecksDetail checks={checks} d={draft} />}
         </div>
-        {action.status === 'done' && action.itemRevision < item.revision && !peopleBlocked && (
+        {action.status === 'done' && action.itemRevision < item.revision && (
           <Banner
             tone="info"
             icon="info"
@@ -748,7 +739,6 @@ export function ActionPanel({
                 on ? 'bg-seg-on text-accent shadow-[0_1px_2px_rgba(20,23,28,0.12)]' : 'text-ink-2',
               )}
             >
-              {t === 'confluence_entry' && s.containsPeopleObservations && <Icon name="lock" size={12} />}
               {TYPE_LABEL[t].short}
               {badge && <span className={cx('rounded px-1.5 py-px text-[10px] font-semibold', badge.cls)}>{v > 1 ? `v${v} · ${badge.label}` : badge.label}</span>}
             </button>
@@ -824,7 +814,7 @@ export function defaultType(view: ItemView): ActionType {
   const s = view.summary;
   return (
     TYPES.find((t) => view.actions.some((a) => a.type === t && ACTIVE.has(a.status))) ??
-    TYPES.find((t) => (t === 'vault_note' ? s.triage?.vault : s.triage?.confluence && !s.containsPeopleObservations)) ??
+    TYPES.find((t) => (t === 'vault_note' ? s.triage?.vault : s.triage?.confluence)) ??
     'vault_note'
   );
 }

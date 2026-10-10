@@ -24,7 +24,7 @@ export const JOURNEYS: Journey[] = [
   { id: 'J08', group: 'Vault', title: 'Append with edit', start: (c) => (fresh(c), item(c, 't1')) },
   { id: 'J09', group: 'Vault', title: 'Vault conflict', start: (c) => (fresh(c), c.setNextDraftOutcome('vault_conflict'), item(c, 'f1', '?tab=vault')) },
   { id: 'J10', group: 'Confluence', title: 'Happy path', start: (c) => (fresh(c), item(c, 'f1')) },
-  { id: 'J11', group: 'Confluence', title: 'Blocked: people observations', start: (c) => (fresh(c), item(c, 't4')) },
+  { id: 'J11', group: 'Confluence', title: 'People mentioned: anonymised draft', start: (c) => (fresh(c), item(c, 't4')) },
   { id: 'J12', group: 'Confluence', title: 'Blocked: people check', start: (c) => (fresh(c), c.setNextDraftOutcome('people_check'), item(c, 't2')) },
   { id: 'J13', group: 'Confluence', title: 'Version conflict', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), item(c, 't2')) },
   { id: 'J14', group: 'Confluence', title: 'Allow-list refusal', start: (c) => (fresh(c), item(c, 'f2')) },

@@ -122,12 +122,14 @@ Answer with JSON only, no prose.`,
   {
     id: 'people-check',
     label: 'People check',
-    description: 'Checks a Confluence draft for observations about named people before it is shown.',
+    description: 'Checks a Confluence draft identifies no one, by name or description, before it is shown.',
     usedBy: 'Draft Confluence entry',
     path: 'config/prompts/people-check.md',
-    defaultText: `<!-- prompt: people-check v1 -->
-You check a draft Confluence entry before it is shown for approval. It must not contain
-observations about named people.
+    defaultText: `<!-- prompt: people-check v2 -->
+You check a draft Confluence entry before it is shown for approval. The entry should already be
+anonymised, so it must not identify any individual, by name or by a description that points to
+one person: no observations about them, and not who raised, attended, agreed or owns something.
+Unnamed teams, roles, functions and organisations are fine.
 
 Answer with JSON only: {"containsPeopleObservations":true|false,"reason":"<one line>"}`,
   },

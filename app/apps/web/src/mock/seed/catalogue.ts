@@ -15,6 +15,7 @@ export const MOCK_TREE: TreePage[] = [
   { id: '31000001', title: 'Data Products (DP)' },
   { id: '39004512', title: 'Insights APIs › Decisions', parent: '31000001', labels: ['psg-bu-dp', 'psg-context'] },
   { id: '40217733', title: 'Meridia › Context: Decisions', parent: '31000001', labels: ['psg-bu-dp', 'psg-context'] },
+  { id: '40217744', title: 'MVI › Context: Decisions', parent: '31000001', labels: ['psg-bu-dp', 'psg-context'] },
   { id: '31000011', title: 'DP - Pricing', parent: '31000001', labels: ['psg-bu-dp', 'psg-context'] },
   { id: '31000012', title: 'DP - Customer Personas', parent: '31000001', labels: ['psg-bu-dp', 'psg-context'] },
   { id: '31000006', title: 'Archive', parent: '31000001' },

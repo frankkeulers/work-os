@@ -183,6 +183,9 @@ describe('reduce', () => {
     add('action.executed', 5, { dryRun: true, path: 'Inbox/x.md' }, vault);
     p = replay(events);
     expect(filedAll(p.items[ITEM], newest())).toBe(true); // the decision suggests the vault only
+    // A thread that mentions people still counts its Confluence suggestion (FR-10.1, amended).
+    const flagged = { ...p.items[ITEM], decision: { ...p.items[ITEM].decision!, containsPeopleObservations: true, confluence: { suggested: true } } };
+    expect(filedAll(flagged, newest())).toBe(false);
     // Corrected to Confluence as well: not filed until that is written too.
     add('triage.corrected', 6, { correction: { itemId: ITEM, itemRevision: 1, attention: 'none', confluence: true, vault: true, correctedAt: at(6) } });
     p = replay(events);

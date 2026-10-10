@@ -158,10 +158,19 @@ export const SEED_THREADS: ThreadSeed[] = [
       vault: 'People/Data products team lead.md › Notes',
       people: true,
       summary: 'Team lead flags two overloaded engineers before MVI V2 and asks to move the export work.',
-      reason: 'Asks for your view this week. Mentions named people, so vault only.',
-      next: { need: 'decide', step: 'Give your view on moving the export work', why: 'The team lead wants it before Thursday. Mentions named people, so it can only go to the private vault.', dueAt: london(8, '09:00') },
+      reason: 'Asks for your view this week. Mentions people: keep the details in your vault.',
+      next: { need: 'decide', step: 'Give your view on moving the export work', why: 'The team lead wants it before Thursday. A Confluence entry would leave the people out.', dueAt: london(8, '09:00') },
     },
     drafts: {
+      confluence: {
+        pageId: '40217744',
+        pageTitle: 'MVI › Context: Decisions',
+        section: 'Open questions',
+        baseVersion: 12,
+        title: '5 Oct 2026 · MVI V2 export work may move to after launch',
+        content:
+          'Open question: whether the MVI V2 export work moves to after launch, to protect the launch date. The Data Products team has proposed it; a decision is due this week.\n\nTier B, 2026-10-05. Source: Slack DM',
+      },
       vault: {
         kind: 'vault_append',
         path: 'People/Data products team lead.md',

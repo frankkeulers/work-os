@@ -1144,9 +1144,6 @@ export class MockServer implements WorkOsApi, MockControls {
     const existing = this.actionsFor(itemId).find((a) => a.type === type && ACTIVE.includes(a.status));
     if (existing) return structuredClone(existing);
     if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
-    if (type === 'confluence_entry' && rec.decision?.containsPeopleObservations) {
-      throw new ApiError('forbidden', 'This thread contains observations about people, so it can only go to the vault (FR-10.1).');
-    }
     const outcome = this.takeOutcome((o) => o === 'model_error' || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
     return structuredClone(this.createAction(rec, type, outcome));
   }
@@ -1212,9 +1209,9 @@ export class MockServer implements WorkOsApi, MockControls {
       const draft = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
       if (action.type === 'confluence_entry') this.recordUsage('confluence_pick', model, 9000, 90, [rec.item.id], 'pick-confluence v1', 9000);
       this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
-      if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-5.5', 2100, 60, [rec.item.id], 'people-check v1', 1900);
+      if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-5.5', 2100, 60, [rec.item.id], 'people-check v2', 1900);
       if (outcome === 'people_check') {
-        action.error = 'The people check found observations about named people in the draft. Nothing will be written to Confluence.';
+        action.error = 'The draft still identifies a person (it names who raised the proposal). Nothing will be written to Confluence. Re-draft, or edit it out.';
         this.s.results[actionId] = action.error;
         this.event('action.failed', { reason: 'people_check' }, { itemId: rec.item.id, actionId });
       } else {

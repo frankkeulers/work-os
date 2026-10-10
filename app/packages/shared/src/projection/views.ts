@@ -24,13 +24,13 @@ export function currentAction<A extends ActionLike>(actions: readonly A[], type:
 
 /**
  * Every filing the triage suggests has been written (cockpit CK-4.4): what marks an item filed in a
- * batch done. Confluence doesn't count for a thread with observations about people (FR-10.1).
+ * batch done.
  * `actions` must be newest first.
  */
 export function filedAll(it: Pick<ItemFlags, 'decision' | 'correction'>, actions: readonly ActionLike[]): boolean {
   const eff = effectiveTriage(it.decision, it.correction);
   const types: ActionType[] = [];
-  if (eff?.confluence && !it.decision?.containsPeopleObservations) types.push('confluence_entry');
+  if (eff?.confluence) types.push('confluence_entry');
   if (eff?.vault) types.push('vault_note');
   return types.length > 0 && types.every((t) => currentAction(actions, t)?.status === 'done');
 }
