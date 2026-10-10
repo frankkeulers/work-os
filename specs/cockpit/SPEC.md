@@ -296,7 +296,7 @@ The layout matches artboards 1 and 2 of the design: `Main.dc.html` and `Panel.dc
 
 ### 6.2 Time column
 
-**CK-3.4 Header:** the clock (`--text-glance-xl`, tabular figures), the date, and a Today / Tomorrow switch.
+**CK-3.4 Header:** the clock (`--text-glance-xl`, tabular figures), the date, and a Today / Tomorrow switch. 56 px, the height of the Needs you and Later headers, so the three end on one line. A button folds the column to a 56 px rail with the clock (the sidebar's Now/Next cues return while it's folded, CK-3.7), and its right edge drags it between 360 and 600 px, 400 by default. Both are kept in client prefs.
 
 **CK-3.5 Next-meeting card.**
 - **Which meeting:** the first timed meeting today that Frank accepted, accepted tentatively or organised, isn't shown as Free, and hasn't ended. These are the same rules as the R2.8 sidebar cues, which move here.

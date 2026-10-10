@@ -25,6 +25,10 @@ interface Prefs extends Profile {
   triageDetailsOpen: boolean;
   /** States hidden on each source's history (cockpit CK-5.8); unset, the default (Done hidden on the lists). */
   sourceHidden: Partial<Record<SourceId, string[]>>;
+  /** The cockpit's time column is folded to a rail. */
+  timeCollapsed: boolean;
+  /** The cockpit's time column width in px, dragged at its right edge (TIME_WIDTH bounds it). */
+  timeWidth: number;
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
@@ -41,7 +45,13 @@ interface Prefs extends Profile {
   clearNew: (id: string) => void;
   setTriageDetailsOpen: (open: boolean) => void;
   setSourceHidden: (source: SourceId, hidden: string[]) => void;
+  setTimeCollapsed: (collapsed: boolean) => void;
+  setTimeWidth: (px: number) => void;
 }
+
+/** The time column's width: 400 px to begin with, dragged between min and max. */
+export const TIME_WIDTH = { default: 400, min: 360, max: 600 } as const;
+export const clampTimeWidth = (px: number) => Math.round(Math.min(TIME_WIDTH.max, Math.max(TIME_WIDTH.min, px)));
 
 /** How long the New dot lasts without being looked at (CK-1.3). */
 export const NEW_FOR_MS = 30 * 60_000;
@@ -65,6 +75,8 @@ export const usePrefs = create<Prefs>()(
       newItems: {},
       triageDetailsOpen: false,
       sourceHidden: {},
+      timeCollapsed: false,
+      timeWidth: TIME_WIDTH.default,
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       setScope: (scope) => set({ scope }),
@@ -98,6 +110,8 @@ export const usePrefs = create<Prefs>()(
         }),
       setTriageDetailsOpen: (triageDetailsOpen) => set({ triageDetailsOpen }),
       setSourceHidden: (source, hidden) => set((s) => ({ sourceHidden: { ...s.sourceHidden, [source]: hidden } })),
+      setTimeCollapsed: (timeCollapsed) => set({ timeCollapsed }),
+      setTimeWidth: (px) => set({ timeWidth: clampTimeWidth(px) }),
     }),
     { name: 'workos.prefs' },
   ),

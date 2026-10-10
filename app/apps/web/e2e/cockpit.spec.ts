@@ -169,6 +169,61 @@ test('J58: a missed deadline turns its pin red, says Overdue and sits at the now
   await expect(page.getByTestId('next-meeting')).toContainText('NOW · UNTIL 15:00');
 });
 
+test('J65: the time column lines up with the other headers, folds to a rail and drags wider (CK-3.4, 3.7)', async ({ page }) => {
+  await afternoon(page);
+  const time = zone(page, 'Time');
+
+  // The three headers are 56 px and end on one line.
+  const heads = await Promise.all((['Time', 'Needs you', 'Later'] as const).map(async (z) => (await zone(page, z).locator('> div').first().boundingBox())!));
+  for (const h of heads) {
+    expect(h.height).toBeCloseTo(56, 0);
+    expect(h.y).toBeCloseTo(heads[0].y, 0);
+  }
+
+  // Dragged wider by its right edge, the meetings lane widens with it and Needs you gives way; kept on reload.
+  const needsWidth = (await zone(page, 'Needs you').boundingBox())!.width;
+  const meetingWidth = async () => (await time.getByRole('list', { name: 'Today’s meetings' }).getByRole('listitem').filter({ hasText: 'stand-up' }).boundingBox())!.width;
+  const narrow = await meetingWidth();
+  const edge = (await page.getByRole('separator', { name: 'Resize the time column' }).boundingBox())!;
+  await page.mouse.move(edge.x + edge.width / 2, edge.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(edge.x + edge.width / 2 + 100, edge.y + 300, { steps: 5 });
+  await page.mouse.up();
+  expect((await time.boundingBox())!.width).toBeCloseTo(500, 0);
+  expect((await zone(page, 'Needs you').boundingBox())!.width).toBeCloseTo(needsWidth - 100, 0);
+  expect(await meetingWidth()).toBeGreaterThan(narrow + 50);
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-time-wide-light.png'), style: HIDE, animations: 'disabled' });
+  await page.reload();
+  await expect(time).toBeVisible();
+  expect((await time.boundingBox())!.width).toBeCloseTo(500, 0);
+
+  // The arrow keys move the edge 20 px, within 360–600 px; a double-click puts it back to 400.
+  const handle = page.getByRole('separator', { name: 'Resize the time column' });
+  await handle.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(handle).toHaveAttribute('aria-valuenow', '480');
+  for (let n = 0; n < 10; n++) await page.keyboard.press('ArrowRight');
+  await expect(handle).toHaveAttribute('aria-valuenow', '600');
+  await handle.dblclick();
+  await expect(handle).toHaveAttribute('aria-valuenow', '400');
+
+  // Folded, it's a rail with the clock, and the sidebar's meeting cues come back (13:58, two minutes
+  // before the renewal call); kept on reload.
+  await time.getByRole('button', { name: 'Collapse the time column' }).click();
+  await expect(time).toHaveAttribute('data-collapsed', 'true');
+  expect((await time.boundingBox())!.width).toBeCloseTo(56, 0);
+  await expect(page.getByTestId('next-meeting')).toHaveCount(0);
+  await control(page, '+10 min');
+  await expect(page.getByTestId('clock')).toHaveText(/^13:5[89]$/);
+  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-time-collapsed-light.png'), style: HIDE, animations: 'disabled' });
+  await page.reload();
+  await expect(time).toHaveAttribute('data-collapsed', 'true');
+  await time.getByRole('button', { name: 'Expand the time column' }).click();
+  await expect(page.getByTestId('next-meeting')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveCount(0);
+});
+
 test('J59: below 1600 px the Inbox keeps the list and the agenda strip (CK-3.1, 3.7)', async ({ page }) => {
   await page.setViewportSize({ width: 1599, height: 1000 });
   await page.goto('/');

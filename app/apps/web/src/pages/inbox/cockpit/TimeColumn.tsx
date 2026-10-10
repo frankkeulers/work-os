@@ -2,22 +2,26 @@ import { OUTLOOK_COLORS, type AgendaEvent, type AgendaView } from '@work-os/shar
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type ItemSummary } from '../../../api';
-import { Segmented, cx } from '../../../components/ui';
+import { Icon } from '../../../components/icons';
+import { IconButton, Segmented, cx } from '../../../components/ui';
 import { onTopics, useApiQuery } from '../../../hooks/useApiQuery';
 import { useNow } from '../../../hooks/useNow';
 import { dayEvents, type AgendaDay } from '../../../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime } from '../../../lib/format';
+import { TIME_WIDTH, clampTimeWidth, usePrefs } from '../../../store/prefs';
 import { dayPins, dayStart, dueBefore, hourHeight, minuteOf, nextMeeting, placeMeetings, shortTitle, timelineSpan, workSpan, type Pin, type PinTone } from '../../../lib/timeline';
 
 // The cockpit's time column (CK-3.4–3.6): the clock, the next meeting and what's due before it, and
 // the day as a timeline of meetings and deadline pins. Meetings open in Outlook; pins open the item.
+// It folds to a rail, and its right edge drags to widen it; both are kept in prefs.
 
 const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
 
-/** Where the timeline's lanes sit: hour labels, then meetings, then pins. */
+/** Where the timeline's lanes sit: hour labels, then meetings, then pins. The meetings take 60% of
+ * the width after the labels (186 px at the default width) and the pins the rest, as the column widens. */
 const MEETINGS_LEFT = 44;
-const MEETINGS_WIDTH = 186;
-const PINS_LEFT = 238;
+const MEETINGS_SHARE = 0.6;
+const LANE_GAP = 8;
 const PIN_HEIGHT = 22;
 const MEETING_MIN_HEIGHT = 19;
 
@@ -107,15 +111,20 @@ const fmtHour = (minute: number) => `${String(Math.floor(minute / 60) % 24).padS
 
 function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView | undefined; items: readonly ItemSummary[]; now: Date; day: AgendaDay; workHours: string; onOpenItem: (id: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(0);
+  const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setAvailable(el.clientHeight));
+    const measure = () => (setAvailable(el.clientHeight), setWidth(inner.current?.clientWidth ?? 0));
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setAvailable(el.clientHeight);
+    measure();
     return () => ro.disconnect();
   }, []);
+  const meetingsWidth = Math.round(((width || TIME_WIDTH.default - 40) - MEETINGS_LEFT - LANE_GAP) * MEETINGS_SHARE);
+  const pinsLeft = MEETINGS_LEFT + meetingsWidth + LANE_GAP;
 
   const start = dayStart(now, day);
   const calendar = v && v.state !== 'off' && v.state !== 'never';
@@ -156,17 +165,17 @@ function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView
         </ul>
       )}
       <div ref={scroller} data-testid="timeline" data-px-per-hour={ph} className="-mx-5 min-h-0 flex-1 overflow-y-auto px-5">
-        <div className="relative" style={{ height }}>
+        <div ref={inner} className="relative" style={{ height }}>
           {hours.map((m) => (
             <div key={m} aria-hidden className="absolute inset-x-0 border-t border-line-soft" style={{ top: top(m) }}>
               <span className="absolute -top-2 left-0 bg-surface pr-1.5 font-mono text-xs text-faint">{fmtHour(m)}</span>
             </div>
           ))}
-          {day === 'today' && <div aria-hidden className="absolute bg-past" style={{ left: MEETINGS_LEFT, width: MEETINGS_WIDTH, top: 0, height: top(nowMin) }} />}
+          {day === 'today' && <div aria-hidden className="absolute bg-past" style={{ left: MEETINGS_LEFT, width: meetingsWidth, top: 0, height: top(nowMin) }} />}
           <ol aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 list-none p-0">
             {meetings.map((m) => {
               const hex = categoryHex(m.event);
-              const w = MEETINGS_WIDTH / m.cols;
+              const w = meetingsWidth / m.cols;
               const named = (m.event.categories ?? []).map((c) => c.name).join(', ');
               const h = Math.max(MEETING_MIN_HEIGHT, top(m.to) - top(m.from) - 2);
               // A short meeting is one line, so its time and title show however short the block.
@@ -201,7 +210,7 @@ function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView
           )}
           <ol aria-label="Deadlines" className="m-0 list-none p-0">
             {pins.map((p, n) => (
-              <li key={p.items.map((i) => i.id).join(',')} className="absolute right-0" style={{ top: tops[n], left: PINS_LEFT, height: PIN_HEIGHT }}>
+              <li key={p.items.map((i) => i.id).join(',')} className="absolute right-0" style={{ top: tops[n], left: pinsLeft, height: PIN_HEIGHT }}>
                 <button
                   type="button"
                   data-pin={p.tone}
@@ -241,19 +250,82 @@ function CalendarNote({ v, now }: { v: AgendaView | undefined; now: Date }) {
   return null;
 }
 
+/** The column's right edge: drag it, or focus it and use the arrow keys; a double-click puts it back. */
+function ResizeHandle({ width, onWidth }: { width: number; onWidth: (px: number, done: boolean) => void }) {
+  const drag = useRef<{ x: number; from: number } | null>(null);
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize the time column"
+      aria-valuenow={width}
+      aria-valuemin={TIME_WIDTH.min}
+      aria-valuemax={TIME_WIDTH.max}
+      tabIndex={0}
+      title="Drag to resize; double-click to reset"
+      className="group absolute -right-[5px] top-0 bottom-0 z-10 flex w-[9px] cursor-col-resize justify-center outline-none"
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { x: e.clientX, from: width };
+      }}
+      onPointerMove={(e) => drag.current && onWidth(drag.current.from + e.clientX - drag.current.x, false)}
+      onPointerUp={(e) => {
+        if (!drag.current) return;
+        onWidth(drag.current.from + e.clientX - drag.current.x, true);
+        drag.current = null;
+      }}
+      onPointerCancel={() => (drag.current = null)}
+      onDoubleClick={() => onWidth(TIME_WIDTH.default, true)}
+      onKeyDown={(e) => {
+        const step = e.key === 'ArrowLeft' ? -20 : e.key === 'ArrowRight' ? 20 : 0;
+        if (!step) return;
+        e.preventDefault();
+        onWidth(width + step, true);
+      }}
+    >
+      <span aria-hidden className="w-[3px] rounded-full bg-transparent transition-colors group-hover:bg-accent-line group-focus-visible:bg-accent group-active:bg-accent" />
+    </div>
+  );
+}
+
 export function TimeColumn({ items, day, setDay, onOpenItem }: { items: readonly ItemSummary[]; day: AgendaDay; setDay: (d: AgendaDay) => void; onOpenItem: (id: string) => void }) {
   const now = useNow(15_000);
   const agenda = useApiQuery(() => api.getAgenda(), onTopics('inbox', 'settings', 'health'), []).data;
   const workHours = useApiQuery(() => api.getSettings(), onTopics('settings'), []).data?.settings.schedule.workHours ?? '';
   const calendar = agenda && agenda.state !== 'off' && agenda.state !== 'never';
+  const collapsed = usePrefs((s) => s.timeCollapsed);
+  const setCollapsed = usePrefs((s) => s.setTimeCollapsed);
+  const saved = usePrefs((s) => s.timeWidth);
+  const setSaved = usePrefs((s) => s.setTimeWidth);
+  // While dragging, the width lives here and is saved once on release.
+  const [dragged, setDragged] = useState<number | null>(null);
+  const width = dragged ?? saved;
+
+  if (collapsed)
+    return (
+      <section aria-label="Time" data-cockpit-zone="time" data-collapsed="true" className="flex w-14 shrink-0 flex-col items-center border-r border-line">
+        <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-line">
+          <IconButton label="Expand the time column" size={32} aria-expanded={false} onClick={() => setCollapsed(false)}>
+            <Icon name="forward" size={17} />
+          </IconButton>
+        </div>
+        <span data-testid="clock" className="mt-3 text-[13px] font-semibold tabular-nums">
+          {fmtTime(now)}
+        </span>
+      </section>
+    );
+
   return (
-    <section aria-label="Time" data-cockpit-zone="time" className="flex w-[400px] shrink-0 flex-col gap-4 border-r border-line px-5 pt-5">
-      <div className="flex items-baseline justify-between">
-        <div className="flex items-baseline gap-2.5">
+    <section aria-label="Time" data-cockpit-zone="time" className={cx('relative flex shrink-0 flex-col border-r border-line', dragged === null && 'transition-[width] duration-200 ease-out motion-reduce:transition-none')} style={{ width }}>
+      {/* 56 px, the height of the Needs you and Later headers, so the three line up. */}
+      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-3">
+        <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
           <span data-testid="clock" className="text-glance-xl tabular-nums">
             {fmtTime(now)}
           </span>
-          <span className="text-sm text-muted">{fmtDayDate(now)}</span>
+          <span className="truncate text-sm text-muted">{fmtDayDate(now)}</span>
         </div>
         <Segmented
           size="sm"
@@ -265,10 +337,23 @@ export function TimeColumn({ items, day, setDay, onOpenItem }: { items: readonly
             { value: 'tomorrow', label: 'Tomorrow' },
           ]}
         />
+        <IconButton label="Collapse the time column" size={32} aria-expanded onClick={() => setCollapsed(true)}>
+          <Icon name="back" size={17} />
+        </IconButton>
       </div>
-      {calendar && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
-      <CalendarNote v={agenda} now={now} />
-      <Timeline v={agenda} items={items} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 pt-4">
+        {calendar && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
+        <CalendarNote v={agenda} now={now} />
+        <Timeline v={agenda} items={items} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
+      </div>
+      <ResizeHandle
+        width={width}
+        onWidth={(px, done) => {
+          if (!done) return setDragged(clampTimeWidth(px));
+          setSaved(px);
+          setDragged(null);
+        }}
+      />
     </section>
   );
 }

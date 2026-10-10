@@ -3,7 +3,7 @@ title: The inbox
 group: Inbox
 order: 30
 summary: The three zones on a wide screen, Needs you and To file, what the chips mean, topics, and how to correct a decision.
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 ## Three zones on a wide screen
@@ -45,6 +45,11 @@ described below; nothing is lost.
   other stack, such as **2 due 17:30**; point at a pin to see what it holds, click it to open the
   item.
 - **Tomorrow** (or `t`) shows tomorrow's meetings, with pins for This week items due then.
+- **Fold it away** with the arrow at the right of its header: it becomes a narrow rail with the
+  clock, and the sidebar shows your next meeting again in its last few minutes. The arrow on the
+  rail opens it. **Drag its right edge** to make it wider or narrower (360 to 600 px; with the
+  edge focused, the arrow keys move it too), and double-click the edge to put it back to 400 px.
+  Both choices are kept in this browser.
 
 The meeting card and the meetings need [Outlook Calendar](outlook.md); without it the timeline
 shows the pins only.

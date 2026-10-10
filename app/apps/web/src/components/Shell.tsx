@@ -262,9 +262,11 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const wide = useWideLayout();
   const collapsed = usePrefs((s) => (wide ? s.navCollapsedWide : s.navCollapsed));
   const setCollapsed = usePrefs((s) => (wide ? s.setNavCollapsedWide : s.setNavCollapsed));
-  // The time column shows the next meeting on the cockpit, so the cues step aside there (CK-3.7).
+  // The time column shows the next meeting on the cockpit, so the cues step aside there (CK-3.7),
+  // unless it's folded to a rail.
   const path = useLocation().pathname;
-  const onCockpit = wide && path === '/';
+  const timeCollapsed = usePrefs((s) => s.timeCollapsed);
+  const onCockpit = wide && path === '/' && !timeCollapsed;
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []).data;
   const status = health && appHealth(health, problemsOf(health));
   const full = scope === 'full';
