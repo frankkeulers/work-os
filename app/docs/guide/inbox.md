@@ -21,7 +21,8 @@ while something is in Now, briefly teal after a filing is written.
 - **Later**, on the right, for once a day: **To file** with where each should go, **This week**
   soonest first, a **Snoozed** line, and at the foot **N low priority · check triage** and
   **N done today**. Snoozed, Low priority and Done open in place of the lists; `Esc` or the back
-  arrow returns.
+  arrow returns. Drag its left edge to make it wider or narrower (360 to 600 px); double-click the
+  edge to put it back to 440 px.
 
 Clicking a row in any column opens it in the item panel, 640 px wide, over Later. `j` and `k` walk
 Now, Today, To file, then This week; `g n` jumps to the first item in Needs you and `g l` to the

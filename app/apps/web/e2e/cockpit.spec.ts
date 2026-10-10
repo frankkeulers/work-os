@@ -169,16 +169,28 @@ test('J58: a missed deadline turns its pin red, says Overdue and sits at the now
   await expect(page.getByTestId('next-meeting')).toContainText('NOW · UNTIL 15:00');
 });
 
-test('J65: the time column lines up with the other headers, folds to a rail and drags wider (CK-3.4, 3.7)', async ({ page }) => {
+test('J65: the time column lines up with the other headers and folds to a rail; Time and Later drag wider (CK-3.4, 3.7)', async ({ page }) => {
   await afternoon(page);
   const time = zone(page, 'Time');
 
-  // The three headers are 56 px and end on one line.
+  // The three headers are 56 px, and the rule under each is drawn on the same pixel row: the first
+  // top border below the header, which in Needs you and Later belongs to the row under it.
   const heads = await Promise.all((['Time', 'Needs you', 'Later'] as const).map(async (z) => (await zone(page, z).locator('> div').first().boundingBox())!));
   for (const h of heads) {
     expect(h.height).toBeCloseTo(56, 0);
     expect(h.y).toBeCloseTo(heads[0].y, 0);
   }
+  const rules = await page.evaluate(() =>
+    ['time', 'needs', 'later'].map((z) => {
+      const head = document.querySelector(`[data-cockpit-zone="${z}"] > div`)!;
+      const below = [...document.querySelectorAll(`[data-cockpit-zone="${z}"] *`)].filter((el) => head.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING && !head.contains(el));
+      const ruled = below.find((el) => parseFloat(getComputedStyle(el).borderTopWidth) > 0 && el.getBoundingClientRect().height > 0)!;
+      return ruled.getBoundingClientRect().top;
+    }),
+  );
+  expect(rules[0]).toBe(heads[0].y + 56);
+  expect(rules[1]).toBe(rules[0]);
+  expect(rules[2]).toBe(rules[0]);
 
   // Dragged wider by its right edge, the meetings lane widens with it and Needs you gives way; kept on reload.
   const needsWidth = (await zone(page, 'Needs you').boundingBox())!.width;
@@ -206,6 +218,28 @@ test('J65: the time column lines up with the other headers, folds to a rail and 
   await expect(handle).toHaveAttribute('aria-valuenow', '600');
   await handle.dblclick();
   await expect(handle).toHaveAttribute('aria-valuenow', '400');
+
+  // Later drags by its left edge: dragged left it widens and Needs you gives way; kept on reload.
+  const later = zone(page, 'Later');
+  await expect.poll(async () => Math.round((await time.boundingBox())!.width)).toBe(400); // the reset animates
+  const needsBefore = (await zone(page, 'Needs you').boundingBox())!.width;
+  const laterEdge = (await page.getByRole('separator', { name: 'Resize the Later column' }).boundingBox())!;
+  await page.mouse.move(laterEdge.x + laterEdge.width / 2, laterEdge.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(laterEdge.x + laterEdge.width / 2 - 80, laterEdge.y + 300, { steps: 5 });
+  await page.mouse.up();
+  expect((await later.boundingBox())!.width).toBeCloseTo(520, 0);
+  expect((await zone(page, 'Needs you').boundingBox())!.width).toBeCloseTo(needsBefore - 80, 0);
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-later-wide-light.png'), style: HIDE, animations: 'disabled' });
+  await page.reload();
+  await expect(later).toBeVisible();
+  expect((await later.boundingBox())!.width).toBeCloseTo(520, 0);
+  const laterHandle = page.getByRole('separator', { name: 'Resize the Later column' });
+  await laterHandle.focus();
+  await page.keyboard.press('ArrowRight'); // the edge moves right: Later narrows
+  await expect(laterHandle).toHaveAttribute('aria-valuenow', '500');
+  await laterHandle.dblclick();
+  await expect(laterHandle).toHaveAttribute('aria-valuenow', '440');
 
   // Folded, it's a rail with the clock, and the sidebar's meeting cues come back (13:58, two minutes
   // before the renewal call); kept on reload.

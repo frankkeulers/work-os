@@ -4,11 +4,12 @@ import { Link } from 'react-router';
 import { api, type ItemSummary } from '../../../api';
 import { Icon } from '../../../components/icons';
 import { IconButton, Segmented, cx } from '../../../components/ui';
+import { useResizable } from '../../../components/useResizable';
 import { onTopics, useApiQuery } from '../../../hooks/useApiQuery';
 import { useNow } from '../../../hooks/useNow';
 import { dayEvents, type AgendaDay } from '../../../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime } from '../../../lib/format';
-import { TIME_WIDTH, clampTimeWidth, usePrefs } from '../../../store/prefs';
+import { TIME_WIDTH, usePrefs } from '../../../store/prefs';
 import { dayPins, dayStart, dueBefore, hourHeight, minuteOf, nextMeeting, placeMeetings, shortTitle, timelineSpan, workSpan, type Pin, type PinTone } from '../../../lib/timeline';
 
 // The cockpit's time column (CK-3.4–3.6): the clock, the next meeting and what's due before it, and
@@ -250,46 +251,6 @@ function CalendarNote({ v, now }: { v: AgendaView | undefined; now: Date }) {
   return null;
 }
 
-/** The column's right edge: drag it, or focus it and use the arrow keys; a double-click puts it back. */
-function ResizeHandle({ width, onWidth }: { width: number; onWidth: (px: number, done: boolean) => void }) {
-  const drag = useRef<{ x: number; from: number } | null>(null);
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize the time column"
-      aria-valuenow={width}
-      aria-valuemin={TIME_WIDTH.min}
-      aria-valuemax={TIME_WIDTH.max}
-      tabIndex={0}
-      title="Drag to resize; double-click to reset"
-      className="group absolute -right-[5px] top-0 bottom-0 z-10 flex w-[9px] cursor-col-resize justify-center outline-none"
-      onPointerDown={(e) => {
-        if (e.button !== 0) return;
-        e.preventDefault();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = { x: e.clientX, from: width };
-      }}
-      onPointerMove={(e) => drag.current && onWidth(drag.current.from + e.clientX - drag.current.x, false)}
-      onPointerUp={(e) => {
-        if (!drag.current) return;
-        onWidth(drag.current.from + e.clientX - drag.current.x, true);
-        drag.current = null;
-      }}
-      onPointerCancel={() => (drag.current = null)}
-      onDoubleClick={() => onWidth(TIME_WIDTH.default, true)}
-      onKeyDown={(e) => {
-        const step = e.key === 'ArrowLeft' ? -20 : e.key === 'ArrowRight' ? 20 : 0;
-        if (!step) return;
-        e.preventDefault();
-        onWidth(width + step, true);
-      }}
-    >
-      <span aria-hidden className="w-[3px] rounded-full bg-transparent transition-colors group-hover:bg-accent-line group-focus-visible:bg-accent group-active:bg-accent" />
-    </div>
-  );
-}
-
 export function TimeColumn({ items, day, setDay, onOpenItem }: { items: readonly ItemSummary[]; day: AgendaDay; setDay: (d: AgendaDay) => void; onOpenItem: (id: string) => void }) {
   const now = useNow(15_000);
   const agenda = useApiQuery(() => api.getAgenda(), onTopics('inbox', 'settings', 'health'), []).data;
@@ -297,30 +258,29 @@ export function TimeColumn({ items, day, setDay, onOpenItem }: { items: readonly
   const calendar = agenda && agenda.state !== 'off' && agenda.state !== 'never';
   const collapsed = usePrefs((s) => s.timeCollapsed);
   const setCollapsed = usePrefs((s) => s.setTimeCollapsed);
-  const saved = usePrefs((s) => s.timeWidth);
-  const setSaved = usePrefs((s) => s.setTimeWidth);
-  // While dragging, the width lives here and is saved once on release.
-  const [dragged, setDragged] = useState<number | null>(null);
-  const width = dragged ?? saved;
+  const { width, dragging, handle } = useResizable({ saved: usePrefs((s) => s.timeWidth), save: usePrefs((s) => s.setTimeWidth), bounds: TIME_WIDTH, edge: 'right', label: 'Resize the time column' });
 
   if (collapsed)
     return (
       <section aria-label="Time" data-cockpit-zone="time" data-collapsed="true" className="flex w-14 shrink-0 flex-col items-center border-r border-line">
-        <div className="flex h-14 w-full shrink-0 items-center justify-center border-b border-line">
+        <div className="flex h-14 w-full shrink-0 items-center justify-center">
           <IconButton label="Expand the time column" size={32} aria-expanded={false} onClick={() => setCollapsed(false)}>
             <Icon name="forward" size={17} />
           </IconButton>
         </div>
-        <span data-testid="clock" className="mt-3 text-[13px] font-semibold tabular-nums">
-          {fmtTime(now)}
-        </span>
+        <div className="flex w-full flex-1 justify-center border-t border-line">
+          <span data-testid="clock" className="mt-3 text-[13px] font-semibold tabular-nums">
+            {fmtTime(now)}
+          </span>
+        </div>
       </section>
     );
 
   return (
-    <section aria-label="Time" data-cockpit-zone="time" className={cx('relative flex shrink-0 flex-col border-r border-line', dragged === null && 'transition-[width] duration-200 ease-out motion-reduce:transition-none')} style={{ width }}>
-      {/* 56 px, the height of the Needs you and Later headers, so the three line up. */}
-      <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-3">
+    <section aria-label="Time" data-cockpit-zone="time" className={cx('relative flex shrink-0 flex-col border-r border-line', !dragging && 'transition-[width] duration-200 ease-out motion-reduce:transition-none')} style={{ width }}>
+      {/* 56 px, the height of the Needs you and Later headers, with the rule under it on what follows
+          as theirs is, so the three lines are one. */}
+      <div className="flex h-14 shrink-0 items-center gap-2.5 pl-5 pr-3">
         <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
           <span data-testid="clock" className="text-glance-xl tabular-nums">
             {fmtTime(now)}
@@ -341,19 +301,12 @@ export function TimeColumn({ items, day, setDay, onOpenItem }: { items: readonly
           <Icon name="back" size={17} />
         </IconButton>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-5 pt-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 border-t border-line px-5 pt-4">
         {calendar && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
         <CalendarNote v={agenda} now={now} />
         <Timeline v={agenda} items={items} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
       </div>
-      <ResizeHandle
-        width={width}
-        onWidth={(px, done) => {
-          if (!done) return setDragged(clampTimeWidth(px));
-          setSaved(px);
-          setDragged(null);
-        }}
-      />
+      {handle}
     </section>
   );
 }

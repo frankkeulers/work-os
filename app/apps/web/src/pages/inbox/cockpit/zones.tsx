@@ -4,10 +4,12 @@ import type { ItemSummary } from '../../../api';
 import { markManyDoneWithUndo } from '../../../components/item';
 import { Icon } from '../../../components/icons';
 import { Button, IconButton, cx } from '../../../components/ui';
+import { useResizable } from '../../../components/useResizable';
 import type { ShownRow } from '../../../hooks/useStableGroups';
 import { useNow } from '../../../hooks/useNow';
 import type { ClosedByReply } from '@work-os/shared';
 import { fmtAgoLong, fmtWhen } from '../../../lib/format';
+import { LATER_WIDTH, usePrefs } from '../../../store/prefs';
 
 // The cockpit's Needs you and Later zones (CK-3.8, CK-3.11). The Inbox page owns the rows (their
 // order, the New dot, the panel); the zones lay them out, each scrolling on its own.
@@ -171,8 +173,9 @@ export function LaterZone({
   const files = live(fileRows);
   const today = doneToday(by.done, now);
   const list = open && open !== 'week' ? open : null;
+  const { width, dragging, handle } = useResizable({ saved: usePrefs((s) => s.laterWidth), save: usePrefs((s) => s.setLaterWidth), bounds: LATER_WIDTH, edge: 'left', label: 'Resize the Later column' });
   return (
-    <section aria-label="Later" data-cockpit-zone="later" className="flex w-[440px] shrink-0 flex-col bg-later-bg">
+    <section aria-label="Later" data-cockpit-zone="later" className={cx('relative flex shrink-0 flex-col bg-later-bg', !dragging && 'transition-[width] duration-200 ease-out motion-reduce:transition-none')} style={{ width }}>
       <ZoneHead dot="bg-faint" title="Later" count={files + by.week.length + by.snoozed.length}>
         <span className="text-[13px] text-muted">Once a day</span>
       </ZoneHead>
@@ -242,6 +245,7 @@ export function LaterZone({
           </button>
         )}
       </div>
+      {handle}
     </section>
   );
 }

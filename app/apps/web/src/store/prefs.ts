@@ -29,6 +29,8 @@ interface Prefs extends Profile {
   timeCollapsed: boolean;
   /** The cockpit's time column width in px, dragged at its right edge (TIME_WIDTH bounds it). */
   timeWidth: number;
+  /** The cockpit's Later column width in px, dragged at its left edge (LATER_WIDTH bounds it). */
+  laterWidth: number;
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
@@ -47,11 +49,12 @@ interface Prefs extends Profile {
   setSourceHidden: (source: SourceId, hidden: string[]) => void;
   setTimeCollapsed: (collapsed: boolean) => void;
   setTimeWidth: (px: number) => void;
+  setLaterWidth: (px: number) => void;
 }
 
-/** The time column's width: 400 px to begin with, dragged between min and max. */
+/** The cockpit's resizable columns: their width to begin with, and how far they drag. */
 export const TIME_WIDTH = { default: 400, min: 360, max: 600 } as const;
-export const clampTimeWidth = (px: number) => Math.round(Math.min(TIME_WIDTH.max, Math.max(TIME_WIDTH.min, px)));
+export const LATER_WIDTH = { default: 440, min: 360, max: 600 } as const;
 
 /** How long the New dot lasts without being looked at (CK-1.3). */
 export const NEW_FOR_MS = 30 * 60_000;
@@ -77,6 +80,7 @@ export const usePrefs = create<Prefs>()(
       sourceHidden: {},
       timeCollapsed: false,
       timeWidth: TIME_WIDTH.default,
+      laterWidth: LATER_WIDTH.default,
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),
       setScope: (scope) => set({ scope }),
@@ -111,7 +115,8 @@ export const usePrefs = create<Prefs>()(
       setTriageDetailsOpen: (triageDetailsOpen) => set({ triageDetailsOpen }),
       setSourceHidden: (source, hidden) => set((s) => ({ sourceHidden: { ...s.sourceHidden, [source]: hidden } })),
       setTimeCollapsed: (timeCollapsed) => set({ timeCollapsed }),
-      setTimeWidth: (px) => set({ timeWidth: clampTimeWidth(px) }),
+      setTimeWidth: (timeWidth) => set({ timeWidth }),
+      setLaterWidth: (laterWidth) => set({ laterWidth }),
     }),
     { name: 'workos.prefs' },
   ),
