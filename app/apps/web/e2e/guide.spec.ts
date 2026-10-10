@@ -31,7 +31,7 @@ test('J43 the guide opens from the sidebar, in groups, with an outline and Previ
 
   await nav.getByRole('link', { name: 'Filing to Confluence' }).click();
   const outline = page.getByRole('navigation', { name: 'On this page' });
-  await expect(outline.getByRole('link')).toHaveText(['Scope', 'Drafting', 'No fit', 'Approving and writing', 'Refused writes']);
+  await expect(outline.getByRole('link')).toHaveText(['Scope', 'Drafting', 'Already on the page', 'No fit', 'Approving and writing', 'Refused writes']);
   await outline.getByRole('link', { name: 'No fit' }).click();
   await expect(page).toHaveURL(/\/guide\/confluence#no-fit$/);
   await expect(page.locator('#no-fit')).toBeInViewport();

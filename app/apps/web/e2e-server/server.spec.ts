@@ -170,22 +170,22 @@ test('the prompt and guidance files are listed from the data directory, and a sa
   // Written on first run from the built-in defaults.
   await expect(page.locator('[data-prompt="confluence-routing"]')).toContainText('confluence-routing v3#');
   await expect(page.locator('[data-prompt="pick-confluence"]')).toContainText('pick-confluence v2#');
-  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v3#');
   await page.screenshot({ path: join(APP, 'screenshots/server-prompts-light.png') });
 
   await page.getByRole('button', { name: 'Edit Vault conventions' }).click();
   const text = page.getByLabel('Vault conventions text');
   await expect(text).toHaveValue(/Split hubs/);
-  await text.fill('<!-- prompt: vault-conventions v3 -->\nFile meetings under Work/Meetings.');
+  await text.fill('<!-- prompt: vault-conventions v4 -->\nFile meetings under Work/Meetings.');
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v3#');
-  expect(await readFile(join(dir, 'data/config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v3 -->\nFile meetings under Work/Meetings.\n');
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v4#');
+  expect(await readFile(join(dir, 'data/config/vault-conventions.md'), 'utf8')).toBe('<!-- prompt: vault-conventions v4 -->\nFile meetings under Work/Meetings.\n');
 
   // Back to the default, for whatever runs next.
   await page.getByRole('button', { name: 'Edit Vault conventions' }).click();
   await page.getByRole('button', { name: 'Reset to default' }).click();
   await page.getByRole('dialog', { name: 'Reset Vault conventions?' }).getByRole('button', { name: 'Reset to default' }).click();
-  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v2#');
+  await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v3#');
 });
 
 test('the guide is read live from its folder: an edit shows on focus, without a deploy (FR-1.8)', async ({ page }) => {
