@@ -1,6 +1,7 @@
 import {
   applyActionEvent,
   applyDecision,
+  draftTarget,
   failTriage,
   firstMatchingRule,
   ruleFloor,
@@ -189,14 +190,15 @@ export function buildState(preset: Preset = 'default'): MockState {
     const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : 'c'}1`;
     const draft = buildDraft(rec, type, settings, at, { attempt: 1 });
     state.drafts[id] = draft;
-    const target = draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path };
+    const target = draftTarget(draft);
     ev('action.requested', at, { type, revision: rec.item.revision }, { itemId: rec.item.id, actionId: id });
     ev('action.drafted', addMins(at, 1), { type, revision: rec.item.revision, draftRef: `drafts/${id}.json`, tokens: draft.tokens, target }, { itemId: rec.item.id, actionId: id });
     if (status === 'done') {
       ev('action.approved', addMins(at, 6), undefined, { itemId: rec.item.id, actionId: id });
       ev('action.executing', addMins(at, 6), { attempt: 1 }, { itemId: rec.item.id, actionId: id });
-      ev('action.executed', addMins(at, 6), draft.kind === 'confluence' ? { dryRun: false, pageId: draft.pageId, pageVersion: draft.baseVersion + 1 } : { dryRun: false, path: draft.path }, { itemId: rec.item.id, actionId: id });
-      state.results[id] = draft.kind === 'confluence' ? `Written to page v${draft.baseVersion + 1}. Logged action.executed.` : `Written to ${draft.path}.`;
+      const t = draftTarget(draft);
+      ev('action.executed', addMins(at, 6), 'pageId' in t ? { dryRun: false, pageId: t.pageId, pageVersion: t.baseVersion + 1 } : { dryRun: false, path: t.path }, { itemId: rec.item.id, actionId: id });
+      state.results[id] = 'pageId' in t ? `Written to page v${t.baseVersion + 1}. Logged action.executed.` : `Written to ${t.path}.`;
     }
   };
   addAction(byKey.f1, 'confluence_entry', addMins(clock, -25), 'ready');

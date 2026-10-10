@@ -682,9 +682,9 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     // The call could read the vault, and nothing else (FR-9.1).
     const draftCall = claude.calls.at(-1)!;
     expect(draftCall.options).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], cwd: vault });
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v3 -->/);
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v4 -->/);
     // The vault conventions written on first run go with the request.
-    expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v2 -->/);
+    expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v3 -->/);
 
     // Frank edits, then approves; the outbox writes once it may.
     expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: '# Product\n\nEdited.\n' })).status).toBe(204);
@@ -1176,6 +1176,79 @@ describe('meeting drafts (R2.3, R2.7)', () => {
     const { r, call: c } = await draft();
     expect((await call<ItemView>('GET', `/api/items/${encodeURIComponent(ID)}`)).body.actions.find((a) => a.id === r.body.id)?.status).toBe('ready');
     expect(c.prompt).toContain(TRANSCRIPT_MISSING);
+  });
+
+  describe('checks the vault first (FR-9.6)', () => {
+    const LANNY = '7a1c2b3d-0000-4000-8000-000000000001';
+    const LANNY_ID = `wispr:${LANNY}`;
+    const vault = () => join(dir, '..', 'vault');
+    const TEAMS_NOTE = 'Work/Meetings/Frank × Lanny — Satellite Imagery Integration Path 2026-10-06.md';
+    const view = async (id: string) => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(id)}`)).body;
+    const draftFor = async (id: string) => {
+      const r = await call<Action>('POST', `/api/items/${encodeURIComponent(id)}/actions`, { type: 'vault_note' });
+      await res.actions.settled();
+      expect(r.status).toBe(201);
+      return { id: r.body.id, prompt: claude.calls.at(-1)!.prompt };
+    };
+    beforeEach(async () => {
+      // The meeting Teams recorded and Frank filed by hand; now Wispr brings in its own recording.
+      await writeFile(join(vault(), TEAMS_NOTE), '---\ntype: meeting\ncreated: 2026-10-06\nsource: Teams transcript\n---\n# Frank × Lanny — Satellite Imagery\n\n**Attendees:** Frank Keulers, [[Lanny Day]]\n\n## Decisions\n\n- Imagery behind one API.\n');
+      wispr.add({
+        id: LANNY,
+        title: 'SkyWatch satellite data',
+        start: new Date(START + 4 * 60 * MIN).toISOString(),
+        end: new Date(START + 5 * 60 * MIN).toISOString(),
+        modified_at: new Date(START - 20 * MIN).toISOString().replace('Z', '000Z'),
+        participants: [{ name: 'Lanny Day', contact_id: 'c-lanny', is_self: false, spoke: true, relationship: 'colleague' }],
+      });
+      await call('POST', '/api/poll');
+      await res.runtime.settled();
+    });
+
+    it('offers the note filed from another recording, and approving “already filed” writes nothing', async () => {
+      const { id, prompt } = await draftFor(LANNY_ID);
+      expect(prompt).toContain('<existing-notes>');
+      expect(prompt).toContain(`"path":"${TEAMS_NOTE}"`);
+      expect(prompt).toContain('"strength":"strong","why":["same date","attendee: Lanny Day"]');
+      expect(prompt).toContain('"attendees":["me","Lanny Day"]');
+      let v = await view(LANNY_ID);
+      expect(v.drafts[id]).toMatchObject({ kind: 'vault_filed', path: TEAMS_NOTE });
+      expect(v.actions[0]).toMatchObject({ status: 'ready', target: { path: TEAMS_NOTE } });
+      expect((await call<ApiErrorBody>('PUT', `/api/actions/${id}/draft`, { content: 'x' })).status).toBe(409); // nothing to edit
+
+      expect((await call('POST', `/api/actions/${id}/approve`)).status).toBe(202);
+      await res.actions.settled();
+      v = await view(LANNY_ID);
+      expect(v.actions[0].status).toBe('done');
+      expect(v.results[id]).toBe(`Already in the vault: ${TEAMS_NOTE}. Nothing was written. Logged action.executed.`);
+      const log = (await readdir(join(dir, 'events'))).filter((f) => f.endsWith('.jsonl'));
+      const events = (await Promise.all(log.map((f) => readFile(join(dir, 'events', f), 'utf8')))).join('').trim().split('\n').map((l) => JSON.parse(l) as { type: string; actionId?: string; data?: unknown });
+      expect(events.find((e) => e.type === 'action.executed' && e.actionId === id)?.data).toEqual({ dryRun: true, path: join(vault(), TEAMS_NOTE), unchanged: true });
+      await expect(readdir(join(dir, 'sandbox/vault'))).rejects.toThrow(); // nothing written, not even to the sandbox
+    });
+
+    it('appends what is new to that note when the draft says so', async () => {
+      claude.nextTexts.push(JSON.stringify({ kind: 'append', path: TEAMS_NOTE, heading: '## Decisions', content: '- Frank drives the SkyWatch relationship ([recording](https://wisprflow.ai/m/x)).' }));
+      const { id } = await draftFor(LANNY_ID);
+      expect((await view(LANNY_ID)).drafts[id]).toMatchObject({ kind: 'vault_append', path: TEAMS_NOTE, heading: '## Decisions' });
+    });
+
+    it('still drafts a new note when the model chooses one, with the match shown as a possible duplicate', async () => {
+      claude.nextTexts.push(JSON.stringify({ kind: 'new', path: 'Work/Meetings/Frank × Lanny — SkyWatch 2026-10-06.md', content: '# SkyWatch\n' }));
+      const { id } = await draftFor(LANNY_ID);
+      expect((await view(LANNY_ID)).drafts[id]).toMatchObject({ kind: 'vault_new', possibleDuplicates: [{ path: TEAMS_NOTE, why: 'same date, attendee: Lanny Day' }] });
+    });
+
+    it('fails a “filed” answer that names a note that isn’t there', async () => {
+      claude.nextTexts.push(JSON.stringify({ kind: 'filed', path: 'Work/Meetings/Nowhere.md', why: 'Already there.' }));
+      const { id } = await draftFor(LANNY_ID);
+      expect((await view(LANNY_ID)).actions.find((a) => a.id === id)).toMatchObject({ status: 'failed', failureReason: 'model_error' });
+    });
+
+    it('finds nothing for a meeting with no note on its day', async () => {
+      const { prompt } = await draftFor(ID);
+      expect(prompt).toContain('<existing-notes>\nNone found by source link, or for a meeting by date and attendees.\n</existing-notes>');
+    });
   });
 });
 

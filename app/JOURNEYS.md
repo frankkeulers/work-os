@@ -39,6 +39,8 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J07 | New vault note | Open the Claude Code how-to item (File). Click Draft vault note. Wait for the draft and read it. Approve. | Is the drafting progress reassuring? Can you judge the path and frontmatter at a glance? | FR-9.1–9.3 | |
 | J08 | Append with edit | Open the Meridia IQ beta feedback item (Today). Draft a vault note. Click the note path (it opens Obsidian). Click Edit text, change a line in the rich-text editor, try bold or a list, look at the Markdown view, save, then approve. | Is the diff readable? Does editing in place feel natural? Is "Edited" visible? Does the done banner say where the text went? | FR-9.2, FR-9.3 | |
 | J09 | Vault conflict | Start J09 from the drawer. On the imo_str item, open the Vault note tab and approve. | The note changed after drafting. Is "re-drafting instead of writing" understood? Does a new draft follow? | FR-9.4 | |
+| J66 | Vault: already filed | Start J66. On the Claude Code how-to item, draft a vault note, then click Mark as filed. | The draft says which note already holds it and why. Is it clear that nothing is written? Does the note link open Obsidian? | FR-9.6 | |
+| J67 | Vault: possible duplicate | Start J67. On the Claude Code how-to item, draft a vault note. | The draft is a new note, with a warning that a meeting note may already hold it. Is Re-draft the obvious next step? Is approving anyway still possible? | FR-9.6 | |
 
 ### Filing to Confluence
 
@@ -51,6 +53,7 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J14 | Scope refusal | Open the roadmap ownership item (File). Its drafted page sits under an excluded page (Product org). Approve anyway. | Is the red chip noticed before approving? Does the refusal point to Settings › Write targets? | FR-10.6 | |
 | J15 | Discard and re-draft | On a ready draft, edit the text, then click Re-draft, then Discard. Try to leave the page with unsaved edits. | Are the confirmations proportionate? | FR-9.3 | |
 | J16 | Draft ready while away | On a To file item, click the draft button in the Next step card's Also file options, then move to another item at once. | Does the "Draft ready" toast bring you back? Does the Also file row show the state? | FR-9.1 | |
+| J68 | Confluence: already filed | Start J68. Draft a Confluence entry on the Labs graduation item, then click Mark as filed. | The draft names the page and section that already hold it, and nothing is written. | FR-10.7 | |
 
 ### Polling, triage and notifications
 

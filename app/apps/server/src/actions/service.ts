@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId } from '@work-os/shared';
-import { filedAll, londonParts, topicItem } from '@work-os/shared';
+import { draftTarget, filedAll, isFiledDraft, londonParts, topicItem } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeError, ClaudeOutputError } from '../claude/errors';
@@ -22,6 +22,7 @@ import { scopeCql } from './confluenceCatalogue';
 import { draftConfluenceEntry } from './confluenceDrafter';
 import { marker, planConfluenceWrite } from './confluenceExecutor';
 import { readTopic } from '../pipeline/topics';
+import { itemLinks } from './alreadyFiled';
 import { DraftError } from './errors';
 import { draftVaultNote, vaultExists } from './vaultDrafter';
 import { NoteExistsError, planVaultWrite, writeVaultFile, type VaultTargets } from './vaultExecutor';
@@ -168,6 +169,7 @@ export class ActionService {
     const a = this.action(id);
     const stored = await this.d.drafts.read(id);
     if (a.status !== 'ready' || !stored?.draft) throw new HttpError('conflict', 'This draft can no longer be edited.');
+    if (isFiledDraft(stored.draft)) throw new HttpError('conflict', 'This draft files nothing, so there is nothing to edit. Re-draft to file it anyway.');
     await this.d.drafts.update(id, a.itemId, (s) => ({
       ...s,
       draft: { ...s.draft!, content, edited: true },
@@ -370,7 +372,7 @@ export class ActionService {
     if (!stored?.draft) {
       // A topic is drafted from all its pieces.
       const topic = await readTopic(this.d.store.projection, this.d.items, a.itemId);
-      const content = topic && { item: topicItem(topic.anchor.item, topic.parts).item };
+      const content = topic && { item: topicItem(topic.anchor.item, topic.parts).item, links: itemLinks(topic.anchor.item, topic.parts) };
       if (!content) return this.fail(a, 'model_error', 'The thread’s content is no longer available, so it can’t be drafted.');
       try {
         this.stage(a.id, 1);
@@ -388,6 +390,8 @@ export class ActionService {
                   signal,
                   onTurn: (usedTool) => this.stage(a.id, usedTool ? 1 : 2),
                   transcript,
+                  links: content.links,
+                  ...(this.d.dryRun() && { sandboxRoot: this.targets().sandboxRoot }),
                 },
                 content.item,
                 this.d.me(content.item.source),
@@ -441,7 +445,7 @@ export class ActionService {
         revision: a.itemRevision,
         draftRef: `drafts/${a.id}.json`,
         tokens: draft.tokens,
-        target: draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path },
+        target: draftTarget(draft),
       },
     });
     this.progress.delete(a.id);
@@ -479,6 +483,7 @@ export class ActionService {
       const plan = await planVaultWrite(t, stored);
       if (plan.kind === 'refused') return this.fail(a, 'allow_list', plan.message);
       if (plan.kind === 'conflict') return this.conflict(a, plan.message);
+      if (plan.kind === 'filed') return await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file, unchanged: true });
       if (plan.kind === 'write') {
         const attempt = this.nextAttempt(a.id);
         await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHash: plan.expectedHash }));
@@ -540,7 +545,7 @@ export class ActionService {
     if (n) this.attempts.set(id, n - 1);
   }
 
-  private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; pageId?: string; pageVersion?: number }) {
+  private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; pageId?: string; pageVersion?: number; unchanged?: true }) {
     await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, result: message }));
     // Filed in a batch (CK-4.4): the write that completes the item's filings also marks it done, in the same append.
     const it = this.d.store.projection.items[a.itemId];

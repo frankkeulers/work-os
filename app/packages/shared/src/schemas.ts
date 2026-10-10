@@ -180,10 +180,28 @@ const DraftMeta = z.object({
   edited: z.boolean(),
 });
 
+/** A note or section that may already hold what a draft files (FR-9.6, FR-10.7). */
+export const PossibleDuplicate = z.object({
+  path: z.string().min(1).optional(),
+  pageId: z.string().min(1).optional(),
+  pageTitle: z.string().optional(),
+  section: z.string().optional(),
+  why: z.string(),
+});
+export type PossibleDuplicate = z.infer<typeof PossibleDuplicate>;
+
 export const VaultNewDraft = DraftMeta.extend({
   kind: z.literal('vault_new'),
   path: z.string().min(1),
   content: z.string(),
+  /** Notes the check found for the same source or meeting, when the draft still chose a new note (FR-9.6). */
+  possibleDuplicates: z.array(PossibleDuplicate).optional(),
+});
+/** Nothing to file: the note at `path` already holds it (FR-9.6). Approving writes nothing. */
+export const VaultFiledDraft = DraftMeta.extend({
+  kind: z.literal('vault_filed'),
+  path: z.string().min(1),
+  why: z.string().min(1),
 });
 export const VaultAppendDraft = DraftMeta.extend({
   kind: z.literal('vault_append'),
@@ -202,12 +220,30 @@ export const ConfluenceDraft = DraftMeta.extend({
   baseVersion: z.number().int().positive(),
   title: z.string().min(1),
   content: z.string(),
+  /** Sections that already hold this thread's link, when the draft still wrote an entry (FR-10.7). */
+  possibleDuplicates: z.array(PossibleDuplicate).optional(),
 });
-export const Draft = z.discriminatedUnion('kind', [VaultNewDraft, VaultAppendDraft, ConfluenceDraft]);
+/** Nothing to file: the page's section already holds it (FR-10.7). Approving writes nothing. */
+export const ConfluenceFiledDraft = DraftMeta.extend({
+  kind: z.literal('confluence_filed'),
+  pageId: z.string().min(1),
+  pageTitle: z.string().min(1),
+  ancestorIds: z.array(z.string()).optional(),
+  section: z.string().min(1),
+  baseVersion: z.number().int().positive(),
+  why: z.string().min(1),
+});
+export const Draft = z.discriminatedUnion('kind', [VaultNewDraft, VaultAppendDraft, VaultFiledDraft, ConfluenceDraft, ConfluenceFiledDraft]);
 export type Draft = z.infer<typeof Draft>;
 export type VaultNewDraft = z.infer<typeof VaultNewDraft>;
 export type VaultAppendDraft = z.infer<typeof VaultAppendDraft>;
+export type VaultFiledDraft = z.infer<typeof VaultFiledDraft>;
 export type ConfluenceDraft = z.infer<typeof ConfluenceDraft>;
+export type ConfluenceFiledDraft = z.infer<typeof ConfluenceFiledDraft>;
+/** A draft that files nothing: what it would file is already there (FR-9.6, FR-10.7). */
+export const isFiledDraft = (d: Draft): d is VaultFiledDraft | ConfluenceFiledDraft => d.kind === 'vault_filed' || d.kind === 'confluence_filed';
+/** Where an approved draft goes: the page and its version for Confluence, the note path for the vault. */
+export const draftTarget = (d: Draft): { pageId: string; baseVersion: number } | { path: string } => ('pageId' in d ? { pageId: d.pageId, baseVersion: d.baseVersion } : { path: d.path });
 
 // The event log (EventType, WorkEvent and their payloads) lives in events.ts.
 

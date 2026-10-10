@@ -5,7 +5,9 @@ import {
   askId,
   awaitsReply,
   effectiveTriage,
+  draftTarget,
   filedAll,
+  isFiledDraft,
   settleChecked,
   settleFailed,
   anchorOf,
@@ -101,7 +103,7 @@ import {
 import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, SettleOutcome, StateFlag } from './controls';
-import { buildDraft } from './drafts';
+import { asFiled, buildDraft, withPossibleDuplicate } from './drafts';
 import { CALENDAR, CALENDAR_CATEGORIES, CALENDAR_WEEK } from './seed/calendar';
 import { inMockScope, mockCatalogue } from './seed/catalogue';
 import { ME } from './me';
@@ -127,6 +129,9 @@ const RANK = { none: 0, today: 1, now: 2 } as const;
 
 /** The Microsoft 365 connector's ID on the mock's claude.ai. */
 export const MOCK_CONNECTOR_ID = 'mcpsrv_01MockMicrosoft365';
+
+/** Outcomes either kind of draft can take while drafting; the others are Confluence's alone, or happen at write. */
+const DRAFT_TIME_OUTCOMES: DraftOutcome[] = ['model_error', 'already_filed', 'possible_duplicate'];
 
 export class MockServer implements WorkOsApi, MockControls {
   private s: MockState;
@@ -1144,7 +1149,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const existing = this.actionsFor(itemId).find((a) => a.type === type && ACTIVE.includes(a.status));
     if (existing) return structuredClone(existing);
     if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
-    const outcome = this.takeOutcome((o) => o === 'model_error' || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
+    const outcome = this.takeOutcome((o) => DRAFT_TIME_OUTCOMES.includes(o) || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
     return structuredClone(this.createAction(rec, type, outcome));
   }
 
@@ -1206,7 +1211,8 @@ export class MockServer implements WorkOsApi, MockControls {
       this.event('action.failed', { reason: 'no_fit' }, { itemId: rec.item.id, actionId });
     } else {
       const attempt = this.actionsFor(rec.item.id).filter((a) => a.type === action.type).length;
-      const draft = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
+      const built = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
+      const draft = outcome === 'already_filed' ? asFiled(built) : outcome === 'possible_duplicate' ? withPossibleDuplicate(built) : built;
       if (action.type === 'confluence_entry') this.recordUsage('confluence_pick', model, 9000, 90, [rec.item.id], 'pick-confluence v1', 9000);
       this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
       if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-5.5', 2100, 60, [rec.item.id], 'people-check v2', 1900);
@@ -1216,7 +1222,7 @@ export class MockServer implements WorkOsApi, MockControls {
         this.event('action.failed', { reason: 'people_check' }, { itemId: rec.item.id, actionId });
       } else {
         this.s.drafts[actionId] = draft;
-        const target = draft.kind === 'confluence' ? { pageId: draft.pageId, baseVersion: draft.baseVersion } : { path: draft.path };
+        const target = draftTarget(draft);
         this.event('action.drafted', { type: action.type, revision: rec.item.revision, draftRef: action.draftRef, tokens: draft.tokens, target }, { itemId: rec.item.id, actionId });
         ready = true;
       }
@@ -1247,6 +1253,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const a = this.action(actionId);
     const d = this.s.drafts[actionId];
     if (a.status !== 'ready' || !d) throw new ApiError('conflict', 'This draft can no longer be edited.');
+    if (isFiledDraft(d)) throw new ApiError('conflict', 'This draft files nothing, so there is nothing to edit. Re-draft to file it anyway.');
     this.s.drafts[actionId] = { ...d, content, edited: true };
     this.event('action.edited', undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId });
@@ -1263,7 +1270,7 @@ export class MockServer implements WorkOsApi, MockControls {
       }
     }
     const rec = this.rec(a.itemId);
-    const outcome = this.takeOutcome((o) => o === 'model_error' || (a.type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
+    const outcome = this.takeOutcome((o) => DRAFT_TIME_OUTCOMES.includes(o) || (a.type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
     return structuredClone(this.createAction(rec, a.type, outcome, a.id));
   }
 
@@ -1295,16 +1302,16 @@ export class MockServer implements WorkOsApi, MockControls {
     const d = this.s.drafts[actionId];
     const rec = this.s.items[a.itemId];
     if (!d || !rec) return;
-    const conflict = this.takeOutcome((o) => (a.type === 'vault_note' ? o === 'vault_conflict' : o === 'confluence_conflict'));
+    const conflict = isFiledDraft(d) ? 'normal' : this.takeOutcome((o) => (a.type === 'vault_note' ? o === 'vault_conflict' : o === 'confluence_conflict'));
     const dry = this.s.settings.dryRun;
 
     if (conflict !== 'normal') {
       a.error =
-        d.kind === 'confluence'
-          ? `The page changed after drafting (v${d.baseVersion} → v${d.baseVersion + 2}). Re-drafting instead of writing.`
-          : d.kind === 'vault_append'
-            ? `${d.path} changed after drafting (file hash differs). Re-drafting instead of writing.`
-            : `A note now exists at ${d.path}. Re-drafting instead of overwriting it.`;
+        d.kind === 'vault_append'
+          ? `${d.path} changed after drafting (file hash differs). Re-drafting instead of writing.`
+          : d.kind === 'vault_new' || d.kind === 'vault_filed'
+            ? `A note now exists at ${d.path}. Re-drafting instead of overwriting it.`
+            : `The page changed after drafting (v${d.baseVersion} → v${d.baseVersion + 2}). Re-drafting instead of writing.`;
       this.s.results[actionId] = a.error;
       this.event('action.failed', { reason: 'conflict' }, { itemId: a.itemId, actionId });
       this.emit({ topic: 'item', id: a.itemId });
@@ -1322,7 +1329,12 @@ export class MockServer implements WorkOsApi, MockControls {
     }
 
     let msg: string;
-    if (d.kind === 'confluence') {
+    if (isFiledDraft(d)) {
+      // FR-9.6, FR-10.7: already filed, so nothing is written, in dry-run or not.
+      const t = draftTarget(d);
+      msg = d.kind === 'confluence_filed' ? `Already on ${d.pageTitle} under ${d.section}. Nothing was written. Logged action.executed.` : `Already in the vault: ${d.path}. Nothing was written. Logged action.executed.`;
+      this.event('action.executed', { dryRun: dry, ...('pageId' in t ? { pageId: t.pageId } : { path: `${this.s.settings.vaultPath}/${t.path}` }), unchanged: true }, { itemId: a.itemId, actionId });
+    } else if (d.kind === 'confluence') {
       msg = dry
         ? `Dry-run: write logged only. ${d.pageTitle} stays at v${d.baseVersion}. Logged action.executed.`
         : `Written to ${d.pageTitle}, now v${d.baseVersion + 1}. Logged action.executed.`;

@@ -83,8 +83,14 @@ export function topicsFor(convs: Conversation[]) {
   };
 }
 
-/** A new note for the thread in a vault draft request. */
+/** A vault draft: "filed" when the check found a strong match (FR-9.6), otherwise a new note for the thread. */
 export function vaultNoteFor(prompt: string) {
+  const existing = (/<existing-notes>\n([\s\S]*?)\n<\/existing-notes>/.exec(prompt)?.[1] ?? '')
+    .split('\n')
+    .filter((l) => l.startsWith('{'))
+    .map((l) => JSON.parse(l) as { path: string; strength: string; why: string[] });
+  const strong = existing.find((n) => n.strength === 'strong');
+  if (strong) return { kind: 'filed', path: strong.path, why: `${strong.path} already holds it (${strong.why.join(', ')}).` };
   const m = /<thread>\n([\s\S]*?)\n<\/thread>/.exec(prompt);
   const t = m ? (JSON.parse(m[1]) as Thread & { title: string; permalink?: string }) : { id: 'x', title: 'Thread', messages: [] };
   const name = t.title.replace(/[^A-Za-z0-9 -]/g, '').trim() || 'Thread';

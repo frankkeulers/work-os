@@ -127,7 +127,7 @@ any page's Status or changelog table.
 - Never invent a figure, date, source or resource. A thin entry is better than a plausible wrong one.
 `;
 
-export const DEFAULT_VAULT_CONVENTIONS = `<!-- prompt: vault-conventions v2 -->
+export const DEFAULT_VAULT_CONVENTIONS = `<!-- prompt: vault-conventions v3 -->
 <!-- Distilled 2026-10-07 from the vault's Notes System note and llms.txt, plus the obsidian-vault-reader skill's retrieval order. The tag taxonomy is read live. -->
 <!-- source: vault-notes-system sha1:e2a144e5a040 -->
 <!-- source: vault-llms sha1:9c789ec5fa6d -->
@@ -189,7 +189,8 @@ summary: "One line saying what the note holds, for retrieval."
 ---
 Then "# Title" matching the filename. Filenames are descriptive Title Case ("Insights API Rate
 Limits.md"). Meeting notes use "type: meeting", a "source:" line, and sections Decisions, Action
-items, Notes.
+items, Notes. "source:" holds the recording's link (the Wispr Flow share link or the Slack
+permalink), so the meeting can be recognised if it comes in again.
 
 ## Tags
 Topical tags come only from "_meta/Tag Taxonomy.md". Read it; do not guess or invent a tag.

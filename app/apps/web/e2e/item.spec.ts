@@ -92,3 +92,38 @@ test('J08 edit a vault append, then the leave guard and re-draft confirmation', 
   // The inbox opens its item panel, so only the path is fixed.
   await expect(page).toHaveURL((u) => u.pathname === '/');
 });
+
+test('J66 a vault draft that finds the meeting already filed writes nothing (FR-9.6)', async ({ page }) => {
+  await startJourney(page, 'J66');
+  await panel(page).getByRole('tab', { name: /Vault note/ }).click();
+  await panel(page).getByRole('button', { name: 'Draft vault note' }).click();
+  await expect(panel(page).getByRole('button', { name: 'Mark as filed' })).toBeVisible(DRAFT_TIMEOUT);
+  await expect(panel(page).getByRole('heading', { name: 'Already filed' })).toBeVisible();
+  await expect(panel(page).getByText('Nothing new to file.')).toBeVisible();
+  await expect(panel(page).getByText('Already in', { exact: true })).toBeVisible();
+  await expect(panel(page).getByRole('link', { name: /\.md$/ })).toHaveAttribute('href', /^obsidian:\/\/open\?/);
+  await expect(panel(page).getByRole('button', { name: 'Edit text' })).toHaveCount(0);
+  await panel(page).getByRole('button', { name: 'Mark as filed' }).click();
+  await expect(panel(page).getByText(/^Already in the vault: .*\. Nothing was written\. Logged action\.executed\.$/)).toBeVisible(DRAFT_TIMEOUT);
+});
+
+test('J67 a new vault note beside a likely match warns, and still lets you approve (FR-9.6)', async ({ page }) => {
+  await startJourney(page, 'J67');
+  await panel(page).getByRole('tab', { name: /Vault note/ }).click();
+  await panel(page).getByRole('button', { name: 'Draft vault note' }).click();
+  await expect(panel(page).getByText('This may already be in the vault.')).toBeVisible(DRAFT_TIMEOUT);
+  await expect(panel(page).getByText(/same date, attendee: Lanny Day/)).toBeVisible();
+  await panel(page).getByRole('button', { name: /Checks passed/ }).click();
+  await expect(panel(page).getByText('A note may already hold this')).toBeVisible();
+  await expect(panel(page).getByRole('button', { name: 'Approve and write to sandbox' })).toBeEnabled();
+});
+
+test('J68 a Confluence draft that finds the thread already on the page writes nothing (FR-10.7)', async ({ page }) => {
+  await startJourney(page, 'J68');
+  await panel(page).getByRole('tab', { name: /Confluence entry/ }).click();
+  await panel(page).getByRole('button', { name: 'Draft Confluence entry' }).click();
+  await expect(panel(page).getByRole('button', { name: 'Mark as filed' })).toBeVisible(DRAFT_TIMEOUT);
+  await expect(panel(page).getByText('Already on', { exact: true })).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Mark as filed' }).click();
+  await expect(panel(page).getByText(/^Already on .* under .*\. Nothing was written\. Logged action\.executed\.$/)).toBeVisible(DRAFT_TIMEOUT);
+});

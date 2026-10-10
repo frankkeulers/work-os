@@ -77,4 +77,7 @@ export const JOURNEYS: Journey[] = [
   { id: 'J59', group: 'Cockpit', title: 'A narrower window', start: (c) => (fresh(c), '/') },
   { id: 'J60', group: 'Cockpit', title: 'File in a batch', start: (c) => (c.cockpitAfternoon(), '/') },
   { id: 'J61', group: 'Cockpit', title: 'Stop a batch', start: (c) => (c.cockpitAfternoon(), '/') },
+  { id: 'J66', group: 'Vault', title: 'Already filed', start: (c) => (fresh(c), c.setNextDraftOutcome('already_filed'), item(c, 'f4')) },
+  { id: 'J67', group: 'Vault', title: 'Possible duplicate', start: (c) => (fresh(c), c.setNextDraftOutcome('possible_duplicate'), item(c, 'f4')) },
+  { id: 'J68', group: 'Confluence', title: 'Already filed', start: (c) => (fresh(c), c.setNextDraftOutcome('already_filed'), item(c, 't2')) },
 ];

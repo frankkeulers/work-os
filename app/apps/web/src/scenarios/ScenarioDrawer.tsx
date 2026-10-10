@@ -55,6 +55,8 @@ const OUTCOMES: [DraftOutcome, string][] = [
   ['allow_list', 'Page out of scope'],
   ['no_fit', 'No page fits'],
   ['model_error', 'Model error'],
+  ['already_filed', 'Already filed'],
+  ['possible_duplicate', 'Possible duplicate'],
 ];
 
 const SETTLES: [SettleOutcome, string][] = [

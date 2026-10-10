@@ -136,4 +136,15 @@ describe('vault executor (FR-9.4, FR-14.5)', () => {
     const stored = { ...newDraft(), draft: { ...newDraft().draft!, path: '../escape.md' } } as StoredDraft;
     expect(await planVaultWrite(targets(false), stored)).toMatchObject({ kind: 'refused' });
   });
+
+  it('writes nothing for a draft that found its content already filed, and re-drafts if that note is gone (FR-9.6)', async () => {
+    const filed: StoredDraft = { schemaVersion: 1, actionId: 'act-4', itemId: 'wispr:m1', draft: { kind: 'vault_filed', path: 'Projects/MVI V2.md', why: 'Already holds the meeting.', ...meta }, baseHash: null };
+    await writeFile(join(vault, 'Projects/MVI V2.md'), NOTE);
+    for (const dry of [false, true]) {
+      expect(await planVaultWrite(targets(dry), filed)).toEqual({ kind: 'filed', file: join(vault, 'Projects/MVI V2.md'), message: 'Already in the vault: Projects/MVI V2.md. Nothing was written. Logged action.executed.' });
+    }
+    expect(await readFile(join(vault, 'Projects/MVI V2.md'), 'utf8')).toBe(NOTE);
+    await rm(join(vault, 'Projects/MVI V2.md'));
+    expect(await planVaultWrite(targets(false), filed)).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/no longer exists/) });
+  });
 });

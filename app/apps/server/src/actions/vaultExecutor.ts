@@ -10,6 +10,8 @@ import { checkNotePath, insertUnderHeading, readOrNull, sha256, touchUpdated, Va
 //   - the expected hash: an earlier attempt already wrote it, so it is done;
 //   - the base hash (or no file, for a new note): write;
 //   - anything else: someone changed it, so re-draft rather than overwrite.
+// A draft that found its content already filed (FR-9.6) writes nothing: it only checks the note is
+// still there.
 // In dry-run the write goes to <data>/sandbox/vault/<path>; the sandbox copy, if there is one,
 // stands in for the vault file, so a second approval sees the first.
 
@@ -24,6 +26,7 @@ export interface VaultTargets {
 export type VaultPlan =
   | { kind: 'write'; file: string; content: string; expectedHash: string; isNew: boolean; message: string }
   | { kind: 'already'; file: string; message: string }
+  | { kind: 'filed'; file: string; message: string }
   | { kind: 'conflict'; message: string }
   | { kind: 'refused'; message: string };
 
@@ -33,7 +36,7 @@ const doneMessage = (t: VaultTargets, d: VaultNewDraft | VaultAppendDraft, file:
 /** What is there now, and what an attempt would write. Reads only. */
 export async function planVaultWrite(t: VaultTargets, stored: StoredDraft): Promise<VaultPlan> {
   const d = stored.draft;
-  if (!d || d.kind === 'confluence') return { kind: 'refused', message: 'This draft is not a vault note.' };
+  if (!d || d.kind === 'confluence' || d.kind === 'confluence_filed') return { kind: 'refused', message: 'This draft is not a vault note.' };
   let path: string;
   try {
     path = await checkNotePath(t.vaultRoot, d.path);
@@ -44,6 +47,10 @@ export async function planVaultWrite(t: VaultTargets, stored: StoredDraft): Prom
   const real = join(t.vaultRoot, path);
   const file = t.dryRun ? join(t.sandboxRoot, path) : real;
   const current = t.dryRun ? ((await readOrNull(file)) ?? (await readOrNull(real))) : await readOrNull(real);
+  if (d.kind === 'vault_filed') {
+    if (current === null) return { kind: 'conflict', message: `${path} no longer exists. Re-drafting instead of marking it filed.` };
+    return { kind: 'filed', file: real, message: `Already in the vault: ${path}. Nothing was written. Logged action.executed.` };
+  }
   const currentHash = current === null ? null : sha256(current);
   if (currentHash && stored.expectedHash && currentHash === stored.expectedHash) return { kind: 'already', file, message: doneMessage(t, d, file) };
 

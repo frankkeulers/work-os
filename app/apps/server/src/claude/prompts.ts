@@ -262,7 +262,7 @@ itemRevision copied from the check, and one entry per ask:
 {"decisions":[{"itemId":"<id>","itemRevision":<n>,"asks":[{"index":0,"settled":true,"why":"<one sentence>"}],"allSettled":true}]}
 `;
 
-export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v3 -->
+export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v4 -->
 You draft a note for Frank's Obsidian vault from a Slack thread or a meeting. Frank is Product Innovation Lead at
 Pole Star Global. The vault is his knowledge base, written for models and agents to read: decisions,
 facts, findings and meeting outcomes, one canonical note per topic. Messages written by Frank have
@@ -272,6 +272,18 @@ You may read the vault with Read, Grep and Glob to find where this belongs. Star
 conventions below say (the manifest and the Work map of content), decide on note summaries before
 opening bodies, and read only what you need. You cannot write anything; code writes the note after
 Frank approves it.
+
+First, check whether the vault already holds this. Never file the same thread or meeting twice.
+- <existing-notes> lists notes code found that link to this thread or meeting, or, for a meeting,
+  are dated the same day and name someone who was there ("strong"), or are meeting notes from the
+  same day ("weak"). Open each one.
+- Also Grep the vault for the thread's permalink. A meeting can already have a note from another
+  recording (Plaud, Teams, a pasted summary) under a different title and source.
+- A note holds the same meeting when it is the same day, the same people and the same subject.
+- If a note already holds this thread or meeting, add only what it lacks: decisions, action items
+  or facts it does not have, under its matching heading, with the new link as a second source. If
+  it lacks nothing worth keeping, answer "filed" with that note's path and one line on why.
+- Create a new note only when no note covers it.
 
 Follow the vault conventions below: where things go, frontmatter, tags, headings, links and style.
 Prefer adding under a heading of the note that owns the topic; create a new note only when nothing
@@ -291,6 +303,7 @@ available, draft from the summary and notes alone.
 Answer with JSON only, no prose, in one of these shapes:
 {"kind":"new","path":"Folder/Note name.md","content":"<the whole note, with frontmatter>"}
 {"kind":"append","path":"Folder/Existing note.md","heading":"## Exact heading line","content":"<the block to add under that heading>"}
+{"kind":"filed","path":"Folder/Existing note.md","why":"<one line: which note already holds it, and that nothing is new>"}
 "path" is relative to the vault root. For "append", "heading" must be a heading line that exists
 in the note, copied exactly, and "content" is only the new block.
 `;

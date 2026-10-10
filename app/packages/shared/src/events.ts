@@ -101,6 +101,8 @@ export const EventPayloads = {
     path: z.string().optional(),
     pageId: z.string().optional(),
     pageVersion: z.number().int().positive().optional(),
+    // FR-9.6, FR-10.7: approved as already filed, so nothing was written.
+    unchanged: z.literal(true).optional(),
   }),
   'action.failed': z.object({ reason: FailureReason, pageId: z.string().optional(), detail: z.string().optional() }),
   'action.discarded': z.object({ reason: z.enum(['cancelled', 'redraft', 'discarded']) }),

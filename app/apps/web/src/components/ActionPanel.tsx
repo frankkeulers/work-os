@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { currentAction, entryVersion, type Action, type ActionType, type ConfluenceDraft, type Draft, type VaultAppendDraft } from '@work-os/shared';
+import { currentAction, entryVersion, isFiledDraft, type Action, type ActionType, type ConfluenceDraft, type ConfluenceFiledDraft, type Draft, type VaultAppendDraft, type VaultFiledDraft } from '@work-os/shared';
 import { api, type ItemView } from '../api';
 import { fmtTokens } from '../lib/format';
 import { confluencePageUrl, obsidianNoteUrl } from '../lib/links';
@@ -126,6 +126,18 @@ function VaultDoc({ doc, frame }: { doc: DocProps; frame: FrameProps }) {
   );
 }
 
+/** Nothing to file (FR-9.6, FR-10.7): the check found the note or section that already holds it. */
+function FiledDoc({ d }: { d: VaultFiledDraft | ConfluenceFiledDraft }) {
+  return (
+    <div className="flex items-start gap-2.5 rounded-[10px] border border-line bg-surface px-5 py-4 text-sm leading-relaxed text-ink-strong">
+      <Icon name="check" size={16} strokeWidth={2.5} className="mt-0.5 shrink-0 text-teal-ink" />
+      <p className="m-0">
+        <strong>Nothing new to file.</strong> {d.why}
+      </p>
+    </div>
+  );
+}
+
 /** A link out to the page or note. Confluence opens in a new tab; obsidian:// hands over to the app. */
 function TargetLink({ href, title, children }: { href: string; title: string; children: ReactNode }) {
   const web = href.startsWith('http');
@@ -154,10 +166,10 @@ function Under({ heading }: { heading: string }) {
 }
 
 function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: TargetLinks }) {
-  if (d.kind === 'confluence')
+  if (d.kind === 'confluence' || d.kind === 'confluence_filed')
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
-        <span className="text-muted">Append to</span>
+        <span className="text-muted">{d.kind === 'confluence_filed' ? 'Already on' : 'Append to'}</span>
         <BrandIcon brand="confluence" size={14} decorative />
         <TargetLink href={links.page(d.pageId)} title={`Open page ${d.pageId} in Confluence`}>
           {d.pageTitle}
@@ -168,9 +180,9 @@ function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: 
     );
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
-      <span className="text-muted">{d.kind === 'vault_new' ? 'New note' : 'Append to'}</span>
+      <span className="text-muted">{d.kind === 'vault_new' ? 'New note' : d.kind === 'vault_filed' ? 'Already in' : 'Append to'}</span>
       <BrandIcon brand="obsidian" size={14} decorative />
-      {d.kind === 'vault_append' || links.noteExists ? (
+      {d.kind !== 'vault_new' || links.noteExists ? (
         <TargetLink href={links.note(d.path)} title="Open the note in Obsidian">
           <span className="font-mono text-[12px]">{d.path}</span>
         </TargetLink>
@@ -189,14 +201,25 @@ type TargetLinks = { page: (id: string) => string; note: (path: string) => strin
 type Check = { ok: boolean | 'info' | 'warn'; label: string; detail?: string };
 
 function checksFor(d: Draft, inScope: boolean, dryRun: boolean): Check[] {
+  if (isFiledDraft(d))
+    return [
+      { ok: true, label: d.kind === 'vault_filed' ? 'Checked the vault for this thread or meeting' : 'Checked the page for this thread' },
+      { ok: 'info', label: 'Nothing is written' },
+    ];
+  // FR-9.6, FR-10.7: what the check for an earlier filing found.
+  const found = d.kind === 'vault_append' ? undefined : d.possibleDuplicates;
+  const dupes: Check = found?.length
+    ? { ok: 'warn', label: d.kind === 'confluence' ? 'The page already links to this thread' : 'A note may already hold this', detail: `${found.length} found` }
+    : { ok: true, label: d.kind === 'confluence' ? 'Checked the page for this thread' : 'Checked the vault for an existing note' };
   const c: Check[] =
     d.kind === 'confluence'
       ? [
           inScope ? { ok: true, label: 'Page in scope', detail: `page ${d.pageId}, checked again at write` } : { ok: false, label: 'Page excluded from scope', detail: `page ${d.pageId}` },
           { ok: 'info', label: 'Version check at write', detail: `base v${d.baseVersion}` },
           { ok: true, label: 'People check passed' },
+          dupes,
         ]
-      : [{ ok: true, label: 'Follows vault conventions' }, d.kind === 'vault_append' ? { ok: 'info', label: 'File hash check at write' } : { ok: 'info', label: 'Refuses to overwrite an existing note' }];
+      : [{ ok: true, label: 'Follows vault conventions' }, dupes, d.kind === 'vault_append' ? { ok: 'info', label: 'File hash check at write' } : { ok: 'info', label: 'Refuses to overwrite an existing note' }];
   if (dryRun) c.push({ ok: 'warn', label: 'Dry-run: writes go to the sandbox only' });
   return c;
 }
@@ -439,6 +462,7 @@ export function ActionPanel({
 
   let heading = `Draft a ${TYPE_LABEL[type].short.toLowerCase().replace('confluence', 'Confluence')}`;
   if (action?.status === 'drafting') heading = `Drafting the ${type === 'vault_note' ? 'vault note' : 'Confluence entry'}`;
+  else if (draft && isFiledDraft(draft) && (action?.status === 'ready' || action?.status === 'done')) heading = 'Already filed';
   else if (action?.status === 'ready') heading = 'Review and approve the draft';
   else if (action?.status === 'approved' || action?.status === 'executing') heading = 'Writing…';
   else if (action?.status === 'done') heading = view.dryRun ? 'Written to the sandbox' : 'Written';
@@ -559,8 +583,10 @@ export function ActionPanel({
       );
   } else if (draft) {
     const isEditing = editing?.actionId === action.id;
+    const text = isFiledDraft(draft) ? '' : draft.content;
+    const dupes = (!isFiledDraft(draft) && draft.kind !== 'vault_append' && draft.possibleDuplicates) || [];
     const doc: DocProps = {
-      value: isEditing ? editing.text : draft.content,
+      value: isEditing ? editing.text : text,
       editing: isEditing,
       onChange: (text) => setEditing((e) => (e ? { ...e, text } : e)),
       mode: docMode,
@@ -578,7 +604,7 @@ export function ActionPanel({
       edited: draft.edited,
       editing: isEditing,
       canEdit: action.status === 'ready' && !editing,
-      onEdit: () => setEditing({ actionId: action.id, text: draft.content, original: draft.content }),
+      onEdit: () => setEditing({ actionId: action.id, text, original: text }),
       mode: docMode,
       setMode: setDocMode,
       editActions: (
@@ -624,12 +650,43 @@ export function ActionPanel({
             <strong>New replies since this draft</strong> (revision {action.itemRevision} → {item.revision}). You can still approve it as it is.
           </Banner>
         )}
+        {dupes.length > 0 && action.status === 'ready' && (
+          <Banner
+            tone="warn"
+            icon="alert"
+            action={
+              <Button size="sm" icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
+                Re-draft
+              </Button>
+            }
+          >
+            <strong>{draft.kind === 'confluence' ? 'This page may already have it.' : 'This may already be in the vault.'}</strong>{' '}
+            {dupes.map((p, i) => (
+              <span key={p.path ?? `${p.pageId}-${p.section}`}>
+                {i > 0 && '; '}
+                {p.path ? (
+                  <TargetLink href={links.note(p.path)} title="Open the note in Obsidian">
+                    {p.path}
+                  </TargetLink>
+                ) : (
+                  <TargetLink href={links.page(p.pageId ?? '')} title="Open the page in Confluence">
+                    {p.pageTitle} › {p.section}
+                  </TargetLink>
+                )}{' '}
+                ({p.why})
+              </span>
+            ))}
+            . Re-draft to add to it instead, or approve to file this anyway.
+          </Banner>
+        )}
         {!inScope && action.status === 'ready' && (
           <Banner tone="bad" icon="lock" action={<Link to="/settings/writing" className="text-[13px] font-medium">Write targets</Link>}>
             Page {draft.kind === 'confluence' && draft.pageId} is excluded from the Confluence scope. The executor will refuse this write.
           </Banner>
         )}
-        {draft.kind === 'confluence' ? (
+        {isFiledDraft(draft) ? (
+          <FiledDoc d={draft} />
+        ) : draft.kind === 'confluence' ? (
           <ConfluencePreview d={draft} item={item} doc={doc} frame={frame} />
         ) : draft.kind === 'vault_append' ? (
           <VaultAppendDoc d={draft} doc={doc} frame={frame} />
@@ -666,12 +723,12 @@ export function ActionPanel({
           <div role="status" className="flex flex-wrap items-center gap-3 rounded-[10px] border border-teal-line bg-teal-wash px-4 py-3 text-[13px] text-teal-ink">
             <Icon name="check" strokeWidth={2.5} />
             <span className="min-w-0 flex-[1_1_300px] text-ink">{view.results[action.id]}</span>
-            {draft.kind === 'confluence' ? (
+            {draft.kind === 'confluence' || draft.kind === 'confluence_filed' ? (
               <a href={links.page(draft.pageId)} target="_blank" rel="noreferrer" className={linkButton}>
                 <BrandIcon brand="confluence" size={14} decorative /> Open page
               </a>
             ) : (
-              written && (
+              (written || draft.kind === 'vault_filed') && (
                 <a href={links.note(draft.path)} className={linkButton}>
                   <BrandIcon brand="obsidian" size={14} decorative /> Open note
                 </a>
@@ -695,7 +752,9 @@ export function ActionPanel({
       <div className={cx('flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3', embedded ? 'rounded-b-[11px] px-[18px]' : 'px-6')}>
         <Button variant="solid" size="lg" icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(async () => (await api.approveAction(action.id, onApproved && { markDoneWhenFiled: true }), onApproved?.(type)))}>
           {action.status === 'ready' ? (
-            view.dryRun ? (
+            isFiledDraft(draft) ? (
+              'Mark as filed'
+            ) : view.dryRun ? (
               'Approve and write to sandbox'
             ) : (
               'Approve and write'

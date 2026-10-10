@@ -95,3 +95,20 @@ export function buildDraft(
     content: t?.content ?? `${summary}\n\nContext: ${rec.item.messages[0]?.text ?? ''}\n\nSource: ${src} ${rec.item.title} ${what}`,
   };
 }
+
+/** Scenario "Already filed" (FR-9.6, FR-10.7): the check found the note or section that holds it already. */
+export function asFiled(d: Draft): Draft {
+  const { model, promptVersion, durationMs, tokens, edited } = d;
+  const meta = { model, promptVersion, durationMs, tokens, edited };
+  if (d.kind === 'confluence' || d.kind === 'confluence_filed')
+    return { ...meta, kind: 'confluence_filed', pageId: d.pageId, pageTitle: d.pageTitle, ancestorIds: d.ancestorIds, section: d.section, baseVersion: d.baseVersion, why: `The ${d.section} section already has an entry for this thread, with its link, and the thread adds nothing to it.` };
+  if (d.kind === 'vault_filed') return d;
+  return { ...meta, kind: 'vault_filed', path: d.path, why: `${d.path} already records this: the same decisions and facts, from another recording. Nothing new to add.` };
+}
+
+/** Scenario "Possible duplicate": the draft wrote a new note or entry beside a strong match. */
+export function withPossibleDuplicate(d: Draft): Draft {
+  if (d.kind === 'vault_new') return { ...d, possibleDuplicates: [{ path: `Work/Meetings/${d.path.split('/').at(-1)!.replace(/\.md$/, '')} (Teams).md`, why: 'same date, attendee: Lanny Day' }] };
+  if (d.kind === 'confluence') return { ...d, possibleDuplicates: [{ pageId: d.pageId, pageTitle: d.pageTitle, section: d.section, why: 'already holds this thread’s link' }] };
+  return d;
+}

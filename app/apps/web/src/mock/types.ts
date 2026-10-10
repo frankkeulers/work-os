@@ -80,7 +80,7 @@ export interface ReplySeed {
   looksFinished?: string; // the finish check after the re-triage finds the asks settled, and why (cockpit CK-2.10)
 }
 
-export type DraftOutcome = 'normal' | 'vault_conflict' | 'confluence_conflict' | 'people_check' | 'allow_list' | 'no_fit' | 'model_error';
+export type DraftOutcome = 'normal' | 'vault_conflict' | 'confluence_conflict' | 'people_check' | 'allow_list' | 'no_fit' | 'model_error' | 'already_filed' | 'possible_duplicate';
 
 /** An item with the server's inbox flags (shared projection), plus the mock's own script. */
 export interface ItemRec extends ItemFlags<TriageDecision> {
