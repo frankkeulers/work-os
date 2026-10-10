@@ -3,7 +3,7 @@ title: Filing to Confluence
 group: Filing
 order: 50
 summary: How a thread becomes an entry on the right page of the PSG context corpus.
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 The Confluence PRD pages are Pole Star Global's context corpus: the PSPD pipeline and the Product
@@ -38,7 +38,8 @@ watch:
    up to three likely pages, preferring a specific page over an index.
 3. **Drafting the entry.** Claude reads only those pages' outlines and writes a short entry under
    an existing section: the fact, why, what follows, its provenance tier, the date and a link back
-   to Slack.
+   to Slack. Each outline shows the start and the end of every section, where the latest entries
+   are, so the draft can see what was filed lately (see [Already on the page](#already-on-the-page)).
 4. **People check.** A second, cheap check (Haiku) reads the entry as it would be written and
    blocks it if it still identifies anyone, by name or by a description that points to one person.
 
@@ -50,6 +51,17 @@ name out. The observations themselves belong in your vault.
 
 The routing guidance (which business unit, which kind of fact goes where) is a file you can edit:
 see [Prompts and guidance](prompts.md).
+
+## Already on the page
+
+Work OS looks through the picked pages for sections that already link to the thread or meeting,
+and gives Claude their full text. Claude writes only what the page lacks, comparing facts rather
+than wording, so an entry filed from the meeting's Slack thread also counts. If the page lacks
+nothing, the panel shows **Already filed** with the page and section; **Mark as filed** writes
+nothing, and there is no people check because there is no entry.
+
+If Claude still writes an entry next to a section that links to the thread, the panel warns
+**This page may already have it**. Re-draft, or approve the entry anyway.
 
 ## No fit
 

@@ -650,6 +650,8 @@ As built (M2 step 16):
 
 **FR-9.5** People observations are allowed in the vault (it is private), but only in the notes the conventions allow for them.
 
+**FR-9.6** *Added 2026-10-10, after prod filed a Wispr meeting as a new note beside the Teams note on the same meeting.* Before a draft, code finds the notes that may already hold the thread or meeting, and the draft must weigh them. If one does, the draft appends only what it lacks; if it lacks nothing, the draft files nothing and says which note holds it. A new note beside a likely match is shown with a warning, not blocked.
+
 > **Story 9.1** As Frank, I want to turn a Slack thread into a vault note with one review so that knowledge lands in my vault without copy-paste.
 >
 > - Given a thread suggested for the vault, when I click Draft vault note, then a preview appears within ~60 seconds showing the target path and content.
@@ -671,6 +673,16 @@ As built (M3 step 17):
 - A ready, approved or executing action whose draft file is gone fails as `draft_missing` at startup.
 - `--fakes` runs use a made-up vault in their temp data directory.
 
+As built (FR-9.6, 2026-10-10):
+
+- **What code looks for** (`actions/vaultCandidates.ts`). Before the call it reads every `.md` file in the vault, skipping hidden folders; in dry-run it reads the sandbox first, whose copy stands in for the vault note. That is 271 notes, about 120 ms on Frank's vault.
+  - **Strong:** a note that contains a link of the topic (`itemLinks`, without Wispr's `wispr-flow://` placeholder), on any day. For a meeting, also a note whose filename date or `created:`/`date:` is the meeting's London date and whose first 40 lines name a participant or invitee other than Frank (also as "Last, First").
+  - **Weak:** a `type: meeting` note on that date that names no one from the meeting.
+  - At most 5, strong first. Source lines are not compared: meeting notes come from Plaud, Teams and pasted summaries as well as Work OS, and never share one.
+- **The request** gains `<existing-notes>`, one JSON line per note, and a meeting's `attendees`. draft-vault v4 must open them, also Grep for the permalink, and answer `append` with only what the note lacks, or `{kind: filed, path, why}`. vault-conventions v3 puts the recording's link in a meeting note's `source:`.
+- **`vault_filed`.** Code checks the note exists. Approving it writes nothing and logs `action.executed` with `unchanged: true`, so `filedAll` and batch filing count it. A filed note that has since gone is a conflict and re-drafts. It can't be edited.
+- **Backstop.** A `new` answer beside a strong match keeps `possibleDuplicates`; the panel shows "This may already be in the vault" with Re-draft.
+
 ### 7.10 E9 Confluence entry action
 
 **FR-10.1** Allowed only for items where `containsPeopleObservations` is false. Otherwise the button is disabled with an explanation. *Amended 2026-10-10:* allowed for every item. A thread that mentions people is not blocked; the draft anonymises them the way the `psg-context-builder` skill does (its exclusion screen and attribution ladder: drop the person, keep the fact, and answer no fit only when nothing survives). Confluence entries never identify people.
@@ -684,6 +696,8 @@ As built (M3 step 17):
 **FR-10.5** On approval, **code** applies the patch through the Confluence REST API, with an optimistic version check. A version mismatch means re-draft, never overwrite.
 
 **FR-10.6** Pages outside the scope are refused by the executor, whatever the draft says. *Amended 2026-10-07:* the executor checks the scope as it is in Confluence at write time.
+
+**FR-10.7** *Added 2026-10-10.* Before a draft, code finds the sections of the picked pages that already link to the thread or meeting, and the draft sees each section's latest entries. The draft writes only what the page lacks; if it lacks nothing, it files nothing and says where it is. An entry beside a section that already links to the thread is shown with a warning, not blocked.
 
 > **Story 10.1** As Frank, I want to file a decision from Slack into the right Confluence context page so that the PSPD pipeline and the Knowledge Desk can use it.
 >
@@ -741,6 +755,13 @@ As built (M3 step 18):
 - **Credentials (P0-8).** They are `email:token` in the Keychain account `confluence-api-token`, sent as Basic auth. The site URL and the scope come from settings.
 - **Retries.** A draft that fails on a transient Claude or Confluence error stays drafting and waits at least 30 s before the next try, so a failure the breaker lets through is not retried at once. Writes after a 409 or a dropped connection wait the same way.
 - **Test runs.** Tests and `--fakes` runs use a made-up Confluence (`actions/fakeConfluence.ts`). It checks Basic auth and version numbers, evaluates the CQL the catalogue writes, and can answer as an anonymous user. Under vitest, with no fake given, any Confluence call fails.
+
+As built (FR-10.7, 2026-10-10):
+
+- **Linked sections** (`findOnPages`, `storage.sectionsLinking`). In the picked pages' storage, code finds each of the topic's links, also with `&` written as `&amp;`, and takes the nearest heading above it. The request gains `<already-filed>`: one JSON line per section, with its text (the last 3,000 characters if it is longer).
+- **Outlines.** Each section's excerpt is its first 150 and last 450 characters, instead of the first 300, within the same 8,000-character budget per page. Entries go at the end of a section, so the end is where the latest ones are.
+- **draft-confluence v6** compares facts, not wording, so an entry filed from another source counts. It answers `{alreadyFiled, pageId, section, why}` when the page lacks nothing. Code checks the page and section, and the draft becomes `confluence_filed`, with no people check. Approving it writes nothing, not even a dry-run preview, and logs `action.executed` with `unchanged: true`.
+- **Backstop.** An entry beside a linked section keeps `possibleDuplicates`; the panel shows "This page may already have it".
 
 ### 7.11 E10 Notifications
 
