@@ -198,7 +198,7 @@ function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: 
 
 type TargetLinks = { page: (id: string) => string; note: (path: string) => string; noteExists: boolean };
 
-type Check = { ok: boolean | 'info' | 'warn'; label: string; detail?: string };
+type Check = { ok: boolean | 'info' | 'warn' | 'caution'; label: string; detail?: string };
 
 function checksFor(d: Draft, inScope: boolean, dryRun: boolean): Check[] {
   if (isFiledDraft(d))
@@ -209,7 +209,7 @@ function checksFor(d: Draft, inScope: boolean, dryRun: boolean): Check[] {
   // FR-9.6, FR-10.7: what the check for an earlier filing found.
   const found = d.kind === 'vault_append' ? undefined : d.possibleDuplicates;
   const dupes: Check = found?.length
-    ? { ok: 'warn', label: d.kind === 'confluence' ? 'The page already links to this thread' : 'A note may already hold this', detail: `${found.length} found` }
+    ? { ok: 'caution', label: d.kind === 'confluence' ? 'The page already links to this thread' : 'A note may already hold this', detail: `${found.length} found` }
     : { ok: true, label: d.kind === 'confluence' ? 'Checked the page for this thread' : 'Checked the vault for an existing note' };
   const c: Check[] =
     d.kind === 'confluence'
@@ -229,6 +229,7 @@ const CHECK_ICON = {
   false: { icon: 'alert', cls: 'text-red-fg' },
   info: { icon: 'lock', cls: 'text-muted' },
   warn: { icon: 'flask', cls: 'text-amber-fg' },
+  caution: { icon: 'alert', cls: 'text-amber-fg' },
 } as const;
 
 /** The safety checks folded into one line: they matter when one fails, not when all pass. */

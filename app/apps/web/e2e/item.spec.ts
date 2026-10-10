@@ -1,6 +1,8 @@
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const DRAFT_TIMEOUT = { timeout: 20_000 };
+const APP = join(import.meta.dirname, '../../..');
 
 async function startJourney(page: Page, id: string) {
   await page.goto('/');
@@ -103,6 +105,10 @@ test('J66 a vault draft that finds the meeting already filed writes nothing (FR-
   await expect(panel(page).getByText('Already in', { exact: true })).toBeVisible();
   await expect(panel(page).getByRole('link', { name: /\.md$/ })).toHaveAttribute('href', /^obsidian:\/\/open\?/);
   await expect(panel(page).getByRole('button', { name: 'Edit text' })).toHaveCount(0);
+  await panel(page).screenshot({ path: join(APP, 'screenshots/vault-already-filed-light.png'), animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await panel(page).screenshot({ path: join(APP, 'screenshots/vault-already-filed-dark.png'), animations: 'disabled' });
+  await page.evaluate(() => delete document.documentElement.dataset.theme);
   await panel(page).getByRole('button', { name: 'Mark as filed' }).click();
   await expect(panel(page).getByText(/^Already in the vault: .*\. Nothing was written\. Logged action\.executed\.$/)).toBeVisible(DRAFT_TIMEOUT);
 });
@@ -115,6 +121,7 @@ test('J67 a new vault note beside a likely match warns, and still lets you appro
   await expect(panel(page).getByText(/same date, attendee: Lanny Day/)).toBeVisible();
   await panel(page).getByRole('button', { name: /Checks passed/ }).click();
   await expect(panel(page).getByText('A note may already hold this')).toBeVisible();
+  await panel(page).screenshot({ path: join(APP, 'screenshots/vault-possible-duplicate-light.png'), animations: 'disabled' });
   await expect(panel(page).getByRole('button', { name: 'Approve and write to sandbox' })).toBeEnabled();
 });
 
