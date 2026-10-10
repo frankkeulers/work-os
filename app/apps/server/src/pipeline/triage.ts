@@ -237,8 +237,8 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
       const floor = verdict.kind === 'model' && !toFile ? ruleFloor(topic, rules, settings, me) : undefined;
       const attention = toFile ? 'none' : atLeast(a.attention, floor?.min);
       const ruleId = (toFile ?? floor?.rule)?.id;
-      // Never Confluence for observations about people (NF-2, FR-10.1).
-      const confluence = a.containsPeopleObservations ? { suggested: false } : a.confluence;
+      // People in the thread don't rule out Confluence: the draft anonymises them (FR-10.1, amended).
+      const confluence = a.confluence;
       // To file needs a destination: the model's, or the vault when it suggested neither.
       const vault = toFile && !confluence.suggested && !a.vault.suggested ? { suggested: true } : a.vault;
       // An ask Frank ticked off stays off, even if the model lists it again.

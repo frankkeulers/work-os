@@ -97,7 +97,7 @@ export async function runEval(d: EvalDeps, records: LabelRecord[], o: { source?:
           failed++;
           continue;
         }
-        rows.push({ source: l.source, label: l.label, predicted: { attention: a.attention, confluence: a.confluence.suggested && !a.containsPeopleObservations, vault: a.vault.suggested } });
+        rows.push({ source: l.source, label: l.label, predicted: { attention: a.attention, confluence: a.confluence.suggested, vault: a.vault.suggested } });
       }
     } catch (err) {
       if (!(err instanceof ClaudeOutputError)) throw err;

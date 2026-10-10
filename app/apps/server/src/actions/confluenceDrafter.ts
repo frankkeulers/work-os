@@ -16,7 +16,8 @@ import { draftThread } from './vaultDrafter';
 // reads only those pages over REST and the draft call gets their outlines. Neither call has tools,
 // so the model only ever sees pages in scope (FR-10.2). The draft answers with a page, a section, a
 // title and Markdown; code checks the page and section exist, records the page version (FR-10.3),
-// and a Haiku call checks the entry for observations about people before anyone sees it (FR-10.4).
+// and a Haiku call checks the entry identifies no one before anyone sees it (FR-10.4). People in the
+// thread never block the draft: it anonymises them (FR-10.1, amended 2026-10-10).
 
 export const ConfluenceEntryAnswer = z.object({
   pageId: z.string().min(1),
@@ -164,7 +165,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
   const section = findHeading(page.storage, a.section);
   if (!section) throw new DraftError(`The draft would file under “${a.section}”, but ${page.title} has no such section.`);
 
-  // FR-10.4: a second, cheap look at the entry itself, before it is shown.
+  // FR-10.4: a second, cheap look at the entry itself, before it is shown. It blocks this draft only.
   d.onStage?.(4);
   const check = await d.claude.structured(
     {
@@ -180,7 +181,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
     PeopleCheckAnswer,
   );
   if (check.value.containsPeopleObservations) {
-    throw new DraftError(`The people check found observations about named people in the draft (${check.value.reason}). Nothing will be written to Confluence.`, 'people_check');
+    throw new DraftError(`The draft still identifies a person (${check.value.reason}). Nothing will be written to Confluence. Re-draft, or edit it out.`, 'people_check');
   }
   const tokens = [...pick.usage, ...r.usage, ...check.usage].reduce((n, u) => n + u.inputTokens + u.outputTokens + u.cacheTokens, 0);
   return {

@@ -31,7 +31,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Decides attention, filing suggestions, the summary and the open asks for each topic.',
     usedBy: 'Triage and the eval',
     defaultText: DEFAULT_TRIAGE_PROMPT,
-    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550', 'd4b00d127a3dd9605964c0b44ac43c7967894f3f', '149c84e01c7eadef74a9eda6cfbf1994536706bc', '92c1953b699525b35e2b3e63ac1a4558852ea085', '74c0880ee869f2ab4326c4f48cffc45a2b46a514'], // triage v2, v3, v4, v5, v6
+    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550', 'd4b00d127a3dd9605964c0b44ac43c7967894f3f', '149c84e01c7eadef74a9eda6cfbf1994536706bc', '92c1953b699525b35e2b3e63ac1a4558852ea085', '74c0880ee869f2ab4326c4f48cffc45a2b46a514', '1778d2e9ea4326a39e614e4427150f69bccb23c3'], // triage v2, v3, v4, v5, v6, v7
   },
   {
     id: 'topics',
@@ -85,16 +85,16 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Drafts an entry for one of the picked Confluence pages, or declines when none fits.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_CONFLUENCE_PROMPT,
-    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20', '4b97acd122e6f9a3cee48ea30d36baa1854a88b3', '3ca183c57f1c9a9b7d4947e27635de168a942cc5'], // draft-confluence v1, v2, v3
+    previousDefaults: ['72bb329124bba27ca3c929afa7ee50baa7916c20', '4b97acd122e6f9a3cee48ea30d36baa1854a88b3', '3ca183c57f1c9a9b7d4947e27635de168a942cc5', '9fcb308e51e3a5be56ce00af2c4fdbb13053053a'], // draft-confluence v1, v2, v3, v4
   },
   {
     id: 'people-check',
     file: 'prompts/people-check.md',
     label: 'People check',
-    description: 'Checks a Confluence draft for observations about named people before it is shown.',
+    description: 'Checks a Confluence draft identifies no one, by name or description, before it is shown.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_PEOPLE_CHECK_PROMPT,
-    previousDefaults: [],
+    previousDefaults: ['852f66caf3c91f7c15086c4bb7057fc5fea51e13'], // people-check v1
   },
   {
     id: 'vault-conventions',

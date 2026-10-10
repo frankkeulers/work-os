@@ -216,7 +216,7 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(prod).toMatchObject({ triageState: 'triaged', summary: 'Release notes draft is up', reason: 'Fake triage for tests.', triage: { attention: 'today', vault: true } });
     // CL-4: no tools, no servers, no settings; the prompt file's version is logged.
     expect(claude.calls[0].options).toMatchObject({ tools: [], mcpServers: {}, settingSources: [], maxTurns: 1, persistSession: false });
-    expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v7 -->/);
+    expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v8 -->/);
     const usage = (await call<UsageView>('GET', '/api/usage')).body;
     expect(usage.budgets.triage.used).toBe(1);
     expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('ok');
@@ -844,9 +844,9 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(draftCall.options).toMatchObject({ tools: [], mcpServers: {} });
     expect(draftCall.prompt).toContain('"pageId":"1234567"');
     expect(draftCall.prompt).not.toContain('"pageId":"1100000"');
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v4 -->/);
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v5 -->/);
     expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
-    expect(check.system).toMatch(/^<!-- prompt: people-check v1 -->/);
+    expect(check.system).toMatch(/^<!-- prompt: people-check v2 -->/);
     expect(check.options.model).toBe('claude-haiku-5-5');
 
     expect((await approve(r.body.id)).status).toBe(202);
@@ -859,10 +859,32 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(preview).toContain('<h3>#product update</h3><p>Release notes draft is up</p>');
   });
 
-  it('blocks a draft the people check flags, and refuses items with people observations (FR-10.1, FR-10.4)', async () => {
+  it('blocks a draft the people check flags, and only that draft (FR-10.4)', async () => {
     claude.nextTexts.push(PICK, JSON.stringify({ pageId: '1234567', section: 'Decisions', title: 'Release', content: 'Dana has been unreliable on reviews.' }));
     const r = await request();
-    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'people_check', error: expect.stringMatching(/people check found/) });
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'people_check', error: expect.stringMatching(/still identifies a person.*Re-draft/) });
+    const again = await call<Action>('POST', `/api/actions/${r.body.id}/redraft`);
+    await res.actions.settled();
+    expect(again.status).toBe(201);
+    expect((await item()).actions[0]).toMatchObject({ id: again.body.id, status: 'ready' });
+  });
+
+  it('keeps the Confluence suggestion for a thread that mentions people, and drafts it (FR-10.1, amended 2026-10-10)', async () => {
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'We agreed bulk export ships without PDF in v1. Sam was slow on the review again.' });
+    claude.nextTexts.push(
+      JSON.stringify({
+        decisions: [{ id: PROD, attention: 'none', confluence: { suggested: true, targetHint: 'MVI › Decisions' }, vault: { suggested: false }, containsPeopleObservations: true, summary: 'Bulk export ships without PDF in v1', reason: 'A product decision; nothing waits on Frank.' }],
+      }),
+    );
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 13; i++) await tick(); // past the quiet window, so it is triaged again
+    expect((await item()).summary).toMatchObject({ containsPeopleObservations: true, triage: { confluence: true } });
+
+    claude.nextTexts.push(PICK, JSON.stringify({ pageId: '1234567', section: 'Decisions', title: 'Bulk export without PDF', content: 'The MVI product team agreed bulk export ships without the PDF option in v1. (Tier B, 2026-10-10)' }));
+    const r = await request();
+    expect(r.status).toBe(201);
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'ready' });
   });
 
   it('fails as no_fit, without reading pages or a people check, when the picker finds no home in the catalogue', async () => {

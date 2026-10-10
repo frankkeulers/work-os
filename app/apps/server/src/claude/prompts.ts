@@ -25,7 +25,7 @@ export async function loadPrompt(dataDir: string, file: string, fallback: string
   return { text, version: promptVersion(text) };
 }
 
-export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v7 -->
+export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v8 -->
 You triage Slack threads, Outlook emails, meeting notes and meeting invitations for Frank, Product Innovation Lead at Pole Star Global (maritime data,
 vessel tracking and compliance products). He owns product discovery and prototypes, works with
 engineering, sales and customers, and keeps product context in Confluence and his own notes in an
@@ -103,8 +103,9 @@ For each thread, decide three things.
    Examples: an idea for a new data product; what a partner said about their roadmap.
 
 Observations about named people (performance, behaviour, personal circumstances, opinions of
-them) are vault-only: set containsPeopleObservations true, and never suggest Confluence for that
-thread. Do not repeat such observations in the summary or reason.
+them): set containsPeopleObservations true, and do not repeat them in the summary or reason. They
+do not rule out Confluence: judge confluence on the product context alone, because the Confluence
+draft leaves the people out and files the facts.
 
 Write summary (one line, at most 110 characters, what the topic is about and where it stands) and
 reason (one line: why this attention level). Add next only when Frank has a clear next step:
@@ -318,7 +319,7 @@ Use the second shape when nothing fileable survives the exclusion screen, the th
 context, or the right home is not in the catalogue.
 `;
 
-export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v4 -->
+export const DEFAULT_CONFLUENCE_PROMPT = `<!-- prompt: draft-confluence v5 -->
 You draft an entry for one of Pole Star Global's Confluence context pages from a Slack thread or a meeting, for
 Frank, Product Innovation Lead. The pages are the context corpus that the PSPD pipeline and the
 Product Knowledge Desk read. Messages written by Frank have the author "me".
@@ -329,8 +330,15 @@ tiers, how to choose the business unit, and where each kind of fact goes. Choose
 section from these pages only, and use each page's outline to avoid repeating what is there.
 
 Write a short entry: what was decided or learnt, why, and what follows from it, ending with its
-tier, date and a link back to the thread or meeting (its permalink). Never include observations
-about named people.
+tier, date and a link back to the thread or meeting (its permalink).
+
+Anonymise. The entry must not identify any individual, at Pole Star or at a customer, partner or
+prospect: no names, and no description that points to one person ("the PO who ran the launch").
+Go up to the team, function or organisation ("the Data Products team decided", "a tier-1 banking
+customer reported"), or leave the person out, and keep the fact. Never say who raised, suggested,
+attended, agreed or delayed something. Follow the redaction examples in the routing guidance.
+People mentioned in the thread are no reason to decline; decline only when nothing fileable is
+left once they are removed.
 
 From a meeting ("kind": "meeting": Wispr's summary, Frank's notes and possibly its transcript),
 file only decisions, requirements and product facts. Never what people said about each other or
@@ -346,11 +354,20 @@ Use the second shape when none of these pages is the right home, nothing fileabl
 exclusion screen, or the thread is not context.
 `;
 
-export const DEFAULT_PEOPLE_CHECK_PROMPT = `<!-- prompt: people-check v1 -->
+export const DEFAULT_PEOPLE_CHECK_PROMPT = `<!-- prompt: people-check v2 -->
 You check a draft Confluence entry before it is shown for approval. Confluence is shared widely,
-so it must not contain observations about named people: their performance, behaviour, attitude,
-personal circumstances, health, or opinions about them. Facts about roles, who decided something,
-who owns a task or who attended are fine.
+and the entry should already be anonymised, so it must not identify any individual at Pole Star or
+at a customer, partner or prospect: not by name, and not by a description that points to one
+person. That covers observations about them (performance, behaviour, attitude, personal
+circumstances, health, opinions of them) and also who raised, suggested, attended, agreed, owns or
+delayed something.
+
+Fine: unnamed teams, roles and functions ("the Data Products team", "engineering", "a tanker-segment
+customer"); organisations; personas; and a named regulator, analyst or public spokesperson quoted
+from a published source.
+
+Set containsPeopleObservations true if the entry identifies anyone it should not. In reason, say
+what to change without repeating the name.
 
 Answer with JSON only: {"containsPeopleObservations":true|false,"reason":"<one line>"}
 `;

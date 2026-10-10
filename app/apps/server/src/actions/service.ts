@@ -132,7 +132,6 @@ export class ActionService {
     const it = this.d.store.projection.items[itemId];
     if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     if (type === 'confluence_entry') {
-      if (it.decision?.containsPeopleObservations) throw new HttpError('forbidden', 'This thread contains observations about people, so it can only go to the vault (FR-10.1).');
       if (!scopeCql(this.d.settings().confluence)) throw new HttpError('conflict', 'Nothing is in the Confluence scope yet. Add root pages, labels or single pages in Settings › Write targets.');
     }
     if (this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
