@@ -23,7 +23,7 @@ Follow the milestones: M1 → M2 → M3 → M4. Do not start a milestone until t
 4. **Models never write to Confluence, the vault or Slack.** Models draft. Code writes after Frank approves, with allow-list and version or hash checks (FR-9.4, FR-10.5, FR-10.6).
 5. **Dry-run is on by default in development** (FR-1.6). Never write to the real vault or real Confluence pages during development or tests. Development uses its own data directory, `~/WorkOS-data-dev` (sandbox writes go to `~/WorkOS-data-dev/sandbox/`), and port 4318, so it never touches the autostarted instance's `~/WorkOS-data` or its lock.
 6. **Secrets only in the macOS Keychain.** Never in files, logs, prompts or test fixtures.
-7. **Observations about people never go to Confluence** (FR-10.1, FR-10.4). They are allowed only in the private vault.
+7. **Confluence entries never identify people** (FR-10.1, FR-10.4). The drafter anonymises them following `psg-context-builder`'s exclusion screen and attribution ladder, and the people check confirms it. A thread that mentions people can still be filed. Observations about people are kept only in the private vault.
 8. **Slack access is read-only.** The app never sends messages.
 9. **Server binds to 127.0.0.1 only**, with a bearer token (FR-3.3).
 10. **No live model calls in tests.** Use recorded fixtures validated against the zod schemas.

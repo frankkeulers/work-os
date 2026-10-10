@@ -582,7 +582,7 @@ Robustness lands in M1, not M4: the server runs unattended from the first milest
 **FR-5.2** The prompt (`config/prompts/triage.md`) contains:
 - Frank's role in a few lines. No observations about people.
 - Definitions and 2–3 examples per category: `now`, `today`, `none`, confluence-worthy, vault-worthy.
-- The rule that observations about named people are vault-only and must set `containsPeopleObservations`.
+- The rule that observations about named people set `containsPeopleObservations` and are never repeated in the summary or reason. *Amended 2026-10-10:* the flag no longer removes the Confluence suggestion; Confluence is judged on the product content, and the draft anonymises (FR-10.1).
 - The JSON output schema.
 
 **FR-5.3** Output per item matches `TriageDecision`. Each decision is stored as a `triage.decided` event with the model and prompt version.
@@ -673,13 +673,13 @@ As built (M3 step 17):
 
 ### 7.10 E9 Confluence entry action
 
-**FR-10.1** Allowed only for items where `containsPeopleObservations` is false. Otherwise the button is disabled with an explanation.
+**FR-10.1** Allowed only for items where `containsPeopleObservations` is false. Otherwise the button is disabled with an explanation. *Amended 2026-10-10:* allowed for every item. A thread that mentions people is not blocked; the draft anonymises them the way the `psg-context-builder` skill does (its exclusion screen and attribution ladder: drop the person, keep the fact, and answer no fit only when nothing survives). Confluence entries never identify people.
 
 **FR-10.2** "Draft Confluence entry" runs a Sonnet draft with read-only Confluence access (Atlassian MCP or REST search) limited to the pages in scope, and the `psg-context-builder` routing guidance. *Amended 2026-10-07:* the scope is a live catalogue, not a fixed list of page IDs, because pages are added to the PRD context tree all the time and must not be missed. It is every root page and everything below it, every page in the space with one of the scope labels, and any single pages, minus the excluded pages and everything below them. It is read from Confluence for every draft.
 
 **FR-10.3** The draft output is a structured patch: page ID, page version at draft time, section heading anchor, and content in Confluence storage format.
 
-**FR-10.4** Before showing the preview, a second Haiku check confirms there are no observations about named people. If it finds any, the draft is blocked.
+**FR-10.4** Before showing the preview, a second Haiku check confirms there are no observations about named people. If it finds any, the draft is blocked. *Amended 2026-10-10:* the check confirms the entry identifies no individual, by name or by an identifying description, following the skill's rules. If it does, that draft is blocked and Frank can re-draft; the thread itself is never blocked.
 
 **FR-10.5** On approval, **code** applies the patch through the Confluence REST API, with an optimistic version check. A version mismatch means re-draft, never overwrite.
 
@@ -687,7 +687,8 @@ As built (M3 step 17):
 
 > **Story 10.1** As Frank, I want to file a decision from Slack into the right Confluence context page so that the PSPD pipeline and the Knowledge Desk can use it.
 >
-> - Given a thread suggested for Confluence with no people observations, when I click Draft Confluence entry, then I see the target page, section and content.
+> - Given a thread suggested for Confluence, when I click Draft Confluence entry, then I see the target page, section and content.
+> - Given a thread that mentions named people, when I draft a Confluence entry, then the entry keeps the facts and identifies no one.
 > - Given the page was edited after the draft, when I approve, then the app re-drafts instead of writing.
 > - Given a draft targets a page outside the scope, when I approve, then the executor refuses and logs `action.failed`.
 > - Given a page added under a root page since the last draft, when I draft, then it can be picked without changing settings.
@@ -726,7 +727,7 @@ As built (M3 step 18):
 
   The action fails as `no_fit`, before any page is read when the picker declines, and always before the people check. The panel offers a vault note instead.
 - **Deviation from FR-10.3: the draft is Markdown, not storage format.** The model answers `{pageId, section, title, content}` with Markdown content. That is what the preview shows and what Frank edits. Code checks that the page and section exist, records the page version at draft time (`baseVersion`), and converts the Markdown to storage format only when it writes. The conversion handles a safe subset: headings, paragraphs, lists, bold, italics, code, and https or mailto links. Everything else is escaped. The entry goes at the end of the chosen section, under a heading one level below it.
-- **People check (FR-10.4).** A second Haiku call (`config/prompts/people-check.md`, usage purpose `people_check`) reads the entry as it would be written. If it finds observations about named people, the action fails as `people_check` and nothing is shown. Items flagged `containsPeopleObservations` are refused with a 403 before any call.
+- **People check (FR-10.4).** A second Haiku call (`config/prompts/people-check.md`, usage purpose `people_check`) reads the entry as it would be written. If the entry still identifies a person, the action fails as `people_check`, nothing is shown, and the panel offers a re-draft. Items flagged `containsPeopleObservations` are drafted like any other (FR-10.1, amended 2026-10-10).
 - **Executor (FR-10.5, FR-10.6, NF-5).** Before every attempt, code:
   1. checks the scope as it is now, with the catalogue's CQL narrowed to `id = <page>`. A page no longer in scope fails the action as `allow_list`. A failed query is a failed attempt, never a yes;
   2. re-reads the page;
@@ -935,7 +936,7 @@ The server runs unattended on a laptop that sleeps, travels and loses its networ
 | ID | Area | Requirement |
 |---|---|---|
 | NF-1 | Privacy | Data stays on the laptop. No telemetry. The server binds to localhost only. |
-| NF-2 | Privacy | Observations about people never leave the vault. Enforced by FR-10.1 and FR-10.4. |
+| NF-2 | Privacy | Observations about people never leave the vault, and Confluence entries never identify people: the draft anonymises (FR-10.1) and the people check confirms it (FR-10.4). |
 | NF-3 | Security | Secrets live only in the Keychain. Never logged, never in files or prompts. |
 | NF-4 | Security | Slack scopes are read-only. The app never sends messages in the MVP. |
 | NF-5 | Safety | Every write needs explicit approval. Executors re-validate the target (Confluence scope, version or hash) at write time, and reconcile against the target before every retry, so a write is applied at most once (FR-14.5). |
