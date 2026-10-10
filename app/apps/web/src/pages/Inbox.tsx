@@ -46,48 +46,42 @@ function pollResult(inbox: InboxView, now: Date) {
   return r.triaged === 0 ? (r.fetched === 0 ? 'Nothing new, no Claude call' : `${r.fetched} new · no Claude call needed`) : `${r.fetched} new · ${r.triaged} triaged in ${plural(r.calls, 'call')}`;
 }
 
-/**
- * Poll status next to the Poll button, only when there's something to say: a poll in flight, or
- * what the last one found. The rest (last and next poll) is in the button's tooltip, and the
- * sidebar shows how long ago Slack was polled. Slack trouble has its own banner.
- */
-/** Threads still being written, which triage once they go quiet. Opens their list under the footer. */
-function StillActive({ count, open, onToggle }: { count: number; open: boolean; onToggle: () => void }) {
-  if (!count) return null;
-  return (
-    <button
-      type="button"
-      aria-expanded={open}
-      onClick={onToggle}
-      title="Triage runs once each thread has been quiet for a while."
-      className={cx('inline-flex min-h-8 items-center rounded-lg px-2 text-xs text-muted cursor-pointer hover:bg-surface-2 hover:text-ink-2', open && 'text-ink-2')}
-    >
-      {count} still active
-    </button>
-  );
-}
+/** "Triaging 12 threads…", or just "Triaging…" before the count is known. What it cost is in the result line after. */
+const triaging = (n: number | undefined) => (n ? `Triaging ${plural(n, 'thread')}…` : 'Triaging…');
 
-function PollStatus({ inbox }: { inbox: InboxView }) {
+/**
+ * One quiet line left of the Poll button: what the poll is doing or what the last one found, then
+ * threads still being written. The poll part shows only when there's something to say; the rest
+ * (last and next poll) is in the button's tooltip. Slack trouble has its own banner.
+ */
+function StatusLine({ inbox, stillActive, open, onToggle }: { inbox: InboxView; stillActive: number; open: boolean; onToggle: () => void }) {
   const now = useNow(5_000);
   const { poll } = inbox;
-  let body: ReactNode;
-  if (poll.phase === 'polling')
-    body = (
-      <>
-        <Spinner size={12} /> Polling {poll.polling ? SOURCE_NAME[poll.polling] : 'sources'}…
-      </>
-    );
-  else if (poll.phase === 'triaging') {
-    const n = poll.triagingCount ?? 0;
-    body = (
-      <>
-        <Spinner size={12} /> Triaging {plural(n, 'thread')} · {plural(Math.max(1, Math.ceil(n / 25)), 'call')}
-      </>
-    );
-  } else body = pollResult(inbox, now);
+  const busy = poll.phase !== 'idle';
+  const text = poll.phase === 'polling' ? `Polling ${poll.polling ? SOURCE_NAME[poll.polling] : 'sources'}…` : poll.phase === 'triaging' ? triaging(poll.triagingCount) : pollResult(inbox, now);
   return (
-    <span data-testid="poll-line" aria-live="polite" className={cx('inline-flex items-center gap-1.5 text-xs', poll.phase === 'idle' ? 'text-muted' : 'text-accent')}>
-      {body}
+    <span className="inline-flex items-center gap-1 text-xs text-muted">
+      <span data-testid="poll-line" aria-live="polite" className="inline-flex items-center gap-1.5">
+        {busy && (
+          <span className="text-accent">
+            <Spinner size={12} />
+          </span>
+        )}
+        {text}
+      </span>
+      {text && stillActive > 0 && <span aria-hidden>·</span>}
+      {/* Threads still being written, which triage once they go quiet. Opens their list under the footer. */}
+      {stillActive > 0 && (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={onToggle}
+          title="Triage runs once each thread has been quiet for a while."
+          className={cx('-mx-1 inline-flex min-h-8 items-center rounded-lg px-1 cursor-pointer hover:bg-surface-2 hover:text-ink-2', open && 'text-ink-2')}
+        >
+          {stillActive} still active
+        </button>
+      )}
     </span>
   );
 }
@@ -209,7 +203,8 @@ function UsagePopover({ inbox }: { inbox: InboxView }) {
         className={cx('relative inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-2 cursor-pointer hover:bg-track', pOpen && 'bg-track')}
       >
         <Icon name="dollar" size={17} />
-        <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full border-2 border-surface box-content" style={{ background: colour }} />
+        {/* Only when it's worth a look: under budget says nothing. */}
+        {tone !== 'green' && <span data-testid="usage-dot" className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full border-2 border-surface box-content" style={{ background: colour }} />}
       </button>
       {pOpen && (
         <PopoverPanel panelRef={pPanel} label="Claude usage today" className="flex w-[300px] flex-col gap-3 !p-4">
@@ -241,11 +236,12 @@ const Kpi = ({ value, label }: { value: string; label: string }) => (
   </div>
 );
 
+/** Disabled while a poll runs; the status line beside it carries the spinner. */
 function PollButton({ inbox }: { inbox: InboxView }) {
   const busy = inbox.poll.phase !== 'idle';
   return (
     <IconButton label={busy ? 'Poll in progress' : 'Poll now'} title={`Poll now · ${pollTooltip(inbox)}`} size={32} disabled={busy} onClick={() => void api.pollNow().catch(errorToast)}>
-      {busy ? <Spinner size={15} /> : <Icon name="poll" size={17} />}
+      <Icon name="poll" size={17} />
     </IconButton>
   );
 }
@@ -332,7 +328,7 @@ function FirstRun({ inbox }: { inbox: InboxView }) {
       <Button variant="solid" size="lg" disabled={busy} onClick={() => void api.pollNow().catch(errorToast)}>
         {busy ? (
           <>
-            <Spinner /> {inbox.poll.phase === 'polling' ? 'Polling Slack…' : `Triaging ${plural(inbox.poll.triagingCount ?? 0, 'thread')}…`}
+            <Spinner /> {inbox.poll.phase === 'polling' ? 'Polling Slack…' : triaging(inbox.poll.triagingCount)}
           </>
         ) : (
           'Run first poll'
@@ -954,8 +950,7 @@ export function InboxPage() {
         <CountPills counts={counts} />
         {!wide && <SortMenu />}
         <span className="flex-1" />
-        <PollStatus inbox={inbox} />
-        <StillActive count={by.waiting.length} open={open === 'waiting'} onToggle={() => toggle('waiting')} />
+        <StatusLine inbox={inbox} stillActive={by.waiting.length} open={open === 'waiting'} onToggle={() => toggle('waiting')} />
         {inbox.dryRun && (
           <Link
             to="/settings/writing#dry-run"

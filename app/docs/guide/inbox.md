@@ -78,8 +78,10 @@ otherwise the chip says "before the exec sync" without a time.
 
 The header counts what's waiting, large enough to read from across the desk: **3 now · 6 today ·
 4 to file** (Today includes items whose triage failed). Click a count to scroll to those rows.
-On the right, the health pill says whether Work OS is reading everything; see
-[Troubleshooting](troubleshooting.md#health).
+On the right, a quiet line says what the poll is doing or what the last one found, and how many
+threads are still active. A health pill appears there only when Work OS isn't reading everything;
+see [Troubleshooting](troubleshooting.md#health). The **$** button's dot shows once Claude usage is
+close to a budget, amber, or has reached one, red.
 
 The **Sort** menu starts on **Priority**: Now first, then failed triage, then Today by deadline. It
 can also order by newest or oldest, and **Group by channel** gathers items under their channel or

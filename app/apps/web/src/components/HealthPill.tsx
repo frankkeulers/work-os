@@ -6,7 +6,8 @@ import { pillHealth, type AppHealth, type PillHealth } from '../lib/health';
 import { cx } from './ui';
 
 // The top bar's health pill (cockpit CK-1.7): whether Work OS is reading everything, readable from
-// across the desk. The health banner stays for what Frank must act on, and the sidebar dot stays.
+// across the desk. It shows only when something isn't right; all well, the bar stays plain and says
+// nothing. The health banner stays for what Frank must act on, and the sidebar dot stays.
 
 const PILL: Record<AppHealth['tone'], { pill: string; dot: string }> = {
   ok: { pill: 'bg-green-wash !text-green-fg', dot: 'bg-green' },
@@ -34,6 +35,7 @@ export function usePillHealth(inbox: InboxView | undefined): PillHealth | undefi
 }
 
 export function HealthPill({ health }: { health: PillHealth }) {
+  if (health.tone === 'ok') return null;
   const tone = PILL[health.tone];
   const fix = health.fix;
   return (

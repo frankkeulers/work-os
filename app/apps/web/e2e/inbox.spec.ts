@@ -555,7 +555,7 @@ test('triage details sit behind a disclosure that stays as Frank left it (CK-1.6
   await expect(details).toContainText('by rule vip-dm · no model call');
 });
 
-test('J51 the top bar’s health pill: live, stale, a connector down, catching up, safe mode, stopping (CK-1.7)', async ({ page }) => {
+test('J51 the top bar’s health pill: hidden while live; stale, a connector down, catching up, safe mode, stopping (CK-1.7)', async ({ page }) => {
   const header = page.locator('[data-inbox-header]');
   const pill = page.getByTestId('health-pill');
   const setHealth = async (name: string) => {
@@ -564,9 +564,9 @@ test('J51 the top bar’s health pill: live, stale, a connector down, catching u
     await closeDrawer(page);
   };
 
-  await expect(pill).toHaveAttribute('data-tone', 'ok');
-  await expect(pill).toContainText(/^All sources live · (just now|\d+ min ago)$/);
+  // All well: no pill, and a plain bar.
   await expect(header).toHaveAttribute('data-health', 'ok');
+  await expect(pill).toHaveCount(0);
 
   // The server quietly stopped polling: Slack's last read is past twice its 10-minute interval.
   await setHealth('Slack stale');
@@ -602,10 +602,10 @@ test('J51 the top bar’s health pill: live, stale, a connector down, catching u
   await expect(pill).toContainText('Stopping');
   await expect(header).toHaveAttribute('data-health', 'idle');
 
-  // Back to normal: the mock polls again, and the pill is green with a plain bar.
+  // Back to normal: the mock polls again, and the pill goes, leaving a plain bar.
   await setHealth('Running normally');
-  await expect(pill).toHaveAttribute('data-tone', 'ok', { timeout: 10_000 });
-  await expect(header).toHaveAttribute('data-health', 'ok');
+  await expect(header).toHaveAttribute('data-health', 'ok', { timeout: 10_000 });
+  await expect(pill).toHaveCount(0);
   await expect(slackNav.locator('[data-stale]')).toHaveCount(0);
 });
 

@@ -41,8 +41,12 @@ test('poll outcomes: nothing eligible, VIP DM, batch of 12, and the event log', 
 });
 
 test('state flags: budgets, Slack, FileVault and rebuilt notices show as banners', async ({ page }) => {
+  // The usage button's dot shows only once a budget is close or reached.
+  const usageDot = page.getByTestId('usage-dot');
+  await expect(usageDot).toHaveCount(0);
   await ctl(page, 'Triage budget hit').click();
   await expect(page.getByText(/Triage budget reached/)).toBeVisible();
+  await expect(usageDot).toHaveCount(1);
   await ctl(page, 'Drafts budget hit').click();
   // The banner; the panel also says it next to the disabled draft buttons.
   await expect(page.getByText(/Drafts budget reached \(/)).toBeVisible();
