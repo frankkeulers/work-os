@@ -789,7 +789,7 @@ As built (FR-10.7, 2026-10-10):
 
 ### 7.11 E10 Notifications
 
-**FR-11.1** New `now` items trigger a macOS notification with the one-line summary. Clicking it opens the item in the UI. Uses `terminal-notifier`, because `osascript` notifications can't open a URL.
+**FR-11.1** New `now` items trigger a macOS notification with the one-line summary. Clicking it opens the item in the UI. Uses `terminal-notifier`, because `osascript` notifications can't open a URL. *Amended 11 Oct 2026 (BACKLOG UX-6):* the item opens in the inbox panel (`/?item=…`), not as a full page, so Frank keeps his place and the panel's keys. The same goes for the in-app notification card, the "draft ready" and "draft failed" toasts and the bell's item entries. An item the inbox doesn't show (out of scope, or gone from it) opens as the full page instead.
 
 **FR-11.2** No more than one notification per item, recorded as an `item.notified` event so a restart never repeats one. Quiet hours come from settings. Three or more `now` items found in one catch-up poll after a wake become a single summary notification.
 
@@ -838,7 +838,7 @@ As built (M3 step 19):
 
 **FR-11.5 Dismissing.** A dismissible entry's key names its occurrence: `draft_failed:<action>`, `snooze_back:<item>:<when>`, and so on. `POST /api/attention/dismiss {key}` logs `attention.dismissed`, and the projection keeps the key for 90 days. A new occurrence has a new key, so it shows again.
 
-**FR-11.6 macOS notifications for drafts.** A draft that is ready or failed notifies, as Frank may have moved on. Clicking the notification opens the item.
+**FR-11.6 macOS notifications for drafts.** A draft that is ready or failed notifies, as Frank may have moved on. Clicking the notification opens the item: *amended 11 Oct 2026 (UX-6)*, in the inbox panel on the draft's filing (`/?item=…&file=vault`), as FR-11.1.
 
 - **Same rules as FR-11.2:** quiet hours and the off switch apply, and the bell lists it either way.
 - **Batch drafts don't notify:** drafts made ahead while filing in a batch are requested with `quiet: true` (CK-4.2).

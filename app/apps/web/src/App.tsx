@@ -6,6 +6,7 @@ import { Shell } from './components/Shell';
 import { Toasts } from './components/Toasts';
 import { onTopics, useApiQuery } from './hooks/useApiQuery';
 import { ConnectionContext } from './hooks/useConnection';
+import { useOpenItem } from './hooks/useOpenItem';
 import { TYPE_LABEL } from './lib/lanes';
 import { EvalReportPage } from './pages/EvalReport';
 import { InboxPage } from './pages/Inbox';
@@ -36,7 +37,7 @@ function useThemeAttribute() {
 /** Turns server notices into macOS-style notifications and "draft ready" and "draft failed" toasts. */
 function useNoticeToasts() {
   const location = useLocation();
-  const navigate = useNavigate();
+  const openItem = useOpenItem();
   const path = useRef(location.pathname);
   const search = useRef(location.search);
   useEffect(() => {
@@ -52,7 +53,7 @@ function useNoticeToasts() {
         if (n.topic === 'draft_ready' && !takeQuiet(n.itemId) && !showing(n.itemId)) {
           toast(`${TYPE_LABEL[n.type].short} draft ready · ${n.title}`, {
             tone: 'success',
-            action: { label: 'Review', run: () => navigate(`/item/${encodeURIComponent(n.itemId)}`) },
+            action: { label: 'Review', run: () => openItem(n.itemId, n.type) },
           });
         }
         // The bell keeps it too (FR-11.4); the toast is for when Frank is here.
@@ -61,11 +62,11 @@ function useNoticeToasts() {
             tone: 'error',
             description: n.message || undefined,
             ttl: 9000,
-            action: { label: 'Open', run: () => navigate(`/item/${encodeURIComponent(n.itemId)}`) },
+            action: { label: 'Open', run: () => openItem(n.itemId, n.type) },
           });
         }
       }),
-    [navigate],
+    [openItem],
   );
 }
 

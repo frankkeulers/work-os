@@ -985,7 +985,7 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
       const r = await request();
       await settle();
       expect((await attention()).entries).toEqual([expect.objectContaining({ key: `draft_ready:${r.body.id}`, kind: 'draft_ready', title: 'Vault note draft ready', subject: '#product', itemId: PROD, dismissible: false })]);
-      expect(notes).toEqual([{ title: 'Vault note draft ready', message: '#product', group: `work-os-draft-${PROD}`, url: `${res.url}/item/${encodeURIComponent(PROD)}` }]);
+      expect(notes).toEqual([{ title: 'Vault note draft ready', message: '#product', group: `work-os-draft-${PROD}`, url: `${res.url}/?item=${encodeURIComponent(PROD)}&file=vault` }]);
       await call('POST', `/api/actions/${r.body.id}/approve`);
       await settle();
       expect((await attention()).entries).toEqual([]);
@@ -1500,7 +1500,7 @@ describe('notifications (FR-11.1, FR-11.2) and health alerts', () => {
     await call('POST', '/api/poll');
     for (let i = 0; i < 12 * 12; i++) await tick(); // past the quiet window
     await settle();
-    expect(notes).toEqual([{ title: '#product', message: 'Go/no-go on the launch before Thursday?', group: `work-os-${id}`, url: `${res.url}/item/${encodeURIComponent(id)}` }]);
+    expect(notes).toEqual([{ title: '#product', message: 'Go/no-go on the launch before Thursday?', group: `work-os-${id}`, url: `${res.url}/?item=${encodeURIComponent(id)}` }]);
     expect(res.store.projection.items[id].notified).toBe(true);
     // Still Now after a new reply: no second notification.
     slack.post('C01PROD', { ts: isoToTs(wall), thread_ts: isoToTs(START + MIN), user: 'U02DANA', text: 'Urgent, any news?' });

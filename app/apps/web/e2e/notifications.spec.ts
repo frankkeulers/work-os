@@ -18,6 +18,8 @@ const bell = (page: Page) => page.getByTestId('bell');
 const popover = (page: Page) => page.getByRole('dialog', { name: 'Follow-ups' });
 const entry = (page: Page, text: string | RegExp) => popover(page).getByRole('list', { name: 'Needs you' }).getByRole('listitem').filter({ hasText: text });
 
+const panel = (page: Page) => page.getByRole('complementary', { name: 'Item panel' });
+
 async function openBell(page: Page) {
   if (!(await popover(page).isVisible())) await bell(page).click();
   await expect(popover(page)).toBeVisible();
@@ -50,9 +52,10 @@ test('J69 draft a vault note, move on, and the bell says when it is ready (FR-11
   await shot(page, 'notifications-ready-dark');
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 
+  // Review opens it in the inbox panel, on the vault note (UX-6).
   await ready.getByRole('button', { name: 'Review' }).click();
-  await expect(page).toHaveURL(/\/item\//);
-  await page.getByRole('region', { name: 'Action' }).getByRole('button', { name: /^Approve/ }).click();
+  await expect(page).toHaveURL(/\/\?item=[^&]+&file=vault$/);
+  await panel(page).getByRole('region', { name: 'Action' }).getByRole('button', { name: /^Approve/ }).click();
   await openBell(page);
   await expect(entry(page, 'Vault note draft ready')).toHaveCount(1); // only the demo data's older one
 });
@@ -108,4 +111,37 @@ test('the bell says when nothing needs you', async ({ page }) => {
   await expect(popover(page).getByText('Nothing needs you.')).toBeVisible();
   await expect(bell(page).getByTestId('bell-count')).toHaveCount(0);
   await shot(page, 'notifications-empty-light');
+});
+
+test('J83 a notification opens its item in the inbox panel, with the list still there (UX-6)', async ({ page }) => {
+  await startJourney(page, 'J83');
+  const card = page.getByTestId('os-notification');
+  await expect(card).toBeVisible({ timeout: 10_000 });
+  const title = (await card.locator('span.font-semibold').nth(1).textContent())!;
+  await card.click();
+  await expect(page).toHaveURL(/\/\?item=/);
+  await expect(panel(page)).toContainText(title);
+  await expect(page.getByRole('region', { name: 'Inbox list' })).toBeVisible();
+  await expect(page.locator('[data-row][aria-current="true"]')).toContainText(title);
+  await expect(panel(page).getByText('Loading…')).toHaveCount(0);
+  await shot(page, 'notifications-open-in-panel-light');
+  // The panel's keys work there: Esc closes it and leaves you on the inbox.
+  await page.keyboard.press('Escape');
+  await expect(panel(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test('J84 a toast for an item the inbox doesn’t show opens it as a full page (UX-6)', async ({ page }) => {
+  await startJourney(page, 'J84'); // a Teams meeting, outside the Focus scope
+  await page.getByRole('region', { name: 'Action' }).getByRole('button', { name: 'Draft vault note' }).click();
+  await page.getByRole('link', { name: 'Back to inbox' }).click();
+  const toast = page.getByRole('status').filter({ hasText: /Vault note draft ready ·/ });
+  await toast.getByRole('button', { name: 'Review' }).click({ timeout: 20_000 });
+  await expect(page).toHaveURL(/\/item\/[^?]+\?tab=vault$/);
+  await expect(page.getByRole('region', { name: 'Action' }).getByRole('button', { name: /^Approve/ })).toBeVisible();
+  // A macOS notification's link, opened afresh, does the same.
+  const id = decodeURIComponent(new URL(page.url()).pathname.split('/').pop()!);
+  await page.goto(`/?item=${encodeURIComponent(id)}&file=vault`);
+  await expect(page).toHaveURL(/\/item\/[^?]+\?tab=vault$/);
+  await expect(page.getByRole('region', { name: 'Action' }).getByRole('button', { name: /^Approve/ })).toBeVisible();
 });

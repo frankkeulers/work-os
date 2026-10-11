@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { ActionType } from '@work-os/shared';
 import { api, type InboxView, type ItemSummary } from '../api';
 import { typeParam } from '../components/ActionPanel';
@@ -16,6 +16,7 @@ import { useLookedAt } from '../hooks/useLookedAt';
 import { useWideLayout } from '../hooks/useLayout';
 import { useStableGroups, type ShownRow } from '../hooks/useStableGroups';
 import { useNow } from '../hooks/useNow';
+import type { OpenItemState } from '../hooks/useOpenItem';
 import { closedByReply, useRepliedHold } from '../hooks/useRepliedHold';
 import type { AgendaDay } from '../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
@@ -828,20 +829,23 @@ export function InboxPage() {
   // Today's list opens the panel on the first item when Work OS opens, until it's closed; the
   // cockpit doesn't, as the panel would cover Later (UX-13). Only once, as the inbox arrives: the
   // preference is set a moment before a pick's URL changes, and opening the first item in that gap
-  // (a poll landing as File in a batch starts) would replace the one picked. A stale ?item= (after
-  // a reset) moves on to the first item on the list, and closes the panel on the cockpit.
+  // (a poll landing as File in a batch starts) would replace the one picked.
+  // An item the inbox doesn't show (done long ago, or out of scope), opened from a notification, a
+  // toast or the bell, opens as a full page instead (UX-6). Otherwise a stale ?item= (after a
+  // reset) moves on to the first item on the list, and closes the panel on the cockpit.
   const first = order[0];
   const missing = !!inbox && !!sel && !selItem;
+  const orPage = (useLocation().state as Partial<OpenItemState> | null)?.orPage;
   const arrived = useRef(false);
   useEffect(() => {
     if (!inbox) return;
+    const opening = !arrived.current;
+    if (sel || first) arrived.current = true;
     const open = !wide && usePrefs.getState().panelOpen;
-    if (missing) setSearch(open && first ? { item: first } : {}, { replace: true });
-    else if (!arrived.current && (sel || first)) {
-      arrived.current = true;
-      if (!sel && open) setSearch({ item: first }, { replace: true });
-    }
-  }, [inbox, missing, sel, first, wide, setSearch]);
+    if (missing && (orPage || opening)) navigate(orPage ?? itemPath(sel, filing ? `?tab=${typeParam(filing)}` : ''), { replace: true });
+    else if (missing) setSearch(open && first ? { item: first } : {}, { replace: true });
+    else if (opening && !sel && open && first) setSearch({ item: first }, { replace: true });
+  }, [inbox, missing, orPage, sel, first, filing, wide, navigate, setSearch]);
 
   // g then n or l, within a second (CK-3.3).
   const gAt = useRef(0);

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { api } from '../api';
 import { onTopics, useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
+import { useOpenItem } from '../hooks/useOpenItem';
 import { fmtAgo } from '../lib/format';
 import { TYPE_LABEL } from '../lib/lanes';
 import { usePrefs } from '../store/prefs';
@@ -118,6 +119,7 @@ export function NotificationBell() {
 
 function EntryRow({ e, isNew, onDone }: { e: AttentionEntry; isNew: boolean; onDone: () => void }) {
   const navigate = useNavigate();
+  const openItem = useOpenItem();
   const now = useNow(30_000);
   const k = KIND[e.kind];
   const go = () => {
@@ -125,6 +127,7 @@ function EntryRow({ e, isNew, onDone }: { e: AttentionEntry; isNew: boolean; onD
     if (e.kind === 'eval_done') void api.dismissAttention(e.key).catch(errorToast);
     onDone();
     if (e.href) window.open(e.href, '_blank', 'noopener');
+    else if (e.itemId) openItem(e.itemId, e.actionType);
     else if (e.to) navigate(e.to);
   };
   const dismiss = () => void api.dismissAttention(e.key).catch(errorToast);
@@ -159,7 +162,7 @@ function EntryRow({ e, isNew, onDone }: { e: AttentionEntry; isNew: boolean; onD
 }
 
 function WorkRow({ w, onDone }: { w: AttentionWork; onDone: () => void }) {
-  const navigate = useNavigate();
+  const openItem = useOpenItem();
   const p = w.progress;
   const status = p ? `${p.stages[p.stage] ?? 'Drafting'} · ${p.stage + 1} of ${p.stages.length}` : (w.held ?? 'Waiting its turn');
   return (
@@ -168,7 +171,7 @@ function WorkRow({ w, onDone }: { w: AttentionWork; onDone: () => void }) {
         type="button"
         onClick={() => {
           onDone();
-          navigate(`/item/${encodeURIComponent(w.itemId)}`);
+          openItem(w.itemId, w.type);
         }}
         className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left cursor-pointer hover:bg-surface-2"
       >

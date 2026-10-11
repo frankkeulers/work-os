@@ -220,6 +220,11 @@ A draft that is ready or fails also sends a macOS notification, and a toast when
 OS. Quiet hours apply, as for new Now items. See
 [Settings › Notifications](/settings/notifications).
 
+Notifications, toasts and the bell open an item in the inbox panel, on its draft if there is one,
+so the list stays beside it and the panel's keys work. `Esc` closes it and leaves you on the
+inbox. An item the inbox doesn't show, such as a Teams meeting in the Focus scope, opens as a full
+page instead.
+
 ## The item panel
 
 Click a row to open it in a panel on the right. It shows the decision (attention and why), the

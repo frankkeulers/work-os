@@ -16,6 +16,10 @@ export const HOLD_MS = 2 * 60_000;
 export const SUMMARY_MIN = 3;
 
 const DRAFT_LABEL: Record<ActionType, string> = { vault_note: 'Vault note', confluence_entry: 'Confluence entry', todo: 'To-do' };
+const FILE_PARAM: Record<ActionType, string> = { vault_note: 'vault', confluence_entry: 'confluence', todo: 'todo' };
+
+/** A click opens the item in the inbox panel, on the draft's filing (UX-6); the inbox opens the full page for one it doesn't show. */
+const inboxUrl = (base: string, itemId: string, type?: ActionType) => `${base}/?${new URLSearchParams({ item: itemId, ...(type && { file: FILE_PARAM[type] }) })}`;
 
 /** A draft Frank asked for is ready, or failed (FR-11.6). */
 export interface DraftNotification {
@@ -82,7 +86,7 @@ export class Notifications {
         title: `${DRAFT_LABEL[n.type]} draft ${n.outcome === 'ready' ? 'ready' : 'failed'}`,
         message: n.outcome === 'ready' ? n.title || 'Ready to review.' : `${n.title}${n.message ? `: ${n.message}` : ''}`,
         group: `work-os-draft-${n.itemId}`,
-        ...(base && { url: `${base}/item/${encodeURIComponent(n.itemId)}` }),
+        ...(base && { url: inboxUrl(base, n.itemId, n.type) }),
       })
       .catch((err) => this.d.logger?.error({ err }, 'Could not send a draft notification'))
       .finally(() => this.sending.delete(p));
@@ -121,7 +125,7 @@ export class Notifications {
       for (const it of items) {
         const text = (await this.d.items.read(it.source, it.id).catch(() => undefined))?.text?.summary ?? '';
         this.d.publish({ topic: 'notification', itemId: it.id, title: it.title, summary: text });
-        if (!summary) await this.d.notifier.notify({ title: it.title, message: text || 'Needs you now.', group: `work-os-${it.id}`, ...(base && { url: `${base}/item/${encodeURIComponent(it.id)}` }) });
+        if (!summary) await this.d.notifier.notify({ title: it.title, message: text || 'Needs you now.', group: `work-os-${it.id}`, ...(base && { url: inboxUrl(base, it.id) }) });
       }
     };
     const prev = this.flushing ?? Promise.resolve();

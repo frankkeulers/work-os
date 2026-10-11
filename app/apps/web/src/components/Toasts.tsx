@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useOpenItem } from '../hooks/useOpenItem';
 import { useToasts, type OsNotification, type Toast } from '../store/toasts';
 import { BrandMark } from './brand/BrandMark';
 import { Icon } from './icons';
@@ -61,7 +61,7 @@ const TONE = {
 
 function NotificationCard({ n }: { n: OsNotification }) {
   const dismiss = useToasts((s) => s.dismissNotification);
-  const navigate = useNavigate();
+  const openItem = useOpenItem();
   useEffect(() => {
     const id = setTimeout(() => dismiss(n.id), 9000);
     return () => clearTimeout(id);
@@ -72,7 +72,7 @@ function NotificationCard({ n }: { n: OsNotification }) {
       data-testid="os-notification"
       onClick={() => {
         dismiss(n.id);
-        navigate(`/item/${encodeURIComponent(n.itemId)}`);
+        openItem(n.itemId);
       }}
       className="pointer-events-auto flex w-[360px] items-start gap-3 rounded-[14px] border border-line bg-surface/95 p-3 text-left shadow-[0_16px_40px_rgba(20,23,28,0.22)] backdrop-blur cursor-pointer hover:bg-surface"
     >
