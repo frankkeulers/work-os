@@ -6,7 +6,7 @@ import { SourceError } from '../errors';
 import { mapLimit } from '../limit';
 import { SlackAdapter } from './adapter';
 import { SlackApi } from './api';
-import { mpdmTitle } from './directory';
+import { mpdmTitle, SlackDirectory } from './directory';
 import { EarlierMessages } from './earlier';
 import { FakeSlack } from './fakeSlack';
 import { buildItem, channelListed, cmpTs, mentionedIds, messageText, webClientUrl, dmWindows, isHuman, isoToTs, permalinkFor, threadTsOf, tsToIso } from './normalise';
@@ -303,6 +303,68 @@ describe('Earlier messages before a DM item', () => {
     expect((await new EarlierMessages(a.directory).forItem(dm)).messages.map((m) => m.text)).not.toContain('Last week');
     // Threads are fetched whole already: nothing before them.
     expect(await earlier.forItem(items[`slack:C01PROD:${ts(20)}`])).toEqual({ messages: [], people: [] });
+  });
+});
+
+describe('Slack adapter, nothing skipped (FR-2.8, Story 2.1)', () => {
+  // One directory across polls, as in the server, on a clock the test moves.
+  let at: number;
+  let directory: SlackDirectory;
+  const shared = () => {
+    settings = defaultSettings('/tmp/x');
+    settings.slack = { ...settings.slack, excludeChannels: ['#random'] };
+    return new SlackAdapter({ api: directory.api, settings, directory });
+  };
+  const poll = (cursor: string | undefined, mins: number) => {
+    at = NOW + mins * MIN;
+    return shared().fetchSince(cursor, ctx(at));
+  };
+  beforeEach(() => {
+    workspace();
+    at = NOW;
+    directory = new SlackDirectory(new SlackApi(secrets, slack.fetch), () => at);
+  });
+
+  it('keeps a mention in a channel Frank joined since the member list was read', async () => {
+    const first = await poll(undefined, 0);
+    slack.channel({ id: 'C05NEW', name: 'new-launch' }).post('C05NEW', { ts: ts(-5), user: 'U02DANA', text: '<@UFRANK> can you check the launch plan?' });
+    const r = await poll(first.nextCursor, 10);
+    expect(r.items.map((i) => i.id)).toContain(`slack:C05NEW:${ts(-5)}`);
+  });
+
+  it('reads back a channel Frank has joined, for what polls skipped before the member list knew', async () => {
+    slack.channel({ id: 'C06LATE', name: 'late', member: false });
+    const first = await poll(undefined, 0);
+    slack.post('C06LATE', { ts: ts(-2), user: 'U03SAM', text: 'Kick-off notes are in the doc' });
+    const second = await poll(first.nextCursor, 10);
+    expect(second.items.map((i) => i.id)).not.toContain(`slack:C06LATE:${ts(-2)}`); // not Frank's channel yet
+    slack.channels.get('C06LATE')!.member = true; // Frank is added; no new message mentions him
+    slack.post('C01PROD', { ts: ts(-30), user: 'U02DANA', text: 'Later news' }); // the cursor moves well past it
+    const third = await poll(second.nextCursor, 35);
+    expect(third.items.map((i) => i.id)).not.toContain(`slack:C06LATE:${ts(-2)}`); // the list is still fresh
+    const fourth = await poll(third.nextCursor, 80); // the hourly listing finds the new channel, past the look-back
+    expect(fourth.items.map((i) => i.id)).toContain(`slack:C06LATE:${ts(-2)}`);
+  });
+
+  it('reads the member list again for a channel it has not met, but not every poll for one Frank is not in', async () => {
+    const first = await poll(undefined, 0);
+    expect(slack.count('users.conversations')).toBe(1);
+    slack.post('C03OTHER', { ts: ts(-5), user: 'U03SAM', text: 'Still not Frank’s channel' });
+    const second = await poll(first.nextCursor, 10);
+    await poll(second.nextCursor, 20);
+    expect(slack.count('users.conversations')).toBe(1); // C03OTHER was met at the first listing
+    slack.channel({ id: 'C07PUB', name: 'public-other', member: false }).post('C07PUB', { ts: ts(-25), user: 'U03SAM', text: 'Hello' });
+    await poll(second.nextCursor, 30);
+    expect(slack.count('users.conversations')).toBe(2); // a channel never met: once
+  });
+
+  it('reads the rest by history when search hits its page limit, so the cursor jumps no gap', async () => {
+    const first = await poll(undefined, 0);
+    slack.channel({ id: 'C04BUSY', name: 'busy' });
+    for (let i = 0; i < 1200; i++) slack.post('C04BUSY', { ts: isoToTs(NOW + 60 * MIN + i * 1000), user: 'U03SAM', text: `m${i}` });
+    const r = await poll(first.nextCursor, 90);
+    expect(slack.count('search.messages')).toBe(1 + 10); // the first poll's page, then the limit
+    expect(r.items.filter((i) => i.id.includes('C04BUSY'))).toHaveLength(1200);
   });
 });
 

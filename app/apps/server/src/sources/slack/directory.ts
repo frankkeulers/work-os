@@ -2,10 +2,13 @@ import type { SlackApi } from './api';
 import type { AuthTest, Conversation, ConversationsResponse, MembersResponse, SlackUser, UserInfo, UsersListResponse } from './types';
 
 // Who is who, and which conversations Frank is in. Kept in memory: names for participants and
-// titles, membership to keep search to Frank's own conversations. Refreshed hourly; a user seen for
-// the first time is looked up on demand.
+// titles, membership to keep search to Frank's own conversations. Refreshed hourly, and sooner when a
+// poll meets a channel it doesn't know (recheck); a user seen for the first time is looked up on
+// demand.
 
-const REFRESH_MS = 60 * 60_000;
+export const REFRESH_MS = 60 * 60_000;
+/** The member list is read again for an unknown channel at most this often. */
+export const RECHECK_MS = 2 * 60_000;
 const MAX_PAGES = 20;
 
 /** The name Work OS shows and rules match on: display name, then real name, then handle. */
@@ -28,6 +31,10 @@ export class SlackDirectory {
   private bots = new Set<string>();
   private convs = new Map<string, Conversation>();
   private convsAt = 0;
+  /** Conversations a listing found that the one before it didn't, with when that one was read. */
+  private joined = new Map<string, { channel: Conversation; since: number }>();
+  /** Unknown channels already rechecked against the current listing: public ones Frank isn't in. */
+  private unknownSeen = new Set<string>();
   private members = new Map<string, { at: number; ids: string[] }>();
 
   constructor(
@@ -47,6 +54,30 @@ export class SlackDirectory {
   /** The conversations Frank is a member of, including DMs and group DMs. */
   async conversations(signal?: AbortSignal): Promise<Map<string, Conversation>> {
     if (this.convs.size && this.now() - this.convsAt < REFRESH_MS) return this.convs;
+    return this.relist(signal);
+  }
+
+  /**
+   * The member list again, when a poll meets channels it doesn't know: Frank may have joined one
+   * since the last listing, and its messages would be filtered out. Each unknown channel asks once
+   * per listing (search also returns public channels Frank isn't in), and again while a message
+   * there mentions Frank; never more often than RECHECK_MS.
+   */
+  async recheck(unknown: { id: string; mentionsMe: boolean }[], signal?: AbortSignal): Promise<Map<string, Conversation>> {
+    const due = unknown.some((u) => !this.convs.has(u.id) && (u.mentionsMe || !this.unknownSeen.has(u.id)));
+    if (due && this.now() - this.convsAt >= RECHECK_MS) await this.relist(signal);
+    for (const u of unknown) if (!this.convs.has(u.id)) this.unknownSeen.add(u.id);
+    return this.convs;
+  }
+
+  /** Conversations Frank joined since an earlier listing, each once, with when that listing was. */
+  takeJoined(): { channel: Conversation; since: number }[] {
+    const out = [...this.joined.values()];
+    this.joined.clear();
+    return out;
+  }
+
+  private relist(signal?: AbortSignal): Promise<Map<string, Conversation>> {
     // Callers at the same moment (a poll, the inbox naming group DMs) share one listing.
     this.loading ??= this.listConversations(signal).finally(() => (this.loading = undefined));
     return this.loading;
@@ -63,6 +94,9 @@ export class SlackDirectory {
       cursor = r.response_metadata?.next_cursor || undefined;
       if (!cursor) break;
     }
+    // The first listing has nothing to compare with; later ones note what Frank has joined since.
+    if (this.convs.size) for (const [id, c] of next) if (!this.convs.has(id)) this.joined.set(id, { channel: c, since: this.convsAt });
+    this.unknownSeen.clear();
     this.convs = next;
     this.convsAt = this.now();
     return next;

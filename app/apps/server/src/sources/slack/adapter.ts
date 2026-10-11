@@ -15,6 +15,10 @@ import type { Conversation, HistoryResponse, SearchMatch, SearchResponse, SlackM
 //   4. groups DMs outside threads into windows split by 30 minutes of quiet.
 // The cursor is the newest message ts seen. Search lags behind posting, so each poll looks back
 // 15 minutes before the cursor; the poll pipeline dedupes on ts (FR-2.8).
+// Nothing is skipped when the cursor jumps (Story 2.1): a search that stops at its page limit is
+// filled in by history, conversation by conversation; a channel search meets that the member list
+// doesn't know has the list read again first; and a channel Frank has joined since an earlier
+// listing is read back to then, for what polls filtered out before the list knew.
 
 export const SEARCH_OVERLAP_MS = 15 * 60_000;
 export const FIRST_POLL_MS = 2 * 86_400_000;
@@ -22,6 +26,8 @@ export const DM_LOOKBACK_MS = 12 * 3600_000;
 export const MAX_SEARCH_PAGES = 10;
 export const MAX_HISTORY_PAGES = 5;
 export const MAX_REPLY_PAGES = 5;
+/** History pages per conversation when filling in after search hit its limit (a week away). */
+export const MAX_CATCHUP_PAGES = 20;
 /** History mode: how far back to look for thread parents that may have new replies. */
 export const THREAD_LOOKBACK_MS = 3 * 86_400_000;
 export const CONCURRENCY = 3;
@@ -29,6 +35,8 @@ export const CONCURRENCY = 3;
 interface Found {
   channel: Conversation;
   msg: SlackMessage;
+  /** Read back for a newly joined channel: kept even though it is older than the cursor. */
+  catchUp?: boolean;
 }
 
 export interface SlackAdapterOptions {
@@ -74,7 +82,7 @@ export class SlackAdapter implements SourceAdapter {
     const { signal } = ctx;
     const s = this.o.settings.slack;
     const me = await this.directory.identity(signal);
-    const members = await this.directory.conversations(signal);
+    let members = await this.directory.conversations(signal);
     const sinceMs = cursor ? Date.parse(tsToIso(cursor)) - SEARCH_OVERLAP_MS : ctx.now.getTime() - FIRST_POLL_MS;
     const since = isoToTs(sinceMs);
 
@@ -84,7 +92,24 @@ export class SlackAdapter implements SourceAdapter {
       return s.includeChannels.length ? channelListed(s.includeChannels, c) : members.has(c.id);
     };
 
-    const fetched = s.fetchMode === 'history' ? await this.historySince(since, sinceMs, members, allowed, signal) : await this.searchSince(since, sinceMs, signal);
+    const mine = () => [...members.values()].filter(allowed);
+    let fetched: Found[];
+    if (s.fetchMode === 'history') fetched = await this.historySince(since, sinceMs, mine(), signal);
+    else {
+      const search = await this.searchSince(since, sinceMs, signal);
+      fetched = search.found;
+      if (!s.includeChannels.length) {
+        const unknown = fetched.filter((f) => !isDirect(f.channel) && !members.has(f.channel.id) && !channelListed(s.excludeChannels, f.channel));
+        if (unknown.length) members = await this.directory.recheck(unknown.map((f) => ({ id: f.channel.id, mentionsMe: mentionedIds([messageText(f.msg)]).includes(me.user_id) })), signal);
+      }
+      if (search.capped) fetched.push(...(await this.historySince(since, sinceMs, mine(), signal, MAX_CATCHUP_PAGES)));
+    }
+    for (const j of this.directory.takeJoined()) {
+      if (!allowed(j.channel)) continue;
+      const from = Math.min(sinceMs, j.since) - SEARCH_OVERLAP_MS;
+      for (const f of await this.historySince(isoToTs(from), from, [j.channel], signal)) fetched.push({ ...f, catchUp: true });
+    }
+    fetched = dedupe(fetched);
     let nextCursor = cursor;
     for (const f of fetched) {
       nextCursor = maxTs(nextCursor, f.msg.ts);
@@ -93,7 +118,7 @@ export class SlackAdapter implements SourceAdapter {
     const isNew = (m: SlackMessage) => cmpTs(m.ts, since) > 0 || (!!m.latest_reply && cmpTs(m.latest_reply, since) > 0);
     // Search drops bot_id: an app's post is known by its user being a bot, so look the authors up first.
     await this.directory.resolveUsers(fetched.flatMap((f) => (f.msg.user && allowed(f.channel) ? [f.msg.user] : [])), signal);
-    const found = fetched.filter((f) => allowed(f.channel) && isNew(f.msg) && this.keep(f.channel)(f.msg));
+    const found = fetched.filter((f) => allowed(f.channel) && (f.catchUp || isNew(f.msg)) && this.keep(f.channel)(f.msg));
 
     // Group: threads by thread_ts, DM messages outside a thread into windows. A thread is fetched
     // whole only when a reply points at it: a new reply always shows up in the search itself, so a
@@ -173,8 +198,8 @@ export class SlackAdapter implements SourceAdapter {
     );
   }
 
-  /** search.messages, newest first, until a page reaches back past `since`. */
-  private async searchSince(since: string, sinceMs: number, signal: AbortSignal): Promise<Found[]> {
+  /** search.messages, newest first, until a page reaches back past `since`; `capped` if the page limit came first. */
+  private async searchSince(since: string, sinceMs: number, signal: AbortSignal): Promise<{ found: Found[]; capped: boolean }> {
     // `after:` is a date in Frank's own time zone and excludes that day: two days back covers any zone.
     const after = new Date(sinceMs - 2 * 86_400_000).toISOString().slice(0, 10);
     const out: Found[] = [];
@@ -187,20 +212,19 @@ export class SlackAdapter implements SourceAdapter {
       }
       const pages = r.messages.paging?.pages ?? r.messages.pagination?.page_count ?? 1;
       const oldest = matches.at(-1)?.ts;
-      if (!oldest || cmpTs(oldest, since) <= 0 || page >= pages) return out;
+      if (!oldest || cmpTs(oldest, since) <= 0 || page >= pages) return { found: out, capped: false };
     }
-    this.o.logger?.warn({ pages: MAX_SEARCH_PAGES }, 'Slack search hit its page limit: older messages in this window were skipped');
-    return out;
+    this.o.logger?.info({ pages: MAX_SEARCH_PAGES }, 'Slack search hit its page limit: reading the rest by history');
+    return { found: out, capped: true };
   }
 
-  /** conversations.history for each allowed conversation: the fallback mode (FR-2.4). */
-  private async historySince(since: string, sinceMs: number, members: Map<string, Conversation>, allowed: (c: Conversation) => boolean, signal: AbortSignal): Promise<Found[]> {
-    const convs = [...members.values()].filter(allowed);
+  /** conversations.history for each of these conversations: the fallback mode (FR-2.4), and filling in. */
+  private async historySince(since: string, sinceMs: number, convs: Conversation[], signal: AbortSignal, maxPages = MAX_HISTORY_PAGES): Promise<Found[]> {
     // A thread with a reply since the cursor shows up only as its parent, with a newer latest_reply,
     // so read back a few days of parents too.
     const oldest = isoToTs(sinceMs - THREAD_LOOKBACK_MS);
     const per = await mapLimit(convs, CONCURRENCY, async (c) => {
-      const msgs = await this.paged<HistoryResponse>('conversations.history', { channel: c.id, oldest, limit: 200 }, MAX_HISTORY_PAGES, signal);
+      const msgs = await this.paged<HistoryResponse>('conversations.history', { channel: c.id, oldest, limit: 200 }, maxPages, signal);
       return msgs.filter((m) => cmpTs(m.ts, since) > 0 || (m.latest_reply && cmpTs(m.latest_reply, since) > 0)).map((msg) => ({ channel: c, msg }));
     });
     return per.flat();
@@ -213,8 +237,9 @@ export class SlackAdapter implements SourceAdapter {
       const r = await this.o.api.call<R>(method, { ...params, cursor }, signal);
       out.push(...r.messages);
       cursor = r.response_metadata?.next_cursor || undefined;
-      if (!cursor) break;
+      if (!cursor) return out;
     }
+    this.o.logger?.warn({ method, channel: params.channel, pages: maxPages }, 'Slack: page limit reached; older messages here were not read');
     return out;
   }
 
@@ -263,6 +288,17 @@ export class SlackAdapter implements SourceAdapter {
       .filter((w) => w.some((m) => newTs.has(m.ts)))
       .map((w) => ({ channel, key: w[0].ts, messages: w, permalink: permalinkFor(teamUrl, channel.id, w[0].ts) }));
   }
+}
+
+/** One entry per message; a later copy (history's, which carries the thread's replies) wins. */
+function dedupe(found: Found[]): Found[] {
+  const by = new Map<string, Found>();
+  for (const f of found) {
+    const key = `${f.channel.id}:${f.msg.ts}`;
+    const had = by.get(key);
+    by.set(key, had?.catchUp && !f.catchUp ? { ...f, catchUp: true } : f);
+  }
+  return [...by.values()];
 }
 
 interface ItemDraft {
