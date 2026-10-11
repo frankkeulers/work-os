@@ -96,7 +96,7 @@ export function Toasts() {
           <ToastRow key={t.id} t={t} />
         ))}
       </div>
-      <div className="pointer-events-none fixed right-4 top-4 z-[70] flex flex-col gap-2" aria-live="polite" aria-label="Notifications">
+      <div className="pointer-events-none fixed right-4 top-[72px] z-[70] flex flex-col gap-2" aria-live="polite" aria-label="Notifications">
         {notifications.map((n) => (
           <NotificationCard key={n.id} n={n} />
         ))}

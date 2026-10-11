@@ -80,4 +80,9 @@ export const JOURNEYS: Journey[] = [
   { id: 'J66', group: 'Vault', title: 'Already filed', start: (c) => (fresh(c), c.setNextDraftOutcome('already_filed'), item(c, 'f4')) },
   { id: 'J67', group: 'Vault', title: 'Possible duplicate', start: (c) => (fresh(c), c.setNextDraftOutcome('possible_duplicate'), item(c, 'f4')) },
   { id: 'J68', group: 'Confluence', title: 'Already filed', start: (c) => (fresh(c), c.setNextDraftOutcome('already_filed'), item(c, 't2')) },
+  // The bell (FR-11.3–11.6).
+  { id: 'J69', group: 'Follow-ups', title: 'Draft, move on, hear back', start: (c) => (fresh(c), item(c, 'f4', '?tab=vault')) },
+  { id: 'J70', group: 'Follow-ups', title: 'A draft fails while away', start: (c) => (fresh(c), c.setNextDraftOutcome('model_error'), item(c, 'f4', '?tab=vault')) },
+  { id: 'J71', group: 'Follow-ups', title: 'Something to fix', start: (c) => (fresh(c), c.setFlag('health_ms365'), '/') },
+  { id: 'J72', group: 'Follow-ups', title: 'Nudges and housekeeping', start: (c) => (c.cockpitAfternoon(), later(() => c.frankReplies('open'), 800), '/') },
 ];

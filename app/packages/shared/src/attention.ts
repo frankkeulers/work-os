@@ -25,7 +25,7 @@ export interface GuidanceChange {
 export interface AttentionInput {
   now: string;
   /** Items the actions belong to, and those that may need a nudge: topics' anchors, not parts. */
-  items: readonly Pick<ItemSummary, 'id' | 'title' | 'status' | 'revision' | 'backFromSnooze' | 'backAt' | 'looksFinished' | 'replyCheck' | 'lastActivityAt'>[];
+  items: readonly Pick<ItemSummary, 'id' | 'title' | 'status' | 'doneAt' | 'revision' | 'backFromSnooze' | 'backAt' | 'looksFinished' | 'replyCheck' | 'lastActivityAt'>[];
   actions: readonly Pick<ActionState, 'id' | 'itemId' | 'type' | 'status' | 'failureReason' | 'failedWhile' | 'supersedes' | 'itemRevision' | 'createdAt' | 'updatedAt'>[];
   /** The drafts being made now, by action id. A drafting action without one waits its turn. */
   progress: Record<string, DraftProgress>;
@@ -130,6 +130,9 @@ export function buildAttention(input: AttentionInput): AttentionView {
     for (const type of ['confluence_entry', 'vault_note'] as const) {
       const a = currentAction(list, type);
       if (!a) continue;
+      // Frank closed the item after this draft was ready or failed: he has left it. One that is ready
+      // or fails after he closed the item is the draft he asked for on his way out, so it shows.
+      if (it.status === 'done' && it.doneAt && it.doneAt >= a.updatedAt && a.status !== 'drafting') continue;
       const base = { itemId, actionId: a.id, actionType: type, subject: it.title, to: `/item/${encodeURIComponent(itemId)}` };
       if (a.status === 'drafting') {
         const progress = input.progress[a.id];

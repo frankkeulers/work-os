@@ -31,7 +31,7 @@ function useThemeAttribute() {
   }, [theme]);
 }
 
-/** Turns server notices into macOS-style notifications and "draft ready" toasts. */
+/** Turns server notices into macOS-style notifications and "draft ready" and "draft failed" toasts. */
 function useNoticeToasts() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,6 +51,15 @@ function useNoticeToasts() {
           toast(`${TYPE_LABEL[n.type].short} draft ready · ${n.title}`, {
             tone: 'success',
             action: { label: 'Review', run: () => navigate(`/item/${encodeURIComponent(n.itemId)}`) },
+          });
+        }
+        // The bell keeps it too (FR-11.4); the toast is for when Frank is here.
+        if (n.topic === 'draft_failed' && !takeQuiet(n.itemId) && !showing(n.itemId)) {
+          toast(`${TYPE_LABEL[n.type].short} draft failed · ${n.title}`, {
+            tone: 'error',
+            description: n.message || undefined,
+            ttl: 9000,
+            action: { label: 'Open', run: () => navigate(`/item/${encodeURIComponent(n.itemId)}`) },
           });
         }
       }),

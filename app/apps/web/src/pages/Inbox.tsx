@@ -32,6 +32,7 @@ import { BatchDone, ItemPanel } from './inbox/ItemPanel';
 import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
 import { LeaveDialog, PanelSlide } from './inbox/PanelSlide';
 import { rowEl, usePanelHost } from './inbox/usePanelHost';
+import { NotificationBell } from '../components/NotificationBell';
 
 // The two groups on screen (FR-8.1). Failed triage sits in Needs you, untriaged, so it isn't missed.
 const isTop = (i: ItemSummary) => i.lane === 'now' || i.lane === 'today' || i.lane === 'week' || i.lane === 'failed' || i.lane === 'file';
@@ -971,6 +972,7 @@ export function InboxPage() {
         {health && <HealthPill health={health} />}
         <PollButton inbox={inbox} />
         <UsagePopover inbox={inbox} />
+        <NotificationBell />
       </header>
 
       {!wide && <Agenda full={full} onOpenItem={openItem} />}

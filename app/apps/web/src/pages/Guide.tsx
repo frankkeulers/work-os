@@ -7,6 +7,7 @@ import { api } from '../api';
 import { GROUPS, PAGES, pageBySlug, pagesFrom, search, type GuidePage, type SearchHit } from '../guide/pages';
 import { renderGuide } from '../guide/render';
 import { toast } from '../store/toasts';
+import { NotificationBell } from '../components/NotificationBell';
 
 // The user guide (FR-1.8). Laid out like Settings: the pages in groups on the left, the page as
 // prose in the middle, and its sections on the right on wide screens. Content comes from
@@ -305,6 +306,9 @@ export function GuidePage() {
         <div className="flex max-w-[1240px] flex-1 items-center gap-x-6">
           <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Guide</h1>
           <GuideSearch pages={pages} />
+        </div>
+        <div className="ml-auto pl-4">
+          <NotificationBell />
         </div>
       </header>
       <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">

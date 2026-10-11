@@ -783,12 +783,12 @@ function MoreSourcesSection({ full }: Ctx) {
 function NotificationsSection({ s, full, set, type, flush, err }: Ctx) {
   return (
     <>
-      <SectionHeader title="Notifications" description="Only new Now items notify you. Everything else waits in the inbox." />
+      <SectionHeader title="Notifications" description="New Now items, and drafts you asked for once they are ready or fail. Everything else waits in the inbox and the bell." />
       <Group>
-        <Row label="macOS notifications" help="One per item, with its one-line summary. Clicking it opens the item.">
+        <Row label="macOS notifications" help="One per Now item, with its one-line summary, and one per draft. Clicking it opens the item.">
           <Switch label="macOS notifications" checked={s.notifications.enabled} onChange={(v) => set((x) => (x.notifications.enabled = v))} />
         </Row>
-        <Row label="Quiet hours" htmlFor="quiet-hours" help="Now items still land in the inbox, just without a notification." error={err('notifications.quietHours')}>
+        <Row label="Quiet hours" htmlFor="quiet-hours" help="Now items still land in the inbox, and drafts in the bell, just without a notification." error={err('notifications.quietHours')}>
           <input
             id="quiet-hours"
             disabled={!s.notifications.enabled}

@@ -31,6 +31,8 @@ interface Prefs extends Profile {
   timeWidth: number;
   /** The cockpit's Later column width in px, dragged at its left edge (LATER_WIDTH bounds it). */
   laterWidth: number;
+  /** When Frank last opened the bell (FR-11.5): entries since then count as new. Server time. */
+  bellSeenAt?: string;
   setTheme: (t: Theme) => void;
   setPanelOpen: (open: boolean) => void;
   setScope: (s: Scope) => void;
@@ -50,6 +52,7 @@ interface Prefs extends Profile {
   setTimeCollapsed: (collapsed: boolean) => void;
   setTimeWidth: (px: number) => void;
   setLaterWidth: (px: number) => void;
+  setBellSeenAt: (at: string) => void;
 }
 
 /** The cockpit's resizable columns: their width to begin with, and how far they drag. */
@@ -117,6 +120,7 @@ export const usePrefs = create<Prefs>()(
       setTimeCollapsed: (timeCollapsed) => set({ timeCollapsed }),
       setTimeWidth: (timeWidth) => set({ timeWidth }),
       setLaterWidth: (laterWidth) => set({ laterWidth }),
+      setBellSeenAt: (bellSeenAt) => set({ bellSeenAt }),
     }),
     { name: 'workos.prefs' },
   ),

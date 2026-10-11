@@ -121,8 +121,17 @@ test('inbox, poll, correction, done, a restart, a vault note, a Confluence entry
   await action.getByRole('tab', { name: /Vault note/ }).click();
   await action.getByRole('button', { name: 'Draft vault note' }).click();
   await expect(action.getByText('Inbox/Matt M.md', { exact: true })).toBeVisible({ timeout: 20_000 });
+  // The bell lists the ready draft until it is approved (FR-11.3, FR-11.4).
+  await page.getByTestId('bell').click();
+  const bell = page.getByRole('dialog', { name: 'Follow-ups' });
+  await expect(bell.getByRole('listitem').filter({ hasText: 'Vault note draft ready' })).toContainText('Matt M.');
+  await page.screenshot({ path: join(APP, 'screenshots/server-bell-light.png') });
+  await page.keyboard.press('Escape');
   await action.getByRole('button', { name: 'Approve and write to sandbox' }).click();
   await expect(action.getByRole('status')).toContainText('Dry-run: Created', { timeout: 20_000 });
+  await page.getByTestId('bell').click();
+  await expect(bell.getByRole('listitem').filter({ hasText: 'Vault note draft ready' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
   await expect(action.getByRole('status')).toContainText('/sandbox/vault/Inbox/Matt M.md');
   await page.screenshot({ path: join(APP, 'screenshots/server-vault-light.png') });
 

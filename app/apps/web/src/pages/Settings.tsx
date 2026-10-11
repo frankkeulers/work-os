@@ -13,6 +13,7 @@ import { SettingsEditor, type EditorState, type SaveInfo } from '../lib/settings
 import { usePrefs } from '../store/prefs';
 import { errorToast, toast } from '../store/toasts';
 import { LEGACY_ANCHORS, SECTIONS, type Confirm, type Ctx } from './settings/sections';
+import { NotificationBell } from '../components/NotificationBell';
 
 const GROUPS = ['Account', 'Inbox', 'Sources', 'Actions', 'Claude', 'System'] as const;
 
@@ -136,6 +137,9 @@ export function SettingsPage() {
         <div className="flex max-w-[1008px] flex-1 items-center gap-x-6">
           <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Settings &amp; rules</h1>
           <SaveStatus st={st} savedAt={view.savedAt} onRetry={ctx.flush} />
+        </div>
+        <div className="ml-auto pl-4">
+          <NotificationBell />
         </div>
       </header>
       <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">

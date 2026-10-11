@@ -94,6 +94,13 @@ describe('buildAttention: drafts (FR-11.4)', () => {
     expect(offline.working[1]?.held).toBe('Waits for Confluence');
   });
 
+  it('leaves out a draft on an item closed after it was ready, not one ready after the item closed', () => {
+    const closedAfter = buildAttention(input({ items: [item('a', { status: 'done', doneAt: at(-10) })], actions: [action('x', 'a', { updatedAt: at(-20) })] }));
+    expect(closedAfter.entries).toEqual([]);
+    const readyAfter = buildAttention(input({ items: [item('a', { status: 'done', doneAt: at(-25) })], actions: [action('x', 'a', { updatedAt: at(-20) })] }));
+    expect(readyAfter.entries.map((e) => e.kind)).toEqual(['draft_ready']);
+  });
+
   it('skips actions whose item retention removed', () => {
     expect(buildAttention(input({ actions: [action('x', 'gone')] })).entries).toEqual([]);
   });

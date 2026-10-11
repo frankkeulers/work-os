@@ -19,6 +19,7 @@ import { usePanelHost } from './inbox/usePanelHost';
 import { CalendarWeek, EventCard, eventItem } from './source/CalendarWeek';
 import { MEETING_STATES, ROW_STATES, countBy, defaultHidden, meetingState, rowState } from './source/filters';
 import { HistoryGroup, HistoryRow, StateFilter, byConversation, byDay, byWeek, whenOf, type Group } from './source/rows';
+import { NotificationBell } from '../components/NotificationBell';
 
 // A source's history (cockpit CK-5): everything the source has stored, newest first, whatever
 // triage made of it, each item opening in the same panel as in the Inbox, filing included. Slack by
@@ -197,6 +198,7 @@ export function SourcePage() {
           Health ›
         </Link>
         {pill && <HealthPill health={pill} />}
+        <NotificationBell />
       </header>
       {(isLive(source) || calendar) && <StateFilter states={calendar ? MEETING_STATES : ROW_STATES} counts={counts} hidden={hidden} onChange={(h) => setSourceHidden(source, h)} />}
 

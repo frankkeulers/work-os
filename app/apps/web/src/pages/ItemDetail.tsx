@@ -16,6 +16,7 @@ import { LANE_META } from '../lib/lanes';
 import { SOURCE_NAME } from '../lib/next';
 import { usePrefs } from '../store/prefs';
 import { errorToast, toast } from '../store/toasts';
+import { NotificationBell } from '../components/NotificationBell';
 
 // ---------- Header ----------
 
@@ -406,9 +407,13 @@ function Frame({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-bg">
       <div className="mx-auto flex max-w-[1360px] flex-col gap-[18px] px-8 pb-12 pt-5">
-        <Link to="/" className="inline-flex min-h-9 items-center gap-1.5 self-start text-[13px] no-underline">
-          <Icon name="back" /> Back to inbox
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link to="/" className="inline-flex min-h-9 items-center gap-1.5 text-[13px] no-underline">
+            <Icon name="back" /> Back to inbox
+          </Link>
+          <span className="flex-1" />
+          <NotificationBell />
+        </div>
         {children}
       </div>
     </div>

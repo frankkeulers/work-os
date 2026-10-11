@@ -10,6 +10,7 @@ import { useHashScroll } from '../hooks/useHashScroll';
 import { fmtDate, fmtMoney, fmtTime, fmtTokens } from '../lib/format';
 import { usePrefs } from '../store/prefs';
 import { errorToast, toast } from '../store/toasts';
+import { NotificationBell } from '../components/NotificationBell';
 
 export const PURPOSE_LABEL: Record<UsagePurpose, string> = {
   triage: 'Triage',
@@ -349,6 +350,7 @@ function UsageFrame({ children }: { children: ReactNode }) {
         <div className="mx-auto flex h-16 max-w-[1360px] items-center gap-3 px-8">
           <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Usage &amp; health</h1>
           <MvpTag>MVP · E7, E12</MvpTag>
+          <NotificationBell />
         </div>
       </header>
       <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
