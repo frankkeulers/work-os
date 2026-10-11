@@ -3,7 +3,7 @@ title: Keyboard shortcuts
 group: Help
 order: 90
 summary: Every key Work OS listens for.
-updated: 2026-10-09
+updated: 2026-10-11
 ---
 
 Shortcuts work anywhere except while you are typing in a field.
@@ -35,6 +35,7 @@ Shortcuts work anywhere except while you are typing in a field.
 | `s` | Snooze |
 | `c` | Correct triage |
 | `y` | Triage was right: keep the decision as a label |
+| `a` | Add to-do: your open steps, as tasks in your Tasks note |
 | `→` | Skip, while filing in a batch: the item stays in To file |
 
 ## Guide

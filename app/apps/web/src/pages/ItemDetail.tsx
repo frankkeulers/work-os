@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useBlocker, useParams, useSearchParams } from 'react-router';
 import type { ActionType, Message } from '@work-os/shared';
 import { api, isApiError, type ItemView } from '../api';
-import { ActionPanel, defaultType, parseType } from '../components/ActionPanel';
+import { ActionPanel, defaultType, parseType, typeParam } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
 import { CategoryTags, CorrectForm, OnCalendar, SnoozeMenu, attentionName, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../components/item';
 import { Icon, type IconName } from '../components/icons';
@@ -340,14 +340,14 @@ export function ItemDetailPage() {
   // ?draft=… starts a draft once, then the link becomes ?tab=… so a refresh doesn't draft again.
   useEffect(() => {
     if (!requested || !id) return;
-    setSearch({ tab: requested === 'vault_note' ? 'vault' : 'confluence' }, { replace: true });
+    setSearch({ tab: typeParam(requested) }, { replace: true });
     void api.requestDraft(id, requested).catch(errorToast);
   }, [requested, id, setSearch]);
 
   // Pin the opening tab in the URL so it doesn't jump when an action finishes.
   const tabParam = parseType(search.get('tab')) ?? requested;
   useEffect(() => {
-    if (view && !tabParam) setSearch({ tab: defaultType(view) === 'vault_note' ? 'vault' : 'confluence' }, { replace: true });
+    if (view && !tabParam) setSearch({ tab: typeParam(defaultType(view)) }, { replace: true });
   }, [view, tabParam, setSearch]);
 
   useEffect(() => {
@@ -374,7 +374,7 @@ export function ItemDetailPage() {
 
   const s = view.summary;
   const type = tabParam ?? defaultType(view);
-  const setType = (t: ActionType) => setSearch({ tab: t === 'vault_note' ? 'vault' : 'confluence' }, { replace: true });
+  const setType = (t: ActionType) => setSearch({ tab: typeParam(t) }, { replace: true });
 
   return (
     <Frame>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import type { ActionType } from '@work-os/shared';
 import { api, type InboxView, type ItemSummary } from '../api';
+import { typeParam } from '../components/ActionPanel';
 import { Agenda } from '../components/Agenda';
 import { SourceMark } from '../components/BrandIcon';
 import { BrandMark } from '../components/brand/BrandMark';
@@ -800,7 +801,7 @@ export function InboxPage() {
       }
       clearNew(item.id);
       setPanelOpen(true);
-      setSearch({ item: item.id, file: type === 'vault_note' ? 'vault' : 'confluence' }, { replace: true });
+      setSearch({ item: item.id, file: typeParam(type) }, { replace: true });
       rowEl(item.id)?.scrollIntoView({ block: 'nearest' });
     },
     [budgetHit, clearNew, setPanelOpen, setSearch],

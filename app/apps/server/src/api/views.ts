@@ -549,7 +549,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
     closesOnReply: closesOnReply(s, it.source),
     dryRun: d.settings.settings?.dryRun ?? true,
     dataDir: d.config.dataDir,
-    targets: { confluenceSite: s.confluence.siteUrl, spaceKey: s.confluence.spaceKey, vaultPath: s.vaultPath },
+    targets: { confluenceSite: s.confluence.siteUrl, spaceKey: s.confluence.spaceKey, vaultPath: s.vaultPath, tasksNote: s.tasksNote },
     budgets: b,
     meId: d.meId?.(it.source) ?? '',
     ...(members && { members }),

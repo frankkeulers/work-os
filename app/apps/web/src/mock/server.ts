@@ -3,6 +3,8 @@ import {
   SETTLE_MAX_ATTEMPTS,
   Settings as SettingsSchema,
   askId,
+  todoContent,
+  todoSteps,
   awaitsReply,
   effectiveTriage,
   draftTarget,
@@ -59,6 +61,7 @@ import {
   unsnooze,
   upgradeSettings,
   type Action,
+  type Draft,
   type AttentionView,
   type ConfluenceCatalogueView,
   type GuideFilesView,
@@ -125,6 +128,7 @@ const STAGE_MS = 1500;
 const DRAFT_STAGES: Record<ActionType, string[]> = {
   vault_note: ['Reading the thread', 'Finding related notes in the vault', 'Drafting the note'],
   confluence_entry: ['Reading the thread', 'Reading the Confluence catalogue', 'Picking the page', 'Drafting the entry', 'People check (Haiku)'],
+  todo: ['Writing the to-do'],
 };
 
 const ACTIVE: Action['status'][] = ['drafting', 'ready', 'approved', 'executing'];
@@ -697,7 +701,7 @@ export class MockServer implements WorkOsApi, MockControls {
       closesOnReply: closesOnReply(this.s.settings, rec.item.source),
       dryRun: this.s.settings.dryRun,
       dataDir: this.s.settings.dataDir,
-      targets: { confluenceSite: this.s.settings.confluence.siteUrl, spaceKey: this.s.settings.confluence.spaceKey, vaultPath: this.s.settings.vaultPath },
+      targets: { confluenceSite: this.s.settings.confluence.siteUrl, spaceKey: this.s.settings.confluence.spaceKey, vaultPath: this.s.settings.vaultPath, tasksNote: this.s.settings.tasksNote },
       budgets,
       meId: FRANK,
       ...(this.categoryTagsOf(rec.item.meeting?.calendar?.eventId) && { calendarCategories: this.categoryTagsOf(rec.item.meeting?.calendar?.eventId) }),
@@ -1150,17 +1154,48 @@ export class MockServer implements WorkOsApi, MockControls {
     return 'normal';
   }
 
-  async requestDraft(itemId: string, type: ActionType, opts: { quiet?: boolean } = {}): Promise<Action> {
+  async requestDraft(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[] } = {}): Promise<Action> {
     await this.gate(COMMAND_MS);
     const rec = this.rec(itemId);
+    if (opts.steps && type !== 'todo') throw new ApiError('validation', 'Only a to-do takes steps.');
     const existing = this.actionsFor(itemId).find((a) => a.type === type && ACTIVE.includes(a.status));
+    // As the server: picked steps replace a to-do still waiting for review.
+    if (existing && type === 'todo' && opts.steps && existing.status === 'ready') {
+      this.event('action.discarded', { reason: 'redraft' }, { itemId, actionId: existing.id });
+      return structuredClone(this.createTodo(rec, opts.steps, existing.id));
+    }
     if (existing) return structuredClone(existing);
+    if (type === 'todo') return structuredClone(this.createTodo(rec, opts.steps));
     if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
     const outcome = this.takeOutcome((o) => DRAFT_TIME_OUTCOMES.includes(o) || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
     return structuredClone(this.createAction(rec, type, outcome, undefined, opts.quiet));
   }
 
+  /** As the server's createTodo (UX-5): built by code from the open steps, ready at once, no draft spent. */
+  private createTodo(rec: ItemRec, steps?: string[], supersedes?: string): Action {
+    const list = steps ? steps.map((step) => ({ step })) : todoSteps(rec.decision, rec.asksDone);
+    if (!list.length) throw new ApiError('validation', 'Nothing to add: this item has no next step.');
+    const id = `act-${rec.key}-t${this.s.seq + 1}`;
+    const draft: Draft = {
+      kind: 'todo',
+      path: this.s.settings.tasksNote,
+      content: todoContent(list, { title: rec.item.title, permalink: rec.item.permalink }),
+      model: 'code',
+      promptVersion: 'todo v1',
+      durationMs: 0,
+      tokens: 0,
+      edited: false,
+    };
+    const revision = rec.item.revision;
+    this.event('action.requested', { type: 'todo', revision, ...(supersedes && { supersedes }) }, { itemId: rec.item.id, actionId: id });
+    this.s.drafts[id] = draft;
+    this.event('action.drafted', { type: 'todo', revision, draftRef: `drafts/${id}.json`, tokens: 0, target: draftTarget(draft) }, { itemId: rec.item.id, actionId: id });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: rec.item.id });
+    return this.s.actions[id];
+  }
+
   private createAction(rec: ItemRec, type: ActionType, outcome: DraftOutcome, supersedes?: string, quiet?: boolean): Action {
+    if (type === 'todo') return this.createTodo(rec, undefined, supersedes);
     const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : 'c'}${this.s.seq + 1}`;
     this.event('action.requested', { type, revision: rec.item.revision, ...(supersedes && { supersedes }), ...(quiet && { quiet: true as const }) }, { itemId: rec.item.id, actionId: id });
     const action = this.s.actions[id];
@@ -1277,7 +1312,7 @@ export class MockServer implements WorkOsApi, MockControls {
   async redraft(actionId: string): Promise<Action> {
     await this.gate(COMMAND_MS);
     const a = this.action(actionId);
-    if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today.');
+    if (this.budgets().drafts.hit && a.type !== 'todo') throw new ApiError('budget', 'Drafts budget reached for today.');
     if (ACTIVE.includes(a.status) || a.status === 'failed') {
       this.clearDraftTimers(actionId);
       if (a.status !== 'failed') {
@@ -1301,6 +1336,8 @@ export class MockServer implements WorkOsApi, MockControls {
     await this.gate(COMMAND_MS);
     const a = this.action(actionId);
     if (a.status !== 'ready') throw new ApiError('conflict', 'This draft is no longer ready to approve.');
+    const td = this.s.drafts[actionId];
+    if (td?.kind === 'todo' && !td.content.trim()) throw new ApiError('validation', 'The to-do is empty. Add a line, or discard it.');
     this.event('action.approved', opts.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
     void this.execute(actionId, 500);
@@ -1327,7 +1364,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const d = this.s.drafts[actionId];
     const rec = this.s.items[a.itemId];
     if (!d || !rec) return;
-    const conflict = isFiledDraft(d) ? 'normal' : this.takeOutcome((o) => (a.type === 'vault_note' ? o === 'vault_conflict' : o === 'confluence_conflict'));
+    const conflict = isFiledDraft(d) || d.kind === 'todo' ? 'normal' : this.takeOutcome((o) => (a.type === 'vault_note' ? o === 'vault_conflict' : o === 'confluence_conflict'));
     const dry = this.s.settings.dryRun;
 
     if (conflict !== 'normal') {
@@ -1336,7 +1373,7 @@ export class MockServer implements WorkOsApi, MockControls {
           ? `${d.parts[0].path} changed after drafting (file hash differs). Re-drafting instead of writing.`
           : d.kind === 'vault_append'
           ? `${d.path} changed after drafting (file hash differs). Re-drafting instead of writing.`
-          : d.kind === 'vault_new' || d.kind === 'vault_filed'
+          : d.kind === 'vault_new' || d.kind === 'vault_filed' || d.kind === 'todo'
             ? `A note now exists at ${d.path}. Re-drafting instead of overwriting it.`
             : `The page changed after drafting (v${d.baseVersion} → v${d.baseVersion + 2}). Re-drafting instead of writing.`;
       this.s.results[actionId] = a.error;
@@ -1381,6 +1418,11 @@ export class MockServer implements WorkOsApi, MockControls {
         ? `Dry-run: write logged only. ${d.pageTitle} stays at v${d.baseVersion}. Logged action.executed.`
         : `Written to ${d.pageTitle}, now v${d.baseVersion + 1}. Logged action.executed.`;
       this.event('action.executed', { dryRun: dry, pageId: d.pageId, pageVersion: dry ? d.baseVersion : d.baseVersion + 1 }, { itemId: a.itemId, actionId });
+    } else if (d.kind === 'todo') {
+      const where = dry ? `${this.s.settings.dataDir}/sandbox/vault/${d.path} (dry-run sandbox)` : d.path;
+      const n = d.content.split('\n').filter((l) => l.trim()).length;
+      msg = `${dry ? 'Dry-run: ' : ''}Added ${n === 1 ? 'the to-do' : `${n} to-dos`} to ${where}. Logged action.executed.`;
+      this.event('action.executed', { dryRun: dry, path: dry ? `${this.s.settings.dataDir}/sandbox/vault/${d.path}` : `${this.s.settings.vaultPath}/${d.path}` }, { itemId: a.itemId, actionId });
     } else if (d.kind === 'vault_multi') {
       // FR-9.7: every note, in one approval.
       const root = dry ? `${this.s.settings.dataDir}/sandbox/vault` : this.s.settings.vaultPath;

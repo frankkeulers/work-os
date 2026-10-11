@@ -44,7 +44,7 @@ test('J43 the guide opens from the sidebar, in groups, with an outline and Previ
 
   // An app route in the Markdown moves within the app, without a reload.
   await page.evaluate(() => ((window as unknown as { marker: number }).marker = 1));
-  await page.locator('.wos-guide').getByRole('link', { name: 'Settings › Write targets' }).click();
+  await page.locator('.wos-guide').getByRole('link', { name: 'Settings › Write targets', exact: true }).click();
   await expect(page).toHaveURL(/\/settings\/writing$/);
   expect(await page.evaluate(() => (window as unknown as { marker?: number }).marker)).toBe(1);
 

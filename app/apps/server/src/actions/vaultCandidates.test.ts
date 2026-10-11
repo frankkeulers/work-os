@@ -52,6 +52,13 @@ const meetingNote = (o: { created?: string; attendees?: string; source?: string 
 const find = (item: Item, roots = [vault]) => findExistingNotes({ roots, item, me, links: itemLinks(item) });
 
 describe('findExistingNotes (FR-9.6)', () => {
+  it('skips the Tasks note, which links to sources without filing them (UX-5)', async () => {
+    await put(vault, 'Work/Tasks.md', `# Tasks\n\n- [ ] Send the sample [SkyWatch](${SHARE})\n`);
+    await put(vault, 'Work/SkyWatch.md', `# SkyWatch\n\nFiled from [the meeting](${SHARE}).\n`);
+    const item = meeting({ kind: 'thread', meeting: undefined });
+    expect((await findExistingNotes({ roots: [vault], item, me, links: itemLinks(item), skip: ['Work/Tasks.md'] })).map((n) => n.path)).toEqual(['Work/SkyWatch.md']);
+  });
+
   it('finds a meeting filed from another recording: same day, someone who was there, another title and source', async () => {
     await put(vault, 'Work/Meetings/Frank × Lanny — Satellite Imagery Integration Path 2026-10-05.md', meetingNote());
     expect(await find(meeting())).toEqual([

@@ -212,13 +212,69 @@ test('J10 file from the panel: review and approve the Confluence entry in place'
   await expect(action.getByRole('status')).toContainText('Dry-run: write logged only', { timeout: 20_000 });
 });
 
+test('J77 a adds the next step as a to-do: review, edit, approve into the sandbox Tasks note', async ({ page }) => {
+  await rows(page, 'Now').filter({ hasText: 'data-licensing' }).click();
+  await page.keyboard.press('a');
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  // Built by code at once: no drafting step, no model.
+  await expect(action.getByRole('heading', { name: 'Review and approve the to-do' })).toBeVisible();
+  await expect(action.getByRole('tab', { name: /To-do/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/file=todo/);
+  await expect(action).toContainText('Add to the end of');
+  await expect(action).toContainText('Work/Tasks.md');
+  const tasks = action.getByRole('list', { name: 'Tasks' });
+  await expect(tasks.getByRole('listitem')).toHaveCount(1);
+  await expect(tasks).toContainText('Confirm the data-licensing wording in the doc');
+  await expect(tasks).toContainText('📅 2026-10-05');
+  await expect(tasks).toContainText('#mvi-launch');
+  await action.getByRole('button', { name: 'Checks passed' }).click();
+  await expect(action.getByText('Built from the triage by code, no model call')).toBeVisible();
+  await itemPanel(page).screenshot({ path: join(APP, 'screenshots/todo-review-light.png'), animations: 'disabled' });
+
+  // Edited as the plain lines: a line without a checkbox becomes a task.
+  await action.getByRole('button', { name: 'Edit text' }).click();
+  const lines = action.getByLabel('Task lines');
+  await expect(lines).toHaveValue(/^- \[ \] Confirm the data-licensing wording in the doc 📅 2026-10-05 \[#mvi-launch\]\(https:/);
+  await lines.fill(`${await lines.inputValue()}\nChase Legal for the final wording`);
+  await action.getByRole('button', { name: 'Save edits' }).click();
+  await expect(tasks.getByRole('listitem')).toHaveCount(2);
+
+  await action.getByRole('button', { name: 'Approve and add in the sandbox' }).click();
+  await expect(action.getByRole('status')).toContainText('Dry-run: Added 2 to-dos to ~/WorkOS-data/sandbox/vault/Work/Tasks.md', { timeout: 20_000 });
+  await expect(action.getByRole('heading', { name: 'Added in the sandbox' })).toBeVisible();
+  await expect(action.getByRole('tab', { name: /To-do/ })).toContainText('Added');
+});
+
+test('J78 a meeting’s action items: pick some, and they go to Tasks as a to-do to review', async ({ page }) => {
+  await setScope(page, 'Full');
+  await page.locator('[data-row^="teams:MTG-MVIREADY"]').click();
+  const items = itemPanel(page).getByRole('region', { name: 'Action items for you' });
+  await expect(items.getByRole('checkbox', { checked: true })).toHaveCount(2);
+  await items.getByRole('checkbox', { name: /Share the customer comms plan/ }).uncheck();
+  await items.getByRole('button', { name: 'Add 1 to Tasks' }).click();
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  const tasks = action.getByRole('list', { name: 'Tasks' });
+  await expect(tasks.getByRole('listitem')).toHaveCount(1);
+  await expect(tasks).toContainText('Confirm the rollback owner for MVI V2');
+  await expect(items).toContainText('To-do ready to review');
+  await itemPanel(page).screenshot({ path: join(APP, 'screenshots/todo-action-items-light.png'), animations: 'disabled' });
+
+  // Picking again replaces the to-do still waiting for review.
+  await items.getByRole('checkbox', { name: /Share the customer comms plan/ }).check();
+  await items.getByRole('button', { name: 'Add to Tasks' }).click();
+  await expect(tasks.getByRole('listitem')).toHaveCount(2);
+  await action.getByRole('button', { name: 'Approve and add in the sandbox' }).click();
+  await expect(items).toContainText('Added to Tasks', { timeout: 20_000 });
+});
+
 test('the Next step card holds the filing: its options, the draft’s progress and the review', async ({ page }) => {
   // The newest item is a reply: the step's action is Slack, so both targets are filing options in the same card.
   await sortBy(page, 'Newest first');
   await group(page, 'Needs you').locator('[data-row]').first().click();
   const step = itemPanel(page).getByRole('region', { name: 'Next step' });
   const options = step.getByRole('region', { name: 'File it' });
-  await expect(options.getByRole('button')).toHaveText(['Draft Confluence entry', 'Draft vault note']);
+  // A to-do is a third target (UX-5): Frank's call, never a triage suggestion.
+  await expect(options.getByRole('button')).toHaveText(['Draft Confluence entry', 'Draft vault note', /^Add to-do/]);
   await options.getByRole('button', { name: 'Draft Confluence entry' }).click();
   // The progress shows in the card, under the step, in place of the options.
   const action = step.getByRole('region', { name: 'Action' });

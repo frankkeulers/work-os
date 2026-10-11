@@ -44,7 +44,7 @@ export function entryVersion(actions: readonly ActionLike[], a: ActionLike): num
 export function actionSummaries(actions: Iterable<ActionState>, revision: number): ItemSummary['actions'] {
   const all = [...actions];
   const out: ItemSummary['actions'] = {};
-  for (const type of ['confluence_entry', 'vault_note'] as const) {
+  for (const type of ['confluence_entry', 'vault_note', 'todo'] as const) {
     const a = currentAction(all, type);
     if (!a) continue;
     const repliesSince = a.itemRevision < revision;

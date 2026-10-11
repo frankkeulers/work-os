@@ -137,7 +137,8 @@ export const TriageCorrection = z.object({
 });
 export type TriageCorrection = z.infer<typeof TriageCorrection>;
 
-export const ActionType = z.enum(['vault_note', 'confluence_entry']);
+// todo (UX-5): lines for the Tasks note, built by code with no model call and no drafts budget.
+export const ActionType = z.enum(['vault_note', 'confluence_entry', 'todo']);
 export type ActionType = z.infer<typeof ActionType>;
 
 export const ActionStatus = z.enum(['drafting', 'ready', 'approved', 'executing', 'done', 'failed', 'discarded']);
@@ -246,6 +247,12 @@ export const ConfluenceDraft = DraftMeta.extend({
   /** Sections that already hold this thread's link, when the draft still wrote an entry (FR-10.7). */
   possibleDuplicates: z.array(PossibleDuplicate).optional(),
 });
+/** To-do lines for the Tasks note (UX-5), built by code: model "code", no tokens. Approving appends them. */
+export const TodoDraft = DraftMeta.extend({
+  kind: z.literal('todo'),
+  path: z.string().min(1),
+  content: z.string(),
+});
 /** Nothing to file: the page's section already holds it (FR-10.7). Approving writes nothing. */
 export const ConfluenceFiledDraft = DraftMeta.extend({
   kind: z.literal('confluence_filed'),
@@ -256,7 +263,7 @@ export const ConfluenceFiledDraft = DraftMeta.extend({
   baseVersion: z.number().int().positive(),
   why: z.string().min(1),
 });
-export const Draft = z.discriminatedUnion('kind', [VaultNewDraft, VaultAppendDraft, VaultMultiDraft, VaultFiledDraft, ConfluenceDraft, ConfluenceFiledDraft]);
+export const Draft = z.discriminatedUnion('kind', [VaultNewDraft, VaultAppendDraft, VaultMultiDraft, VaultFiledDraft, ConfluenceDraft, ConfluenceFiledDraft, TodoDraft]);
 export type Draft = z.infer<typeof Draft>;
 export type VaultNewDraft = z.infer<typeof VaultNewDraft>;
 export type VaultAppendDraft = z.infer<typeof VaultAppendDraft>;
@@ -264,6 +271,7 @@ export type VaultMultiDraft = z.infer<typeof VaultMultiDraft>;
 export type VaultFiledDraft = z.infer<typeof VaultFiledDraft>;
 export type ConfluenceDraft = z.infer<typeof ConfluenceDraft>;
 export type ConfluenceFiledDraft = z.infer<typeof ConfluenceFiledDraft>;
+export type TodoDraft = z.infer<typeof TodoDraft>;
 /** A draft that files nothing: what it would file is already there (FR-9.6, FR-10.7). */
 export const isFiledDraft = (d: Draft): d is VaultFiledDraft | ConfluenceFiledDraft => d.kind === 'vault_filed' || d.kind === 'confluence_filed';
 /** Every note a vault draft writes, in order (FR-9.7). */
@@ -462,6 +470,8 @@ export const Settings = z.object({
   baselineCostPerDay: z.number().positive().nullable(), // from Phase 0, P0-3
   retentionDays: z.number().int().min(1, 'At least 1 day').max(365, 'At most 365 days'),
   vaultPath: z.string().min(1, 'Enter the vault path'),
+  // UX-5: the note in the vault that to-dos are appended to, as Obsidian Tasks lines. Missing in older files: the default.
+  tasksNote: z.string().trim().regex(/^[^/.][\s\S]*\.md$/, 'Enter a note path in the vault, such as Work/Tasks.md').default('Work/Tasks.md'),
   confluence: z.object({
     siteUrl: z.url({ protocol: /^https$/, error: 'Enter the https:// address of your Confluence site' }), // amendment: links to pages
     spaceKey: z.string().regex(/^[A-Za-z0-9~][A-Za-z0-9_~-]*$/, 'Enter a space key, e.g. PRD'),

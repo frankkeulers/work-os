@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useBlocker, useSearchParams, type BlockerFunction } from 'react-router';
 import type { ActionType } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
-import { parseType } from '../../components/ActionPanel';
+import { parseType, typeParam } from '../../components/ActionPanel';
 import { markDoneWithUndo } from '../../components/item';
 import { useApiQuery } from '../../hooks/useApiQuery';
 
@@ -106,7 +106,7 @@ export function usePanelHost({ items, order, notOutside, onPick, onClose }: Pane
   const setFiling = useCallback(
     (t: ActionType | undefined) => {
       if (!sel) return;
-      setSearch(t ? { item: sel, file: t === 'vault_note' ? 'vault' : 'confluence' } : { item: sel }, { replace: true });
+      setSearch(t ? { item: sel, file: typeParam(t) } : { item: sel }, { replace: true });
     },
     [sel, setSearch],
   );

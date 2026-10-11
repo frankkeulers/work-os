@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { Attention, Ms365Connector } from './schemas';
+import { ActionType, Attention, Ms365Connector } from './schemas';
+import { TODO_MAX_LINES, TODO_MAX_STEP } from './todo';
 
 // Request bodies for the API's commands. The server checks every body against these (FR-3.3);
 // the settings themselves are checked field by field, so the UI can show each problem in place.
@@ -30,7 +31,11 @@ export const ItemIds = z.object({ ids: z.array(z.string().min(1)).min(1).max(100
 export const CorrectionBody = z.object({ attention: Attention, confluence: z.boolean(), vault: z.boolean() }).strict();
 
 /** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
-export const DraftRequest = z.object({ type: z.enum(['vault_note', 'confluence_entry']), quiet: z.boolean().optional() }).strict(); // quiet: drafted ahead in a batch (FR-11.6)
+// quiet: drafted ahead in a batch (FR-11.6). steps: for a to-do, the lines to start from (UX-5), else Frank's open steps.
+export const DraftRequest = z
+  .object({ type: ActionType, quiet: z.boolean().optional(), steps: z.array(z.string().trim().min(1).max(TODO_MAX_STEP)).min(1).max(TODO_MAX_LINES).optional() })
+  .strict()
+  .refine((r) => !r.steps || r.type === 'todo', 'Only a to-do takes steps.');
 
 /** POST /api/attention/dismiss (FR-11.5): an entry in the bell, by its key. */
 export const AttentionDismiss = z.object({ key: z.string().min(1).max(300) }).strict();

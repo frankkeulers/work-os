@@ -85,7 +85,7 @@ export function renderVaultRequest(item: Item, me: Me, conventions: string, now:
 export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Promise<{ draft: VaultNewDraft | VaultAppendDraft | VaultMultiDraft | VaultFiledDraft; baseHash?: string | null; baseHashes?: Record<string, string | null> }> {
   const model = d.settings.models.draftVault;
   const t0 = performance.now();
-  const existing = await findExistingNotes({ roots: [...(d.sandboxRoot ? [d.sandboxRoot] : []), d.vaultRoot], item, me, links: d.links });
+  const existing = await findExistingNotes({ roots: [...(d.sandboxRoot ? [d.sandboxRoot] : []), d.vaultRoot], item, me, links: d.links, skip: [d.settings.tasksNote] });
   const r = await d.claude.structured(
     {
       purpose: 'draft_vault',

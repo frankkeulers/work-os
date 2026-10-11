@@ -99,7 +99,7 @@ async function planMulti(t: VaultTargets, stored: StoredDraft, d: VaultMultiDraf
 /** What is there now, and what an attempt would write. Reads only. */
 export async function planVaultWrite(t: VaultTargets, stored: StoredDraft): Promise<VaultPlan> {
   const d = stored.draft;
-  if (!d || d.kind === 'confluence' || d.kind === 'confluence_filed') return { kind: 'refused', message: 'This draft is not a vault note.' };
+  if (!d || d.kind === 'confluence' || d.kind === 'confluence_filed' || d.kind === 'todo') return { kind: 'refused', message: 'This draft is not a vault note.' };
   if (d.kind === 'vault_multi') return planMulti(t, stored, d);
   let path: string;
   try {

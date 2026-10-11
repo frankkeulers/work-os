@@ -38,8 +38,8 @@ export interface AttentionInput {
   dismissed: Record<string, string>;
 }
 
-const LABEL: Record<ActionType, string> = { vault_note: 'Vault note', confluence_entry: 'Confluence entry' };
-const NOUN: Record<ActionType, string> = { vault_note: 'the vault note', confluence_entry: 'the Confluence entry' };
+const LABEL: Record<ActionType, string> = { vault_note: 'Vault note', confluence_entry: 'Confluence entry', todo: 'To-do' };
+const NOUN: Record<ActionType, string> = { vault_note: 'the vault note', confluence_entry: 'the Confluence entry', todo: 'the to-do' };
 
 /** When the server has no message for a failure. */
 const REASON: Record<FailureReason, string> = {
@@ -127,7 +127,7 @@ export function buildAttention(input: AttentionInput): AttentionView {
   for (const [itemId, list] of byItem) {
     const it = items.get(itemId);
     if (!it) continue; // gone with retention: nothing to open
-    for (const type of ['confluence_entry', 'vault_note'] as const) {
+    for (const type of ['confluence_entry', 'vault_note', 'todo'] as const) {
       const a = currentAction(list, type);
       if (!a) continue;
       // Frank closed the item after this draft was ready or failed: he has left it. One that is ready

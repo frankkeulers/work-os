@@ -66,8 +66,12 @@ function others(item: Item, me: Me): string[] {
   return [...new Set(people.filter((p) => p.id !== me.id && !self.has(p.name.trim().toLowerCase())).map((p) => p.name.trim()))].filter((n) => n.length > 2);
 }
 
-/** Notes, in the vault or in the dry-run sandbox, that may already hold this item. Strong first, at most MAX_EXISTING. */
-export async function findExistingNotes(o: { roots: string[]; item: Item; me: Me; links: string[] }): Promise<ExistingNote[]> {
+/**
+ * Notes, in the vault or in the dry-run sandbox, that may already hold this item. Strong first, at
+ * most MAX_EXISTING. `skip`: notes that link to sources without filing them, such as the Tasks note (UX-5).
+ */
+export async function findExistingNotes(o: { roots: string[]; item: Item; me: Me; links: string[]; skip?: string[] }): Promise<ExistingNote[]> {
+  const skip = new Set((o.skip ?? []).map((p) => p.trim().replace(/^(\.\/)+/, '')));
   const date = o.item.kind === 'meeting' && o.item.meeting ? londonParts(o.item.meeting.start).dateKey : undefined;
   if (!o.links.length && !date) return [];
   const people = date ? others(o.item, o.me).map((n) => ({ name: n, re: new RegExp(`(^|[^\\p{L}])(${spellings(n).map(escape).join('|')})($|[^\\p{L}])`, 'iu') })) : [];
@@ -76,7 +80,7 @@ export async function findExistingNotes(o: { roots: string[]; item: Item; me: Me
   for (const root of o.roots) {
     for await (const file of notes(root)) {
       const rel = relative(root, file).split(sep).join('/');
-      if (seen.has(rel)) continue; // the sandbox copy, listed first, stands in for the vault note
+      if (seen.has(rel) || skip.has(rel)) continue; // the sandbox copy, listed first, stands in for the vault note
       seen.add(rel);
       const size = await stat(file).then((s) => s.size, () => 0);
       if (!size || size > MAX_NOTE_BYTES) continue;

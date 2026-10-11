@@ -15,7 +15,7 @@ import type { Notifier } from './macos';
 export const HOLD_MS = 2 * 60_000;
 export const SUMMARY_MIN = 3;
 
-const DRAFT_LABEL: Record<ActionType, string> = { vault_note: 'Vault note', confluence_entry: 'Confluence entry' };
+const DRAFT_LABEL: Record<ActionType, string> = { vault_note: 'Vault note', confluence_entry: 'Confluence entry', todo: 'To-do' };
 
 /** A draft Frank asked for is ready, or failed (FR-11.6). */
 export interface DraftNotification {

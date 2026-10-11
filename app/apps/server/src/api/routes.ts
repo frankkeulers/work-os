@@ -161,11 +161,11 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   app.post<{ Params: { id: string } }>('/api/items/:id/actions', async (req, reply) => {
     const id = item(req.params.id);
     const body = DraftRequest.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" }, and { quiet } for a draft made ahead in a batch.');
+    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" | "todo" }, { quiet } for a draft made ahead in a batch, and { steps } for a to-do’s lines.');
     return reply
       .code(201)
       .headers(noStore)
-      .send(await actions().request(id, body.data.type, { quiet: body.data.quiet }));
+      .send(await actions().request(id, body.data.type, { quiet: body.data.quiet, steps: body.data.steps }));
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/cancel', async (req, reply) => {
     await actions().cancel(req.params.id);

@@ -16,6 +16,7 @@ export function defaultSettings(dataDir: string): Settings {
     baselineCostPerDay: null,
     retentionDays: 30,
     vaultPath: '~/Obsidian',
+    tasksNote: 'Work/Tasks.md',
     confluence: { siteUrl: 'https://pole-star.atlassian.net', spaceKey: 'PRD', ...CONFLUENCE_SCOPE_DEFAULTS, pages: [] },
     notifications: { enabled: true, quietHours: '19:00–08:00' },
     dryRun: true,

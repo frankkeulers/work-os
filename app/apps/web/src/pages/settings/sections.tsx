@@ -868,6 +868,9 @@ function WritingSection({ s, view, full, set, type, flush, err, confirm }: Ctx) 
             </button>
           </span>
         </Row>
+        <Row stacked label="Tasks note" htmlFor="tasks-note" help="To-dos are added to the end of this note, as Obsidian Tasks lines with a due date and a link back. A path inside the vault; it’s created if it isn’t there." error={err('tasksNote')}>
+          <input id="tasks-note" className={cx(inputClass, 'font-mono text-[13px]')} aria-invalid={!!err('tasksNote')} value={s.tasksNote} onBlur={flush} onChange={(e) => type((x) => (x.tasksNote = e.target.value))} />
+        </Row>
       </Group>
       <Group
         title="Confluence"
@@ -1691,7 +1694,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'outlook', label: 'Outlook', group: 'Sources', View: OutlookSection, owns: under('settings.sources.outlook') },
   { id: 'wispr', label: 'Wispr Flow', group: 'Sources', View: WisprSection, owns: under('settings.sources.wispr') },
   { id: 'sources', label: 'More sources', group: 'Sources', View: MoreSourcesSection, owns: () => false, fullOnly: true },
-  { id: 'writing', label: 'Write targets', group: 'Actions', View: WritingSection, owns: under('settings.dryRun', 'settings.vaultPath', 'settings.confluence') },
+  { id: 'writing', label: 'Write targets', group: 'Actions', View: WritingSection, owns: under('settings.dryRun', 'settings.vaultPath', 'settings.tasksNote', 'settings.confluence') },
   { id: 'models', label: 'Models', group: 'Claude', View: ModelsSection, owns: under('settings.models', 'settings.claudeBackend', 'settings.triage.maxThreadsPerCall', 'settings.triage.maxInputTokens', 'settings.triage.keepLastMessages') },
   { id: 'prompts', label: 'Prompts', group: 'Claude', View: PromptsSection, owns: () => false },
   { id: 'budgets', label: 'Budgets', group: 'Claude', View: BudgetsSection, owns: under('settings.budgets', 'settings.baselineCostPerDay') },

@@ -88,6 +88,15 @@ export const JOURNEYS: Journey[] = [
   // Waiting on others (FR-8.1, amended).
   { id: 'J75', group: 'Inbox basics', title: 'Waiting on others', start: (c) => (fresh(c), item(c, 'wo1')) },
   { id: 'J76', group: 'Cockpit', title: 'You hand it on', start: (c) => (c.cockpitAfternoon(), later(() => c.frankReplies('handed'), 800), '/') },
+  // To-dos (FR-9.8–9.11).
+  { id: 'J77', group: 'Vault', title: 'Add a to-do', start: (c) => (fresh(c), `/?item=${encodeURIComponent(c.itemIdForKey('n3') ?? '')}`) },
+  {
+    id: 'J78',
+    group: 'Vault',
+    title: 'Action items to Tasks',
+    start: (c) => (fresh(c), usePrefs.getState().setScope('full'), `/?item=${encodeURIComponent(c.itemIdForKey('m1') ?? '')}`),
+  },
+  { id: 'J79', group: 'Settings', title: 'Tasks note', start: (c) => (fresh(c), '/settings/writing') },
   // Write failures (FR-14.5).
   { id: 'J73', group: 'Vault', title: 'Not written: Retry write', start: (c) => (fresh(c), c.setNextDraftOutcome('write_unreachable'), item(c, 'f4', '?tab=vault')) },
   { id: 'J74', group: 'Confluence', title: 'Conflict, drafts budget used up', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), c.setFlag('drafts_budget'), item(c, 'f1')) },

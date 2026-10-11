@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemSummary } from '../api';
-import { cardActions } from './lanes';
+import { cardActions, draftButton } from './lanes';
 
 const item = (over: Partial<ItemSummary>): ItemSummary => ({
   id: 'i',
@@ -62,5 +62,20 @@ describe('cardActions (design guide §3)', () => {
     const a = cardActions(item({ lane: 'today', triage: { attention: 'today', confluence: false, vault: true, by: 'model' } }), true);
     expect(a.secondary?.disabledReason).toBe('Drafts budget reached for today.');
     expect(a.overflowDrafts.every((d) => d.disabledReason)).toBe(true);
+  });
+});
+
+describe('the to-do target (UX-5)', () => {
+  it('is never held up by the drafts budget, and says Added once written', () => {
+    expect(draftButton(item({}), 'todo', true)).toEqual({ type: 'todo', state: 'none', label: 'Add to-do', disabledReason: undefined });
+    const ready = item({ actions: { todo: { id: 'a', status: 'ready', version: 1 } } as ItemSummary['actions'] });
+    expect(draftButton(ready, 'todo', true).label).toBe('Review to-do');
+    const done = item({ actions: { todo: { id: 'a', status: 'done', version: 1 } } as ItemSummary['actions'] });
+    expect(draftButton(done, 'todo', false).label).toBe('Added to Tasks');
+  });
+
+  it('stays out of the card actions: triage never suggests it', () => {
+    const a = cardActions(item({ lane: 'file', triage: { attention: 'none', confluence: true, vault: true, by: 'model' } }), false);
+    expect([a.primary.kind === 'draft' && a.primary.button.type, a.secondary?.type, ...a.overflowDrafts.map((d) => d.type)]).not.toContain('todo');
   });
 });

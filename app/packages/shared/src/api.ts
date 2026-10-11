@@ -262,7 +262,7 @@ export interface ItemView {
   dryRun: boolean;
   dataDir: string;
   /** Where approved actions write, for links to the Confluence page and the Obsidian note. */
-  targets: { confluenceSite: string; spaceKey: string; vaultPath: string };
+  targets: { confluenceSite: string; spaceKey: string; vaultPath: string; tasksNote: string };
   budgets: BudgetState;
   meId: string; // the signed-in Slack user, shown as "You"
   /** Everyone in a DM or group DM, from the source; absent when it can't say. */
@@ -585,7 +585,8 @@ export interface WorkOsApi {
   regroup(conversation: string): Promise<{ merged: number }>;
 
   /** `quiet`: drafted ahead while filing in a batch, so no macOS notification when it's ready (FR-11.6). */
-  requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean }): Promise<Action>;
+  /** steps: a to-do's lines to start from (UX-5). */
+  requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[] }): Promise<Action>;
   cancelDraft(actionId: string): Promise<void>;
   /** `part`: which note of a draft that files into several (FR-9.7). */
   saveDraftEdit(actionId: string, content: string, part?: number): Promise<void>;

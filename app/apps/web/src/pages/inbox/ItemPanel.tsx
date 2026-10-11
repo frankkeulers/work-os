@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { ActionType, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
@@ -243,17 +243,37 @@ function StatusCard({ item, children }: { item: ItemSummary; children: ReactNode
   );
 }
 
-function ActionItems({ items }: { items: string[] }) {
-  // UI-only for the prototype: ticking an action item isn't stored yet.
-  const [done, setDone] = useState<Record<number, boolean>>({});
+/**
+ * A meeting's action items for Frank (UX-5): pick the ones to track, and they go to the Tasks note
+ * as a to-do to review and approve. They are ticked off in Obsidian, not here.
+ */
+function ActionItems({ item, items, onAdd }: { item: ItemSummary; items: string[]; onAdd: (steps: string[]) => Promise<void> }) {
+  const [picked, setPicked] = useState<Record<number, boolean>>(() => Object.fromEntries(items.map((_, i) => [i, true])));
+  const [busy, setBusy] = useState(false);
+  const steps = items.filter((_, i) => picked[i]);
+  const state = draftState(item, 'todo');
+  const add = async () => {
+    setBusy(true);
+    await onAdd(steps);
+    setBusy(false);
+  };
   return (
-    <Section title="Action items for you">
+    <Section
+      title="Action items for you"
+      aside={state === 'done' ? <span className="text-xs text-teal-ink">Added to Tasks</span> : state === 'ready' || state === 'stale' ? <span className="text-xs text-muted">To-do ready to review</span> : undefined}
+    >
       {items.map((a, i) => (
         <label key={a} className="flex min-h-10 items-center gap-2.5 rounded-lg border border-line px-3 text-[13px] cursor-pointer">
-          <input type="checkbox" className="h-4 w-4 accent-[var(--accent-bg)]" checked={!!done[i]} onChange={(e) => setDone({ ...done, [i]: e.target.checked })} />
-          <span className={cx(done[i] && 'text-muted line-through')}>{a}</span>
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent-bg)]" aria-label={`Add to Tasks: ${a}`} checked={!!picked[i]} onChange={(e) => setPicked({ ...picked, [i]: e.target.checked })} />
+          <span className={cx(!picked[i] && 'text-muted')}>{a}</span>
         </label>
       ))}
+      <div className="flex flex-wrap items-center gap-3 pt-1">
+        <Button icon="commitments" disabled={busy || !steps.length} onClick={() => void add()}>
+          {busy && <Spinner size={12} />} {steps.length === items.length ? 'Add to Tasks' : `Add ${steps.length} to Tasks`}
+        </Button>
+        <span className="text-xs text-muted">You review the tasks before they’re written.</span>
+      </div>
     </Section>
   );
 }
@@ -414,7 +434,7 @@ function Messages({ view }: { view: ItemView }) {
   );
 }
 
-const targetOf = (item: ItemSummary, t: ActionType) => (t === 'vault_note' ? item.targetHints.vault : item.targetHints.confluence);
+const targetOf = (item: ItemSummary, t: ActionType) => (t === 'vault_note' ? item.targetHints.vault : t === 'confluence_entry' ? item.targetHints.confluence : undefined);
 
 /** The filing targets, as the lower half of the Next step or Status card. `skip` is already the card's primary action. */
 function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void; skip?: ActionType }) {
@@ -424,7 +444,7 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
       <h3 className="m-0 text-[13px] font-semibold">{title}</h3>
       {TYPES.filter((t) => t !== skip).map((t) => {
         const b = draftButton(item, t, draftsBudgetHit);
-        const suggested = t === 'vault_note' ? item.triage?.vault : item.triage?.confluence;
+        const suggested = t === 'vault_note' ? item.triage?.vault : t === 'confluence_entry' ? item.triage?.confluence : false;
         const target = targetOf(item, t);
         const a = item.actions[t];
         // From the second entry on, the draft names its version: "v2 draft ready".
@@ -432,13 +452,13 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
         const draftWord = v ? `${v} draft` : 'Draft';
         const hint =
           b.state === 'none'
-            ? (b.disabledReason ?? (suggested ? `Suggested by triage${target ? ` · ${target}` : ''}` : 'Not suggested'))
+            ? (b.disabledReason ?? (t === 'todo' ? 'Your open steps, as tasks in Obsidian' : suggested ? `Suggested by triage${target ? ` · ${target}` : ''}` : 'Not suggested'))
             : b.state === 'ready'
               ? `${draftWord} ready${target ? ` · ${target}` : ''}`
               : b.state === 'stale'
                 ? `${draftWord} out of date: new messages since`
                 : b.state === 'done'
-                  ? `${v ? `${v} filed` : 'Filed'}${a?.repliesSince ? ' · new replies since' : ''}`
+                  ? `${v ? `${v} ${t === 'todo' ? 'added' : 'filed'}` : t === 'todo' ? 'Added to Tasks' : 'Filed'}${a?.repliesSince ? ' · new replies since' : ''}`
                   : b.state === 'failed'
                     ? a?.failedWhile === 'writing'
                       ? `Not written to ${TYPE_LABEL[t].target}`
@@ -448,13 +468,14 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
                       : 'Writing…';
         return (
           <div key={t} className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line-soft-2 py-2.5 first-of-type:border-t-0">
-            <BrandIcon brand={t === 'vault_note' ? 'obsidian' : 'confluence'} size={16} decorative />
+            {t === 'todo' ? <Icon name="commitments" size={16} className="text-ink-2" /> : <BrandIcon brand={t === 'vault_note' ? 'obsidian' : 'confluence'} size={16} decorative />}
             <span className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
               <span className="text-[13px] font-medium">{TYPE_LABEL[t].short}</span>
               <span className="text-xs text-muted">{hint}</span>
             </span>
             <Button className="min-h-9" disabled={!!b.disabledReason && b.state === 'none'} onClick={() => onFile(t)}>
               {b.state === 'none' ? TYPE_LABEL[t].draft : b.state === 'done' ? 'View' : 'Review'}
+              {t === 'todo' && b.state === 'none' && <Kbd>a</Kbd>}
             </Button>
           </div>
         );
@@ -569,10 +590,27 @@ export function ItemPanel({
   const filingRef = useRef<HTMLDivElement>(null);
   const open = item.status === 'open';
 
-  const file = (t: ActionType) => {
-    if (draftState(item, t) === 'none' && !draftButton(item, t, draftsBudgetHit).disabledReason) void api.requestDraft(item.id, t).catch(errorToast);
-    setFiling(t);
-  };
+  const file = useCallback(
+    (t: ActionType) => {
+      if (draftState(item, t) === 'none' && !draftButton(item, t, draftsBudgetHit).disabledReason) void api.requestDraft(item.id, t).catch(errorToast);
+      setFiling(t);
+    },
+    [item, draftsBudgetHit, setFiling],
+  );
+  // An edit in progress holds the panel on its draft: `a` doesn't switch it away.
+  const dirtyNow = useRef(false);
+  const dirty = useCallback(
+    (d: boolean) => {
+      dirtyNow.current = d;
+      onDirty(d);
+    },
+    [onDirty],
+  );
+  const addTodo = (steps: string[]) =>
+    api.requestDraft(item.id, 'todo', { steps }).then(
+      () => setFiling('todo'),
+      (e: unknown) => void errorToast(e),
+    );
   useEffect(() => {
     if (filing) filingRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [filing]);
@@ -580,7 +618,7 @@ export function ItemPanel({
     body.current?.scrollTo({ top: 0 });
   }, [item.id]);
 
-  // e Done, ⇧E Done and next, s Snooze, c Correct triage, o open as a full page.
+  // e Done, ⇧E Done and next, s Snooze, c Correct triage, a Add to-do, o open as a full page.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
@@ -599,6 +637,9 @@ export function ItemPanel({
       } else if (e.key === 'y' && canConfirm(item)) {
         e.preventDefault();
         void confirmTriage(item);
+      } else if (e.key === 'a' && canFile(item) && !dirtyNow.current) {
+        e.preventDefault();
+        file('todo');
       } else if (e.key === 'ArrowRight' && batch) {
         e.preventDefault();
         batch.onSkip();
@@ -606,7 +647,7 @@ export function ItemPanel({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [item, open, onDoneNext, setSnoozeOpen, batch]);
+  }, [item, open, onDoneNext, setSnoozeOpen, batch, file]);
 
   const reopen = () => void api.reopen(item.id).then(() => toast(item.status === 'snoozed' ? 'Unsnoozed.' : 'Reopened.'), errorToast);
   const ago = fmtAgo(item.lastActivityAt, now);
@@ -720,14 +761,14 @@ export function ItemPanel({
           workflow={
             filing && view ? (
               <div ref={filingRef} className="scroll-mt-4">
-                <ActionPanel key={item.id} embedded view={view} type={filing} setType={setFiling} onDirty={onDirty} onDoneNext={onDoneNext} onClose={() => setFiling(undefined)} onApproved={batch?.onApproved} />
+                <ActionPanel key={item.id} embedded view={view} type={filing} setType={setFiling} onDirty={dirty} onDoneNext={onDoneNext} onClose={() => setFiling(undefined)} onApproved={batch?.onApproved} />
               </div>
             ) : undefined
           }
         />
         <Asks key={`asks:${item.id}`} item={item} />
 
-        {item.next?.actionItems?.length ? <ActionItems key={`actions:${item.id}`} items={item.next.actionItems} /> : null}
+        {item.next?.actionItems?.length ? <ActionItems key={`actions:${item.id}`} item={item} items={item.next.actionItems} onAdd={addTodo} /> : null}
         {view ? <Messages key={`messages:${item.id}`} view={view} /> : <div className="text-[13px] text-muted">Loading…</div>}
 
 

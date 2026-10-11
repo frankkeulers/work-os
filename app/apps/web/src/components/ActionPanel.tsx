@@ -5,7 +5,7 @@ import { api, type ItemView } from '../api';
 import { useOnline } from '../hooks/useConnection';
 import { fmtTokens } from '../lib/format';
 import { confluencePageUrl, obsidianNoteUrl } from '../lib/links';
-import { TYPE_LABEL, draftState, type DraftState } from '../lib/lanes';
+import { TYPE_LABEL, TYPE_NOUN, draftState, type DraftState } from '../lib/lanes';
 import { SOURCE_NAME } from '../lib/next';
 import { forgetEdit, keepEdit, keptEdit } from '../store/draftEdits';
 import { errorToast, toast } from '../store/toasts';
@@ -19,14 +19,21 @@ import { Banner, Button, ConfirmDialog, Segmented, Spinner, cx } from './ui';
 // The draft → review → approve panel (FR-9.x, FR-10.x). Used full width on Item detail and,
 // embedded, inside the Next step card of the Inbox item panel.
 
-export const TYPES: ActionType[] = ['confluence_entry', 'vault_note'];
+export const TYPES: ActionType[] = ['confluence_entry', 'vault_note', 'todo'];
 
-/** Accepts the short and long forms used by links: vault, vault_note, confluence, confluence_entry. */
+/** Accepts the short and long forms used by links: vault, vault_note, confluence, confluence_entry, todo. */
 export function parseType(v: string | null): ActionType | undefined {
   if (v === 'vault' || v === 'vault_note') return 'vault_note';
   if (v === 'confluence' || v === 'confluence_entry') return 'confluence_entry';
+  if (v === 'todo') return 'todo';
   return undefined;
 }
+
+/** The short form links use. */
+export const typeParam = (t: ActionType) => (t === 'vault_note' ? 'vault' : t === 'todo' ? 'todo' : 'confluence');
+
+/** Whether triage suggested filing the item this way. A to-do is never a triage suggestion: it's Frank's call. */
+export const triageSuggests = (s: ItemView['summary'], t: ActionType) => (t === 'vault_note' ? !!s.triage?.vault : t === 'confluence_entry' ? !!s.triage?.confluence : false);
 
 const STATUS_BADGE: Record<DraftState, { label: string; cls: string } | null> = {
   none: null,
@@ -128,6 +135,51 @@ function VaultDoc({ doc, frame }: { doc: DocProps; frame: FrameProps }) {
   );
 }
 
+/** One task line as the Tasks plugin reads it: the step, its due date, and the link back to the source. */
+const TASK = /^- \[([ xX])\] (.*?)(?: 📅 (\d{4}-\d{2}-\d{2}))?(?: \[((?:\\.|[^\]\\])*)\]\((\S+)\))?$/u;
+
+/**
+ * A to-do (UX-5): the task lines as they'll read in Obsidian, each with its date and source link.
+ * Edited as the plain lines, so what you type is what is written.
+ */
+function TodoDoc({ doc, frame }: { doc: DocProps; frame: FrameProps }) {
+  const lines = doc.value.split('\n').filter((l) => l.trim());
+  return (
+    <DraftFrame {...frame} fixedView label={`+ ${lines.length === 1 ? 'new task' : `${lines.length} new tasks`}`} className="rounded-[10px] border border-line bg-surface px-5 pb-4 pt-2.5">
+      {doc.editing ? (
+        <textarea
+          aria-label="Task lines"
+          className="min-h-24 w-full resize-y rounded-md border border-line-strong bg-surface px-3 py-2 font-mono text-[13px] leading-relaxed text-ink-strong focus:outline-2 focus:outline-accent"
+          rows={Math.max(3, lines.length + 1)}
+          value={doc.value}
+          autoFocus
+          onChange={(e) => doc.onChange(e.target.value)}
+        />
+      ) : (
+        <ul aria-label="Tasks" className="m-0 flex list-none flex-col gap-1.5 border-l-[3px] border-teal p-0 pl-3">
+          {lines.map((line, i) => {
+            const m = TASK.exec(line.trim());
+            return (
+              <li key={i} className="flex items-start gap-2.5 text-sm leading-relaxed text-ink-strong">
+                <span aria-hidden className="mt-[3px] h-4 w-4 shrink-0 rounded border border-line-strong bg-surface" />
+                {m ? (
+                  <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                    <span>{m[2]}</span>
+                    {m[3] && <span className="font-mono text-xs text-muted">📅 {m[3]}</span>}
+                    {m[4] && <span className="text-xs text-muted">{m[4].replace(/\\(.)/g, '$1')}</span>}
+                  </span>
+                ) : (
+                  <span>{line.trim().replace(/^- /, '')}</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </DraftFrame>
+  );
+}
+
 /**
  * A thread or meeting filed into several notes (FR-9.7): each note with where it lands and its own
  * text to read and edit. Approving writes them all.
@@ -211,14 +263,15 @@ function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: 
       </div>
     );
   }
+  if (d.kind === 'todo') return <NoteTarget kind="tasks" path={d.path} links={links} />;
   return <NoteTarget kind={d.kind === 'vault_new' ? 'new' : d.kind === 'vault_filed' ? 'filed' : 'append'} path={d.path} heading={d.kind === 'vault_append' ? d.heading : undefined} links={links} />;
 }
 
 /** Where a vault note lands: a new note, an append under a heading, or the note that already holds it. */
-function NoteTarget({ kind, path, heading, links }: { kind: 'new' | 'append' | 'filed'; path: string; heading?: string; links: TargetLinks }) {
+function NoteTarget({ kind, path, heading, links }: { kind: 'new' | 'append' | 'filed' | 'tasks'; path: string; heading?: string; links: TargetLinks }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
-      <span className="text-muted">{kind === 'new' ? 'New note' : kind === 'filed' ? 'Already in' : 'Append to'}</span>
+      <span className="text-muted">{kind === 'new' ? 'New note' : kind === 'filed' ? 'Already in' : kind === 'tasks' ? 'Add to the end of' : 'Append to'}</span>
       <BrandIcon brand="obsidian" size={14} decorative />
       {kind !== 'new' || links.noteExists ? (
         <TargetLink href={links.note(path)} title="Open the note in Obsidian">
@@ -244,6 +297,15 @@ function checksFor(d: Draft, inScope: boolean, dryRun: boolean): Check[] {
       { ok: true, label: d.kind === 'vault_filed' ? 'Checked the vault for this thread or meeting' : 'Checked the page for this thread' },
       { ok: 'info', label: 'Nothing is written' },
     ];
+  if (d.kind === 'todo') {
+    const t: Check[] = [
+      { ok: true, label: 'Built from the triage by code, no model call' },
+      { ok: 'info', label: 'Adds only tasks not already in the note', detail: 'ticked or not' },
+      { ok: 'info', label: 'Note path checked against the vault at write' },
+    ];
+    if (dryRun) t.push({ ok: 'warn', label: 'Dry-run: writes go to the sandbox only' });
+    return t;
+  }
   // FR-9.6, FR-10.7: what the check for an earlier filing found.
   const found = d.kind === 'vault_append' ? undefined : d.possibleDuplicates;
   const dupes: Check = found?.length
@@ -310,7 +372,7 @@ function ChecksDetail({ checks, d }: { checks: Check[]; d: Draft }) {
         );
       })}
       <div className="mt-0.5 border-t border-line-soft pt-1.5 font-mono text-[11px] text-muted">
-        Drafted by {d.model} · {d.promptVersion} · {Math.round(d.durationMs / 1000)}s · {fmtTokens(d.tokens)} tokens
+        {d.model === 'code' ? `Built by code · ${d.promptVersion} · no tokens` : `Drafted by ${d.model} · ${d.promptVersion} · ${Math.round(d.durationMs / 1000)}s · ${fmtTokens(d.tokens)} tokens`}
       </div>
     </div>
   );
@@ -330,6 +392,7 @@ function DraftFrame({
   mode,
   setMode,
   context,
+  fixedView,
   className,
   children,
 }: {
@@ -343,6 +406,8 @@ function DraftFrame({
   setMode: (m: DocMode) => void;
   /** Read-only text above the draft, outside the click-to-edit area. */
   context?: ReactNode;
+  /** One view only (a to-do's lines): no Rich text / Markdown switch. */
+  fixedView?: boolean;
   className: string;
   children: ReactNode;
 }) {
@@ -353,7 +418,7 @@ function DraftFrame({
         <span className="font-mono text-[11px] text-teal">{label}</span>
         {edited && <span className="rounded bg-accent-wash px-1.5 py-px text-[10px] font-semibold text-accent-ink">Edited</span>}
         <span className="flex-1" />
-        <Segmented<DocMode>
+        {!fixedView && <Segmented<DocMode>
           label="Draft view"
           size="sm"
           className="gap-0.5 rounded-lg p-0.5 [&>button]:min-h-7 [&>button]:rounded-md [&>button]:px-2.5 [&>button]:text-xs"
@@ -363,7 +428,7 @@ function DraftFrame({
             { value: 'rich', label: 'Rich text' },
             { value: 'markdown', label: 'Markdown' },
           ]}
-        />
+        />}
         {clickToEdit && (
           <Button size="sm" variant="ghost" icon="edit" aria-label="Edit text" title="Edit text" className="-mr-1.5" onClick={onEdit}>
             Edit
@@ -478,7 +543,8 @@ export function ActionPanel({
   const version = action ? entryVersion(view.actions, action) : 1;
   const draft = action ? view.drafts[action.id] : undefined;
   const prev = action?.supersedes ? view.actions.find((a) => a.id === action.supersedes) : undefined;
-  const budgetHit = view.budgets.drafts.hit;
+  // A to-do is built by code: it spends no draft, so the budget never holds it up.
+  const budgetHit = view.budgets.drafts.hit && type !== 'todo';
   // Picked from the live catalogue, so in scope when drafted; excluded since if it or a page above
   // it is now on the exclude list. The executor checks the full scope again at write time.
   const inScope = draft?.kind === 'confluence' ? ![draft.pageId, ...(draft.ancestorIds ?? [])].some((id) => view.excludedPageIds.includes(id)) : true;
@@ -553,18 +619,32 @@ export function ActionPanel({
     }
   };
 
-  let heading = `Draft a ${TYPE_LABEL[type].short.toLowerCase().replace('confluence', 'Confluence')}`;
-  if (action?.status === 'drafting') heading = `Drafting the ${type === 'vault_note' ? 'vault note' : 'Confluence entry'}`;
+  const todo = type === 'todo';
+  let heading = todo ? 'Add a to-do' : `Draft a ${TYPE_NOUN[type]}`;
+  if (action?.status === 'drafting') heading = `Drafting the ${TYPE_NOUN[type]}`;
   else if (draft && isFiledDraft(draft) && (action?.status === 'ready' || action?.status === 'done')) heading = 'Already filed';
-  else if (action?.status === 'ready') heading = 'Review and approve the draft';
+  else if (action?.status === 'ready') heading = todo ? 'Review and approve the to-do' : 'Review and approve the draft';
   else if (action?.status === 'approved' || action?.status === 'executing') heading = 'Writing…';
-  else if (action?.status === 'done') heading = view.dryRun ? 'Written to the sandbox' : 'Written';
+  else if (action?.status === 'done') heading = todo ? (view.dryRun ? 'Added in the sandbox' : 'Added to Tasks') : view.dryRun ? 'Written to the sandbox' : 'Written';
   else if (action?.status === 'failed')
     heading =
       action.failureReason === 'allow_list' ? 'Write refused' : action.failureReason === 'conflict' ? 'Changed since draft' : action.failureReason === 'no_fit' ? 'Nothing to file' : action.failedWhile === 'writing' ? 'Not written' : 'Draft blocked';
 
   let body: ReactNode;
-  if (!action) {
+  if (!action && todo) {
+    body = (
+      <div className="flex flex-col gap-3">
+        <p className="m-0 text-sm leading-relaxed text-ink-2">
+          Adds your open steps on this item to <strong className="text-ink">{view.targets.tasksNote}</strong> as tasks, each with its due date and a link back here. Built by code from the triage, with no model call. Nothing is written until you approve.
+        </p>
+        <div>
+          <Button variant="solid" icon="commitments" disabled={busy} onClick={() => void request(type)}>
+            {TYPE_LABEL[type].draft}
+          </Button>
+        </div>
+      </div>
+    );
+  } else if (!action) {
     const hint = type === 'vault_note' ? s.targetHints.vault : s.targetHints.confluence;
     const suggested = type === 'vault_note' ? s.triage?.vault : s.triage?.confluence;
     body = (
@@ -722,7 +802,7 @@ export function ActionPanel({
   } else if (draft) {
     const textOf = (part?: number) => draftText(draft, part);
     const isEditing = (part?: number) => editing?.actionId === action.id && editing.part === part;
-    const dupes = (!isFiledDraft(draft) && draft.kind !== 'vault_append' && draft.possibleDuplicates) || [];
+    const dupes = (!isFiledDraft(draft) && draft.kind !== 'vault_append' && draft.kind !== 'todo' && draft.possibleDuplicates) || [];
     const docFor = (part?: number): DocProps => ({
       value: isEditing(part) ? editing!.text : textOf(part),
       editing: isEditing(part),
@@ -827,6 +907,8 @@ export function ActionPanel({
         )}
         {isFiledDraft(draft) ? (
           <FiledDoc d={draft} />
+        ) : draft.kind === 'todo' ? (
+          <TodoDoc doc={doc} frame={frame} />
         ) : draft.kind === 'confluence' ? (
           <ConfluencePreview d={draft} item={item} doc={doc} frame={frame} />
         ) : draft.kind === 'vault_multi' ? (
@@ -898,6 +980,8 @@ export function ActionPanel({
           {action.status === 'ready' ? (
             isFiledDraft(draft) ? (
               'Mark as filed'
+            ) : todo ? (
+              view.dryRun ? 'Approve and add in the sandbox' : 'Approve and add to Tasks'
             ) : view.dryRun ? (
               'Approve and write to sandbox'
             ) : (
@@ -927,7 +1011,8 @@ export function ActionPanel({
       <div role="tablist" aria-label="Draft target" className="inline-flex gap-1 rounded-[10px] bg-track-2 p-1">
         {TYPES.map((t) => {
           const on = t === type;
-          const badge = STATUS_BADGE[draftState(s, t)];
+          const state = draftState(s, t);
+          const badge = t === 'todo' && state === 'done' ? { ...STATUS_BADGE.done!, label: 'Added' } : STATUS_BADGE[state];
           const v = s.actions[t]?.version ?? 1;
           return (
             <button
@@ -1017,7 +1102,7 @@ export function defaultType(view: ItemView): ActionType {
   const s = view.summary;
   return (
     TYPES.find((t) => view.actions.some((a) => a.type === t && ACTIVE.has(a.status))) ??
-    TYPES.find((t) => (t === 'vault_note' ? s.triage?.vault : s.triage?.confluence)) ??
+    TYPES.find((t) => triageSuggests(s, t)) ??
     'vault_note'
   );
 }

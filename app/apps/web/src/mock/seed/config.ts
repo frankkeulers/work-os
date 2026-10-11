@@ -19,6 +19,7 @@ export const SEED_SETTINGS: Settings = {
   baselineCostPerDay: 1.9,
   retentionDays: 30,
   vaultPath: '~/Obsidian/PSG Vault',
+  tasksNote: 'Work/Tasks.md',
   confluence: {
     siteUrl: 'https://pole-star.atlassian.net',
     spaceKey: 'PRD',

@@ -1008,6 +1008,82 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
 const PICK = JSON.stringify({ candidates: [{ pageId: '1234567', why: 'The PRD.' }] });
 const SCOPE = { siteUrl: 'https://fake.atlassian.net', spaceKey: 'MVI', roots: [{ id: '1100000', title: 'MVI Context' }], labels: [], exclude: [], pages: [] };
 
+describe('to-do action (UX-5)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  let vault: string;
+
+  // Never the real vault: a temp folder, and dry-run writes go to the sandbox.
+  beforeEach(async () => {
+    vault = join(dir, '..', 'vault');
+    await mkdir(join(vault, 'Work'), { recursive: true });
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect(view.settings.tasksNote).toBe('Work/Tasks.md');
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, vaultPath: vault, budgets: { ...view.settings.budgets, draftsPerDay: 1 } }, rules: view.rules })).status).toBe(200);
+  });
+  const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;
+  const request = (body: object = { type: 'todo' }) => call<Action & ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, body);
+  const sandboxTasks = () => readFile(join(dir, 'sandbox/vault/Work/Tasks.md'), 'utf8');
+
+  it('drafts the next step as a Tasks line by code, ready at once, with no model call and no drafts budget', async () => {
+    const calls = claude.calls.length;
+    const r = await request();
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ type: 'todo', status: 'ready', target: { path: 'Work/Tasks.md' } });
+    expect(claude.calls).toHaveLength(calls);
+    const v = await item();
+    const permalink = v.item.permalink;
+    // The fake's triage gives no next step, so the summary is what to follow up.
+    expect(v.drafts[r.body.id]).toEqual({ kind: 'todo', path: 'Work/Tasks.md', content: `- [ ] Follow up: Release notes draft is up [#product](${permalink})`, model: 'code', promptVersion: 'todo v1', durationMs: 0, tokens: 0, edited: false });
+    expect(v.summary.actions.todo).toMatchObject({ status: 'ready' });
+    expect((await call<UsageView>('GET', '/api/usage')).body.days.at(-1)).toMatchObject({ drafts: 0 });
+
+    // Approved: appended to a new Tasks note in the sandbox; the vault is untouched.
+    expect((await call('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(202);
+    await res.actions.settled();
+    expect(await sandboxTasks()).toBe(`# Tasks\n\n- [ ] Follow up: Release notes draft is up [#product](${permalink})\n`);
+    expect((await item()).results[r.body.id]).toMatch(/^Dry-run: Created .*Work\/Tasks\.md \(dry-run sandbox\) with the to-do\./);
+    await expect(readFile(join(vault, 'Work/Tasks.md'))).rejects.toThrow();
+  });
+
+  it('takes the lines Frank picked, appends below what the note holds, and never adds a line twice', async () => {
+    await writeFile(join(vault, 'Work/Tasks.md'), '---\nupdated: 2026-01-01\n---\n# Tasks\n\n- [x] Old one\n');
+    const r = await request({ type: 'todo', steps: ['Send the tier comparison · by Friday', '- [ ] Book the trial kick-off'] });
+    const link = `[#product](${(await item()).item.permalink})`;
+    expect((await item()).drafts[r.body.id]).toMatchObject({ content: `- [ ] Send the tier comparison · by Friday ${link}\n- [ ] Book the trial kick-off ${link}` });
+    // Frank edits a line and adds his own; a plain line becomes a task.
+    expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: `- [ ] Send the tier comparison 📅 2026-10-09 ${link}\nCall Sam` })).status).toBe(204);
+    expect((await call('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(202);
+    await res.actions.settled();
+    expect(await sandboxTasks()).toBe(`---\nupdated: 2026-10-06\n---\n# Tasks\n\n- [x] Old one\n- [ ] Send the tier comparison 📅 2026-10-09 ${link}\n- [ ] Call Sam\n`);
+
+    // The same lines again: nothing is added.
+    const again = await request({ type: 'todo', steps: ['Call Sam'] });
+    await call('POST', `/api/actions/${again.body.id}/approve`);
+    await res.actions.settled();
+    expect((await sandboxTasks()).match(/Call Sam/g)).toHaveLength(2); // "Call Sam" plain, and "Call Sam [#product](…)" are different lines
+    const third = await request({ type: 'todo', steps: ['Call Sam'] });
+    await call('POST', `/api/actions/${third.body.id}/approve`);
+    await res.actions.settled();
+    expect((await sandboxTasks()).match(/Call Sam/g)).toHaveLength(2);
+    expect((await item()).results[third.body.id]).toMatch(/^The to-do is in /);
+  });
+
+  it('replaces a ready to-do when Frank picks other lines, keeps one otherwise, and refuses an empty one or a path outside the vault', async () => {
+    const first = await request();
+    expect((await request()).body.id).toBe(first.body.id);
+    const picked = await request({ type: 'todo', steps: ['Only this'] });
+    expect(picked.body.id).not.toBe(first.body.id);
+    expect((await item()).actions.find((a) => a.id === first.body.id)?.status).toBe('discarded');
+    expect((await request({ type: 'vault_note', steps: ['x'] })).status).toBe(422);
+
+    expect((await call('PUT', `/api/actions/${picked.body.id}/draft`, { content: '  ' })).status).toBe(204);
+    expect((await call<ApiErrorBody>('POST', `/api/actions/${picked.body.id}/approve`)).body.message).toMatch(/The to-do is empty/);
+
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, tasksNote: '../Tasks.md' }, rules: view.rules })).status).toBe(422);
+  });
+});
+
 describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
   const PROD = `slack:C01PROD:${P}`;
   const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;

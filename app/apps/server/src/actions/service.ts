@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId, VaultMultiDraft } from '@work-os/shared';
-import { draftTarget, filedAll, isFiledDraft, londonParts, topicItem } from '@work-os/shared';
+import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId, TodoDraft, VaultMultiDraft } from '@work-os/shared';
+import { draftTarget, filedAll, isFiledDraft, londonParts, todoContent, todoSteps, topicItem } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeError, ClaudeOutputError } from '../claude/errors';
@@ -26,6 +26,7 @@ import { itemLinks } from './alreadyFiled';
 import { DraftError } from './errors';
 import { draftVaultNote, vaultExists } from './vaultDrafter';
 import { NoteExistsError, planVaultWrite, writeVaultFile, type VaultTargets } from './vaultExecutor';
+import { planTodoWrite, unchangedSince } from './todoExecutor';
 
 // Actions (FR-9.x, FR-10.x, FR-14.4, FR-14.5): requested, drafted by a model, edited and approved
 // by Frank, then written by code. The event log is the queue, so nothing waits in memory alone:
@@ -36,11 +37,14 @@ import { NoteExistsError, planVaultWrite, writeVaultFile, type VaultTargets } fr
 //     awake 45 s, after reconciling against the target. `action.executing` is synced before every
 //     attempt (with the expected hash for the vault, the version marker for Confluence), so a crash
 //     or sleep mid-write is never repeated. Offline time doesn't use up attempts.
+// A to-do (UX-5) is drafted by code as it is requested, ready at once, with no model call and no
+// drafts budget; once approved it goes through the outbox like a vault note.
 
 const ACTIVE: ActionState['status'][] = ['drafting', 'ready', 'approved', 'executing'];
 export const DRAFT_STAGES: Record<ActionType, string[]> = {
   vault_note: ['Reading the thread', 'Finding related notes in the vault', 'Drafting the note'],
   confluence_entry: ['Reading the thread', 'Reading the Confluence catalogue', 'Picking the page', 'Drafting the entry', 'People check (Haiku)'],
+  todo: ['Writing the to-do'],
 };
 export const MAX_ATTEMPTS = 5; // transient write failures before `unreachable` (FR-14.5)
 const RETRY_BASE_MS = 30_000;
@@ -145,14 +149,46 @@ export class ActionService {
 
   // ---------------------------------------------------------------- commands
 
-  /** `quiet`: drafted ahead while filing in a batch, so no macOS notification (FR-11.6). */
-  async request(itemId: string, type: ActionType, opts: { quiet?: boolean } = {}): Promise<Action> {
+  /**
+   * `quiet`: drafted ahead while filing in a batch, so no macOS notification (FR-11.6). `steps`: a
+   * to-do's lines to start from (UX-5); a ready to-do is replaced by one with these.
+   */
+  async request(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[] } = {}): Promise<Action> {
     const existing = Object.values(this.actions).find((a) => a.itemId === itemId && a.type === type && ACTIVE.includes(a.status));
+    if (existing && type === 'todo' && opts.steps && existing.status === 'ready') {
+      await this.d.store.append({ type: 'action.discarded', itemId, actionId: existing.id, data: { reason: 'redraft' } });
+      return this.createTodo(itemId, opts.steps, existing.id);
+    }
     if (existing) return this.toAction(existing);
+    if (type === 'todo') return this.createTodo(itemId, opts.steps);
     return this.create(itemId, type, undefined, opts.quiet);
   }
 
+  /**
+   * A to-do, drafted by code from the item's open steps (or `steps`) and ready at once: the draft
+   * file first, then its request and draft in one append, so it is never left drafting.
+   */
+  private async createTodo(itemId: string, steps?: string[], supersedes?: string): Promise<Action> {
+    const it = this.d.store.projection.items[itemId];
+    if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
+    if (!(await vaultExists(this.vaultRoot()))) throw new HttpError('unavailable', `The vault folder ${this.vaultRoot()} doesn't exist. Set the vault path in Settings.`);
+    const topic = await readTopic(this.d.store.projection, this.d.items, itemId);
+    if (!topic) throw new HttpError('conflict', 'The thread’s content is no longer available, so there is nothing to add.');
+    const list = steps ? steps.map((step) => ({ step })) : todoSteps(topic.anchor.text, it.asksDone);
+    if (!list.length) throw new HttpError('validation', 'Nothing to add: this item has no next step.');
+    const source = topic.anchor.item;
+    const draft: TodoDraft = { kind: 'todo', path: this.d.settings().tasksNote, content: todoContent(list, { title: source.title, permalink: source.permalink }), model: 'code', promptVersion: 'todo v1', durationMs: 0, tokens: 0, edited: false };
+    const id = `act-${randomUUID()}`;
+    await this.d.drafts.update(id, itemId, (s) => ({ ...s, draft }));
+    await this.d.store.append(
+      { type: 'action.requested', itemId, actionId: id, data: { type: 'todo', revision: it.revision, ...(supersedes && { supersedes }) } },
+      { type: 'action.drafted', itemId, actionId: id, data: { type: 'todo', revision: it.revision, draftRef: `drafts/${id}.json`, tokens: 0, target: draftTarget(draft) } },
+    );
+    return this.toAction(this.actions[id]);
+  }
+
   private async create(itemId: string, type: ActionType, supersedes?: string, quiet?: boolean): Promise<Action> {
+    if (type === 'todo') return this.createTodo(itemId, undefined, supersedes);
     const it = this.d.store.projection.items[itemId];
     if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     if (type === 'confluence_entry') {
@@ -212,7 +248,7 @@ export class ActionService {
   async redraft(id: string): Promise<Action> {
     const a = this.action(id);
     if (a.status === 'executing' || a.status === 'done') throw new HttpError('conflict', 'This action has already been written.');
-    if (this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today.');
+    if (a.type !== 'todo' && this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today.');
     if (a.status !== 'failed' && a.status !== 'discarded') {
       this.stopDrafting(id);
       await this.d.store.append({
@@ -245,6 +281,8 @@ export class ActionService {
   async approve(id: string, opts: { markDoneWhenFiled?: boolean } = {}) {
     const a = this.action(id);
     if (a.status !== 'ready') throw new HttpError('conflict', 'This draft is no longer ready to approve.');
+    const todo = a.type === 'todo' ? (await this.d.drafts.read(id))?.draft : undefined;
+    if (todo?.kind === 'todo' && !todo.content.trim()) throw new HttpError('validation', 'The to-do is empty. Add a line, or discard it.');
     await this.checkEdited(a);
     if (this.statusOf(id) !== 'ready') throw new HttpError('conflict', 'This draft is no longer ready to approve.');
     await this.d.store.append({
@@ -357,11 +395,11 @@ export class ActionService {
     const now = this.d.now().getTime();
     const confluenceReady = this.d.online() && this.d.depReady('confluence');
     if (!this.drafting && this.d.claudeReady() && !this.d.draftsBudgetHit()) {
-      const next = this.oldest((a) => a.status === 'drafting' && (this.retryAt.get(a.id) ?? 0) <= now && (a.type === 'vault_note' || confluenceReady));
+      const next = this.oldest((a) => a.status === 'drafting' && a.type !== 'todo' && (this.retryAt.get(a.id) ?? 0) <= now && (a.type === 'vault_note' || confluenceReady));
       if (next) started.push(this.track(this.startDraft(next)));
     }
     if (!this.executing && this.d.canWrite()) {
-      const next = this.oldest((a) => (a.status === 'approved' || a.status === 'executing') && (this.retryAt.get(a.id) ?? 0) <= now && (a.type === 'vault_note' || confluenceReady));
+      const next = this.oldest((a) => (a.status === 'approved' || a.status === 'executing') && (this.retryAt.get(a.id) ?? 0) <= now && (a.type !== 'confluence_entry' || confluenceReady));
       if (next) started.push(this.track(this.execute(next)));
     }
     return Promise.all(started);
@@ -566,6 +604,7 @@ export class ActionService {
     const stored = await this.d.drafts.read(a.id);
     if (!stored?.draft) return this.fail(a, 'draft_missing', 'The draft file is missing, so nothing was written. Re-draft to try again.');
     if (stored.draft.kind === 'confluence') return this.executeConfluence(a, stored.draft);
+    if (stored.draft.kind === 'todo') return this.executeTodo(a, stored, stored.draft);
     if (stored.draft.kind === 'confluence_filed') {
       // FR-10.7: already on the page, so nothing is written, in dry-run or not.
       const d = stored.draft;
@@ -607,6 +646,37 @@ export class ActionService {
     } catch (err) {
       if (err instanceof NoteExistsError) return this.conflict(a, `${err.message} Re-drafting instead of overwriting it.`);
       await this.retryLater(a, err, 'Writing to the vault');
+    }
+  }
+
+  /** A to-do's lines, appended to the Tasks note (UX-5). */
+  private async executeTodo(a: ActionState, stored: StoredDraft, d: TodoDraft) {
+    const t = this.targets();
+    try {
+      const plan = await planTodoWrite(t, stored, d);
+      if (plan.kind === 'refused') return this.fail(a, 'allow_list', plan.message);
+      if (plan.kind === 'already') return await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file, unchanged: true });
+      const attempt = this.nextAttempt(a.id);
+      await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHash: plan.expectedHash }));
+      await this.d.store.append({ type: 'action.executing', itemId: a.itemId, actionId: a.id, data: { attempt, expectedHash: plan.expectedHash } });
+      if (!this.writable(a.id)) return; // discarded while the write was planned
+      // Obsidian saved the note meanwhile (a task ticked, say): plan again, soon, on what is there now.
+      if (!(await unchangedSince(plan, t.dryRun))) {
+        this.forgetAttempt(a.id);
+        this.retryAt.set(a.id, this.d.now().getTime() + 1000);
+        return;
+      }
+      crashPoint('before-write');
+      await writeVaultFile(plan);
+      crashPoint('after-write');
+      await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file });
+    } catch (err) {
+      if (err instanceof NoteExistsError) {
+        // The note appeared meanwhile: plan again on it.
+        this.retryAt.set(a.id, this.d.now().getTime() + 1000);
+        return;
+      }
+      await this.retryLater(a, err, 'Writing the to-do');
     }
   }
 

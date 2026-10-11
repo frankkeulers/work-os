@@ -17,7 +17,11 @@ export const LANE_META: Record<Lane, { name: string; dot: string; headline: stri
 export const TYPE_LABEL: Record<ActionType, { draft: string; short: string; target: string }> = {
   confluence_entry: { draft: 'Draft Confluence entry', short: 'Confluence entry', target: 'Confluence' },
   vault_note: { draft: 'Draft vault note', short: 'Vault note', target: 'Vault' },
+  todo: { draft: 'Add to-do', short: 'To-do', target: 'Tasks' },
 };
+
+/** What a draft of each type is called in a sentence. */
+export const TYPE_NOUN: Record<ActionType, string> = { confluence_entry: 'Confluence entry', vault_note: 'vault note', todo: 'to-do' };
 
 export type DraftState = 'none' | 'drafting' | 'ready' | 'stale' | 'writing' | 'done' | 'failed';
 
@@ -41,16 +45,16 @@ export function draftState(item: ItemSummary, type: ActionType): DraftState {
 
 const STATE_LABEL: Record<Exclude<DraftState, 'none'>, (t: ActionType) => string> = {
   drafting: () => 'Drafting…',
-  ready: (t) => `Review ${t === 'vault_note' ? 'vault note' : 'Confluence entry'}`,
-  stale: (t) => `Review ${t === 'vault_note' ? 'vault note' : 'Confluence entry'}`,
+  ready: (t) => `Review ${TYPE_NOUN[t]}`,
+  stale: (t) => `Review ${TYPE_NOUN[t]}`,
   writing: () => 'Writing…',
-  done: (t) => `Filed to ${TYPE_LABEL[t].target}`,
+  done: (t) => `${t === 'todo' ? 'Added' : 'Filed'} to ${TYPE_LABEL[t].target}`,
   failed: (t) => `${TYPE_LABEL[t].target} draft failed`,
 };
 
 export function draftButton(item: ItemSummary, type: ActionType, draftsBudgetHit: boolean): DraftButton {
   const state = draftState(item, type);
-  const disabledReason = state === 'none' && draftsBudgetHit ? 'Drafts budget reached for today.' : undefined;
+  const disabledReason = state === 'none' && draftsBudgetHit && type !== 'todo' ? 'Drafts budget reached for today.' : undefined;
   const label = state === 'none' ? TYPE_LABEL[type].draft : state === 'failed' && item.actions[type]?.failedWhile === 'writing' ? `Not written to ${TYPE_LABEL[type].target}` : STATE_LABEL[state](type);
   return { type, state, label, disabledReason };
 }

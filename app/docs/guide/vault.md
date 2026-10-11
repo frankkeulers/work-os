@@ -2,7 +2,7 @@
 title: Filing to the vault
 group: Filing
 order: 60
-summary: Notes for your Obsidian vault, drafted to follow its conventions.
+summary: Notes for your Obsidian vault, drafted to follow its conventions, and to-dos for your Tasks note.
 updated: 2026-10-11
 ---
 
@@ -22,7 +22,8 @@ that owns it, ending with the meeting's Wispr Flow link. A meeting note in `Work
 only what fits nowhere else; when everything has a home, there is no meeting note.
 
 Action items stay out of the vault, except in a meeting note that is created anyway. Work OS
-doesn't create a meeting note just to hold them.
+doesn't create a meeting note just to hold them. Add them to your Tasks note instead: see
+[To-dos](#to-dos).
 
 The draft follows the vault conventions: where notes live, front matter, tags, and what to keep
 (decisions and facts that stay true) or leave out (action items and transient status).
@@ -69,3 +70,28 @@ writes any: if one changed since the draft, none is written and it re-drafts.
   instead.
 
 With dry-run on, notes are written to `sandbox/vault/` in the data folder, not to your vault.
+
+## To-dos
+
+Choose **Add to-do** under File it, or press `a`, to add your open steps on an item to your Tasks
+note as Obsidian Tasks lines:
+
+```
+- [ ] Confirm the data-licensing wording in the doc 📅 2026-10-05 [#mvi-launch](https://…)
+```
+
+Each step gets its due date, when it has one, and a link back to the thread. The steps are a
+topic's open asks, a meeting's action items, or the next step. Work OS builds the to-do itself,
+with no model call, so it is ready at once and doesn't count against the drafts budget.
+
+Review the lines, edit them if you like (a line without a checkbox becomes a task), and choose
+**Approve and add to Tasks**. The lines go at the end of the note, and the note is created if it
+isn't there. A task that is already in the note, ticked or not, isn't added again.
+
+On a meeting, **Action items for you** lists what was assigned to you, all ticked. Untick the
+ones you won't track, then choose **Add to Tasks**: the to-do opens for review. Tick them off in
+Obsidian.
+
+The note is set in [Settings › Write targets › Tasks note](/settings/writing), as a path in the
+vault (`Work/Tasks.md` unless you change it). With dry-run on, to-dos go to the sandbox copy of the
+note.

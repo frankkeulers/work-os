@@ -695,6 +695,18 @@ As built (FR-9.7, 2026-10-11):
 - **Panel.** "Files into N notes", then each note with its target, its existing lines and its own Edit; `PUT /api/actions/:id/draft` takes `part`, and the Edited badge is per note.
 - **Backstop.** A `vault_multi` with a new note beside a strong match keeps `possibleDuplicates`, minus the notes it adds to.
 
+### 7.9b To-do action (UX-5, added 11 Oct 2026)
+
+*Added 11 Oct 2026, from specs/BACKLOG.md UX-5. To-dos were a destination in the funnel with no target, and the "Action items for you" checkboxes looked like a to-do list but kept nothing.* Frank uses the Obsidian Tasks plugin.
+
+**FR-9.8** **Add to-do** turns an item's open steps into Obsidian Tasks lines, one per step: `- [ ] {step} 📅 YYYY-MM-DD [{source title}]({permalink})`. The date is the step's deadline in London and is left out when there is none. The steps are a topic's open asks, or a meeting's action items, or the next step, or "Follow up: {summary}" when there is nothing else.
+
+**FR-9.9** Code builds the to-do from the triage, with no model call and no draft spent, so the drafts budget never holds it up. It is ready to review at once (`action.requested` and `action.drafted` in one append). Frank reviews, may edit the lines, and approves. Code then appends the lines to the end of one Tasks note, set in Settings › Write targets (`tasksNote`, default `Work/Tasks.md`), creating the note if it is missing. The path is checked against the vault as for vault notes, and in dry-run the sandbox copy stands in for the note.
+
+**FR-9.10** An append adds only lines that aren't already in the note. A line counts as there when its task matches, ticked or not, and with or without the ✅ date the Tasks plugin adds when ticked. So an attempt cut short is finished and never repeated. An append can't clash with what Frank changed in the note since, so there is no conflict check; if the note changes between the plan and the write, the attempt starts again.
+
+**FR-9.11** In the item panel, **Add to-do** sits under File it, with the key `a`. A meeting's **Action items for you** are a picker: all ticked at first, then **Add to Tasks** makes a to-do of the ticked ones, replacing a to-do still waiting for review. Triage never suggests a to-do, so it stays out of the card actions and batches. The vault drafter keeps its rule that action items stay out of the vault (FR-9.7), and the "already filed" search (FR-9.6) skips the Tasks note.
+
 ### 7.10 E9 Confluence entry action
 
 **FR-10.1** Allowed only for items where `containsPeopleObservations` is false. Otherwise the button is disabled with an explanation. *Amended 2026-10-10:* allowed for every item. A thread that mentions people is not blocked; the draft anonymises them the way the `psg-context-builder` skill does (its exclusion screen and attribution ladder: drop the person, keep the fact, and answer no fit only when nothing survives). Confluence entries never identify people.

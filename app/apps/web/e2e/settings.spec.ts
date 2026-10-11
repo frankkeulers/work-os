@@ -323,3 +323,17 @@ test('J42 the Confluence scope: preview the live catalogue, add a root page, exc
   await expect(page.getByRole('button', { name: 'Remove label psg-shared-glossary' })).toBeVisible();
   await expect(page.getByLabel('Excluded pages', { exact: true })).toContainText('Competitor Profiles');
 });
+
+test('J79 the Tasks note is a path in the vault: anything else is held back', async ({ page }) => {
+  await open(page, 'writing');
+  const note = page.getByLabel('Tasks note');
+  await expect(note).toHaveValue('Work/Tasks.md');
+  await note.fill('../Tasks.md');
+  await expect(page.getByText('Enter a note path in the vault, such as Work/Tasks.md')).toBeVisible();
+  await expect(note).toHaveAttribute('aria-invalid', 'true');
+  await note.fill('Work/Inbox tasks.md');
+  await note.blur();
+  await expect(page.getByTestId('saved-note')).toContainText('All changes saved');
+  await page.reload();
+  await expect(page.getByLabel('Tasks note')).toHaveValue('Work/Inbox tasks.md');
+});
