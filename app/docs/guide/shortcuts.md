@@ -6,13 +6,14 @@ summary: Every key Work OS listens for.
 updated: 2026-10-11
 ---
 
-Shortcuts work anywhere except while you are typing in a field.
+Shortcuts work anywhere except while you are typing in a field. Press `?` to see the keys for
+where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` closes it.
 
 ## Everywhere
 
 | Key | Does |
 |---|---|
-| `?` | Open this page |
+| `?` | Show the keys for where you are, with a link to this page |
 | `[` | Collapse or expand the sidebar |
 | `z` | Undo the last thing a toast offered to undo, even once it has gone; again to go further back |
 

@@ -844,3 +844,38 @@ test('threads still active show as a quiet header link that opens their list', a
   await link.click();
   await expect(page.getByRole('region', { name: 'Waiting for quiet window' }).locator('[data-row]').first()).toBeVisible();
 });
+
+test('J86 ? shows the keys for where you are: the list, the item, a draft, the guide (UX-11)', async ({ page }) => {
+  const keys = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  const sections = () => keys.locator('section').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+  await rows(page, 'To file').filter({ hasText: 'Claude Code' }).click();
+  await expect(itemPanel(page)).toBeVisible();
+  await page.keyboard.press('?');
+  await expect(keys).toBeVisible();
+  expect(await sections()).toEqual(['Item', 'Inbox', 'Everywhere']);
+  await expect(keys.getByRole('region', { name: 'Item' })).toContainText('File to the vault');
+  await page.screenshot({ path: join(APP, 'screenshots/keys-overlay-light.png'), animations: 'disabled' });
+  // Esc closes the overlay, not the panel behind it.
+  await page.keyboard.press('Escape');
+  await expect(keys).toHaveCount(0);
+  await expect(itemPanel(page)).toBeVisible();
+
+  // With a draft open, its keys come first; ? again closes.
+  await page.keyboard.press('v');
+  await expect(itemPanel(page).locator('[data-action-bar]').getByRole('button', { name: /^Approve/ })).toBeEnabled({ timeout: 20_000 });
+  await page.keyboard.press('?');
+  expect(await sections()).toEqual(['Draft', 'Item', 'Inbox', 'Everywhere']);
+  await page.keyboard.press('?');
+  await expect(keys).toHaveCount(0);
+
+  // The panel closed, only the list's keys.
+  await page.keyboard.press('Escape');
+  await expect(itemPanel(page)).toHaveCount(0);
+  await page.keyboard.press('?');
+  expect(await sections()).toEqual(['Inbox', 'Everywhere']);
+  await page.keyboard.press('Escape');
+
+  await page.goto('/guide');
+  await page.keyboard.press('?');
+  expect(await sections()).toEqual(['Guide', 'Everywhere']);
+});

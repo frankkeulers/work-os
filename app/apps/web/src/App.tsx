@@ -1,7 +1,8 @@
-import { Suspense, lazy, useEffect, useRef } from 'react';
-import { Outlet, createBrowserRouter, useLocation, useNavigate } from 'react-router';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { Outlet, createBrowserRouter, useLocation } from 'react-router';
 import { RouterProvider } from 'react-router/dom'; // wires up flushSync, for navigations that need it
 import { API_MODE, api } from './api';
+import { KeysOverlay, keyContexts, type KeyContext } from './components/KeysOverlay';
 import { Shell } from './components/Shell';
 import { Toasts } from './components/Toasts';
 import { onTopics, useApiQuery } from './hooks/useApiQuery';
@@ -70,19 +71,21 @@ function useNoticeToasts() {
   );
 }
 
-/** ? opens the keyboard shortcuts, from anywhere but a text field. */
+/** ? shows the keys for where Frank is (UX-11), from anywhere but a text field. */
 function useHelpKey() {
-  const navigate = useNavigate();
+  const [contexts, setContexts] = useState<KeyContext[] | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== '?' || e.metaKey || e.ctrlKey || e.altKey) return;
       if ((e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]')) return;
       e.preventDefault();
-      navigate('/guide/shortcuts');
+      setContexts(keyContexts(window.location.pathname));
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [navigate]);
+  }, []);
+  const close = useCallback(() => setContexts(null), []);
+  return contexts && <KeysOverlay contexts={contexts} onClose={close} />;
 }
 
 /**
@@ -134,7 +137,7 @@ const guide = (
 function Root() {
   useThemeAttribute();
   useNoticeToasts();
-  useHelpKey();
+  const keys = useHelpKey();
   useUndoKey();
   useCloseOnFileToasts();
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []);
@@ -150,6 +153,7 @@ function Root() {
       {h?.connection === 'reconnecting' && !h.startupFailure && <ReconnectingBar />}
       {body}
       <Toasts />
+      {keys}
       {API_MODE === 'mock' && <ScenarioDrawer />}
     </ConnectionContext>
   );

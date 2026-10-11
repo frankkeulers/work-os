@@ -75,7 +75,7 @@ test('J43 search finds a section; Enter opens it', async ({ page }) => {
   await expect(box).toHaveValue('');
 });
 
-test('J43 a code block copies; ? opens the shortcuts from anywhere', async ({ page }) => {
+test('J43 a code block copies; ? shows the keys from anywhere, with the guide page a click away', async ({ page }) => {
   // The system clipboard depends on window focus, which parallel workers don't share; record instead.
   await page.addInitScript(() => {
     const w = window as unknown as { copied?: string };
@@ -90,6 +90,7 @@ test('J43 a code block copies; ? opens the shortcuts from anywhere', async ({ pa
 
   await page.goto('/');
   await page.keyboard.press('?');
+  await page.getByRole('dialog', { name: 'Keyboard shortcuts' }).getByRole('link', { name: 'All shortcuts in the guide' }).click();
   await expect(page).toHaveURL(/\/guide\/shortcuts$/);
   await expect(page.getByRole('heading', { name: 'Keyboard shortcuts', level: 2 })).toBeVisible();
 });

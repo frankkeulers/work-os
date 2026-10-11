@@ -98,6 +98,13 @@ test('J61: stop a batch with Esc — the rest stay in To file, with at most one 
   await expect(pos(page)).toHaveText(`Filing 1 of ${ids.length}`);
   await page.keyboard.press('ArrowRight');
   await expect(pos(page)).toHaveText(`Filing 2 of ${ids.length}`);
+  // ? shows the batch's keys first (UX-11); Esc closes only the overlay.
+  await page.keyboard.press('?');
+  const keys = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await expect(keys.locator('section').first()).toHaveAttribute('aria-label', 'Filing in a batch');
+  await page.keyboard.press('Escape');
+  await expect(keys).toHaveCount(0);
+  await expect(pos(page)).toHaveText(`Filing 2 of ${ids.length}`);
   await page.keyboard.press('Escape');
   await expect(panel(page)).toHaveCount(0);
   expect(await fileIds(page)).toEqual(ids);

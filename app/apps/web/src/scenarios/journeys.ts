@@ -106,6 +106,8 @@ export const JOURNEYS: Journey[] = [
   { id: 'J84', group: 'Follow-ups', title: 'Open what the inbox doesn’t show', start: (c) => (fresh(c), usePrefs.getState().setScope('mvp'), item(c, 'm1', '?tab=vault')) },
   // Done today shows filings (UX-12).
   { id: 'J85', group: 'Vault', title: 'What was filed today', start: (c) => (fresh(c), '/settings/writing') },
+  // The ? overlay (UX-11).
+  { id: 'J86', group: 'Inbox basics', title: 'Keys for where you are', start: (c) => (fresh(c), `/?item=${encodeURIComponent(c.itemIdForKey('f4') ?? '')}`) },
   // Write failures (FR-14.5).
   { id: 'J73', group: 'Vault', title: 'Not written: Retry write', start: (c) => (fresh(c), c.setNextDraftOutcome('write_unreachable'), item(c, 'f4', '?tab=vault')) },
   { id: 'J74', group: 'Confluence', title: 'Conflict, drafts budget used up', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), c.setFlag('drafts_budget'), item(c, 'f1')) },
