@@ -131,6 +131,8 @@ export async function runFinish(d: SettleDeps, signal: AbortSignal): Promise<Set
 
     const byId = new Map(answer.decisions.map((a) => [a.itemId, a]));
     const events: EventDraft[] = [];
+    // Results whose item must still be as checked when they are logged: a poll may land meanwhile.
+    const results: { current: () => boolean; allSettled: boolean; events: EventDraft[] }[] = [];
     for (const { it, check } of batch) {
       const a = byId.get(it.id);
       if (!a || a.itemRevision !== it.revision) {
@@ -147,8 +149,12 @@ export async function runFinish(d: SettleDeps, signal: AbortSignal): Promise<Set
       };
       const saved = await d.items.update(it.source, it.id, (stored) => (stored?.finish && stored.item.revision === it.revision && current() ? { ...stored, finish: { ...stored.finish, check: snapshot } } : undefined));
       if (!saved) continue;
-      events.push({ type: 'finish.checked', itemId: it.id, data: { revision: it.revision, batchId, allSettled: v.allSettled } });
-      if (v.allSettled) run.closed++;
+      results.push({ current, allSettled: v.allSettled, events: [{ type: 'finish.checked', itemId: it.id, data: { revision: it.revision, batchId, allSettled: v.allSettled } }] });
+    }
+    for (const r of results) {
+      if (!r.current()) continue; // someone wrote since: the next run checks again
+      events.push(...r.events);
+      if (r.allSettled) run.closed++;
       run.checked++;
     }
     if (events.length) await d.store.append(...events);

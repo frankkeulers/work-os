@@ -218,6 +218,8 @@ export async function runSettle(d: SettleDeps, signal: AbortSignal): Promise<Set
 
     const byId = new Map(answer.decisions.map((a) => [a.itemId, a]));
     const events: EventDraft[] = [];
+    // Results whose item must still be as checked when they are logged: a poll may land meanwhile.
+    const results: { current: () => boolean; events: EventDraft[] }[] = [];
     for (const { it, check, through, messageId } of batch) {
       const a = byId.get(it.id);
       if (!a || a.itemRevision !== it.revision) {
@@ -234,14 +236,17 @@ export async function runSettle(d: SettleDeps, signal: AbortSignal): Promise<Set
       };
       const saved = await d.items.update(it.source, it.id, (stored) => (stored && stored.item.revision === it.revision && current() ? { ...stored, settle: snapshot } : undefined));
       if (!saved) continue;
-      events.push({ type: 'settle.checked', itemId: it.id, data: { revision: it.revision, through, batchId, allSettled: v.allSettled, settled: v.settled.map((x) => askId(x.step)) } });
+      const mine: EventDraft[] = [{ type: 'settle.checked', itemId: it.id, data: { revision: it.revision, through, batchId, allSettled: v.allSettled, settled: v.settled.map((x) => askId(x.step)) } }];
       // A topic's asks tick off one by one; a single ask is the item itself.
-      if (check.asks.length > 1 && !v.allSettled) for (const x of v.settled) events.push({ type: 'topic.askDone', itemId: it.id, data: { askId: askId(x.step), by: 'reply' } });
-      if (v.allSettled && close) {
-        events.push({ type: 'item.done', itemId: it.id, data: { by: 'reply', source: it.source, messageId, check: batchId } });
-        run.closed++;
-      }
+      if (check.asks.length > 1 && !v.allSettled) for (const x of v.settled) mine.push({ type: 'topic.askDone', itemId: it.id, data: { askId: askId(x.step), by: 'reply' } });
+      if (v.allSettled && close) mine.push({ type: 'item.done', itemId: it.id, data: { by: 'reply', source: it.source, messageId, check: batchId } });
+      results.push({ current, events: mine });
+    }
+    for (const r of results) {
+      if (!r.current()) continue; // someone wrote since: the next run checks again
+      events.push(...r.events);
       run.checked++;
+      if (r.events.some((e) => e.type === 'item.done')) run.closed++;
     }
     if (events.length) await d.store.append(...events);
   }
