@@ -3,14 +3,26 @@ title: Filing to the vault
 group: Filing
 order: 60
 summary: Notes for your Obsidian vault, drafted to follow its conventions.
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 Choose **Draft vault note** on an item. Claude reads your vault, read-only, to find where the
-thread belongs, then drafts either:
+thread belongs, then drafts:
 
-- **an append** under a heading of the note that already owns the topic (preferred), or
-- **a new note**, with front matter, tags from your tag taxonomy and a summary.
+- **appends** under the headings of the notes that already own each topic (preferred). A thread
+  or meeting that covers several topics goes into several notes in one draft: a product note, the
+  Decision Log, a customer signals note;
+- **a new note**, with front matter, tags from your tag taxonomy and a summary, only for what no
+  existing note covers.
+
+## Meetings
+
+A meeting is filed by topic, like a thread. Each decision, fact or finding goes under the note
+that owns it, ending with the meeting's Wispr Flow link. A meeting note in `Work/Meetings/` holds
+only what fits nowhere else; when everything has a home, there is no meeting note.
+
+Action items stay out of the vault, except in a meeting note that is created anyway. Work OS
+doesn't create a meeting note just to hold them.
 
 The draft follows the vault conventions: where notes live, front matter, tags, and what to keep
 (decisions and facts that stay true) or leave out (action items and transient status).
@@ -46,6 +58,10 @@ The vault path is set in [Settings › Write targets](/settings/writing).
 Review the draft, edit it if you like, and approve. The draft shows as formatted text; switch to
 **Markdown** in its corner to see the raw lines. An append shows the note's existing lines faded
 above the new ones, so you can see where they land.
+
+A draft that files into several notes says **Files into N notes**, then lists each note with where
+it lands and its own **Edit**. One approval writes them all. Work OS checks every note before it
+writes any: if one changed since the draft, none is written and it re-drafts.
 
 - **An append** goes at the end of the heading's section, and the note's `updated:` date is set
   to today. If the note changed since the draft, Work OS re-drafts instead of overwriting.

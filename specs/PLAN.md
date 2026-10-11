@@ -652,6 +652,8 @@ As built (M2 step 16):
 
 **FR-9.6** *Added 2026-10-10, after prod filed a Wispr meeting as a new note beside the Teams note on the same meeting.* Before a draft, code finds the notes that may already hold the thread or meeting, and the draft must weigh them. If one does, the draft appends only what it lacks; if it lacks nothing, the draft files nothing and says which note holds it. A new note beside a likely match is shown with a warning, not blocked.
 
+**FR-9.7** *Added 2026-10-11, after every Wispr meeting drafted so far was filed as a new meeting note while the vault had topic notes for them.* Update existing notes wherever possible. A thread or meeting is filed by topic: each decision, fact or finding goes under the heading of the note that owns it, and one draft can add to several notes. A meeting note holds only what no existing note covers; when everything has a home, there is none. Action items stay out of the vault unless there is a meeting note anyway. Approving writes every note, or none if one changed since the draft.
+
 > **Story 9.1** As Frank, I want to turn a Slack thread into a vault note with one review so that knowledge lands in my vault without copy-paste.
 >
 > - Given a thread suggested for the vault, when I click Draft vault note, then a preview appears within ~60 seconds showing the target path and content.
@@ -682,6 +684,14 @@ As built (FR-9.6, 2026-10-10):
 - **The request** gains `<existing-notes>`, one JSON line per note, and a meeting's `attendees`. draft-vault v4 must open them, also Grep for the permalink, and answer `append` with only what the note lacks, or `{kind: filed, path, why}`. vault-conventions v3 puts the recording's link in a meeting note's `source:`.
 - **`vault_filed`.** Code checks the note exists. Approving it writes nothing and logs `action.executed` with `unchanged: true`, so `filedAll` and batch filing count it. A filed note that has since gone is a conflict and re-drafts. It can't be edited.
 - **Backstop.** A `new` answer beside a strong match keeps `possibleDuplicates`; the panel shows "This may already be in the vault" with Re-draft.
+
+As built (FR-9.7, 2026-10-11):
+
+- **Rules.** draft-vault v5 and vault-conventions v4 say it: file by topic, a meeting note only for what fits nowhere, never a note just for action items, and every block ends with its source link (the Wispr share link for a meeting), so the FR-9.6 check finds the meeting in the topic notes later. Unedited v4 and v3 defaults are upgraded on start.
+- **The answer** gains `{kind: notes, notes: [...]}`, up to 6 entries, each `append` or `new`. One entry is still a `vault_append` or `vault_new` draft. Two or more are a `vault_multi` draft (`parts`), checked note by note as before (path, heading, no overwrite); two appends to one note land in turn. `drafts/<id>.json` holds `baseHashes` by path; the action's target has `paths`.
+- **Writing.** The executor reconciles each note by its own hashes and writes nothing unless every note checks out. Every expected hash (`expectedHashes`) is saved and synced before the first write, so after a crash the notes already written match and only the rest are written. A note that changed fails the action as a conflict and re-drafts. `action.executed` carries `paths`.
+- **Panel.** "Files into N notes", then each note with its target, its existing lines and its own Edit; `PUT /api/actions/:id/draft` takes `part`, and the Edited badge is per note.
+- **Backstop.** A `vault_multi` with a new note beside a strong match keeps `possibleDuplicates`, minus the notes it adds to.
 
 ### 7.10 E9 Confluence entry action
 
