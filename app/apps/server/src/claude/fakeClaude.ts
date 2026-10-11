@@ -21,6 +21,8 @@ export interface FakeClaude {
   nextTexts: string[];
   /** Throws this on the next call instead of answering. */
   failNext?: unknown;
+  /** An API error (the SDK's assistant `error`, e.g. invalid_request) for calls whose prompt it picks. */
+  apiErrorFor?: (prompt: string) => string | undefined;
 }
 
 type Thread = { id: string; messages: { author: string; text: string }[] };
@@ -154,6 +156,8 @@ export function fakeClaude(): FakeClaude {
       return (async function* () {
         if (fail) throw fail;
         yield { type: 'system', subtype: 'init', mcp_servers: [] };
+        const apiError = fake.apiErrorFor?.(prompt);
+        if (apiError) yield { type: 'assistant', error: apiError, message: { content: [] } };
         const m = /<threads>\n([\s\S]*)\n<\/threads>/.exec(prompt);
         const convs = /<conversations>\n([\s\S]*)\n<\/conversations>/.exec(prompt);
         const checks = /<checks>\n([\s\S]*)\n<\/checks>/.exec(prompt);

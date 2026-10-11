@@ -440,6 +440,19 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(r.body.some((c) => !c.startsWith('#'))).toBe(false);
   });
 
+  it('triages the rest when one thread makes the call fail, and marks only that one failed (§5.3)', async () => {
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'POISON attachment, see above' });
+    slack.post('D01DANA', { ts: isoToTs(START + 2 * MIN), user: 'U02DANA', text: 'Can you review the deck?' });
+    claude.apiErrorFor = (prompt) => (prompt.includes('POISON') ? 'invalid_request' : undefined);
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    const items = (await inbox()).items;
+    expect(items.find((i) => i.id === PROD)?.triageState).toBe('failed');
+    expect(items.find((i) => i.id.startsWith('slack:D01DANA'))?.triageState).toBe('triaged');
+    expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('ok'); // not an outage: polling goes on
+  });
+
   it('marks a batch failed after two bad answers, and "Try again" triages it (CL-7)', async () => {
     slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'Updated the draft' });
     claude.nextTexts.push('not json', '{"decisions":[{"id":"x"}]}');

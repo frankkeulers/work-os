@@ -124,6 +124,32 @@ export function threadForTriage(item: Item, me: Me, keepLast: number, earlier?: 
 export const estimateTokens = (text: string) => Math.ceil(text.length / CHARS_PER_TOKEN);
 export const threadTokens = (t: TriageThread) => estimateTokens(JSON.stringify(t));
 
+/** Messages at the end of a thread that capThread keeps: the latest is what needs Frank. */
+const CAP_KEEP_LAST = 2;
+const CAP_MIN_CHARS = 200;
+
+/**
+ * A thread no call could take, cut to fit `maxTokens` on its own (§5.3): first the DM's earlier
+ * messages go, then kept messages from the middle, oldest first (the first message and the last
+ * two stay), then the longest texts are halved. A thread that fits is returned as it is.
+ */
+export function capThread(t: TriageThread, maxTokens: number): TriageThread {
+  if (threadTokens(t) <= maxTokens) return t;
+  const out: TriageThread = { ...t, messages: [...t.messages] };
+  delete out.before;
+  while (out.messages.length > 1 + CAP_KEEP_LAST && threadTokens(out) > maxTokens) {
+    out.messages.splice(1, 1);
+    out.omitted++;
+  }
+  while (threadTokens(out) > maxTokens) {
+    const longest = out.messages.reduce((a, m, i) => (m.text.length > out.messages[a].text.length ? i : a), 0);
+    const m = out.messages[longest];
+    if (!m || m.text.length <= CAP_MIN_CHARS) break; // nothing left worth cutting
+    out.messages[longest] = { ...m, text: cut(m.text, Math.max(CAP_MIN_CHARS, Math.floor(m.text.length / 2))) };
+  }
+  return out;
+}
+
 /**
  * Packs items in order into batches within both limits. An item too big for any batch goes alone:
  * it is still triaged, and the call's own limit decides.

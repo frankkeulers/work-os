@@ -20,7 +20,7 @@ import {
 } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
-import { ClaudeOutputError } from '../claude/errors';
+import { ClaudeError, ClaudeOutputError } from '../claude/errors';
 import type { Prompt } from '../claude/prompts';
 import type { Logger } from '../log';
 import { DEADLINES } from '../net/http';
@@ -31,7 +31,7 @@ import { triageQueue } from './eligibility';
 import { ruleVerdict } from './rules';
 import { openAsks } from './settle';
 import { routeTopics, topicForTriage } from './topics';
-import { estimateTokens, packBatches, threadTokens, type TriageThread } from './truncate';
+import { capThread, estimateTokens, packBatches, threadTokens, type TriageThread } from './truncate';
 
 // Batched model triage (FR-5.1–5.5, §5.3, CL-6, CL-7). Quiet pending threads go to the model in as
 // few calls as the limits allow; nothing eligible means no call. The budget is checked before
@@ -151,6 +151,8 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
   // What the model sees of each thread. An item whose file is gone can't be triaged: it fails
   // once, visibly, instead of being retried on every tick.
   // A topic is triaged through its anchor, over all its pieces.
+  const prompt = await d.prompt();
+  const overheadTokens = estimateTokens(prompt.text) + 200;
   const threads: { item: Item; topic: Item; state: ItemState; thread: TriageThread; topicVersion: number; asksDone: string[] }[] = [];
   const missing: EventDraft[] = [];
   for (const it of due) {
@@ -173,16 +175,18 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
     const asksDone = it.asksDone ?? [];
     const done = (stored.text?.next?.asks ?? []).filter((a) => asksDone.includes(askId(a.step))).map((a) => a.step);
     if (done.length) topic.view.done = done;
-    threads.push({ item: stored.item, topic: topic.item, state: it, thread: topic.view, topicVersion: it.topicVersion, asksDone });
+    // No thread is too big for a call of its own, so none can fail every run and hold up the rest.
+    const thread = capThread(topic.view, t.maxInputTokens - overheadTokens);
+    threads.push({ item: stored.item, topic: topic.item, state: it, thread, topicVersion: it.topicVersion, asksDone });
   }
   if (missing.length) {
     await d.store.append(...missing);
     run.failed += missing.length;
   }
 
-  const prompt = await d.prompt();
-  const batches = packBatches(threads, (x) => threadTokens(x.thread), { maxThreads: t.maxThreadsPerCall, maxInputTokens: t.maxInputTokens, overheadTokens: estimateTokens(prompt.text) + 200 });
-  for (const [n, batch] of batches.entries()) {
+  const batches = packBatches(threads, (x) => threadTokens(x.thread), { maxThreads: t.maxThreadsPerCall, maxInputTokens: t.maxInputTokens, overheadTokens });
+  for (let n = 0; n < batches.length; n++) {
+    const batch = batches[n];
     if (n > 0 && d.budgetHit()) {
       run.paused += batches.slice(n).reduce((k, b) => k + b.length, 0);
       break;
@@ -212,6 +216,20 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
       run.calls += r.usage.length;
       answer = r.value;
     } catch (err) {
+      // A call that failed on what it was sent, not on Claude's health: halve the batch and go on,
+      // so one thread can't hold up the rest. A single thread that still fails is shown as failed,
+      // with Try again; an outage (overloaded, offline, login) still stops the run for the breaker.
+      if (err instanceof ClaudeError && !signal.aborted && failedOnInput(err, batch.length)) {
+        d.logger?.warn({ items: itemIds, reason: err.failure.reason }, 'Triage call failed on its input');
+        if (batch.length > 1) {
+          const half = Math.ceil(batch.length / 2);
+          batches.splice(n + 1, 0, batch.slice(0, half), batch.slice(half));
+        } else {
+          await d.store.append({ type: 'triage.failed', itemId: batch[0].item.id, data: { revision: batch[0].item.revision, attempts: 1, reason: `the call failed: ${err.failure.reason}` } });
+          run.failed++;
+        }
+        continue;
+      }
       if (!(err instanceof ClaudeOutputError)) throw err;
       run.calls += err.attempts;
       // Twice out of shape: shown in the inbox untriaged, with "Try again" (CL-7).
@@ -288,3 +306,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
   d.logger?.info({ ...run, nextReadyAt: run.nextReadyAt?.toISOString() }, 'Triaged');
   return run;
 }
+
+/** Reasons a call fails on what it was sent; a timeout counts only for a batch that can be halved. */
+const INPUT_FAILURES = new Set(['invalid_request', 'max_output_tokens']);
+const failedOnInput = (err: ClaudeError, size: number) => INPUT_FAILURES.has(err.failure.reason) || (err.failure.reason === 'timeout' && size > 1);

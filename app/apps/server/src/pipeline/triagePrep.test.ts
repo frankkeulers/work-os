@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_RULES, defaultSettings } from '../config/defaults';
 import { triageQueue } from './eligibility';
 import { meFrom, ruleVerdict } from './rules';
-import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, EMAIL_MAX_CHARS, INVITEES_MAX, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens, withNames } from './truncate';
+import { BEFORE_MAX_CHARS, BEFORE_MAX_MESSAGES, capThread, EMAIL_MAX_CHARS, INVITEES_MAX, MEETING_MAX_CHARS, MESSAGE_MAX_CHARS, packBatches, threadForTriage, threadTokens, withNames, type TriageThread } from './truncate';
 
 const NOW = new Date('2026-10-06T09:00:00.000Z');
 const ago = (mins: number) => new Date(NOW.getTime() - mins * 60_000).toISOString();
@@ -193,6 +193,19 @@ describe('truncation and batching (§5.3, CL-4)', () => {
     expect(t.messages[0].text.length).toBe(Math.min(long.length, EMAIL_MAX_CHARS));
     // Chat messages carry neither.
     expect(threadForTriage(thread([msg(1)]), meFrom({ id: 'UFRANK' }), 3).messages[0]).not.toHaveProperty('to');
+  });
+
+  it('cuts a thread too big for any call to fit one: the first and last messages stay, the middle goes', () => {
+    const big = (n: number) => ({ author: 'Dana Lee', at: `2026-10-06T08:${String(n % 60).padStart(2, '0')}:00Z`, text: `${n} ${'x'.repeat(1900)}` });
+    const thread: TriageThread = { id: 't', kind: 'thread', title: '#product', messages: Array.from({ length: 60 }, (_, n) => big(n)), omitted: 0 };
+    const capped = capThread(thread, 4000);
+    expect(threadTokens(capped)).toBeLessThanOrEqual(4000);
+    expect(capped.messages[0].text.startsWith('0 ')).toBe(true);
+    expect(capped.messages.at(-1)!.text.startsWith('59 ')).toBe(true);
+    expect(capped.omitted).toBe(60 - capped.messages.length);
+    expect(capThread({ ...thread, messages: thread.messages.slice(0, 2) }, 4000).messages).toHaveLength(2); // small enough: unchanged
+    const one = capThread({ ...thread, messages: [{ ...big(0), text: 'y'.repeat(50_000) }] }, 4000);
+    expect(threadTokens(one)).toBeLessThanOrEqual(4000); // one huge message is shortened
   });
 
   it('packs threads in order within the thread and token limits; an oversized one goes alone', () => {
