@@ -144,6 +144,16 @@ describe('startup checks (FR-12.2)', () => {
     expect(checks.claude_login.status).toBe('warn'); // no Claude call yet
   });
 
+  it('says which account Claude bills: the subscription, or the fallback Settings chose (CL-8)', async () => {
+    const secrets = memoryKeychain({ [tokenAccount('dev')]: 't', [SLACK_TOKEN_ACCOUNT]: 'xoxp-test' });
+    const apiKey = async (backend?: 'subscription' | 'api_key' | 'bedrock') =>
+      byId(await runChecks({ exec: fakeExec('FileVault is On.\n'), secrets, instance: 'dev', settingsCheck: () => settingsOk, backend: backend && (() => backend) })).api_key;
+    expect(await apiKey()).toMatchObject({ status: 'ok', note: 'ok: Claude runs on your subscription' });
+    expect(await apiKey('subscription')).toMatchObject({ status: 'ok', note: 'ok: Claude runs on your subscription' });
+    expect(await apiKey('api_key')).toMatchObject({ status: 'warn', note: expect.stringMatching(/API key in the Keychain \(anthropic-api-key\), billed separately/) });
+    expect(await apiKey('bedrock')).toMatchObject({ status: 'warn', note: expect.stringMatching(/Bedrock, billed separately/) });
+  });
+
   it('judges the Claude login by the last real call (FR-12.2)', async () => {
     const secrets = memoryKeychain({ [tokenAccount('dev')]: 't', [SLACK_TOKEN_ACCOUNT]: 'xoxp-test' });
     const claude = async (h: Partial<DependencyHealth>) =>

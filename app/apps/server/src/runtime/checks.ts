@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
-import type { DependencyHealth, StartupCheck } from '@work-os/shared';
+import type { DependencyHealth, Settings, StartupCheck } from '@work-os/shared';
 import { tokenAccount } from '../api/auth';
 import type { Instance } from '../config/env';
 import { SLACK_TOKEN_ACCOUNT, type SecretStore } from '../config/keychain';
+import { API_KEY_ACCOUNT } from '../claude/backends';
 
 // Startup checks (FR-12.2). They run after the server is listening, never block it, and run again
 // on wake, on a settings save and on "Check again". A failed check puts the server in degraded
@@ -22,6 +23,19 @@ export interface CheckDeps {
   settingsCheck: () => StartupCheck;
   /** Claude's health as the last real call left it (triage, drafts); undefined before the runtime. */
   claude?: () => DependencyHealth | undefined;
+  /** The Claude backend Settings choose (CL-8); the subscription when absent. */
+  backend?: () => Settings['claudeBackend'];
+}
+
+/**
+ * The environment never has a key (CL-2 refuses to start with one), so this check is about which
+ * account Claude bills: the subscription is the goal, and a fallback chosen in Settings is shown.
+ */
+function backendCheck(backend: Settings['claudeBackend'] = 'subscription'): StartupCheck {
+  const label = 'ANTHROPIC_API_KEY not set';
+  if (backend === 'subscription') return check('api_key', label, 'ok', 'ok: Claude runs on your subscription');
+  const via = backend === 'api_key' ? `the API key in the Keychain (${API_KEY_ACCOUNT})` : 'Bedrock';
+  return check('api_key', label, 'warn', `not set; Settings › Models use ${via}, billed separately from your subscription`);
 }
 
 /**
@@ -55,7 +69,7 @@ export async function runChecks(d: CheckDeps): Promise<StartupCheck[]> {
   const powerNap = /^\s*powernap\s+1\b/m.test(pmset.stdout);
   return [
     /FileVault is On/.test(fv.stdout) ? check('filevault', 'FileVault on', 'ok', 'ok') : check('filevault', 'FileVault on', 'warn', fv.code === 0 ? 'off: local files hold company messages' : 'could not check'),
-    check('api_key', 'ANTHROPIC_API_KEY not set', 'ok', 'ok'),
+    backendCheck(d.backend?.()),
     slack === 'present'
       ? check('slack_token', 'Slack token in Keychain', 'ok', 'ok')
       : check('slack_token', 'Slack token in Keychain', 'fail', slack === 'missing' ? `missing: add it to the Keychain as ${SLACK_TOKEN_ACCOUNT}` : 'Keychain locked'),

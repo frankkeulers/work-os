@@ -431,7 +431,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     refresh: (s, itemId, signal) => refreshItem(pollDeps, s, itemId, signal),
     due: (at) => (newDay(at), returnSnoozed(store, at)),
     probe: (signal) => probeNetwork(deps.fetch ?? fetch, signal),
-    checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings), claude: () => runtime.health.get('claude') }),
+    checks: () => runChecks({ exec: deps.exec ?? systemExec, secrets, instance: config.instance, settingsCheck: () => settingsCheck(settings), claude: () => runtime.health.get('claude'), backend: () => settings.editable.settings.claudeBackend }),
     wakeTime: deps.wakeTime ?? readWakeTime,
     followZone: deps.followZone ?? followSystemZone,
     safeMode: runs.safeMode,

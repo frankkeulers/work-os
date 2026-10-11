@@ -18,6 +18,7 @@ Follow the milestones: M1 → M2 → M3 → M4. Do not start a milestone until t
 ## Non-negotiables
 
 1. **Never set or use `ANTHROPIC_API_KEY`.** Claude runs on Frank's Claude subscription through the Agent SDK and the local Claude Code login. The server must refuse to start if the variable is set (CL-2).
+   *Exception (CL-8, kept by Frank on 2026-10-11):* Settings › Models can switch Claude to an API key or Bedrock as a fallback if subscription terms change. Only Frank picks it. The key lives in the Keychain (`anthropic-api-key`) and is passed only into the Agent SDK's own process environment for each call (`claude/backends.ts`). It is never set in the server's environment, a file, a log or a prompt. While a fallback is active, the startup check says so.
 2. **Only `apps/server/src/claude/` imports the Agent SDK** (CL-1). Every call sets its model, system prompt, tools, MCP servers, settings loading and max turns explicitly (CL-3), and logs usage (CL-5). Check the current Agent SDK docs for option names. Don't rely on memory.
 3. **Triage calls use no tools, no MCP and no Claude Code preset prompt** (CL-4).
 4. **Models never write to Confluence, the vault or Slack.** Models draft. Code writes after Frank approves, with allow-list and version or hash checks (FR-9.4, FR-10.5, FR-10.6).

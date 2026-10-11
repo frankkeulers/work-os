@@ -131,6 +131,9 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
 - **Work OS will not start because `ANTHROPIC_API_KEY` is set**: Work OS uses your Claude
   subscription and refuses an API key, so usage is never billed by accident. Remove it with
   `launchctl unsetenv ANTHROPIC_API_KEY` and from your shell profile.
+- **The "ANTHROPIC_API_KEY not set" check shows a warning**: Settings › Models use the API key or
+  Bedrock fallback instead of your subscription, so calls are billed separately. Switch back to
+  the subscription there unless you meant it.
 
 ## Safe mode
 
