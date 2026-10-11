@@ -7,6 +7,7 @@ import { fmtTokens } from '../lib/format';
 import { confluencePageUrl, obsidianNoteUrl } from '../lib/links';
 import { TYPE_LABEL, TYPE_NOUN, draftState, type DraftState } from '../lib/lanes';
 import { SOURCE_NAME } from '../lib/next';
+import { watchCloseOnFile } from '../store/closeOnFile';
 import { forgetEdit, keepEdit, keptEdit } from '../store/draftEdits';
 import { errorToast, toast } from '../store/toasts';
 import { BrandIcon } from './BrandIcon';
@@ -14,7 +15,7 @@ import { GuideLink } from './GuideLink';
 import { Icon } from './icons';
 import { itemPath } from './item';
 import type { DocMode } from './MarkdownDoc';
-import { Banner, Button, ConfirmDialog, Segmented, Spinner, cx } from './ui';
+import { Banner, Button, ConfirmDialog, Kbd, Segmented, Spinner, cx } from './ui';
 
 // The draft → review → approve panel (FR-9.x, FR-10.x). Used full width on Item detail and,
 // embedded, inside the Next step card of the Inbox item panel.
@@ -46,6 +47,8 @@ const STATUS_BADGE: Record<DraftState, { label: string; cls: string } | null> = 
 };
 
 const ACTIVE = new Set<Action['status']>(['drafting', 'ready', 'approved', 'executing']);
+
+const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
 /** A link styled as a secondary button. */
 const linkButton =
@@ -601,6 +604,46 @@ export function ActionPanel({
       run: () => (stopEditing(), void run(() => api.discardAction(action.id))),
     });
 
+  // Close on file (UX-4): a To file item is done once its suggested filings are written, as in a
+  // batch. A to-do is never one of them, and the rest of an item with a step left stays open.
+  const closesOnFile = !onApproved && type !== 'todo' && s.lane === 'file' && s.status === 'open';
+  const approve = (a: Action) => async () => {
+    await api.approveAction(a.id, onApproved || closesOnFile ? { markDoneWhenFiled: true } : undefined);
+    if (closesOnFile) watchCloseOnFile(a.id, item.id, item.title);
+    onApproved?.(type);
+  };
+  const canApprove = action?.status === 'ready' && !!draft && !busy && !confirm;
+  // ⌘↵ approves; while editing, it saves the edit first. x discards (UX-1).
+  const approveKey = () => {
+    if (!action || !canApprove) return false;
+    const e = editing?.actionId === action.id ? editing : null;
+    void run(async () => {
+      if (e && e.text !== e.original) await api.saveDraftEdit(action.id, e.text, e.part);
+      if (e) stopEditing();
+      await approve(action)();
+    });
+    return true;
+  };
+  const keys = useRef({ approve: approveKey, discard: () => {} });
+  useEffect(() => {
+    keys.current = { approve: approveKey, discard: () => !editing && (action?.status === 'ready' || action?.status === 'failed') && discard() };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+        if ((e.target as HTMLElement | null)?.closest?.('[role="dialog"]') || !keys.current.approve()) return;
+        // Before the editor sees it: Tiptap would take ⌘↵ for a line break.
+        e.preventDefault();
+        e.stopPropagation();
+      } else if (e.key === 'x' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target)) {
+        e.preventDefault();
+        keys.current.discard();
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, []);
+
   // A failed write is written again as drafted, once Frank has fixed the cause: no new draft (FR-14.5).
   const retryWrite = () => action && void run(() => api.retryWrite(action.id));
   const canRetryWrite = action?.status === 'failed' && action.failedWhile === 'writing' && (action.failureReason === 'unreachable' || action.failureReason === 'allow_list');
@@ -846,6 +889,9 @@ export function ActionPanel({
           <Button icon="x" onClick={cancelEdit}>
             Cancel
           </Button>
+          <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted">
+            <Kbd>⌘↵</Kbd> saves and approves
+          </span>
         </>
       ),
     });
@@ -922,12 +968,6 @@ export function ActionPanel({
         <div className="-mt-1 flex flex-col gap-2">
           <div className="flex min-h-8 items-center gap-2">
             <ChecksToggle checks={checks} open={checksOpen} onToggle={() => setChecksOpen(!checksOpen)} />
-            <span className="flex-1" />
-            {action.status === 'ready' && !editing && (
-              <Button size="sm" variant="ghost" icon="redraft" className="-mr-1.5" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : 'Ask for a fresh draft'}>
-                Re-draft
-              </Button>
-            )}
           </div>
           {checksOpen && <ChecksDetail checks={checks} d={draft} />}
         </div>
@@ -971,31 +1011,67 @@ export function ActionPanel({
     );
   }
 
-  // Approve and Discard only: Edit lives on the draft and Re-draft under it. While editing,
-  // Save and Cancel sit under the editor and this row steps aside.
+  // The action bar (UX-2): Approve, Edit, Re-draft and Discard, kept in view at the foot of the
+  // panel while the draft scrolls. While editing, Save and Cancel sit under the editor instead.
+  const ready = action?.status === 'ready';
+  const startEdit =
+    action && draft && ready && !editing && !isFiledDraft(draft) && draft.kind !== 'vault_multi'
+      ? () => setEditing({ actionId: action.id, part: undefined, text: draftText(draft), original: draftText(draft) })
+      : undefined;
   const footer =
     action && draft && !editing && (action.status === 'ready' || action.status === 'approved' || action.status === 'executing') ? (
-      <div className={cx('flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3', embedded ? 'rounded-b-[11px] px-[18px]' : 'px-6')}>
-        <Button variant="solid" size="lg" icon={action.status === 'ready' ? 'check' : undefined} disabled={busy || action.status !== 'ready'} onClick={() => void run(async () => (await api.approveAction(action.id, onApproved && { markDoneWhenFiled: true }), onApproved?.(type)))}>
-          {action.status === 'ready' ? (
-            isFiledDraft(draft) ? (
-              'Mark as filed'
-            ) : todo ? (
-              view.dryRun ? 'Approve and add in the sandbox' : 'Approve and add to Tasks'
-            ) : view.dryRun ? (
-              'Approve and write to sandbox'
-            ) : (
-              'Approve and write'
-            )
+      <div
+        data-action-bar
+        className={cx(
+          'sticky bottom-0 z-10 flex flex-wrap items-center gap-2 border-t border-line-soft bg-surface-3 py-3 shadow-[0_-8px_16px_-12px_rgba(20,23,28,0.25)]',
+          embedded ? 'rounded-b-[11px] px-[18px]' : 'px-6',
+        )}
+      >
+        <Button variant="solid" size={embedded ? 'md' : 'lg'} icon={ready ? 'check' : undefined} disabled={busy || !ready} aria-keyshortcuts="Meta+Enter" onClick={() => void run(approve(action))}>
+          {ready ? (
+            <>
+              {isFiledDraft(draft)
+                ? 'Mark as filed'
+                : onApproved
+                  ? 'Approve and next'
+                  : todo
+                    ? view.dryRun
+                      ? 'Approve and add in the sandbox'
+                      : 'Approve and add to Tasks'
+                    : view.dryRun
+                      ? 'Approve and write to sandbox'
+                      : 'Approve and write'}
+              <span aria-hidden className="ml-0.5 inline-flex [&>kbd]:border-white/40 [&>kbd]:bg-transparent [&>kbd]:text-white/85">
+                <Kbd>⌘↵</Kbd>
+              </span>
+            </>
           ) : (
             <>
               <Spinner /> {action.status === 'approved' ? 'Approved…' : 'Writing…'}
             </>
           )}
         </Button>
+        {startEdit && (
+          <Button icon="edit" onClick={startEdit}>
+            Edit
+          </Button>
+        )}
+        {ready && (
+          <Button icon="redraft" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : todo ? 'Build the to-do again from the triage' : 'Ask for a fresh draft'}>
+            Re-draft
+          </Button>
+        )}
         <span className="flex-1" />
-        <Button variant="danger" icon="trash" disabled={action.status !== 'ready'} onClick={discard}>
-          Discard
+        {/* In the narrow panel, an icon keeps the bar on one line. */}
+        <Button variant="danger" icon="trash" disabled={!ready} aria-label="Discard" title="Discard (x)" aria-keyshortcuts="x" className={cx(embedded && 'px-2.5')} onClick={discard}>
+          {!embedded && (
+            <>
+              Discard
+              <span aria-hidden className="inline-flex">
+                <Kbd>x</Kbd>
+              </span>
+            </>
+          )}
         </Button>
       </div>
     ) : null;

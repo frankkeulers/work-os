@@ -21,7 +21,8 @@ async function control(page: Page, name: string) {
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Item panel' });
 const toFile = (page: Page) => page.getByRole('region', { name: 'Later', exact: true }).getByRole('region', { name: 'To file', exact: true });
 const pos = (page: Page) => panel(page).getByTestId('batch-pos');
-const approve = (page: Page) => panel(page).getByRole('button', { name: /^Approve and write/ });
+// In a batch, approving moves on (UX-2).
+const approve = (page: Page) => panel(page).getByRole('button', { name: /^Approve and next/ });
 const current = (page: Page) => new URL(page.url()).searchParams.get('item')!;
 
 async function afternoon(page: Page) {

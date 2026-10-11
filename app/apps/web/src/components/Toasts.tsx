@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { useToasts, type OsNotification, type Toast } from '../store/toasts';
 import { BrandMark } from './brand/BrandMark';
 import { Icon } from './icons';
-import { cx } from './ui';
+import { Kbd, cx } from './ui';
 
 function ToastRow({ t }: { t: Toast }) {
   const dismiss = useToasts((s) => s.dismiss);
@@ -34,6 +34,11 @@ function ToastRow({ t }: { t: Toast }) {
             }}
           >
             {t.action.label}
+            {t.action.label === 'Undo' && (
+              <span aria-hidden className="ml-1.5">
+                <Kbd>z</Kbd>
+              </span>
+            )}
           </button>
         )}
       </div>

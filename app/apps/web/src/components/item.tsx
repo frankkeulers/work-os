@@ -1,11 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { OUTLOOK_COLORS, type Attention, type CategoryTag, type ItemMeeting, type OutlookColor, type SourceId } from '@work-os/shared';
 import { API_MODE, api, type ItemSummary } from '../api';
 import { SOURCE_NAME } from '../lib/next';
 import { snoozeOptions } from '../lib/snooze';
 import { errorToast, toast } from '../store/toasts';
 import { Icon } from './icons';
-import { Button, MenuItem, Segmented, cx, inputClass } from './ui';
+import { Button, Kbd, MenuItem, Segmented, cx, inputClass } from './ui';
 
 // Item helpers shared by the Inbox list, the item panel and Item detail.
 
@@ -143,14 +143,45 @@ function Marker({ tone, icon, children }: { tone: 'accent' | 'warn' | 'neutral';
 
 // ---------- Popovers ----------
 
-export function SnoozeMenu({ onPick, now }: { onPick: (iso: string) => void; now: Date }) {
+/**
+ * The snooze times. Keys while it's open (UX-1): a number picks that row, and `s` the suggested
+ * time, so `s s` snoozes for the suggestion from the item panel.
+ */
+export function SnoozeMenu({ onPick, now, suggested }: { onPick: (iso: string) => void; now: Date; suggested?: { label: string; until: string } }) {
   const [custom, setCustom] = useState(false);
   const local = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   const [value, setValue] = useState(local(new Date(now.getTime() + 3 * 3600_000)));
+  const opts = snoozeOptions(now);
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).tagName === 'INPUT') return;
+    const n = Number(e.key);
+    if (Number.isInteger(n) && n >= 1 && n <= opts.length) {
+      e.preventDefault();
+      onPick(opts[n - 1].until);
+    } else if (e.key === 's' && suggested) {
+      e.preventDefault();
+      onPick(suggested.until);
+    }
+  };
+  const what = suggested?.label.replace(/^Snooze /, '');
   return (
-    <div className="flex w-[240px] flex-col">
-      {snoozeOptions(now).map((o) => (
-        <MenuItem key={o.label} onClick={() => onPick(o.until)} hint={<span className="font-mono text-[11px] text-muted">{o.hint}</span>}>
+    <div className="flex w-[260px] flex-col" onKeyDown={onKeyDown}>
+      {suggested && what && (
+        <MenuItem onClick={() => onPick(suggested.until)} hint={<Kbd>s</Kbd>}>
+          {what[0].toUpperCase() + what.slice(1)} <span className="text-xs text-muted">suggested</span>
+        </MenuItem>
+      )}
+      {opts.map((o, i) => (
+        <MenuItem
+          key={o.label}
+          onClick={() => onPick(o.until)}
+          hint={
+            <>
+              <span className="font-mono text-[11px] text-muted">{o.hint}</span>
+              <Kbd>{i + 1}</Kbd>
+            </>
+          }
+        >
           {o.label}
         </MenuItem>
       ))}

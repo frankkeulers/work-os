@@ -267,6 +267,59 @@ test('J78 a meeting’s action items: pick some, and they go to Tasks as a to-do
   await expect(items).toContainText('Added to Tasks', { timeout: 20_000 });
 });
 
+test('J80 v drafts the vault note; the action bar stays in view; ⌘↵ approves, filing closes it, and z undoes that (UX-1, UX-2, UX-4)', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'Claude Code' }).click();
+  await page.keyboard.press('v');
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  await expect(action.getByRole('tab', { name: /Vault note/ })).toHaveAttribute('aria-selected', 'true');
+  const bar = action.locator('[data-action-bar]');
+  await expect(bar.getByRole('button', { name: 'Approve and write to sandbox' })).toBeEnabled({ timeout: 20_000 });
+  await expect(bar).toBeInViewport();
+  await expect(bar.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
+  await expect(bar.getByRole('button', { name: 'Re-draft' })).toBeVisible();
+  await itemPanel(page).screenshot({ path: join(APP, 'screenshots/action-bar-light.png'), animations: 'disabled' });
+
+  // Its only suggested filing: once written, the item is done, with Undo.
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(page.getByRole('status').filter({ hasText: 'Filed, so marked done · #ai-adoption' })).toBeVisible({ timeout: 20_000 });
+  await expect(itemPanel(page).getByRole('button', { name: 'Reopen' })).toBeVisible();
+  await page.keyboard.press('z');
+  await expect(page.getByRole('status').filter({ hasText: 'Undone: Filed, so marked done · #ai-adoption' })).toBeVisible();
+  await expect(itemPanel(page).getByRole('button', { name: 'Reopen' })).toHaveCount(0);
+});
+
+test('J81 x discards the draft; s then a number snoozes, and s s takes the suggested time (UX-1)', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  await expect(action.locator('[data-action-bar]').getByRole('button', { name: /^Approve/ })).toBeEnabled();
+  await page.keyboard.press('x');
+  await expect(action.getByText('The last draft was discarded.')).toBeVisible();
+
+  await page.keyboard.press('s');
+  const menu = itemPanel(page).getByRole('menu', { name: 'Snooze' });
+  await expect(menu.getByRole('menuitem', { name: /Until 17:30 suggested/ })).toBeVisible();
+  await page.keyboard.press('2');
+  await expect(page.getByRole('status').filter({ hasText: /^Snoozed until Mon 5 Oct 10:45/ })).toBeVisible();
+  await page.keyboard.press('z');
+  await expect(itemPanel(page).getByRole('button', { name: 'Unsnooze' })).toHaveCount(0);
+
+  await page.keyboard.press('s');
+  await page.keyboard.press('s');
+  await expect(page.getByRole('status').filter({ hasText: /^Snoozed until Mon 5 Oct 17:30/ })).toBeVisible();
+});
+
+test('⌘↵ while editing saves the edit, then approves (UX-1)', async ({ page }) => {
+  await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
+  await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();
+  const action = itemPanel(page).getByRole('region', { name: 'Action' });
+  await action.getByRole('button', { name: 'Edit text' }).click();
+  await replaceDraftText(page, 'Edited, then approved from the keyboard');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(action.getByRole('status')).toContainText('Dry-run: write logged only', { timeout: 20_000 });
+  await expect(action.getByText('Edited', { exact: true })).toBeVisible();
+});
+
 test('the Next step card holds the filing: its options, the draft’s progress and the review', async ({ page }) => {
   // The newest item is a reply: the step's action is Slack, so both targets are filing options in the same card.
   await sortBy(page, 'Newest first');

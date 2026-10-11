@@ -93,7 +93,7 @@ test.describe('on the cockpit', () => {
     await expect(page.getByTestId('poll-line')).not.toContainText(/Polling|Triaging/, { timeout: 15_000 });
     const toFile = page.getByRole('region', { name: 'Later', exact: true }).getByRole('region', { name: 'To file', exact: true });
     await toFile.getByRole('button', { name: 'File in a batch' }).click();
-    const approve = panel.getByRole('button', { name: /^Approve and write/ });
+    const approve = panel.getByRole('button', { name: /^Approve and next/ }); // in a batch (UX-2)
     await expect(approve).toBeEnabled({ timeout: 15_000 });
     await expect(navMark(page)).not.toHaveClass(/\bbm-fl\b/);
     await approve.click();

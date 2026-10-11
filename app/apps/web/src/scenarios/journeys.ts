@@ -97,6 +97,9 @@ export const JOURNEYS: Journey[] = [
     start: (c) => (fresh(c), usePrefs.getState().setScope('full'), `/?item=${encodeURIComponent(c.itemIdForKey('m1') ?? '')}`),
   },
   { id: 'J79', group: 'Settings', title: 'Tasks note', start: (c) => (fresh(c), '/settings/writing') },
+  // Filing from the keyboard (UX-1, UX-2, UX-4).
+  { id: 'J80', group: 'Vault', title: 'File from the keyboard', start: (c) => (fresh(c), `/?item=${encodeURIComponent(c.itemIdForKey('f4') ?? '')}`) },
+  { id: 'J81', group: 'Confluence', title: 'Discard and snooze by key', start: (c) => (fresh(c), `/?item=${encodeURIComponent(c.itemIdForKey('f1') ?? '')}&file=confluence`) },
   // Write failures (FR-14.5).
   { id: 'J73', group: 'Vault', title: 'Not written: Retry write', start: (c) => (fresh(c), c.setNextDraftOutcome('write_unreachable'), item(c, 'f4', '?tab=vault')) },
   { id: 'J74', group: 'Confluence', title: 'Conflict, drafts budget used up', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), c.setFlag('drafts_budget'), item(c, 'f1')) },

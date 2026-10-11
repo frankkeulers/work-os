@@ -618,7 +618,8 @@ export function ItemPanel({
     body.current?.scrollTo({ top: 0 });
   }, [item.id]);
 
-  // e Done, ⇧E Done and next, s Snooze, c Correct triage, a Add to-do, o open as a full page.
+  // e Done, ⇧E Done and next, s Snooze, c Correct triage, r Reply in the source, f / v / a file to
+  // Confluence, the vault or Tasks, o open as a full page.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
@@ -637,9 +638,12 @@ export function ItemPanel({
       } else if (e.key === 'y' && canConfirm(item)) {
         e.preventDefault();
         void confirmTriage(item);
-      } else if (e.key === 'a' && canFile(item) && !dirtyNow.current) {
+      } else if ((e.key === 'a' || e.key === 'f' || e.key === 'v') && canFile(item) && !dirtyNow.current) {
         e.preventDefault();
-        file('todo');
+        file(e.key === 'a' ? 'todo' : e.key === 'f' ? 'confluence_entry' : 'vault_note');
+      } else if (e.key === 'r') {
+        e.preventDefault();
+        openInSource(item, { replying: open });
       } else if (e.key === 'ArrowRight' && batch) {
         e.preventDefault();
         batch.onSkip();
@@ -789,6 +793,7 @@ export function ItemPanel({
                 <PopoverPanel panelRef={snoozePanel} label="Snooze" role="menu" align="left" side="top">
                   <SnoozeMenu
                     now={now}
+                    suggested={suggestedSnooze(item, now)}
                     onPick={(iso) => {
                       closeSnooze();
                       void snooze(item, iso);

@@ -17,7 +17,8 @@ import { UsagePage } from './pages/Usage';
 import { ScenarioDrawer } from './scenarios/ScenarioDrawer';
 import { takeQuiet } from './store/quietDrafts';
 import { usePrefs } from './store/prefs';
-import { toast, useToasts } from './store/toasts';
+import { unwatch, watchedFor } from './store/closeOnFile';
+import { errorToast, toast, useToasts } from './store/toasts';
 
 // The guide carries its own Markdown and renderer, so it loads only when opened.
 const GuidePage = lazy(() => import('./pages/Guide').then((m) => ({ default: m.GuidePage })));
@@ -83,6 +84,46 @@ function useHelpKey() {
   }, [navigate]);
 }
 
+/**
+ * Close on file (UX-4): an approval that asked for its To file item to be closed once filed is
+ * watched until its write lands. If the item closed, a toast says so, with Undo.
+ */
+function useCloseOnFileToasts() {
+  useEffect(
+    () =>
+      api.subscribe((n) => {
+        if (n.topic !== 'item') return;
+        const watched = watchedFor(n.id);
+        if (!watched.length) return;
+        void api.getItem(n.id).then((v) => {
+          for (const [actionId, w] of watched) {
+            const a = v.actions.find((x) => x.id === actionId);
+            if (a && (a.status === 'approved' || a.status === 'executing')) continue;
+            unwatch(actionId);
+            if (a?.status === 'done' && v.summary.status === 'done' && (v.summary.doneBy ?? 'you') === 'you')
+              toast(`Filed, so marked done · ${w.title}`, { tone: 'success', action: { label: 'Undo', run: () => void api.reopen(n.id).catch(errorToast) } });
+          }
+        }, () => undefined);
+      }),
+    [],
+  );
+}
+
+/** z runs the newest Undo a toast offered, even after the toast has gone (UX-1). */
+function useUndoKey() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'z' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if ((e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]')) return;
+      e.preventDefault();
+      const u = useToasts.getState().undo();
+      toast(u ? `Undone: ${u.message}` : 'Nothing to undo.', { key: 'undo' });
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+}
+
 const guide = (
   <Suspense fallback={<div className="h-full bg-surface" />}>
     <GuidePage />
@@ -93,6 +134,8 @@ function Root() {
   useThemeAttribute();
   useNoticeToasts();
   useHelpKey();
+  useUndoKey();
+  useCloseOnFileToasts();
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []);
   const h = health.data;
   let body = <Outlet />;

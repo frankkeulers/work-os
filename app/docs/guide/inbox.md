@@ -229,9 +229,25 @@ you, after a correction. Open it for the model, the prompt version, the batch, t
 time. It stays open or closed as you left it, in this browser.
 
 - **Done** (`e`) and **Done and next** (`E`) sit in the footer, with **Snooze** (`s`): an hour,
-  tomorrow at 09:00, or a time you pick.
-- **Open in Slack** goes to the thread, in the browser or the desktop app as set in Settings.
+  tomorrow at 09:00, or a time you pick. With the menu open, a number picks that row, and `s` the
+  suggested time, so `s s` snoozes for the suggestion.
+- **Open in Slack** (`r`) goes to the thread, in the browser or the desktop app as set in Settings.
+- `f` files to Confluence, `v` to the vault and `a` adds a to-do: each opens its draft, starting it
+  if there isn't one.
 - `o` opens the item as a full page; `Esc` or a click outside closes the panel.
+
+### Reviewing a draft
+
+While a draft is open, its action bar stays in view at the foot of the panel as you scroll: **Approve**
+(`⌘↵`), **Edit**, **Re-draft** and **Discard** (`x`). While you edit, `⌘↵` saves your edit and
+approves in one go.
+
+An item in To file is done once everything triage suggested for it is written: approve its last
+filing and it closes by itself, with **Undo** in the toast. An item with something left to do, such
+as a reply, stays open after filing.
+
+`z` undoes the last thing a toast offered to undo (Done, Snooze, a filing that closed an item, a
+settings change), even after the toast has gone. Press it again to go further back.
 
 ## A source's history
 
@@ -265,10 +281,10 @@ still shows its health; **Health ›** in the page's top bar opens
 on the first item, on the filing triage suggests (Confluence first), with its draft started, and
 reads **Filing 1 of 4**.
 
-- **Approve** writes it (to the sandbox while dry-run is on) and moves on. An item that suggests
+- **Approve and next** (`⌘↵`) writes it (to the sandbox while dry-run is on) and moves on. An item that suggests
   both Confluence and the vault stays open for the second one first.
 - An item filed this way goes to Done once all its suggested filings are written, so it leaves
-  To file by itself. Filing one item on its own still leaves it open, as before.
+  To file by itself, as one filed on its own does.
 - **Skip** (`→`) leaves the item in To file and moves on. **Discard** works as usual.
 - The next item's draft runs while you review the current one, so it is usually ready when you
   get there. Only one runs ahead: stopping part-way wastes at most one draft. The batch's drafts

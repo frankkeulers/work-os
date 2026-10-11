@@ -382,7 +382,7 @@ The header reads "Later 9 · Once a day".
 - **Approve** writes (with dry-run as set) and moves to the next item. **Skip** (`→`) leaves the item in To file and moves on. **Discard** works as today.
 - At the end, the panel shows "4 filed · 1 skipped" and closes on `Esc`.
 
-**CK-4.4** An item filed in a batch is marked done once all its suggested targets are written. This answers JOURNEYS open question 5 for the batch path only; single filing keeps today's behaviour until Frank decides.
+**CK-4.4** An item filed in a batch is marked done once all its suggested targets are written. This answers JOURNEYS open question 5 for the batch path only; single filing keeps today's behaviour until Frank decides. *Amended 11 Oct 2026 (BACKLOG UX-4):* single filing of a To file item closes it the same way, with Undo (PLAN FR-8.4).
 
 > **Story 4.1** As Frank, I want to file the day's items in one sitting so that filing takes minutes, not a context switch per item.
 >
