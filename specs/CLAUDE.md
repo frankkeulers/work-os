@@ -1,6 +1,6 @@
 # CLAUDE.md: Work OS
 
-Read `PLAN.md` before any task. It holds the requirements (FR-*, CL-*, NF-*) and the milestone order. Reference requirement IDs in commits and PR descriptions.
+Read `PLAN.md` before any task. It holds the requirements (FR-*, CL-*, NF-*) and the milestone order. Reference requirement IDs in commits and PR descriptions. Ideas not yet planned (enhancements, features, review findings) live in `BACKLOG.md`; cite their IDs (UX-*, FT-*, IN-*, RV-*) too.
 
 ## What this is
 
