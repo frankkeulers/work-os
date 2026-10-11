@@ -236,6 +236,63 @@ describe('reduce', () => {
   });
 });
 
+describe('events that arrive too late', () => {
+  const ids = { itemId: ITEM, actionId: 'act-1' };
+  const drafted: EventData<'action.drafted'> = { type: 'confluence_entry', revision: 1, draftRef: 'drafts/act-1.json', tokens: 900, target: { pageId: '42', baseVersion: 7 } };
+  const ready = () => {
+    const c = log();
+    c.add('item.upserted', 0, upserted(1)).add('action.requested', 1, { type: 'confluence_entry', revision: 1 }, ids).add('action.drafted', 2, drafted, ids);
+    return c;
+  };
+  const status = (events: WorkEvent[]) => replay(events).actions['act-1'].status;
+
+  it('keeps a discarded action discarded: no write, no late draft, no late failure', () => {
+    const write = ready();
+    write.add('action.approved', 3, undefined, ids).add('action.discarded', 4, { reason: 'discarded' }, ids);
+    write.add('action.executing', 5, { attempt: 1 }, ids).add('action.executed', 6, { dryRun: false, pageId: '42' }, ids);
+    expect(status(write.events)).toBe('discarded');
+
+    const draft = log();
+    draft.add('item.upserted', 0, upserted(1)).add('action.requested', 1, { type: 'confluence_entry', revision: 1 }, ids).add('action.discarded', 2, { reason: 'discarded' }, ids);
+    draft.add('action.drafted', 3, drafted, ids).add('action.failed', 4, { reason: 'model_error' }, ids);
+    expect(status(draft.events)).toBe('discarded');
+  });
+
+  it('approves only a ready draft, and writes only an approved one', () => {
+    const early = log();
+    early.add('item.upserted', 0, upserted(1)).add('action.requested', 1, { type: 'confluence_entry', revision: 1 }, ids).add('action.approved', 2, undefined, ids);
+    expect(status(early.events)).toBe('drafting');
+    const unapproved = ready();
+    unapproved.add('action.executing', 3, { attempt: 1 }, ids);
+    expect(status(unapproved.events)).toBe('ready');
+  });
+
+  it('lets a discard that lost the race to the write change nothing', () => {
+    const c = ready();
+    c.add('action.approved', 3, undefined, ids).add('action.executing', 4, { attempt: 1 }, ids).add('action.discarded', 5, { reason: 'discarded' }, ids);
+    expect(status(c.events)).toBe('executing');
+  });
+
+  it('ignores a triage failure for an older revision: the newer messages still get triaged', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2));
+    add('triage.failed', 21, { revision: 1, attempts: 2, reason: 'left out of the answer' });
+    expect(replay(events).items[ITEM]).toMatchObject({ revision: 2, triageState: 'pending', failCount: 0 });
+  });
+
+  it('ignores settle and finish checks on an older revision', () => {
+    const settle = log();
+    settle.add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2, true, 20)).add('item.upserted', 25, upserted(3, false, 25));
+    settle.add('settle.checked', 26, { revision: 2, through: at(20), batchId: 's', allSettled: true, settled: ['a1'] });
+    expect(replay(settle.events).items[ITEM].replyCheck).toBeUndefined();
+
+    const finish = log();
+    finish.add('item.upserted', 0, upserted(1)).add('triage.decided', 1, decided(1)).add('item.upserted', 20, upserted(2)).add('triage.decided', 30, { ...decided(2, 'none'), finishCheck: true });
+    finish.add('item.upserted', 35, upserted(3, false, 35)).add('finish.checked', 36, { revision: 2, batchId: 'b', allSettled: true });
+    expect(replay(finish.events).items[ITEM].looksFinished).toBeUndefined();
+  });
+});
+
 describe('topics', () => {
   const A = 'slack:G1:1791189720.000100';
   const B = 'slack:G1:1791193320.000100';

@@ -1183,6 +1183,30 @@ describe('Confluence writes outside dry-run (FR-10.5, FR-14.5, NF-5)', () => {
     expect(page.storage).toMatch(/<h2>Decisions<\/h2><ul><li>Bulk export first.<\/li><\/ul><h3>#product update<\/h3>.*<h2>Open questions<\/h2>/);
   });
 
+  it('writes nothing when Frank discards an approved entry while the page is being read', async () => {
+    const id = await drafted();
+    const real = confluence.fetch;
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let reading = false;
+    confluence.fetch = async (url, init) => {
+      if (!init?.method || init.method === 'GET') {
+        reading = true;
+        await held; // the executor waits on the page here
+      }
+      return real(url, init);
+    };
+    await call('POST', `/api/actions/${id}/approve`);
+    while (!reading) await new Promise((r) => setTimeout(r, 1));
+    expect((await call('POST', `/api/actions/${id}/discard`)).status).toBe(204);
+    release();
+    await res.actions.settled();
+    confluence.fetch = real;
+    expect((await item()).actions[0]).toMatchObject({ id, status: 'discarded' });
+    expect(puts()).toHaveLength(0);
+    expect(confluence.pages.get('1234567')!.version).toBe(7);
+  });
+
   it('treats a write whose answer was lost as done when the page carries its marker', async () => {
     const id = await drafted();
     const real = confluence.fetch;

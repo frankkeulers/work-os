@@ -133,6 +133,16 @@ export class ActionService {
     return a;
   }
 
+  private statusOf(id: string) {
+    return this.actions[id]?.status;
+  }
+
+  /** Still Frank's to write: not discarded (or failed) while the write was being planned. */
+  private writable(id: string) {
+    const s = this.statusOf(id);
+    return s === 'approved' || s === 'executing';
+  }
+
   // ---------------------------------------------------------------- commands
 
   /** `quiet`: drafted ahead while filing in a batch, so no macOS notification (FR-11.6). */
@@ -226,6 +236,9 @@ export class ActionService {
       actionId: id,
       data: { reason: 'discarded' },
     });
+    // The write may have started between the check above and the append: then the discard
+    // changed nothing (the reducer ignores it), and Frank is told so.
+    if (this.statusOf(id) !== 'discarded') throw new HttpError('conflict', 'This action was already being written.');
   }
 
   /** `markDoneWhenFiled`: approved while filing in a batch (cockpit CK-4.4). */
@@ -488,6 +501,7 @@ export class ActionService {
     });
     this.progress.delete(a.id);
     this.retryAt.delete(a.id);
+    if (this.statusOf(a.id) !== 'ready') return; // discarded while the draft was being saved
     const it = this.d.store.projection.items[a.itemId];
     this.d.notify({
       topic: 'draft_ready',
@@ -534,6 +548,7 @@ export class ActionService {
         const attempt = this.nextAttempt(a.id);
         await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHashes: plan.expectedHashes }));
         await this.d.store.append({ type: 'action.executing', itemId: a.itemId, actionId: a.id, data: { attempt, expectedHashes: plan.expectedHashes } });
+        if (!this.writable(a.id)) return; // discarded while the write was planned
         crashPoint('before-write');
         for (const w of plan.writes) await writeVaultFile(w);
         crashPoint('after-write');
@@ -544,6 +559,7 @@ export class ActionService {
         const attempt = this.nextAttempt(a.id);
         await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHash: plan.expectedHash }));
         await this.d.store.append({ type: 'action.executing', itemId: a.itemId, actionId: a.id, data: { attempt, expectedHash: plan.expectedHash } });
+        if (!this.writable(a.id)) return; // discarded while the write was planned
         crashPoint('before-write');
         await writeVaultFile(plan);
         crashPoint('after-write');
@@ -564,6 +580,7 @@ export class ActionService {
       if (plan.kind === 'refused') return this.fail(a, 'allow_list', plan.message);
       if (plan.kind === 'conflict') return this.conflict(a, plan.message);
       if (plan.kind === 'already') return this.done(a, plan.message, { dryRun: false, pageId: d.pageId, pageVersion: plan.version });
+      if (!this.writable(a.id)) return; // discarded while the page was read
       if (dryRun) {
         // What would have been saved, for inspection; the page itself is only read.
         await mkdir(join(this.d.dataDir, 'sandbox/confluence'), { recursive: true });
@@ -572,6 +589,7 @@ export class ActionService {
       }
       const attempt = this.nextAttempt(a.id);
       await this.d.store.append({ type: 'action.executing', itemId: a.itemId, actionId: a.id, data: { attempt } });
+      if (!this.writable(a.id)) return; // discarded while the page was read
       await this.d.confluence.updatePage({ id: d.pageId, title: plan.page.title, storage: plan.storage, version: plan.version, message: marker(a.id) }, signal);
       await this.done(a, plan.message, { dryRun: false, pageId: d.pageId, pageVersion: plan.version });
     } catch (err) {
@@ -602,6 +620,7 @@ export class ActionService {
   }
 
   private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; paths?: string[]; pageId?: string; pageVersion?: number; unchanged?: true }) {
+    if (!this.writable(a.id)) return; // discarded meanwhile: nothing to report
     await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, result: message }));
     // Filed in a batch (CK-4.4): the write that completes the item's filings also marks it done, in the same append.
     const it = this.d.store.projection.items[a.itemId];

@@ -1,4 +1,5 @@
-import type { WorkEvent } from '../events';
+import type { EventType, WorkEvent } from '../events';
+import type { ActionStatus } from '../schemas';
 import { DISMISSED_DAYS, emptyProjection, type ActionState, type Projection } from './state';
 import {
   applyDecision,
@@ -33,6 +34,20 @@ export class SeqGapError extends Error {
 }
 
 /**
+ * The statuses each action event may move an action from. One that arrives too late changes
+ * nothing: a draft or write finishing after Frank discarded it, an approval before the draft was
+ * ready, a discard that lost the race to the write (the service then tells Frank it was written).
+ */
+const ACTION_FROM: Partial<Record<EventType, readonly ActionStatus[]>> = {
+  'action.drafted': ['drafting'],
+  'action.approved': ['ready'],
+  'action.executing': ['approved', 'executing'],
+  'action.executed': ['approved', 'executing'],
+  'action.failed': ['drafting', 'ready', 'approved', 'executing'],
+  'action.discarded': ['drafting', 'ready', 'approved', 'failed'],
+};
+
+/**
  * Applies one action event to the actions it touches, in place. Fields the log doesn't carry
  * (the mock's error text) are left alone. Returns false for an action the log never requested.
  */
@@ -57,6 +72,7 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
   }
   const a = actions[e.actionId];
   if (!a) return false;
+  if (ACTION_FROM[e.type] && !ACTION_FROM[e.type]!.includes(a.status)) return true;
   a.updatedAt = e.at;
   switch (e.type) {
     case 'action.drafted':
@@ -175,21 +191,25 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
     case 'triage.confirmed':
       confirm(item, e.data.revision);
       break;
+    // Failures and checks for older messages than the item now has are stale, like decisions: the
+    // newer messages get their own triage and checks.
     case 'triage.failed':
-      failTriage(item, e.data.attempts);
+      if (e.data.revision >= item.revision) failTriage(item, e.data.attempts);
       break;
     case 'item.done':
       countClose((p.closes ??= {}), item, e.at, e.data);
       markDone(item, e.at, e.data);
       break;
+    // A settle check still counts after Frank replies again (it waits on by `through`), but not
+    // once someone else has written: their message dropped the check and asks for triage.
     case 'settle.checked':
-      settleChecked(item, e.at, e.data);
+      if (e.data.revision >= item.revision || item.settlePending) settleChecked(item, e.at, e.data);
       break;
     case 'settle.failed':
-      settleFailed(item, e.data.attempts);
+      if (e.data.revision >= item.revision || item.settlePending) settleFailed(item, e.data.attempts);
       break;
     case 'finish.checked':
-      finishChecked(item, e.at, e.data);
+      if (e.data.revision >= item.revision) finishChecked(item, e.at, e.data);
       break;
     case 'finish.failed':
       item.finishPending = undefined;

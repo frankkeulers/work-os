@@ -69,10 +69,13 @@ describe('retention (FR-12.1)', () => {
       ['act-done', 'action.executed'],
       ['act-ready', 'action.drafted'],
     ] as const) {
+      // As the service writes them: a draft, then (for the finished one) approval and the write.
       await store.append({ type: 'action.requested', itemId: 'slack:C1:old', actionId: id, data: { type: 'vault_note', revision: 1 } });
-      if (last === 'action.drafted')
-        await store.append({ type: last, itemId: 'slack:C1:old', actionId: id, data: { type: 'vault_note', revision: 1, draftRef: `drafts/${id}.json`, tokens: 1, target: { path: 'a.md' } } });
-      else await store.append({ type: last, itemId: 'slack:C1:old', actionId: id, data: { dryRun: true } });
+      await store.append({ type: 'action.drafted', itemId: 'slack:C1:old', actionId: id, data: { type: 'vault_note', revision: 1, draftRef: `drafts/${id}.json`, tokens: 1, target: { path: 'a.md' } } });
+      if (last === 'action.executed') {
+        await store.append({ type: 'action.approved', itemId: 'slack:C1:old', actionId: id, data: undefined });
+        await store.append({ type: last, itemId: 'slack:C1:old', actionId: id, data: { dryRun: true } });
+      }
       await drafts.update(id, 'slack:C1:old', (s) => s);
     }
     now = NOW + 31 * DAY; // the actions were updated at NOW, 31 days before
