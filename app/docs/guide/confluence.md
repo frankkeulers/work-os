@@ -3,7 +3,7 @@ title: Filing to Confluence
 group: Filing
 order: 50
 summary: How a thread becomes an entry on the right page of the PSG context corpus.
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 The Confluence PRD pages are Pole Star Global's context corpus: the PSPD pipeline and the Product
@@ -75,7 +75,12 @@ and re-draft.
 
 ## Approving and writing
 
-Review the entry, edit it in place if you like, and choose **Approve**. Before every write, code:
+Review the entry, edit it in place if you like, and choose **Approve**. If you edited it, the
+people check reads it again first. If it now identifies someone, it is not approved: a message says
+what to change, your edit stays, and you can fix it and approve again. If Claude can't be reached
+for the check, the entry isn't approved either; try again in a moment.
+
+Before every write, code:
 
 1. checks the page is still in scope, asking Confluence afresh;
 2. re-reads the page and checks its version is the one the draft was made from;

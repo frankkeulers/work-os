@@ -1218,7 +1218,7 @@ export class MockServer implements WorkOsApi, MockControls {
       const draft = outcome === 'already_filed' ? asFiled(built) : outcome === 'possible_duplicate' ? withPossibleDuplicate(built) : built;
       if (action.type === 'confluence_entry') this.recordUsage('confluence_pick', model, 9000, 90, [rec.item.id], 'pick-confluence v1', 9000);
       this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
-      if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-5.5', 2100, 60, [rec.item.id], 'people-check v2', 1900);
+      if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-5.5', 2100, 60, [rec.item.id], 'people-check v3', 1900);
       if (outcome === 'people_check') {
         action.error = 'The draft still identifies a person (it names who raised the proposal). Nothing will be written to Confluence. Re-draft, or edit it out.';
         this.s.results[actionId] = action.error;

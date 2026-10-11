@@ -701,7 +701,7 @@ As built (FR-9.7, 2026-10-11):
 
 **FR-10.3** The draft output is a structured patch: page ID, page version at draft time, section heading anchor, and content in Confluence storage format.
 
-**FR-10.4** Before showing the preview, a second Haiku check confirms there are no observations about named people. If it finds any, the draft is blocked. *Amended 2026-10-10:* the check confirms the entry identifies no individual, by name or by an identifying description, following the skill's rules. If it does, that draft is blocked and Frank can re-draft; the thread itself is never blocked.
+**FR-10.4** Before showing the preview, a second Haiku check confirms there are no observations about named people. If it finds any, the draft is blocked. *Amended 2026-10-10:* the check confirms the entry identifies no individual, by name or by an identifying description, following the skill's rules. If it does, that draft is blocked and Frank can re-draft; the thread itself is never blocked. *Amended 2026-10-11:* an entry Frank has edited is checked again when he approves it. If it identifies someone, approval is refused with the reason and the draft stays ready, with his edit, to fix; if Claude can't be reached for the check, approval is refused too.
 
 **FR-10.5** On approval, **code** applies the patch through the Confluence REST API, with an optimistic version check. A version mismatch means re-draft, never overwrite.
 

@@ -59,6 +59,26 @@ export const ConfluencePickAnswer = z.union([
 
 export const PeopleCheckAnswer = z.object({ containsPeopleObservations: z.boolean(), reason: z.string().max(400) });
 
+/**
+ * FR-10.4: does the entry identify anyone? One Haiku call with no tools, on the entry as it would be
+ * written. Run on every draft, and again before writing a draft Frank has edited.
+ */
+export function checkPeople(claude: ClaudeAdapter, prompt: Prompt, entry: { title: string; content: string; level?: number }, itemId: string, signal?: AbortSignal) {
+  return claude.structured(
+    {
+      purpose: 'people_check',
+      model: 'haiku-5.5',
+      system: prompt.text,
+      prompt: `<entry>\n${entry.title}\n${textOf(entryStorage(entry.title, entry.content, entry.level ?? 2))}\n</entry>`,
+      promptVersion: prompt.version,
+      timeoutMs: DEADLINES.triage,
+      signal,
+      itemIds: [itemId],
+    },
+    PeopleCheckAnswer,
+  );
+}
+
 const OUTLINE_CHARS = 8000; // per page, so the three candidates fit one call easily
 
 export interface ConfluenceDraftDeps {
@@ -196,19 +216,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
 
   // FR-10.4: a second, cheap look at the entry itself, before it is shown. It blocks this draft only.
   d.onStage?.(4);
-  const check = await d.claude.structured(
-    {
-      purpose: 'people_check',
-      model: 'haiku-5.5',
-      system: d.peoplePrompt.text,
-      prompt: `<entry>\n${a.title}\n${textOf(entryStorage(a.title, a.content, section.level))}\n</entry>`,
-      promptVersion: d.peoplePrompt.version,
-      timeoutMs: DEADLINES.triage,
-      signal: d.signal,
-      itemIds: [item.id],
-    },
-    PeopleCheckAnswer,
-  );
+  const check = await checkPeople(d.claude, d.peoplePrompt, { title: a.title, content: a.content, level: section.level }, item.id, d.signal);
   if (check.value.containsPeopleObservations) {
     throw new DraftError(`The draft still identifies a person (${check.value.reason}). Nothing will be written to Confluence. Re-draft, or edit it out.`, 'people_check');
   }

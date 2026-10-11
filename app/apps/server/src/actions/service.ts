@@ -19,7 +19,7 @@ import { writeFileAtomic } from '../store/atomic';
 import { crashPoint } from '../runtime/crash';
 import { ConfluenceError, type ConfluenceApi } from './confluenceApi';
 import { scopeCql } from './confluenceCatalogue';
-import { draftConfluenceEntry } from './confluenceDrafter';
+import { checkPeople, draftConfluenceEntry } from './confluenceDrafter';
 import { marker, planConfluenceWrite } from './confluenceExecutor';
 import { readTopic } from '../pipeline/topics';
 import { itemLinks } from './alreadyFiled';
@@ -245,6 +245,8 @@ export class ActionService {
   async approve(id: string, opts: { markDoneWhenFiled?: boolean } = {}) {
     const a = this.action(id);
     if (a.status !== 'ready') throw new HttpError('conflict', 'This draft is no longer ready to approve.');
+    await this.checkEdited(a);
+    if (this.statusOf(id) !== 'ready') throw new HttpError('conflict', 'This draft is no longer ready to approve.');
     await this.d.store.append({
       type: 'action.approved',
       itemId: a.itemId,
@@ -252,6 +254,27 @@ export class ActionService {
       data: opts.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined,
     });
     this.pump();
+  }
+
+  /**
+   * FR-10.4: the people check ran on the entry as Claude drafted it. One Frank has edited is checked
+   * again before it is approved, so a hit leaves the draft ready, with his edit, to fix.
+   */
+  private async checkEdited(a: ActionState) {
+    const d = (await this.d.drafts.read(a.id))?.draft;
+    if (d?.kind !== 'confluence' || !d.edited) return;
+    let flagged: string | undefined;
+    try {
+      const check = await checkPeople(this.d.claude, await this.d.prompt('people-check'), d, a.itemId, this.d.signal());
+      if (check.value.containsPeopleObservations) flagged = check.value.reason;
+    } catch (err) {
+      if (err instanceof ClaudeError) await this.d.reportFailure('claude', err.failure);
+      else if (!(err instanceof ClaudeOutputError)) throw err;
+      throw new HttpError('unavailable', 'Couldn’t check the edited entry for people, so it was not approved. Try again in a moment.');
+    }
+    if (flagged) throw new HttpError('validation', `The edited entry still identifies a person (${flagged}). Edit it out, then approve again. Nothing was written.`);
+    const now = (await this.d.drafts.read(a.id))?.draft;
+    if (now?.kind !== 'confluence' || now.content !== d.content) throw new HttpError('conflict', 'The draft changed while it was checked. Approve it again.');
   }
 
   // ---------------------------------------------------------------- views

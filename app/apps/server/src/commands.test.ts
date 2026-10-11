@@ -982,7 +982,7 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(draftCall.prompt).not.toContain('"pageId":"1100000"');
     expect(draftCall.system).toMatch(/^<!-- prompt: draft-confluence v6 -->/);
     expect(draftCall.prompt).toMatch(/<routing-guidance>\n<!-- prompt: confluence-routing v3 -->/);
-    expect(check.system).toMatch(/^<!-- prompt: people-check v2 -->/);
+    expect(check.system).toMatch(/^<!-- prompt: people-check v3 -->/);
     expect(check.options.model).toBe('claude-haiku-5-5');
 
     expect((await approve(r.body.id)).status).toBe(202);
@@ -993,6 +993,42 @@ describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
     expect(confluence.calls.filter((c) => c.method === 'PUT')).toHaveLength(0);
     const preview = await readFile(join(dir, 'sandbox/confluence', `1234567-${r.body.id}.html`), 'utf8');
     expect(preview).toContain('<h3>#product update</h3><p>Release notes draft is up</p>');
+  });
+
+  it('checks an edited entry for people again before approving it, and keeps the edit to fix (FR-10.4)', async () => {
+    const r = await request();
+    const edit = (content: string) => call('PUT', `/api/actions/${r.body.id}/draft`, { content });
+    expect((await edit('Dana has been unreliable on reviews, so the date moved.')).status).toBe(204);
+    let before = claude.calls.length;
+    const refused = await approve(r.body.id);
+    expect(refused).toMatchObject({ status: 422, body: { message: expect.stringMatching(/^The edited entry still identifies a person .*Edit it out, then approve again/) } });
+    expect(claude.calls.slice(before).map((c) => c.system.slice(0, 32))).toEqual(['<!-- prompt: people-check v3 -->']);
+    expect(claude.calls.at(-1)!.prompt).toContain('Dana has been unreliable');
+    let v = await item();
+    expect(v.actions[0]).toMatchObject({ id: r.body.id, status: 'ready' });
+    expect(v.drafts[r.body.id]).toMatchObject({ content: 'Dana has been unreliable on reviews, so the date moved.', edited: true });
+
+    // Claude unavailable: not approved, and not counted as passed.
+    claude.failNext = new Error('Not logged in · Please run /login');
+    expect((await approve(r.body.id)).status).toBe(503);
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'ready' });
+
+    expect((await edit('The release date moved a week.')).status).toBe(204);
+    before = claude.calls.length;
+    expect((await approve(r.body.id)).status).toBe(202);
+    expect(claude.calls.slice(before).map((c) => c.system.slice(0, 32))).toEqual(['<!-- prompt: people-check v3 -->']);
+    v = await item();
+    expect(v.actions[0]).toMatchObject({ id: r.body.id, status: 'done' });
+    const preview = await readFile(join(dir, 'sandbox/confluence', `1234567-${r.body.id}.html`), 'utf8');
+    expect(preview).toContain('The release date moved a week.');
+    expect(preview).not.toContain('Dana');
+  });
+
+  it('approves an unedited entry without a second people check', async () => {
+    const r = await request();
+    const before = claude.calls.length;
+    expect((await approve(r.body.id)).status).toBe(202);
+    expect(claude.calls.length).toBe(before);
   });
 
   it('blocks a draft the people check flags, and only that draft (FR-10.4)', async () => {

@@ -91,10 +91,10 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     id: 'people-check',
     file: 'prompts/people-check.md',
     label: 'People check',
-    description: 'Checks a Confluence draft identifies no one, by name or description, before it is shown.',
+    description: 'Checks a Confluence draft identifies no one, by name or description, before it is shown, and again before an edited one is approved.',
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_PEOPLE_CHECK_PROMPT,
-    previousDefaults: ['852f66caf3c91f7c15086c4bb7057fc5fea51e13'], // people-check v1
+    previousDefaults: ['852f66caf3c91f7c15086c4bb7057fc5fea51e13', 'ec4c692e2f60e81de1bbbdb807ff8cb81cb6df4e'], // people-check v1, v2
   },
   {
     id: 'vault-conventions',
