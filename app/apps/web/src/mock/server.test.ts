@@ -154,6 +154,29 @@ describe('draft and approval outcomes', () => {
     expect(confs[0].status).toBe('drafting');
   });
 
+  it('shows a failed write as not written, and writes the same draft again on Retry write (FR-14.5)', async () => {
+    const actionId = await draft('f4', 'vault_note');
+    server.setNextDraftOutcome('write_unreachable');
+    await settle(server.approveAction(actionId), 3000);
+    let v = await view('f4');
+    expect(v.actions[0]).toMatchObject({ id: actionId, status: 'failed', failureReason: 'unreachable', failedWhile: 'writing' });
+    expect(v.summary.actions.vault_note).toMatchObject({ failedWhile: 'writing' });
+    await settle(server.retryWrite(actionId), 3000);
+    v = await view('f4');
+    expect(v.actions[0]).toMatchObject({ id: actionId, status: 'done' });
+    expect(v.actions.filter((a) => a.type === 'vault_note')).toHaveLength(1); // no new draft
+  });
+
+  it('leaves a conflict for Frank when the drafts budget is used up (FR-10.5)', async () => {
+    server.setNextDraftOutcome('confluence_conflict');
+    server.setFlag('drafts_budget');
+    const conf = (await view('f1')).actions.find((a) => a.type === 'confluence_entry')!;
+    await settle(server.approveAction(conf.id), 3500);
+    const confs = (await view('f1')).actions.filter((a) => a.type === 'confluence_entry');
+    expect(confs).toHaveLength(1);
+    expect(confs[0]).toMatchObject({ id: conf.id, status: 'failed', failureReason: 'conflict' });
+  });
+
   it('refuses a page excluded from the scope at write time (FR-10.6)', async () => {
     const actionId = await draft('f2', 'confluence_entry');
     const before = await view('f2');

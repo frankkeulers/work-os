@@ -493,6 +493,11 @@ export function ActionPanel({
       run: () => (setEditing(null), void run(() => api.discardAction(action.id))),
     });
 
+  // A failed write is written again as drafted, once Frank has fixed the cause: no new draft (FR-14.5).
+  const retryWrite = () => action && void run(() => api.retryWrite(action.id));
+  const canRetryWrite = action?.status === 'failed' && action.failedWhile === 'writing' && (action.failureReason === 'unreachable' || action.failureReason === 'allow_list');
+  const budgetNote = budgetHit && <span className="text-xs text-amber-fg">Drafts budget reached for today ({view.budgets.drafts.used}/{view.budgets.drafts.limit}).</span>;
+
   const markDoneAndNext = async () => {
     try {
       const inbox = await api.getInbox();
@@ -512,7 +517,9 @@ export function ActionPanel({
   else if (action?.status === 'ready') heading = 'Review and approve the draft';
   else if (action?.status === 'approved' || action?.status === 'executing') heading = 'Writing…';
   else if (action?.status === 'done') heading = view.dryRun ? 'Written to the sandbox' : 'Written';
-  else if (action?.status === 'failed') heading = action.failureReason === 'allow_list' ? 'Write refused' : action.failureReason === 'conflict' ? 'Changed since draft' : action.failureReason === 'no_fit' ? 'Nothing to file' : 'Draft blocked';
+  else if (action?.status === 'failed')
+    heading =
+      action.failureReason === 'allow_list' ? 'Write refused' : action.failureReason === 'conflict' ? 'Changed since draft' : action.failureReason === 'no_fit' ? 'Nothing to file' : action.failedWhile === 'writing' ? 'Not written' : 'Draft blocked';
 
   let body: ReactNode;
   if (!action) {
@@ -599,7 +606,12 @@ export function ActionPanel({
           >
             <strong>Not written.</strong> {msg}
           </Banner>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canRetryWrite && (
+              <Button variant="solid" icon="poll" disabled={busy} onClick={retryWrite}>
+                Retry write
+              </Button>
+            )}
             <Button icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
               Re-draft
             </Button>
@@ -609,9 +621,47 @@ export function ActionPanel({
           </div>
         </div>
       ) : action.failureReason === 'conflict' ? (
-        <Banner tone="warn" icon="alert">
-          <strong>Changed since draft.</strong> {msg} <Spinner size={12} />
-        </Banner>
+        // Re-drafted at once while the budget allows; otherwise, or if that failed, Frank decides.
+        view.actions.some((b) => b.type === type && b.id !== action.id && b.status === 'drafting' && b.createdAt >= action.createdAt) ? (
+          <Banner tone="warn" icon="alert">
+            <strong>Changed since draft.</strong> {msg} <Spinner size={12} />
+          </Banner>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <Banner tone="warn" icon="alert">
+              <strong>Changed since draft.</strong> {msg?.replace(/ Re-drafting instead of (writing|overwriting it)\.$/, '')} Nothing was written{budgetHit ? ', and it can’t be re-drafted until the drafts budget resets' : ''}.
+            </Banner>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="solid" icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
+                Re-draft
+              </Button>
+              <Button variant="danger" icon="trash" onClick={discard}>
+                Discard
+              </Button>
+              {budgetNote}
+            </div>
+          </div>
+        )
+      ) : action.failedWhile === 'writing' ? (
+        <div className="flex flex-col gap-3">
+          <Banner tone="bad" icon="alert">
+            <strong>Not written.</strong> {msg}
+          </Banner>
+          <div className="flex flex-wrap items-center gap-2">
+            {canRetryWrite && (
+              <Button variant="solid" icon="poll" disabled={busy} onClick={retryWrite}>
+                Retry write
+              </Button>
+            )}
+            <Button variant={canRetryWrite ? 'secondary' : 'solid'} icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
+              Re-draft
+            </Button>
+            <Button variant="danger" icon="trash" onClick={discard}>
+              Discard
+            </Button>
+            {budgetNote}
+          </div>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           <Banner tone="bad" icon="alert">

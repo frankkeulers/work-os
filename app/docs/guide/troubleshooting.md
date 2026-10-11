@@ -76,9 +76,14 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
 
 - **"macOS refused access"** on an approved note: the autostarted Work OS hasn't been allowed into
   the folder that holds your vault (often under Documents). Allow it in System Settings › Privacy &
-  Security › Full Disk Access (or Files and Folders), then re-draft. Nothing was written.
+  Security › Full Disk Access (or Files and Folders), then choose **Retry write**. Nothing was
+  written.
 - **"failed 5 times"**: a write that keeps failing stops after five tries, roughly ten minutes,
   instead of retrying quietly. The message says why. Time offline doesn't count towards the five.
+  Once the cause is fixed, choose **Retry write**.
+
+Either way the panel says **Not written**. **Retry write** writes the same draft again, with your
+edits, and uses no draft from the day's budget; **Re-draft** starts over from the thread.
 
 ## Confluence
 

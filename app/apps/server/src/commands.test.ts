@@ -815,6 +815,38 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     }
   });
 
+  it('retries a failed write once Frank has fixed the cause, without a new draft (FR-14.5)', async () => {
+    await useVault();
+    await writeFile(join(vault, 'Projects/Product.md'), NOTE);
+    claude.nextTexts.push(JSON.stringify({ kind: 'append', path: 'Projects/Product.md', heading: '## Decisions', content: '- ETA wording agreed.' }));
+    const r = await request();
+    expect((await call('POST', `/api/actions/${r.body.id}/retry-write`)).status).toBe(409); // ready, not failed
+    await chmod(join(vault, 'Projects/Product.md'), 0o000);
+    try {
+      await call('POST', `/api/actions/${r.body.id}/approve`);
+      await res.actions.settled();
+    } finally {
+      await chmod(join(vault, 'Projects/Product.md'), 0o644);
+    }
+    const v = await item();
+    expect(v.actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'unreachable', failedWhile: 'writing' });
+    expect(v.summary.actions.vault_note).toMatchObject({ status: 'failed', failedWhile: 'writing' });
+    const calls = claude.calls.length;
+    expect((await call('POST', `/api/actions/${r.body.id}/retry-write`)).status).toBe(202);
+    await res.actions.settled();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'done' });
+    expect(claude.calls.length).toBe(calls); // the same draft, written: no new draft, no budget
+  });
+
+  it('retries only a failed write: a failed draft needs a re-draft (FR-14.5)', async () => {
+    await useVault();
+    claude.nextTexts.push(JSON.stringify({ kind: 'append', path: 'Projects/Nope.md', heading: '## Actions', content: 'x' }));
+    const bad = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: bad.body.id, status: 'failed', failedWhile: 'drafting' });
+    const r = await call<ApiErrorBody>('POST', `/api/actions/${bad.body.id}/retry-write`);
+    expect(r).toMatchObject({ status: 409, body: { message: expect.stringMatching(/re-draft/i) } });
+  });
+
   it('gives up on an approved note after MAX_ATTEMPTS failures before the write, rather than retrying silently for ever (FR-14.5)', async () => {
     await useVault();
     await writeFile(join(vault, 'Projects/Product.md'), NOTE);

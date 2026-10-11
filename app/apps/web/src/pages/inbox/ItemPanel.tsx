@@ -432,7 +432,9 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
                 : b.state === 'done'
                   ? `${v ? `${v} filed` : 'Filed'}${a?.repliesSince ? ' · new replies since' : ''}`
                   : b.state === 'failed'
-                    ? `The last ${draftWord.toLowerCase()} failed`
+                    ? a?.failedWhile === 'writing'
+                      ? `Not written to ${TYPE_LABEL[t].target}`
+                      : `The last ${draftWord.toLowerCase()} failed`
                     : b.state === 'drafting'
                       ? `Drafting${v && ` ${v}`}…`
                       : 'Writing…';

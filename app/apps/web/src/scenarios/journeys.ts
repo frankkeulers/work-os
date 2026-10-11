@@ -85,4 +85,7 @@ export const JOURNEYS: Journey[] = [
   { id: 'J70', group: 'Follow-ups', title: 'A draft fails while away', start: (c) => (fresh(c), c.setNextDraftOutcome('model_error'), item(c, 'f4', '?tab=vault')) },
   { id: 'J71', group: 'Follow-ups', title: 'Something to fix', start: (c) => (fresh(c), c.setFlag('health_ms365'), '/') },
   { id: 'J72', group: 'Follow-ups', title: 'Nudges and housekeeping', start: (c) => (c.cockpitAfternoon(), later(() => c.frankReplies('open'), 800), '/') },
+  // Write failures (FR-14.5).
+  { id: 'J73', group: 'Vault', title: 'Not written: Retry write', start: (c) => (fresh(c), c.setNextDraftOutcome('write_unreachable'), item(c, 'f4', '?tab=vault')) },
+  { id: 'J74', group: 'Confluence', title: 'Conflict, drafts budget used up', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), c.setFlag('drafts_budget'), item(c, 'f1')) },
 ];

@@ -1302,6 +1302,16 @@ export class MockServer implements WorkOsApi, MockControls {
     void this.execute(actionId, 500);
   }
 
+  async retryWrite(actionId: string) {
+    await this.gate(COMMAND_MS);
+    const a = this.action(actionId);
+    if (a.status !== 'failed' || a.failedWhile !== 'writing' || (a.failureReason !== 'unreachable' && a.failureReason !== 'allow_list'))
+      throw new ApiError('conflict', 'Only a write that failed can be tried again. Re-draft this one instead.');
+    this.event('action.approved', a.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined, { itemId: a.itemId, actionId });
+    this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+    void this.execute(actionId, 500);
+  }
+
   /** The executor: code writes, after re-validating the target (NF-5, FR-9.4, FR-10.5, FR-10.6). */
   private async execute(actionId: string, delay: number) {
     await sleep(delay);
@@ -1329,7 +1339,21 @@ export class MockServer implements WorkOsApi, MockControls {
       this.event('action.failed', { reason: 'conflict' }, { itemId: a.itemId, actionId });
       this.emit({ topic: 'item', id: a.itemId });
       await sleep(900);
-      this.createAction(rec, a.type, 'normal', a.id);
+      // As the server: re-drafted only while the drafts budget allows; otherwise Frank decides.
+      if (!this.budgets().drafts.hit) this.createAction(rec, a.type, 'normal', a.id);
+      return;
+    }
+
+    // The write itself fails: Confluence unreachable, or macOS refusing the vault (FR-14.5).
+    if (!isFiledDraft(d) && this.takeOutcome((o) => o === 'write_unreachable') === 'write_unreachable') {
+      a.error =
+        d.kind === 'confluence'
+          ? 'Writing to Confluence failed 5 times (connect ETIMEDOUT). Nothing was written.'
+          : 'Writing to the vault failed: macOS refused access (EPERM). Allow Work OS (node) in System Settings › Privacy & Security › Full Disk Access, or Files and Folders for the vault’s folder, then choose Retry write. Nothing was written.';
+      this.s.results[actionId] = a.error;
+      this.event('action.failed', { reason: 'unreachable' }, { itemId: a.itemId, actionId });
+      this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+      this.failed(a);
       return;
     }
 

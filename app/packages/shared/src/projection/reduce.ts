@@ -40,7 +40,7 @@ export class SeqGapError extends Error {
  */
 const ACTION_FROM: Partial<Record<EventType, readonly ActionStatus[]>> = {
   'action.drafted': ['drafting'],
-  'action.approved': ['ready'],
+  'action.approved': ['ready', 'failed'], // failed: Retry write, for a failed write only (below)
   'action.executing': ['approved', 'executing'],
   'action.executed': ['approved', 'executing'],
   'action.failed': ['drafting', 'ready', 'approved', 'executing'],
@@ -73,6 +73,7 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
   const a = actions[e.actionId];
   if (!a) return false;
   if (ACTION_FROM[e.type] && !ACTION_FROM[e.type]!.includes(a.status)) return true;
+  if (e.type === 'action.approved' && a.status === 'failed' && a.failedWhile !== 'writing') return true; // a failed draft needs a re-draft
   a.updatedAt = e.at;
   switch (e.type) {
     case 'action.drafted':
@@ -82,6 +83,8 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
       break;
     case 'action.approved':
       a.status = 'approved';
+      delete a.failureReason;
+      delete a.failedWhile;
       if (e.data?.markDoneWhenFiled) a.markDoneWhenFiled = true;
       break;
     case 'action.executing':
@@ -91,7 +94,8 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
       a.status = 'done';
       break;
     case 'action.failed':
-      a.failedWhile = a.status === 'drafting' ? 'drafting' : 'writing';
+      // Writing once approved, whether or not the write itself had started; before that, the draft failed.
+      a.failedWhile = a.status === 'approved' || a.status === 'executing' ? 'writing' : 'drafting';
       a.status = 'failed';
       a.failureReason = e.data.reason;
       break;

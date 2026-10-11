@@ -32,6 +32,7 @@ export interface ActionSummary {
   type: ActionType;
   status: Action['status'];
   failureReason?: FailureReason;
+  failedWhile?: 'drafting' | 'writing'; // a failed write shows as "Not written", with Retry write
   stale: boolean; // a ready draft made from an older revision than the item has now
   repliesSince: boolean; // drafted from an older revision, whatever the status: a filed entry with new replies can take a next version
   version: number; // entries of this type filed before this one, plus one: v2 is the draft after the first filing
@@ -589,6 +590,8 @@ export interface WorkOsApi {
   discardAction(actionId: string): Promise<void>;
   /** `markDoneWhenFiled`: approved while filing in a batch; the item is done once all its filings are written (cockpit CK-4.4). */
   approveAction(actionId: string, opts?: { markDoneWhenFiled?: boolean }): Promise<void>;
+  /** Writes a draft whose write failed again, once the cause is fixed: no new draft, no drafts budget (FR-14.5). */
+  retryWrite(actionId: string): Promise<void>;
 
   runEval(): Promise<void>;
   rebuildState(): Promise<{ events: number }>;

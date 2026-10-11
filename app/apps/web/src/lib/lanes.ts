@@ -50,7 +50,8 @@ const STATE_LABEL: Record<Exclude<DraftState, 'none'>, (t: ActionType) => string
 export function draftButton(item: ItemSummary, type: ActionType, draftsBudgetHit: boolean): DraftButton {
   const state = draftState(item, type);
   const disabledReason = state === 'none' && draftsBudgetHit ? 'Drafts budget reached for today.' : undefined;
-  return { type, state, label: state === 'none' ? TYPE_LABEL[type].draft : STATE_LABEL[state](type), disabledReason };
+  const label = state === 'none' ? TYPE_LABEL[type].draft : state === 'failed' && item.actions[type]?.failedWhile === 'writing' ? `Not written to ${TYPE_LABEL[type].target}` : STATE_LABEL[state](type);
+  return { type, state, label, disabledReason };
 }
 
 /** Filing types the triage suggests, Confluence first (as in the designs). */

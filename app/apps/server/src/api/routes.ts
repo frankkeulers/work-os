@@ -194,6 +194,11 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(202).send();
   });
 
+  app.post<{ Params: { id: string } }>('/api/actions/:id/retry-write', async (req, reply) => {
+    await actions().retryWrite(req.params.id);
+    return reply.code(202).send();
+  });
+
   app.get('/api/inbox', async (req, reply) => sendJson(req, reply, inboxView(d)));
   app.get('/api/calendar/agenda', async (_req, reply) => reply.headers(noStore).send(await agendaView(d)));
   // A source's history (cockpit CK-5.1) and the calendar week (CK-5.6).

@@ -88,8 +88,12 @@ Before every write, code:
    with the version message "Work OS" and the action's id.
 
 If someone edited the page since the draft, Work OS re-drafts against the new version instead of
-overwriting. A dropped connection or a lost answer is retried, and the version message makes sure
-an entry is never written twice.
+overwriting. When the day's drafts budget is used up it can't, so the panel shows **Changed since
+draft** with **Re-draft** (once the budget resets) and **Discard**. A dropped connection or a lost answer is retried, and the version message makes sure
+an entry is never written twice. A write that still fails, or one refused because the page is
+out of scope, shows **Not written** with the reason; once you've fixed it (in
+[Settings › Write targets](/settings/writing), say), **Retry write** writes the same entry again
+without a new draft.
 
 With dry-run on, nothing is written: the would-be page is saved under `sandbox/confluence/` in the
 data folder, and the result says "Dry-run: write logged only".

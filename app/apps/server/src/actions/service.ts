@@ -277,6 +277,22 @@ export class ActionService {
     if (now?.kind !== 'confluence' || now.content !== d.content) throw new HttpError('conflict', 'The draft changed while it was checked. Approve it again.');
   }
 
+  /**
+   * Retry write: a write that failed (unreachable, or refused by the allow-list) is approved again
+   * once Frank has fixed the cause. The same draft is written, with fresh attempts; nothing is drafted.
+   */
+  async retryWrite(id: string) {
+    const a = this.action(id);
+    if (a.status !== 'failed' || a.failedWhile !== 'writing' || (a.failureReason !== 'unreachable' && a.failureReason !== 'allow_list'))
+      throw new HttpError('conflict', 'Only a write that failed can be tried again. Re-draft this one instead.');
+    if (!(await this.d.drafts.read(id))?.draft) throw new HttpError('conflict', 'The draft file is missing, so there is nothing to write. Re-draft instead.');
+    this.attempts.delete(id);
+    this.failures.delete(id);
+    this.retryAt.delete(id);
+    await this.d.store.append({ type: 'action.approved', itemId: a.itemId, actionId: id, data: a.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined });
+    this.pump();
+  }
+
   // ---------------------------------------------------------------- views
 
   async view(itemId: string): Promise<ActionsView> {
@@ -667,7 +683,7 @@ export class ActionService {
   private async retryLater(a: ActionState, err: unknown, what: string) {
     const code = (err as NodeJS.ErrnoException)?.code;
     if (code === 'EPERM' || code === 'EACCES')
-      return this.fail(a, 'unreachable', `${what} failed: macOS refused access (${code}). Allow Work OS (node) in System Settings › Privacy & Security › Full Disk Access, or Files and Folders for the vault's folder, then re-draft. Nothing was written.`);
+      return this.fail(a, 'unreachable', `${what} failed: macOS refused access (${code}). Allow Work OS (node) in System Settings › Privacy & Security › Full Disk Access, or Files and Folders for the vault's folder, then choose Retry write. Nothing was written.`);
     const n = (this.failures.get(a.id) ?? 0) + 1;
     this.failures.set(a.id, n);
     this.d.logger?.warn({ err, actionId: a.id, attempt: n }, `${what} failed`);

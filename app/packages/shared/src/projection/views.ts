@@ -48,7 +48,7 @@ export function actionSummaries(actions: Iterable<ActionState>, revision: number
     const a = currentAction(all, type);
     if (!a) continue;
     const repliesSince = a.itemRevision < revision;
-    out[type] = { id: a.id, type, status: a.status, failureReason: a.failureReason, stale: a.status === 'ready' && repliesSince, repliesSince, version: entryVersion(all, a) };
+    out[type] = { id: a.id, type, status: a.status, failureReason: a.failureReason, ...(a.failedWhile && { failedWhile: a.failedWhile }), stale: a.status === 'ready' && repliesSince, repliesSince, version: entryVersion(all, a) };
   }
   return out;
 }

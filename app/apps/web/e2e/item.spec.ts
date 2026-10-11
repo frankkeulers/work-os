@@ -51,6 +51,28 @@ test('J13 Confluence version conflict re-drafts instead of writing', async ({ pa
   await expect(panel(page).getByRole('button', { name: 'Approve and write to sandbox' })).toBeEnabled();
 });
 
+test('J73 a write that fails shows Not written, and Retry write writes the same draft', async ({ page }) => {
+  await startJourney(page, 'J73');
+  await panel(page).getByRole('button', { name: 'Draft vault note' }).click();
+  await panel(page).getByRole('button', { name: 'Approve and write to sandbox' }).click(DRAFT_TIMEOUT);
+  await expect(panel(page).getByText('Not written.')).toBeVisible(DRAFT_TIMEOUT);
+  await expect(panel(page).getByText(/Full Disk Access/)).toBeVisible();
+  await expect(panel(page).getByText(/didn’t return a usable draft/)).toHaveCount(0);
+  await panel(page).getByRole('button', { name: 'Retry write' }).click();
+  await expect(panel(page).getByRole('status')).toContainText('Dry-run', DRAFT_TIMEOUT);
+});
+
+test('J74 a conflict with the drafts budget used up offers Re-draft and Discard, not a spinner', async ({ page }) => {
+  await startJourney(page, 'J74');
+  await panel(page).getByRole('tab', { name: /Confluence entry/ }).click();
+  await panel(page).getByRole('button', { name: 'Approve and write to sandbox' }).click();
+  await expect(panel(page).getByText('Changed since draft.')).toBeVisible(DRAFT_TIMEOUT);
+  await expect(panel(page).getByText(/can’t be re-drafted until the drafts budget resets/)).toBeVisible(DRAFT_TIMEOUT);
+  await expect(panel(page).getByRole('button', { name: 'Re-draft' })).toBeDisabled();
+  await panel(page).getByRole('button', { name: 'Discard' }).click();
+  await expect(panel(page).getByText('Changed since draft.')).toHaveCount(0);
+});
+
 test('J11 people mentioned: the Confluence draft leaves them out', async ({ page }) => {
   await startJourney(page, 'J11');
   await panel(page).getByRole('tab', { name: /Confluence entry/ }).click();

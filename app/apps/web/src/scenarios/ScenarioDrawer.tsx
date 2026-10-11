@@ -57,6 +57,7 @@ const OUTCOMES: [DraftOutcome, string][] = [
   ['model_error', 'Model error'],
   ['already_filed', 'Already filed'],
   ['possible_duplicate', 'Possible duplicate'],
+  ['write_unreachable', 'Write fails (unreachable)'],
 ];
 
 const SETTLES: [SettleOutcome, string][] = [

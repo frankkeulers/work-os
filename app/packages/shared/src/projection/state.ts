@@ -5,7 +5,7 @@ import type { Action, Attention, ItemKind, Participant, SourceId, TriageCorrecti
 // The inbox state that the event log projects to (PLAN.md §4.3). The server keeps it in memory
 // and in snapshot.json; the mock keeps the same flags on its own records. Bump PROJECTION_VERSION
 // whenever reduce() changes, so the server replays the whole log instead of trusting the snapshot.
-export const PROJECTION_VERSION = 6; // 6: events that arrive too late change nothing (action status guards, stale failures and checks); 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10); 5: the bell's dismissals, back-from-snooze times, failedWhile (FR-11.3–11.5)
+export const PROJECTION_VERSION = 7; // 7: Retry write (a failed write approved again), failedWhile only once approved; 6: events that arrive too late change nothing (action status guards, stale failures and checks); 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10); 5: the bell's dismissals, back-from-snooze times, failedWhile (FR-11.3–11.5)
 
 /**
  * What the inbox knows about an item beyond its content. `D` is the decision type: the server

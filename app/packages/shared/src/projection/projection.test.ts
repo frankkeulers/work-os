@@ -273,6 +273,23 @@ describe('events that arrive too late', () => {
     expect(status(c.events)).toBe('executing');
   });
 
+  it('says what a failed action was doing, and lets only a failed write be approved again', () => {
+    const lost = ready();
+    lost.add('action.failed', 3, { reason: 'draft_missing' }, ids); // lost before Frank approved it
+    expect(replay(lost.events).actions['act-1']).toMatchObject({ status: 'failed', failedWhile: 'drafting' });
+    lost.add('action.approved', 4, undefined, ids);
+    expect(status(lost.events)).toBe('failed');
+
+    const write = ready();
+    write.add('action.approved', 3, undefined, ids).add('action.failed', 4, { reason: 'unreachable' }, ids); // refused before the write started
+    expect(replay(write.events).actions['act-1']).toMatchObject({ status: 'failed', failedWhile: 'writing', failureReason: 'unreachable' });
+    write.add('action.approved', 5, undefined, ids).add('action.executing', 6, { attempt: 1 }, ids);
+    const a = replay(write.events).actions['act-1'];
+    expect(a.status).toBe('executing');
+    expect(a.failureReason).toBeUndefined();
+    expect(a.failedWhile).toBeUndefined();
+  });
+
   it('ignores a triage failure for an older revision: the newer messages still get triaged', () => {
     const { events, add } = log();
     add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2));
