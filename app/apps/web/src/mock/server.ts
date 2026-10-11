@@ -128,7 +128,7 @@ const DRAFT_STAGES: Record<ActionType, string[]> = {
 };
 
 const ACTIVE: Action['status'][] = ['drafting', 'ready', 'approved', 'executing'];
-const RANK = { none: 0, today: 1, now: 2 } as const;
+const RANK = { none: 0, follow: 1, today: 2, now: 3 } as const;
 
 /** The Microsoft 365 connector's ID on the mock's claude.ai. */
 export const MOCK_CONNECTOR_ID = 'mcpsrv_01MockMicrosoft365';
@@ -1412,13 +1412,15 @@ export class MockServer implements WorkOsApi, MockControls {
     setTimeout(() => {
       const prev = this.s.evals[this.s.evals.length - 1];
       const labels = this.s.labelCount;
+      // rows and columns in ATTENTION_ORDER: now, today, follow (Waiting on others), none
       const base = prev?.confusion ?? [
-        [20, 3, 1],
-        [5, 42, 10],
-        [2, 10, 100],
+        [20, 3, 0, 1],
+        [5, 42, 2, 8],
+        [0, 3, 9, 2],
+        [2, 10, 2, 98],
       ];
       // A little better on "today" each run, to make the comparison visible.
-      const confusion = base.map((row, i) => (i === 1 ? [row[0], row[1] + 2, Math.max(0, row[2] - 1)] : [...row]));
+      const confusion = base.map((row, i) => (i === 1 ? [row[0], row[1] + 2, row[2], Math.max(0, row[3] - 1)] : [...row]));
       const pr = (i: number) => {
         const tp = confusion[i][i];
         const col = confusion.reduce((s, r) => s + r[i], 0);
@@ -1429,12 +1431,13 @@ export class MockServer implements WorkOsApi, MockControls {
         id: `eval-${this.iso()}`,
         at: this.iso(),
         labelCount: labels,
-        promptVersion: 'triage v3',
+        promptVersion: 'triage v9',
         model: this.s.settings.models.triage,
         categories: {
           now: pr(0),
           today: pr(1),
-          none: pr(2),
+          follow: pr(2),
+          none: pr(3),
           confluence: { precision: 0.8, recall: 0.83, support: 35 },
           vault: { precision: 0.81, recall: 0.86, support: 45 },
         },
@@ -1628,7 +1631,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const rank = (r: ItemRec) => (effectiveTriage(r.decision, r.correction)?.attention === 'now' ? 0 : 1);
     const rec = itemId ? this.s.items[itemId] : open.sort((a, b) => rank(a) - rank(b) || b.item.lastActivityAt.localeCompare(a.item.lastActivityAt))[0];
     if (!rec || !awaitsReply(rec) || !checked[rec.item.source]) return;
-    const text = { settled: 'Yes, go ahead. Done on my side.', open: 'Will look later today', failed: 'Sounds good' }[outcome];
+    const text = { settled: 'Yes, go ahead. Done on my side.', open: 'Will look later today', handed: 'Sagar, can you take this? I need it back by Friday.', failed: 'Sounds good' }[outcome];
     this.ingestReply({ targetKey: rec.key, by: FRANK, text });
     this.emit({ topic: 'inbox' });
     const id = rec.item.id;
@@ -1648,9 +1651,10 @@ export class MockServer implements WorkOsApi, MockControls {
         const next = r.decision?.next;
         const asks = next?.asks?.filter((a) => !(r.asksDone ?? []).includes(askId(a.step))) ?? (next ? [next] : []);
         const settled = outcome === 'settled';
-        const data = { revision, through, batchId: `settle-${at}-1`, allSettled: settled, settled: settled ? asks.map((a) => askId(a.step)) : [] };
-        this.recordUsage('settle', this.s.settings.models.triage, 2400, 140, [id], 'settle v1#mock', 1400);
-        r.settleWhy = settled ? undefined : `You said you’d look later; ${next ? `“${next.step}”` : 'the reply'} is still yours.`;
+        const handedOn = outcome === 'handed';
+        const data = { revision, through, batchId: `settle-${at}-1`, allSettled: settled, settled: settled ? asks.map((a) => askId(a.step)) : [], ...(handedOn && { handedOn: true as const }) };
+        this.recordUsage('settle', this.s.settings.models.triage, 2400, 140, [id], 'settle v2#mock', 1400);
+        r.settleWhy = settled ? undefined : handedOn ? 'Sagar has it now; you need it back by Friday.' : `You said you’d look later; ${next ? `“${next.step}”` : 'the reply'} is still yours.`;
         settleChecked(r, at, data);
         this.event('settle.checked', data, { itemId: id });
         if (settled && closesOnReply(this.s.settings, r.item.source)) {

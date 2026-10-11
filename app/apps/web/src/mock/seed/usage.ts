@@ -1,4 +1,4 @@
-import { costOf, type EvalReport, type UsageRecord } from '@work-os/shared';
+import { EvalReport, costOf, type EvalReportInput, type UsageRecord } from '@work-os/shared';
 
 // Seven days of usage up to the seed clock (CL-5), and two eval reports (FR-6.3).
 
@@ -68,7 +68,8 @@ export function seedUsage(f1Id: string): UsageRecord[] {
   return out;
 }
 
-export const SEED_EVALS: EvalReport[] = [
+// Saved before Waiting on others, so 3×3: read as the server reads old reports, with an empty follow row.
+export const SEED_EVALS: EvalReport[] = ([
   {
     id: 'eval-2026-09-28',
     at: '2026-09-28T15:10:00.000Z',
@@ -111,4 +112,4 @@ export const SEED_EVALS: EvalReport[] = [
     tokens: 438000,
     costEquivalent: 0.66,
   },
-];
+] satisfies EvalReportInput[]).map((r) => EvalReport.parse(r));

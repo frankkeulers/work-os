@@ -124,7 +124,8 @@ export function ItemMarkers({ item }: { item: ItemSummary }) {
   return m.length ? <span className="flex flex-wrap gap-1">{m}</span> : null;
 }
 
-export const attentionName = (a: Attention) => (a === 'none' ? 'None' : a === 'now' ? 'Now' : 'Today');
+const ATTENTION_NAME: Record<Attention, string> = { now: 'Now', today: 'Today', follow: 'Waiting on others', none: 'None' };
+export const attentionName = (a: Attention) => ATTENTION_NAME[a];
 
 /** When a rule's floor or To file changed the model's answer: what each said (FR-4.3). */
 export const ruleOverride = (d: { modelAttention?: Attention; ruleId?: string; attention: Attention }) =>
@@ -206,7 +207,7 @@ export function CorrectForm({
       {label}
     </button>
   );
-  const lane = attention === 'now' ? 'Now' : attention === 'today' ? 'Today' : conf || vault ? 'File' : 'Everything else';
+  const lane = attention === 'now' ? 'Now' : attention === 'today' ? 'Today' : attention === 'follow' ? 'Waiting on others' : conf || vault ? 'File' : 'Everything else';
   const fields = (
     <>
       <div className="flex flex-col gap-1.5">
@@ -218,6 +219,7 @@ export function CorrectForm({
           options={[
             { value: 'now', label: 'Now' },
             { value: 'today', label: 'Today' },
+            { value: 'follow', label: 'Waiting on others' },
             { value: 'none', label: 'None' },
           ]}
         />
@@ -281,6 +283,7 @@ export function CorrectForm({
             options={[
               { value: 'now', label: 'Now' },
               { value: 'today', label: 'Today' },
+              { value: 'follow', label: 'Waiting on others' },
               { value: 'none', label: 'No action' },
             ]}
           />

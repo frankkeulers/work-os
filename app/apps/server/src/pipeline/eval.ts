@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { EvalReport, type Attention, type Settings, type SourceId } from '@work-os/shared';
+import { ATTENTION_ORDER, EvalReport, type Attention, type Settings, type SourceId } from '@work-os/shared';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
 import type { Prompt } from '../claude/prompts';
@@ -16,7 +16,7 @@ import { estimateTokens, packBatches, threadTokens } from './truncate';
 // the model alone: rules are not applied, so a rule change never moves the score. Calls are logged
 // with purpose `eval` and count towards the day's cost-equivalent like any other call.
 
-const ORDER: Attention[] = ['now', 'today', 'none'];
+const ORDER = ATTENTION_ORDER;
 
 export interface Scored {
   source?: SourceId;
@@ -42,7 +42,7 @@ export function score(rows: Scored[]): Pick<EvalReport, 'categories' | 'confusio
       rows.filter((r) => r.predicted[k]).length,
       rows.filter((r) => r.label[k]).length,
     );
-  return { categories: { now: att(0), today: att(1), none: att(2), confluence: flag('confluence'), vault: flag('vault') }, confusion };
+  return { categories: { now: att(0), today: att(1), follow: att(2), none: att(3), confluence: flag('confluence'), vault: flag('vault') }, confusion };
 }
 
 export interface EvalDeps {

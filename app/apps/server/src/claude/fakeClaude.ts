@@ -4,6 +4,7 @@ import type { QueryFn } from './adapter';
 // batches by keyword, the way a model might, so lanes fill predictably:
 //   now    go/no-go, "before Thursday", urgent, asap
 //   today  a question, or check / review / decision
+//   follow someone else has picked it up: "looking into it", "on it", "will get back to you"
 //   none   anything else
 // Confluence for launch, licensing and pricing talk; the vault for release notes and ideas.
 // Routing joins pieces that name the same PR or ticket, and Frank's own piece to the topic of the
@@ -11,8 +12,9 @@ import type { QueryFn } from './adapter';
 // A vault draft request gets a new note under Inbox/, named after the thread. The Confluence page
 // picker takes the first page in the catalogue that isn't a hub, and the draft goes to that page's
 // first section; the people check flags words about how someone works.
-// A settle check settles every ask unless Frank's reply only holds it ("later", "on it", a question);
-// a finish check (CK-2.10) likewise, judged on the latest message since.
+// A settle check settles every ask unless Frank's reply only holds it ("later", "on it", a question)
+// or hands it on ("over to you", "can you take this"), which leaves it open and handed on; a finish
+// check (CK-2.10) likewise, judged on the latest message since.
 
 export interface FakeClaude {
   query: QueryFn;
@@ -30,6 +32,7 @@ type Thread = { id: string; messages: { author: string; text: string }[] };
 const pick = (text: string) => {
   if (/go\/no-go|before thursday|urgent|asap/i.test(text)) return 'now';
   if (/\?|\b(check|review|decision)\b/i.test(text)) return 'today';
+  if (/\b(looking into it|on it|will get back to you)\b/i.test(text)) return 'follow';
   return 'none';
 };
 
@@ -127,6 +130,7 @@ export function confluenceEntryFor(prompt: string) {
 
 type Check = { itemId: string; itemRevision: number; asks: { index: number }[]; reply?: { text: string }[]; since?: { text: string }[] };
 
+const HANDED_ON = /\b(over to you|handing (it|this) (on|over)|can you (take|pick up|handle) (this|it))\b/i;
 const HOLDING = /\b(later|on it|let me|will|tomorrow)\b|\?\s*$|^\W*$/i;
 
 /** Settle and finish checks: a holding reply (or latest message) settles nothing; any other settles every ask. */
@@ -134,9 +138,10 @@ export function settleFor(checks: Check[]) {
   return {
     decisions: checks.map((c) => {
       const text = c.reply ? c.reply.map((m) => m.text).join(' ') : (c.since?.at(-1)?.text ?? '');
-      const settled = !HOLDING.test(text);
-      const why = c.reply ? (settled ? 'Your reply answers it.' : 'You said you would come back to it.') : settled ? 'The latest messages settle it.' : 'It still waits on you.';
-      return { itemId: c.itemId, itemRevision: c.itemRevision, asks: c.asks.map((a) => ({ index: a.index, settled, why })), allSettled: settled };
+      const handedOn = !!c.reply && HANDED_ON.test(text);
+      const settled = !handedOn && !HOLDING.test(text);
+      const why = handedOn ? 'They have the next move; you still own the outcome.' : c.reply ? (settled ? 'Your reply answers it.' : 'You said you would come back to it.') : settled ? 'The latest messages settle it.' : 'It still waits on you.';
+      return { itemId: c.itemId, itemRevision: c.itemRevision, asks: c.asks.map((a) => ({ index: a.index, settled, why })), allSettled: settled, ...(handedOn && { handedOn: true }) };
     }),
   };
 }

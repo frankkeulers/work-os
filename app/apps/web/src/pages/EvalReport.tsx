@@ -12,18 +12,20 @@ import { evalPath } from './Usage';
 const CATS = [
   ['now', 'Attention: Now'],
   ['today', 'Attention: Today'],
+  ['follow', 'Attention: Waiting on others'],
   ['none', 'Attention: None'],
   ['confluence', 'Filing: Confluence'],
   ['vault', 'Filing: Vault'],
 ] as const;
-const ATT = ['Now', 'Today', 'None'];
+// In ATTENTION_ORDER, as the confusion matrix lists them.
+const ATT = ['Now', 'Today', 'Waiting on others', 'None'];
 
 /** S1 is precision on now + today together; S2 is recall on now (PLAN success criteria). */
 export function headline(r: EvalReport) {
   const c = r.confusion;
-  const predictedUrgent = c[0][0] + c[1][0] + c[2][0] + c[0][1] + c[1][1] + c[2][1];
+  const predictedUrgent = c.reduce((s, row) => s + row[0] + row[1], 0);
   const s1 = predictedUrgent ? (c[0][0] + c[1][1]) / predictedUrgent : 0;
-  const nowRow = c[0][0] + c[0][1] + c[0][2];
+  const nowRow = c[0].reduce((s, v) => s + v, 0);
   const s2 = nowRow ? c[0][0] / nowRow : 0;
   return { s1, s2 };
 }
@@ -193,7 +195,7 @@ export function EvalReportPage() {
           </tbody>
         </table>
         <div className="text-xs leading-normal text-muted">
-          The costly misses are labelled Now predicted Today or None ({r.confusion[0][1] + r.confusion[0][2]} here). Corrections from the inbox add to the labelled set for the next run.
+          The costly misses are labelled Now predicted anything else ({r.confusion[0].slice(1).reduce((s, v) => s + v, 0)} here). Corrections from the inbox add to the labelled set for the next run.
         </div>
       </SectionCard>
     </div>

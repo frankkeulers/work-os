@@ -45,6 +45,7 @@ test('J01 morning scan: groups, the item panel, Done with Undo', async ({ page }
   // Monday: Today holds what's due today; asks due Thursday, Friday or "this week" wait under This week (CK-3.10).
   await expect(rows(page, 'Today')).toHaveCount(1);
   await expect(rows(page, 'To file')).toHaveCount(4);
+  await expect(page.getByRole('region', { name: 'Waiting on others', exact: true }).locator('[data-row]')).toHaveCount(1);
   await expect(page.getByTestId('inbox-footer').getByRole('button', { name: /^3 this week/ })).toBeVisible();
   await expect(page.getByRole('link', { name: /Dry-run on/ })).toBeVisible();
   // Last and next poll live in the Poll button's tooltip; the top bar stays quiet when idle.
@@ -53,7 +54,7 @@ test('J01 morning scan: groups, the item panel, Done with Undo', async ({ page }
   // The panel opens on the first item, with its next step.
   const first = rows(page, 'Now').first();
   await expect(first).toHaveAttribute('aria-current', 'true');
-  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('1 of 9');
+  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('1 of 10');
   await expect(itemPanel(page).getByRole('region', { name: 'Next step' })).toBeVisible();
   // Rows show the source's brand mark.
   await expect(first.getByRole('img', { name: 'Slack' })).toBeVisible();
@@ -72,7 +73,7 @@ test('J06 keyboard: j/k move the panel, e and ⇧E mark done, Esc closes', async
   const secondId = await rows(page, 'Now').nth(1).getAttribute('data-row');
   await page.keyboard.press('j');
   await expect(selected(page)).toHaveAttribute('data-row', secondId!);
-  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('2 of 9');
+  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText('2 of 10');
   await page.keyboard.press('k');
   await expect(selected(page)).toHaveAttribute('data-row', firstId!);
 
@@ -123,6 +124,31 @@ test('J04 correct triage in the panel moves the item and grows the labelled set'
   await expect(moved).toBeVisible();
   await expect(moved.getByText('Corrected by you')).toBeVisible();
   await expect(rows(page, 'Today')).toHaveCount(0);
+});
+
+test('J75 Waiting on others: between Needs you and To file, it says who has the next move, and a correction can send an item there (FR-8.1, amended)', async ({ page }) => {
+  const follow = page.getByRole('region', { name: 'Waiting on others', exact: true });
+  await expect(follow.locator('[data-row]')).toHaveCount(1);
+  expect(await page.locator('section[data-group]').evaluateAll((els) => els.map((e) => e.getAttribute('data-group')))).toEqual(['needs', 'follow', 'file']);
+  const row = follow.locator('[data-row]').first();
+  await expect(row).toHaveAttribute('data-lane', 'follow');
+  await row.click();
+  const status = itemPanel(page).getByRole('region', { name: 'Status' });
+  await expect(status).toContainText('Waiting on others');
+  await expect(status).toContainText('You own the outcome and someone else has the next move.');
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-follow-light.png'), animations: 'disabled' });
+
+  // A Today item, corrected to Waiting on others, moves there.
+  const today = rows(page, 'Today').first();
+  const id = (await today.getAttribute('data-row'))!;
+  await today.click();
+  await itemPanel(page).getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: /Correct triage/ }).click();
+  await itemPanel(page).getByRole('group', { name: 'Attention' }).getByRole('button', { name: 'Waiting on others' }).click();
+  await itemPanel(page).getByRole('button', { name: 'Save correction' }).click();
+  await expect(page.getByText('Correction saved · moved to Waiting on others · labelled set now 201')).toBeVisible();
+  await expect(follow.locator(`[data-row="${id}"][data-lane="follow"]`)).toBeVisible();
+  await expect(follow.locator('[data-row]')).toHaveCount(2);
 });
 
 test('triage was right: the decision joins the labelled set as it stands, by button or y', async ({ page }) => {
@@ -633,7 +659,7 @@ test('the footer opens Low priority, Snoozed and Done one at a time, and j/k wal
   const n = await lowRows.count();
   expect(n).toBeGreaterThan(0);
   // The open list joins the panel's order after To file.
-  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText(`1 of ${9 + n}`);
+  await expect(itemPanel(page).getByTestId('panel-pos')).toHaveText(`1 of ${10 + n}`);
 
   await done.click();
   await expect(page.getByRole('region', { name: 'Low priority' })).toHaveCount(0);

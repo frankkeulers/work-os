@@ -357,10 +357,12 @@ function InboxZero({ inbox }: { inbox: InboxView }) {
 
 // ---------- Rows ----------
 
-type Group = 'needs' | 'file';
+type Group = 'needs' | 'follow' | 'file';
 
-const GROUPS: { id: Group; title: string; dot: string }[] = [
+// Waiting on others (FR-8.1, amended) shows only when it holds something.
+const GROUPS: { id: Group; title: string; dot: string; hideEmpty?: boolean }[] = [
   { id: 'needs', title: 'Needs you', dot: 'var(--orange)' },
+  { id: 'follow', title: 'Waiting on others', dot: 'var(--gray-solid)', hideEmpty: true },
   { id: 'file', title: 'To file', dot: 'var(--teal-solid)' },
 ];
 
@@ -414,6 +416,7 @@ function FooterLinks({ by, open, onToggle }: { by: Record<Lower, ItemSummary[]>;
 
 function lowerMeta(i: ItemSummary, now: Date): string | undefined {
   if (i.lane === 'failed') return 'output invalid twice';
+  if (i.lane === 'follow' && i.replyCheck?.handedOn) return 'you handed it on';
   if (i.lane === 'waiting') return i.modelPaused ? 'paused · triage budget reached' : i.quietUntil && Date.parse(i.quietUntil) > now.getTime() ? `quiet ${fmtIn(i.quietUntil, now)}` : 'next poll';
   if (i.lane === 'snoozed' && i.snoozedUntil) return `until ${fmtDayDate(i.snoozedUntil)} ${fmtTime(i.snoozedUntil)}`;
   if (i.lane === 'done' && i.doneAt) return `done ${fmtDayDate(i.doneAt)} ${fmtTime(i.doneAt)}`;
@@ -585,7 +588,9 @@ function NewPill({ items, above, group, onGo }: { items: ItemSummary[]; above: b
   const label =
     group === 'file'
       ? `${n} new ${n === 1 ? 'item' : 'items'} to file${where}`
-      : `${n} new${lanes.size === 1 && lanes.has('now') ? ' Now' : lanes.size === 1 && lanes.has('today') ? ' Today' : ''} ${n === 1 ? 'item' : 'items'}${where}`;
+      : group === 'follow'
+        ? `${n} new ${n === 1 ? 'item' : 'items'} waiting on others${where}`
+        : `${n} new${lanes.size === 1 && lanes.has('now') ? ' Now' : lanes.size === 1 && lanes.has('today') ? ' Today' : ''} ${n === 1 ? 'item' : 'items'}${where}`;
   return (
     // At the left, so the open item panel never covers it.
     <div className="sticky top-2 z-10 flex px-6">
@@ -641,16 +646,17 @@ function CommitmentsGroup() {
 // ---------- Page ----------
 
 /**
- * The rows j/k walk, as they show. The list: Needs you, To file, then the footer's open list. The
- * cockpit (CK-3.3): Now, Today, then Later as it shows, To file and This week, or the list open there.
+ * The rows j/k walk, as they show. The list: Needs you, Waiting on others, To file, then the
+ * footer's open list. The cockpit (CK-3.3): Now, Today, then Later as it shows, Waiting on others,
+ * To file and This week, or the list open there.
  */
-function cockpitOrder(needsRows: ShownRow[], fileRows: ShownRow[], by: Record<Lower, ItemSummary[]>, open: Lower | null, wide: boolean) {
+function cockpitOrder(needsRows: ShownRow[], followRows: ShownRow[], fileRows: ShownRow[], by: Record<Lower, ItemSummary[]>, open: Lower | null, wide: boolean) {
   const ids = (rows: ShownRow[]) => rows.filter((r) => !r.leaving).map((r) => r.item.id);
   // This week is always on screen on the cockpit, so it doesn't open as a list there.
   const listOpen = open && !(wide && open === 'week') ? open : null;
   const list = listOpen ? by[listOpen].map((i) => i.id) : [];
   const needs = wide ? [...ids(needsRows.filter((r) => r.item.lane === 'now')), ...ids(needsRows.filter((r) => r.item.lane !== 'now'))] : ids(needsRows);
-  const later = wide ? (listOpen ? list : [...ids(fileRows), ...by.week.map((i) => i.id)]) : ids(fileRows);
+  const later = wide ? (listOpen ? list : [...ids(followRows), ...ids(fileRows), ...by.week.map((i) => i.id)]) : [...ids(followRows), ...ids(fileRows)];
   return { order: wide ? [...needs, ...later] : [...needs, ...later, ...list], firstNeeds: needs[0], firstLater: later[0] };
 }
 
@@ -690,10 +696,10 @@ export function InboxPage() {
   // Items Frank's reply just closed stay where they were for 5 s as "You replied" (CK-2.5).
   const replied = useRepliedHold(all, !!inbox);
   const by = useMemo(() => {
-    const m: Record<Group | Lower, ItemSummary[]> = { needs: [...sortItems(all, sort, true, now), ...replied.filter((i) => i.lane !== 'week')], file: [], week: replied.filter((i) => i.lane === 'week'), else: [], waiting: [], snoozed: [], done: [], replied: [] };
+    const m: Record<Group | Lower, ItemSummary[]> = { needs: [...sortItems(all, sort, true, now), ...replied.filter((i) => i.lane !== 'week')], follow: [], file: [], week: replied.filter((i) => i.lane === 'week'), else: [], waiting: [], snoozed: [], done: [], replied: [] };
     for (const i of all) if (i.lane in m) m[i.lane as Group | Lower].push(i);
-    for (const g of ['file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
-    if (grouped) for (const g of ['needs', 'file', 'else', 'waiting'] as const) m[g] = groupByChannel(m[g]);
+    for (const g of ['follow', 'file', 'else', 'waiting'] as const) m[g] = sortItems(m[g], sort, false, now);
+    if (grouped) for (const g of ['needs', 'follow', 'file', 'else', 'waiting'] as const) m[g] = groupByChannel(m[g]);
     m.week = byDue(m.week);
     m.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
     m.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
@@ -716,8 +722,8 @@ export function InboxPage() {
   const listRef = useRef<HTMLElement>(null);
   const laterRef = useRef<HTMLElement>(null);
   const selItem = sel ? all.find((i) => i.id === sel) : undefined;
-  const topGroups = useMemo(() => (wide ? { needs: by.needs } : { needs: by.needs, file: by.file }) as Record<Group, ItemSummary[]>, [by, wide]);
-  const laterGroups = useMemo(() => (wide ? { file: by.file } : {}) as Record<'file', ItemSummary[]>, [by, wide]);
+  const topGroups = useMemo(() => (wide ? { needs: by.needs } : { needs: by.needs, follow: by.follow, file: by.file }) as Record<Group, ItemSummary[]>, [by, wide]);
+  const laterGroups = useMemo(() => (wide ? { follow: by.follow, file: by.file } : {}) as Record<'follow' | 'file', ItemSummary[]>, [by, wide]);
   // Rows that land even under the panel: those Frank moved himself, the open item, and those he
   // asked to see from the pill (until the panel closes).
   const userMoves = useUserMoves((s) => s.ids);
@@ -729,8 +735,8 @@ export function InboxPage() {
   const stableLater = useStableGroups(laterGroups, laterRef, stableOpts);
   const fileStable = wide ? stableLater : stableTop;
   const stable = {
-    above: { needs: stableTop.above.needs, file: fileStable.above.file },
-    pending: { needs: stableTop.pending.needs, file: fileStable.pending.file },
+    above: { needs: stableTop.above.needs, follow: fileStable.above.follow, file: fileStable.above.file },
+    pending: { needs: stableTop.pending.needs, follow: fileStable.pending.follow, file: fileStable.pending.file },
   };
   // The pill's target, scrolled to once it's on screen.
   const goTo = useRef<string | undefined>(undefined);
@@ -745,7 +751,8 @@ export function InboxPage() {
   // cockpit (CK-3.3): Now, Today, then Later as it shows, To file and This week or the list open there.
   const needsRows = stableTop.rows.needs;
   const fileRows = fileStable.rows.file;
-  const { order, firstNeeds, firstLater } = useMemo(() => cockpitOrder(needsRows, fileRows, by, open, wide), [needsRows, fileRows, by, open, wide]);
+  const followRows = fileStable.rows.follow;
+  const { order, firstNeeds, firstLater } = useMemo(() => cockpitOrder(needsRows, followRows, fileRows, by, open, wide), [needsRows, followRows, fileRows, by, open, wide]);
   // The New dot (CK-1.3): items that entered a group since Frank last looked.
   const newItems = usePrefs((s) => s.newItems);
   const markNew = usePrefs((s) => s.markNew);
@@ -759,8 +766,8 @@ export function InboxPage() {
   const isNew = (id: string) => id in newItems && now.getTime() - Date.parse(newItems[id]) < NEW_FOR_MS;
   const unseen = useMemo(() => {
     const ids = (rows: ShownRow[]) => rows.filter((r) => !r.leaving && r.item.id in newItems).map((r) => r.item.id);
-    return wide ? { top: ids(needsRows), later: ids(fileRows) } : { top: ids([...needsRows, ...fileRows]), later: [] };
-  }, [needsRows, fileRows, newItems, wide]);
+    return wide ? { top: ids(needsRows), later: ids([...followRows, ...fileRows]) } : { top: ids([...needsRows, ...followRows, ...fileRows]), later: [] };
+  }, [needsRows, followRows, fileRows, newItems, wide]);
   useLookedAt(listRef, unseen.top);
   useLookedAt(laterRef, unseen.later);
 
@@ -880,7 +887,7 @@ export function InboxPage() {
 
   if (!inbox) return <div className="p-8 text-muted">{q.error ? 'Could not load the inbox.' : 'Loading…'}</div>;
 
-  const topCount = by.needs.length + by.file.length;
+  const topCount = by.needs.length + by.follow.length + by.file.length;
   const counts = laneCounts(all);
   // Under Priority, a darker hairline closes the Now block at the top of Needs you. Grouped by
   // channel, each Slack channel's run of rows opens with its name. The cockpit has its own rows:
@@ -904,7 +911,7 @@ export function InboxPage() {
       ),
     ];
   };
-  const groupRows = { needs: needsRows, file: fileRows };
+  const groupRows = { needs: needsRows, follow: followRows, file: fileRows };
   const lowerRow = (i: ItemSummary, n: number, list: ItemSummary[]) => row({ item: i }, n, list.map((item) => ({ item })), wide ? 'later' : 'list', true);
   const openItem = (id: string) => (all.some((i) => i.id === id) ? pick(id) : navigate(itemPath(id)));
   const pillItems = (g: Group) => [...stable.pending[g].map((p) => p.id), ...stable.above[g]].flatMap((id) => all.filter((i) => i.id === id));
@@ -994,6 +1001,8 @@ export function InboxPage() {
               {full && <CommitmentsGroup />}
             </NeedsYouZone>
             <LaterZone
+              followRows={followRows}
+              followPill={<NewPill group="follow" items={pillItems('follow')} above={stable.pending.follow.every((p) => p.above)} onGo={() => goNew('follow')} />}
               fileRows={fileRows}
               by={by}
               open={open}
@@ -1015,7 +1024,7 @@ export function InboxPage() {
               {topCount === 0 ? (
                 <InboxZero inbox={inbox} />
               ) : (
-                GROUPS.map((g) => (
+                GROUPS.filter((g) => !g.hideEmpty || groupRows[g.id].length > 0).map((g) => (
                   <section key={g.id} aria-label={g.title} data-group={g.id} className="flex flex-col pb-3">
                     <NewPill group={g.id} items={pillItems(g.id)} above={stable.pending[g.id].every((p) => p.above)} onGo={() => goNew(g.id)} />
                     <div className="flex items-baseline gap-2 px-6 pb-2 pt-3">

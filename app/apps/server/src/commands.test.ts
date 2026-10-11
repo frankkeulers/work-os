@@ -219,7 +219,7 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(prod).toMatchObject({ triageState: 'triaged', summary: 'Release notes draft is up', reason: 'Fake triage for tests.', triage: { attention: 'today', vault: true } });
     // CL-4: no tools, no servers, no settings; the prompt file's version is logged.
     expect(claude.calls[0].options).toMatchObject({ tools: [], mcpServers: {}, settingSources: [], maxTurns: 1, persistSession: false });
-    expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v8 -->/);
+    expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v9 -->/);
     const usage = (await call<UsageView>('GET', '/api/usage')).body;
     expect(usage.budgets.triage.used).toBe(1);
     expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('ok');
@@ -246,6 +246,39 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(triageCalls()[1].prompt).toContain('Go/no-go?');
     expect(await lanes()).toMatchObject({ '#product': 'now' });
     expect((await inbox()).items.find((i) => i.id === PROD)?.doneBy).toBeUndefined();
+  });
+
+  it('puts a request someone else has picked up in Waiting on others, and lifts it when they hand it back (FR-8.1, amended)', async () => {
+    const DM = (await inbox()).items.find((i) => i.title === 'Dana Lee')!.id;
+    slack.post('D01DANA', { ts: isoToTs(START + 1 * MIN), user: 'UFRANK', text: 'Can you sort out Meridia access for Sam?' });
+    slack.post('D01DANA', { ts: isoToTs(START + 2 * MIN), user: 'U02DANA', text: 'Sure, looking into it.' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 13; i++) await tick(); // past the quiet window
+    expect((await inbox()).items.find((i) => i.id === DM)).toMatchObject({ lane: 'follow', triage: { attention: 'follow' } });
+
+    slack.post('D01DANA', { ts: isoToTs(wall + 1 * MIN), user: 'U02DANA', text: 'Done. Can you check it works for Sam?' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 13; i++) await tick();
+    expect((await inbox()).items.find((i) => i.id === DM)).toMatchObject({ lane: 'today', triage: { attention: 'today' } });
+  });
+
+  it('moves an item Frank hands on, while he still owns it, to Waiting on others instead of closing it (FR-8.1, amended)', async () => {
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'UFRANK', text: 'Sagar, can you take this? I need it back by Friday' });
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    await tick();
+    const item = (await inbox()).items.find((i) => i.id === PROD)!;
+    expect(item).toMatchObject({ lane: 'follow', status: 'open', replyCheck: { allSettled: false, handedOn: true, why: 'They have the next move; you still own the outcome.' } });
+    expect(item.doneBy).toBeUndefined();
+    // Not nagged as "Your reply left asks open": it waits on someone else now.
+    const att = (await call<AttentionView>('GET', '/api/attention')).body;
+    expect(att.entries.filter((e) => e.kind === 'reply_unsettled')).toEqual([]);
+
+    // A rebuild from the log lands in the same place.
+    expect((await call('POST', '/api/admin/rebuild-state')).status).toBe(200);
+    expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ lane: 'follow' });
   });
 
   it('labels a close Frank undoes, and a Done soon after a check that said not settled, and counts C1 and C2 (CK-2.6, CK-2.8)', async () => {
@@ -330,7 +363,7 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
       await othersSettleIt();
       const checks = claude.calls.filter((c) => c.prompt.includes('<checks>'));
       expect(checks).toHaveLength(1);
-      expect(checks[0].system).toMatch(/^<!-- prompt: finish v1 -->/);
+      expect(checks[0].system).toMatch(/^<!-- prompt: finish v2 -->/);
       expect(checks[0].prompt).toContain('Thanks Sam, shipping it as is');
       const prod = (await inbox()).items.find((i) => i.id === PROD)!;
       // The model said None; the mention-me floor keeps it in Today, now suggested as finished.
@@ -659,9 +692,10 @@ describe('corrections, labels and the eval (FR-6, FR-7.2, Story 6.1)', () => {
       labelCount: 2,
       model: 'haiku-5.5',
       confusion: [
-        [0, 0, 0],
-        [0, 1, 1],
-        [0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 1, 0, 1],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
       ],
       categories: { today: { precision: 1, recall: 0.5, support: 2 }, vault: { precision: 1, recall: 1, support: 1 } },
     });

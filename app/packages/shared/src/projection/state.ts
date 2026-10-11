@@ -55,6 +55,7 @@ export interface ReplyCheck {
   revision: number;
   allSettled: boolean;
   settled: number; // asks it found settled
+  handedOn?: true; // he passed it on but still owns the outcome: it moved to Waiting on others
 }
 
 /** Item metadata from item.upserted. Message bodies live in items/, never here. */

@@ -219,6 +219,14 @@ function StatusCard({ item, children }: { item: ItemSummary; children: ReactNode
       : item.quietUntil && Date.parse(item.quietUntil) > now.getTime()
         ? `The thread is still active. Triage runs once it has been quiet, ${fmtIn(item.quietUntil, now)}.`
         : 'Quiet now. It is triaged on the next poll.';
+  } else if (item.lane === 'follow') {
+    title = 'Waiting on others';
+    body = (
+      <>
+        You own the outcome and someone else has the next move. It moves up when a reply hands it back to you, and to Low priority once it’s resolved.
+        {item.replyCheck?.handedOn && item.replyCheck.why && <span className="mt-1 block text-ink">You handed it on: {item.replyCheck.why}</span>}
+      </>
+    );
   } else {
     title = 'Nothing to do';
     body = 'No reply needed and nothing to file. Correct the triage if that’s wrong.';

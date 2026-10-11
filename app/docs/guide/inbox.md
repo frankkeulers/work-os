@@ -2,7 +2,7 @@
 title: The inbox
 group: Inbox
 order: 30
-summary: The three zones on a wide screen, Needs you and To file, the bell, what the chips mean, topics, and how to correct a decision.
+summary: The three zones on a wide screen, Needs you, Waiting on others and To file, the bell, what the chips mean, topics, and how to correct a decision.
 updated: 2026-10-11
 ---
 
@@ -18,14 +18,14 @@ while something is in Now, briefly teal after a filing is written.
   timeline. See [The time column](#the-time-column).
 - **Needs you**, in the middle: **NOW** then **TODAY**, each under its own header. Each row is two
   lines: where it happened, what it needs and when it's due, then the summary in large type.
-- **Later**, on the right, for once a day: **To file** with where each should go, **This week**
+- **Later**, on the right, for once a day: **Waiting on others** when something is, **To file** with where each should go, **This week**
   soonest first, a **Snoozed** line, and at the foot **N low priority · check triage** and
   **N done today**. Snoozed, Low priority and Done open in place of the lists; `Esc` or the back
   arrow returns. Drag its left edge to make it wider or narrower (360 to 600 px); double-click the
   edge to put it back to 440 px.
 
 Clicking a row in any column opens it in the item panel, 640 px wide, over Later. `j` and `k` walk
-Now, Today, To file, then This week; `g n` jumps to the first item in Needs you and `g l` to the
+Now, Today, Waiting on others, To file, then This week; `g n` jumps to the first item in Needs you and `g l` to the
 first in Later. In a narrower window the inbox is a single list with the agenda strip above it, as
 described below; nothing is lost.
 
@@ -66,6 +66,22 @@ The inbox has two groups of equal weight. On a wide screen they sit in Needs you
   If you correct it to Now, it stays in Needs you.
 - **To file** holds threads that need nothing from you but hold something worth keeping, in
   Confluence, your vault or both.
+
+### Waiting on others
+
+Between Needs you and To file (on a wide screen, at the top of Later), **Waiting on others** holds
+what you own but someone else has the next move on: you asked for something, started a request or
+handed work on, and it isn't resolved yet. It only shows when it holds something.
+
+- When their reply hands the next step back to you ("Done, can you check it works for Sam?"), the
+  item moves up to Needs you. Once the request is resolved, or dropped, it goes to Low priority.
+- If you reply handing an ask on ("Sagar, can you take this? I need it back by Friday"), the reply
+  check sees you still own the outcome: the item moves here rather than closing, and its panel
+  says **You handed it on:** and who has it.
+- A rule that sets Today or Now still wins. Waiting on others isn't counted in the pills or the
+  sidebar, and never sends a notification.
+- If triage put something here that is really yours to do, or not yours at all, correct it:
+  **Waiting on others** is one of the choices.
 
 Each row reads left to right: where it happened and how long ago, the one-line summary, then up to
 three chips: what it needs (reply, decide, review…), a deadline (orange within about four hours,

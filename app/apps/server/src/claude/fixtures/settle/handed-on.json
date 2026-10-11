@@ -1,0 +1,5 @@
+{
+  "about": "A reply that hands the ask on while Frank still owns the outcome settles nothing, and the item waits on the other person (FR-8.1, amended).",
+  "reply": ["Sagar, can you take this? I need it back by Friday"],
+  "answer": { "asks": [{ "index": 0, "settled": false, "why": "Sagar has the ETA wording now; you need it back by Friday." }], "allSettled": false, "handedOn": true }
+}

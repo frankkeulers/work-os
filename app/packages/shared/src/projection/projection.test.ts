@@ -3,7 +3,7 @@ import { toLoggedDecision, type EventData, type EventType, type WorkEvent } from
 import type { TriageDecision } from '../schemas';
 import { SeqGapError, reduce, replay } from './reduce';
 import { emptyProjection } from './state';
-import { finishQueue } from './transitions';
+import { awaitsReply, finishQueue } from './transitions';
 import { askId, conversationOf } from './topics';
 import { budgetsOf, closedByReply, confirmedNow, filedAll, openNext, replyCloseCriteria, summaryOf } from './views';
 
@@ -603,6 +603,26 @@ describe('settle checks on Frank’s replies (cockpit CK-2.1–2.3)', () => {
     expect(it).toMatchObject({ status: 'open', asksDone: [askId(asks[0].step)], replyCheck: { allSettled: false, settled: 1 } });
     expect(openNext(next, it.asksDone)?.step).toBe('Say who owns bulk export');
     expect(summaryOf(it, it, { ...ITEM_SUMMARY, text: { next, settleWhy: 'Bulk export’s owner is still open' } }).replyCheck).toEqual({ at: at(21), allSettled: false, settled: 1, why: 'Bulk export’s owner is still open' });
+  });
+
+  it('moves an item he hands on to Waiting on others, over an older correction, until someone else writes (FR-8.1, amended)', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('triage.corrected', 12, { correction: { itemId: ITEM, itemRevision: 1, attention: 'now', confluence: false, vault: false, correctedAt: at(12) } });
+    add('item.upserted', 20, upserted(2, true, 20)).add('settle.checked', 21, { ...checked(20, [], false), handedOn: true });
+    const it = replay(events).items[ITEM];
+    expect(it).toMatchObject({ status: 'open', replyCheck: { allSettled: false, handedOn: true }, decision: { attention: 'follow', itemRevision: 2 } });
+    expect(summaryOf(it, it, ITEM_SUMMARY)).toMatchObject({ lane: 'follow', replyCheck: { handedOn: true } });
+    expect(awaitsReply(it)).toBe(false); // his next reply asks nothing of the check
+
+    // Someone else writes: triage decides afresh.
+    add('item.upserted', 30, upserted(3, false, 30)).add('triage.decided', 40, decided(3));
+    expect(summaryOf(replay(events).items[ITEM], replay(events).items[ITEM], ITEM_SUMMARY)).toMatchObject({ lane: 'today' });
+
+    // handedOn with everything settled is just settled.
+    const c = log();
+    c.add('item.upserted', 0, upserted(1)).add('triage.decided', 10, decided(1)).add('item.upserted', 20, upserted(2, true, 20)).add('settle.checked', 21, { ...checked(20, ['a1'], true), handedOn: true });
+    expect(replay(c.events).items[ITEM]).toMatchObject({ replyCheck: { allSettled: true }, decision: { attention: 'today' } });
+    expect(replay(c.events).items[ITEM].replyCheck?.handedOn).toBeUndefined();
   });
 
   it('keeps waiting when he replies again during a check, and drops the check once someone else writes', () => {

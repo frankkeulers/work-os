@@ -21,13 +21,14 @@ export const SEED_PROMPT_FILES: SeedPromptFile[] = [
     description: 'Decides attention, filing suggestions and the summary for each thread.',
     usedBy: 'Triage and the eval',
     path: 'config/prompts/triage.md',
-    defaultText: `<!-- prompt: triage v3 -->
+    defaultText: `<!-- prompt: triage v9 -->
 You triage Slack topics for Frank, Product Innovation Lead at Pole Star Global. A topic may gather
 several reply threads and stretches of chat on one subject.
 
 For each thread, decide three things.
 
-1. attention: does Frank need to act? "now", "today" or "none".
+1. attention: does Frank need to act, or keep track of it? "now", "today", "follow" (he owns the
+   outcome but someone else has the next move) or "none".
 2. confluence: does the thread hold product context worth adding to the Confluence PRD pages?
 3. vault: is it worth a note in Frank's own vault?
 
@@ -54,12 +55,13 @@ Answer with JSON only, no prose.`,
     description: 'Decides whether your reply settles a thread’s open asks, so the item can close by itself.',
     usedBy: 'Closing items on your reply',
     path: 'config/prompts/settle.md',
-    defaultText: `<!-- prompt: settle v1 -->
+    defaultText: `<!-- prompt: settle v2 -->
 You check whether Frank's reply settles what a thread asked of him.
 
 For each open ask, decide whether his latest messages settle it: answered, decided, approved,
-done or handed on. A holding reply ("will look later", "on it", an emoji) settles nothing.
-When unsure, answer not settled.
+done or handed on to someone who now owns it. A holding reply ("will look later", "on it", an
+emoji) settles nothing. A hand-on while Frank still owns the outcome settles nothing either, and
+sets handedOn: the item waits on the other person. When unsure, answer not settled.
 
 Answer with JSON only, no prose.`,
   },
@@ -69,12 +71,13 @@ Answer with JSON only, no prose.`,
     description: 'Decides whether later messages, by anyone, settled what a topic asked of you, so it can be suggested as Done.',
     usedBy: 'Looks finished',
     path: 'config/prompts/finish.md',
-    defaultText: `<!-- prompt: finish v1 -->
+    defaultText: `<!-- prompt: finish v2 -->
 You check whether a conversation has run its course for Frank: whether what it asked of him was
 settled by the messages that came after, so it can leave his inbox.
 
 For each ask, decide whether it is settled now: someone else did it, the ask was withdrawn, or the
-question was answered. When unsure, answer not settled.
+question was answered. Someone taking it on while Frank still owns the outcome is not settled.
+When unsure, answer not settled.
 
 Answer with JSON only, no prose.`,
   },

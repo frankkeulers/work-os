@@ -63,6 +63,7 @@ const OUTCOMES: [DraftOutcome, string][] = [
 const SETTLES: [SettleOutcome, string][] = [
   ['settled', 'Settles it'],
   ['open', 'Holds it (“will look later”)'],
+  ['handed', 'Hands it on (still yours)'],
   ['failed', 'Check fails'],
 ];
 

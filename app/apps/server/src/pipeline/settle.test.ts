@@ -55,9 +55,17 @@ describe('the settle check’s input', () => {
   it('closes only when every ask sent is settled, whatever the model says of the whole', () => {
     const check = { asks: [{ index: 0 }, { index: 1 }].map((a) => ({ ...a, need: 'reply' as const, step: `ask ${a.index}` })) } as SettleCheck;
     const d = (asks: SettleDecision['asks'], allSettled: boolean): SettleDecision => ({ itemId: ID, itemRevision: 2, asks, allSettled });
-    expect(judge(check, d([{ index: 0, settled: true, why: 'a' }], true))).toEqual({ settled: [check.asks[0]], allSettled: false });
+    expect(judge(check, d([{ index: 0, settled: true, why: 'a' }], true))).toEqual({ settled: [check.asks[0]], allSettled: false, handedOn: false });
     expect(judge(check, d([{ index: 0, settled: true, why: 'a' }, { index: 1, settled: false, why: 'b' }], false))).toMatchObject({ allSettled: false, why: 'b' });
     expect(judge(check, d([{ index: 0, settled: true, why: 'a' }, { index: 1, settled: true, why: 'b' }, { index: 7, settled: false, why: 'c' }], false))).toMatchObject({ allSettled: true });
+  });
+
+  it('hands an item on only while something is still open (FR-8.1, amended)', () => {
+    const check = { asks: [{ index: 0, need: 'reply' as const, step: 'ask 0' }] } as SettleCheck;
+    const d = (settled: boolean, handedOn?: boolean): SettleDecision => ({ itemId: ID, itemRevision: 2, asks: [{ index: 0, settled, why: 'w' }], allSettled: settled, ...(handedOn !== undefined && { handedOn }) });
+    expect(judge(check, d(false, true))).toMatchObject({ allSettled: false, handedOn: true });
+    expect(judge(check, d(true, true))).toMatchObject({ allSettled: true, handedOn: false });
+    expect(judge(check, d(false))).toMatchObject({ handedOn: false });
   });
 });
 

@@ -143,10 +143,13 @@ const doneToday = (done: readonly ItemSummary[], now: Date) => {
 };
 
 /**
- * To file, This week and a Snoozed link, with Low priority and Done at the foot. Snoozed, Low
- * priority, Done and Waiting open in place of the default view, one at a time; Esc comes back.
+ * Waiting on others (when it holds something), To file, This week and a Snoozed link, with Low
+ * priority and Done at the foot. Snoozed, Low priority, Done and Waiting open in place of the
+ * default view, one at a time; Esc comes back.
  */
 export function LaterZone({
+  followRows,
+  followPill,
   fileRows,
   by,
   open,
@@ -157,6 +160,9 @@ export function LaterZone({
   fileAction,
   scrollerRef,
 }: {
+  /** Waiting on others (FR-8.1, amended): Frank owns the outcome, someone else has the next move. */
+  followRows: ShownRow[];
+  followPill: ReactNode;
   fileRows: ShownRow[];
   by: Record<Lower, ItemSummary[]>;
   open: Lower | null;
@@ -171,12 +177,13 @@ export function LaterZone({
   const now = useNow(30_000);
   const back = by.snoozed[0]?.snoozedUntil;
   const files = live(fileRows);
+  const follows = live(followRows);
   const today = doneToday(by.done, now);
   const list = open && open !== 'week' ? open : null;
   const { width, dragging, handle } = useResizable({ saved: usePrefs((s) => s.laterWidth), save: usePrefs((s) => s.setLaterWidth), bounds: LATER_WIDTH, edge: 'left', label: 'Resize the Later column' });
   return (
     <section aria-label="Later" data-cockpit-zone="later" className={cx('relative flex shrink-0 flex-col bg-later-bg', !dragging && 'transition-[width] duration-200 ease-out motion-reduce:transition-none')} style={{ width }}>
-      <ZoneHead dot="bg-faint" title="Later" count={files + by.week.length + by.snoozed.length}>
+      <ZoneHead dot="bg-faint" title="Later" count={follows + files + by.week.length + by.snoozed.length}>
         <span className="text-[13px] text-muted">Once a day</span>
       </ZoneHead>
       <section ref={scrollerRef} aria-label="Later list" className="min-h-0 flex-1 overflow-y-auto pb-4 [overflow-anchor:none]">
@@ -198,6 +205,13 @@ export function LaterZone({
           </section>
         ) : (
           <>
+            {followRows.length > 0 && (
+              <section aria-label="Waiting on others" data-group="follow" className="mb-2 flex flex-col">
+                {followPill}
+                <SubHead dot="bg-gray-solid" title="Waiting on others" count={follows} />
+                {followRows.flatMap(renderFile)}
+              </section>
+            )}
             <section aria-label="To file" data-group="file" className="flex flex-col">
               {pill}
               <SubHead dot="bg-teal-solid" title="To file" count={files}>

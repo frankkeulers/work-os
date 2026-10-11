@@ -108,19 +108,19 @@ test('J57: clear what’s due before the meeting — pins open the item; j/k, g 
   await expect(page.locator('[data-row][aria-current="true"]')).toContainText('Insights APIs v2 pricing');
   await page.screenshot({ path: join(APP, 'screenshots/cockpit-panel-light.png'), style: HIDE, animations: 'disabled' });
 
-  // g l: the first Later item, the top of To file; g n: back to the first Needs you item.
+  // g l: the first Later item, the top of Waiting on others (above To file); g n: back to the first Needs you item.
   await page.keyboard.press('g');
   await page.keyboard.press('l');
-  await expect(page.locator('[data-row][aria-current="true"]')).toHaveAttribute('data-lane', 'file');
-  await expect(page.locator('[data-row][aria-current="true"]')).toContainText('v2 vessel-events');
+  await expect(page.locator('[data-row][aria-current="true"]')).toHaveAttribute('data-lane', 'follow');
+  await expect(page.locator('[data-row][aria-current="true"]')).toContainText('Meridia access');
   await page.keyboard.press('g');
   await page.keyboard.press('n');
   await expect(zone(page, 'Needs you').locator('[data-row]').first()).toHaveAttribute('aria-current', 'true');
 
-  // j walks Now, then Today, then Later: To file, then This week.
+  // j walks Now, then Today, then Later: Waiting on others, To file, then This week.
   const current = page.locator('[data-row][aria-current="true"]');
   const lanes: string[] = [];
-  // Every row on screen: Needs you, To file and This week.
+  // Every row on screen: Needs you, Waiting on others, To file and This week.
   const rows = await page.locator('[data-cockpit-zone] [data-row]').count();
   for (let n = 0; n < rows - 1; n++) {
     const id = (await current.getAttribute('data-row'))!;
@@ -130,7 +130,7 @@ test('J57: clear what’s due before the meeting — pins open the item; j/k, g 
   }
   lanes.push((await current.getAttribute('data-lane'))!);
   const runs = lanes.filter((l, n) => l !== lanes[n - 1]);
-  expect(runs).toEqual(['now', 'failed', 'today', 'file', 'week']);
+  expect(runs).toEqual(['now', 'failed', 'today', 'follow', 'file', 'week']);
 
   // Esc closes the panel; t shows tomorrow.
   await page.keyboard.press('Escape');

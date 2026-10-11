@@ -39,12 +39,15 @@ const label = (itemId: string, attention: LabelRecord['label']['attention'], at 
 
 describe('score', () => {
   it('builds the confusion matrix with labels as rows, and precision and recall from it', () => {
-    const s = score([row('now', 'now'), row('now', 'today'), row('today', 'today'), row('none', 'today'), row('none', 'none', { lc: true, pc: true }), row('today', 'none', { lv: true })]);
+    const s = score([row('now', 'now'), row('now', 'today'), row('today', 'today'), row('none', 'today'), row('none', 'none', { lc: true, pc: true }), row('today', 'none', { lv: true }), row('follow', 'follow'), row('follow', 'none')]);
+    // rows and columns: now, today, follow (Waiting on others), none
     expect(s.confusion).toEqual([
-      [1, 1, 0],
-      [0, 1, 1],
-      [0, 1, 1],
+      [1, 1, 0, 0],
+      [0, 1, 0, 1],
+      [0, 0, 1, 1],
+      [0, 1, 0, 1],
     ]);
+    expect(s.categories.follow).toEqual({ precision: 1, recall: 0.5, support: 2 });
     expect(s.categories.now).toEqual({ precision: 1, recall: 0.5, support: 2 });
     expect(s.categories.today).toEqual({ precision: 1 / 3, recall: 0.5, support: 2 });
     expect(s.categories.confluence).toEqual({ precision: 1, recall: 1, support: 1 });

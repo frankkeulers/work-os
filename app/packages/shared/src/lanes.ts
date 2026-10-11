@@ -2,8 +2,9 @@ import type { Attention, NextStep, TriageCorrection, TriageDecision } from './sc
 import { londonAt, londonParts } from './time';
 
 // Inbox lanes (FR-8.1) plus the off-lane places an item can be. `week` is a view of Today: Today
-// items due after today (cockpit CK-3.10).
-export type Lane = 'now' | 'today' | 'week' | 'file' | 'else' | 'failed' | 'waiting' | 'snoozed' | 'done';
+// items due after today (cockpit CK-3.10). `follow` is Waiting on others: Frank owns the outcome,
+// someone else has the next move (FR-8.1, amended). `waiting` is the quiet window, not that.
+export type Lane = 'now' | 'today' | 'week' | 'follow' | 'file' | 'else' | 'failed' | 'waiting' | 'snoozed' | 'done';
 
 export type ItemStatus = 'open' | 'done' | 'snoozed';
 export type TriageState = 'pending' | 'triaged' | 'failed';
@@ -51,6 +52,7 @@ export function laneFor(input: {
   if (!eff) return input.triageState === 'failed' ? 'failed' : 'waiting';
   if (eff.attention === 'now') return 'now';
   if (eff.attention === 'today') return 'today';
+  if (eff.attention === 'follow') return 'follow'; // attention wins over filing, as Now and Today do
   return eff.confluence || eff.vault ? 'file' : 'else';
 }
 

@@ -12,7 +12,7 @@ A local app on Frank's laptop that polls work sources, decides what each item ne
 
 For every incoming conversation it answers three questions:
 
-1. Does it need Frank's attention (now, today, or not at all)?
+1. Does it need Frank's attention (now, today, or not at all), or is he waiting on someone else for it?
 2. Should it go into the Confluence PRD context?
 3. Should it become a note in the Obsidian vault?
 
@@ -327,7 +327,7 @@ interface Item {                 // one conversation unit: a Slack thread or DM 
   schemaVersion: 1;
 }
 
-type Attention = 'now' | 'today' | 'none';
+type Attention = 'now' | 'today' | 'follow' | 'none'; // follow: amendment to FR-8.1
 
 interface TriageDecision {
   itemId: string;
@@ -627,7 +627,9 @@ As built (M2 step 16):
 
 ### 7.8 Inbox lanes (M2 UI)
 
-**FR-8.1** The inbox shows two groups: **Needs you** (attention now or today, plus items whose triage failed, shown untriaged) and **To file** (confluence or vault suggested, attention none). A Sort menu orders the lists by **Priority** (the default since the cockpit, CK-1.1): Needs you lists Now items first, then failed ones, then Today items by deadline; or by last activity, newest or oldest first. **Group by channel** (off by default since CK-1.1, switched on in the same menu) brings each Slack channel's or DM's items together under its name; channels follow the chosen order. Both choices are kept in the browser. **Low priority** (no attention, nothing to file) is a footer link that opens its list. Lanes stay as before underneath (now, today, file, else, failed, waiting). **This week** (cockpit CK-3.10) is a view of Today, not an attention level: a Today item whose open next step is due after the end of the day (Europe/London), or, with no `dueAt`, labelled "this week" or "by Friday" (Monday to Thursday) or "next week", shows under This week instead of Needs you, soonest due first. It moves into Needs you on the day it falls due; the server tells open tabs at midnight. A correction to Now keeps it in Needs you. Labels and the eval are unaffected.
+**FR-8.1** The inbox shows two groups: **Needs you** (attention now or today, plus items whose triage failed, shown untriaged) and **To file** (confluence or vault suggested, attention none). A Sort menu orders the lists by **Priority** (the default since the cockpit, CK-1.1): Needs you lists Now items first, then failed ones, then Today items by deadline; or by last activity, newest or oldest first. **Group by channel** (off by default since CK-1.1, switched on in the same menu) brings each Slack channel's or DM's items together under its name; channels follow the chosen order. Both choices are kept in the browser. **Low priority** (no attention, nothing to file) is a footer link that opens its list. Lanes stay as before underneath (now, today, follow, file, else, failed, waiting). **This week** (cockpit CK-3.10) is a view of Today, not an attention level: a Today item whose open next step is due after the end of the day (Europe/London), or, with no `dueAt`, labelled "this week" or "by Friday" (Monday to Thursday) or "next week", shows under This week instead of Needs you, soonest due first. It moves into Needs you on the day it falls due; the server tells open tabs at midnight. A correction to Now keeps it in Needs you. Labels and the eval are unaffected.
+
+*Amended 11 Oct 2026 (Waiting on others):* a third group, **Waiting on others** (attention `follow`), sits between Needs you and To file and shows only when it holds something; on the cockpit it sits at the top of Later, above To file. It holds topics where Frank owns the outcome but someone else has the next move: he asked for something, started a request or handed work on, and it isn't resolved. Before this, triage called them "someone else's to act on" and they landed in Low priority, out of sight. Unlike This week (CK-3.10, a view rule with no new attention level), this is a fourth attention level, because the model must tell "someone else's, not mine" from "someone else's move, my outcome" and only the thread says which. Triage prompt v9 defines it; a reply that hands the next step back to Frank is Today, and a resolved or dropped request is None. A reply from Frank that hands an ask on while he still owns the outcome is not settled: the settle check (prompt v2) answers `handedOn`, and the item moves to Waiting on others instead of closing or nagging, until someone else writes and triage decides afresh. The finish check (v2) treats such a hand-on as not settled. A rule's floor (FR-4.3) still lifts `follow` to Today; the count pills and the sidebar count leave it out (nothing to do yet), and no notification fires. The eval scores `follow` as a fourth attention level; reports saved before it are read with an empty `follow` row and column, so S1 and S2 compare across the change.
 
 **FR-8.2** Item actions: Open in Slack, Done, Snooze (1h / tomorrow 09:00 / custom), Correct triage, Draft vault note, Draft Confluence entry.
 

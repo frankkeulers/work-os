@@ -25,7 +25,7 @@ export async function loadPrompt(dataDir: string, file: string, fallback: string
   return { text, version: promptVersion(text) };
 }
 
-export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v8 -->
+export const DEFAULT_TRIAGE_PROMPT = `<!-- prompt: triage v9 -->
 You triage Slack threads, Outlook emails, meeting notes and meeting invitations for Frank, Product Innovation Lead at Pole Star Global (maritime data,
 vessel tracking and compliance products). He owns product discovery and prototypes, works with
 engineering, sales and customers, and keeps product context in Confluence and his own notes in an
@@ -62,8 +62,9 @@ message is one email, with only what it adds: the quoted history, signatures and
 already cut, and attachments show as "📎 name". "to" and "cc" list who it went to, "me" for Frank.
    - attention: judge as for a chat, with these on top. Newsletters, notifications, automated mail
      and mailing lists are "none". An email where Frank is only in "cc" is "none" unless it names
-     him or asks him something. When Frank wrote the last email, nothing is open unless he
-     promised something with a date, or others have had days to answer a question he needs answered.
+     him or asks him something. When Frank wrote the last email, nothing is his to do unless he
+     promised something with a date. When that email asked for something he still needs, it is
+     "follow"; "today" once others have had days to answer and he should chase.
    - next: need "reply" when someone is waiting on his answer.
    - filing: customer requirements, commitments and decisions suit Confluence, as in chat.
 
@@ -82,15 +83,24 @@ Frank answers in Outlook, not here, and the item closes by itself once he has.
 
 For each thread, decide three things.
 
-1. attention: does Frank need to act?
+1. attention: does Frank need to act, or keep track of it?
    - "now": he is blocking someone or something time-critical today: a go/no-go, an approval
      others are waiting on, a customer or exec question addressed to him with a near deadline.
      Examples: "Need your go/no-go before the 2pm exec sync"; "IT can apply the DNS change once
      you approve it, launch is tomorrow".
-   - "today": he should reply, review or decide today, but nothing breaks within the hour.
+   - "today": he should reply, review or decide today, but nothing breaks within the hour. A
+     reply to a question Frank asked counts when it hands the next step back to him.
      Examples: "Can you review the release notes draft by end of day?"; "Which wording do you
-     prefer for the licence page, A or B?".
-   - "none": for information, social, already handled, or someone else's to act on.
+     prefer for the licence page, A or B?"; "Yes, you need the extra entitlement for that" after
+     Frank asked whether he did.
+   - "follow": Frank owns the outcome but someone else has the next move. He asked for
+     something, started a request or handed work on, and it isn't resolved yet. He needs to see it
+     again when they come back, or chase it if they don't.
+     Examples: Frank asked engineering to fix a colleague's product access and they are looking
+     into it; Frank asked for the pricing figures and was told they will come on Friday.
+     Once the request is resolved, or Frank has dropped it, it is "none".
+   - "none": for information, social, already handled, or someone else's to act on that Frank
+     didn't ask for.
      Examples: "Standup moved to 10:15"; a thread where Frank already answered and others said
      thanks; a team discussing their own sprint.
 2. confluence: does the thread hold product context worth adding to the Confluence PRD pages:
@@ -108,7 +118,8 @@ do not rule out Confluence: judge confluence on the product context alone, becau
 draft leaves the people out and files the facts.
 
 Write summary (one line, at most 110 characters, what the topic is about and where it stands) and
-reason (one line: why this attention level). Add next only when Frank has a clear next step:
+reason (one line: why this attention level; for "follow", who has the next move and what Frank is
+waiting for). Add next only when Frank has a clear next step of his own:
 need is one of reply, approve, decide, prepare, review, actions, file; step says what to do; why
 says why.
 
@@ -135,7 +146,7 @@ ask. An ask that has been answered or done in the messages is not open. "done" l
 has already ticked off: never list them again. With a single ask, leave asks out.
 
 Answer with JSON only, no prose, in exactly this shape, one entry per thread, using each thread's id:
-{"decisions":[{"id":"...","attention":"now|today|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"approve","step":"...","why":"...","dueAt":"...","dueLabel":"...","asks":[{"need":"approve","step":"...","dueAt":"..."},{"need":"review","step":"..."}]}}]}
+{"decisions":[{"id":"...","attention":"now|today|follow|none","confluence":{"suggested":false},"vault":{"suggested":true,"targetHint":"..."},"containsPeopleObservations":false,"summary":"...","reason":"...","next":{"need":"approve","step":"...","why":"...","dueAt":"...","dueLabel":"...","asks":[{"need":"approve","step":"...","dueAt":"..."},{"need":"review","step":"..."}]}}]}
 `;
 
 export const DEFAULT_TOPICS_PROMPT = `<!-- prompt: topics v2 -->
@@ -176,7 +187,7 @@ Answer with JSON only, no prose, in exactly this shape, one entry per piece:
 {"assignments":[{"id":"<piece id>","topic":"<topic id, piece id, or new>"}]}
 `;
 
-export const DEFAULT_SETTLE_PROMPT = `<!-- prompt: settle v1 -->
+export const DEFAULT_SETTLE_PROMPT = `<!-- prompt: settle v2 -->
 You check whether Frank's reply settles what a thread asked of him. Frank is Product Innovation
 Lead at Pole Star Global (maritime data, vessel tracking and compliance products). Messages
 written by Frank have the author "me".
@@ -195,7 +206,13 @@ Settled:
 - He answered the question, gave the decision, approved or turned it down, or gave the outcome
   of the review.
 - He said it is done, or sent what was asked for.
-- He handed it on clearly to someone else, or declined it, so nothing is left for him.
+- He declined it, or handed it on clearly to someone else who now owns it, so nothing is left for
+  him to see through.
+
+Handed on: when the reply passes what is open to someone else but Frank still owns the outcome (he
+asked them to do it and needs it back, or must see it through once they have), it is not settled.
+Set handedOn true: the item waits on them until they come back. Its why says who has the next move
+("Ops are fixing Sam's access; you'll hear back from them"). Otherwise leave handedOn out.
 
 Not settled:
 - A holding reply: "will look later", "on it", "let me check", "by Friday", "thanks", or an
@@ -217,9 +234,10 @@ allSettled is true only when every ask is settled.
 Answer with JSON only, no prose, in exactly this shape: one decision per check, with itemId and
 itemRevision copied from the check, and one entry per ask:
 {"decisions":[{"itemId":"<id>","itemRevision":<n>,"asks":[{"index":0,"settled":true,"why":"<one sentence>"}],"allSettled":true}]}
+with "handedOn":true added to a decision when the reply hands it on.
 `;
 
-export const DEFAULT_FINISH_PROMPT = `<!-- prompt: finish v1 -->
+export const DEFAULT_FINISH_PROMPT = `<!-- prompt: finish v2 -->
 You check whether a conversation has run its course for Frank: whether what it asked of him was
 settled by the messages that came after, so it can leave his inbox. Frank is Product Innovation
 Lead at Pole Star Global (maritime data, vessel tracking and compliance products). Messages
@@ -239,7 +257,7 @@ Settled:
 - Frank answered, decided, approved, reviewed or did it, here or as reported here.
 - Someone else did it or answered it instead, and the person who asked accepted that.
 - The person who asked withdrew it, said it is no longer needed, or solved it themselves.
-- It was clearly handed to someone else, who took it on.
+- It was clearly handed to someone else, who took it on and now owns it.
 
 Not settled:
 - Nobody addressed it, or the latest messages are about something else.
@@ -247,6 +265,8 @@ Not settled:
 - A holding reply from anyone: "will look later", "on it", "thanks", or an emoji alone.
 - A question back that still waits on an answer.
 - Only part of it was handled: say what is left.
+- Someone took it on, but Frank still owns the outcome: he asked for it and needs it back, or must
+  see it through once they have.
 
 When unsure, answer not settled. A wrong answer here hides something Frank still owes; a missed
 one costs him one click.

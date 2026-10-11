@@ -99,9 +99,10 @@ export function ReplyNote({ item, className, wrap, finish = true }: { item: Item
   if (finish && item.looksFinished) return <FinishNote item={item} className={className} wrap={wrap} />;
   const c = item.replyCheck;
   if (!c || item.status !== 'open') return null;
+  const text = c.allSettled ? 'You replied · Mark done?' : c.handedOn ? `You handed it on${c.why ? `: ${c.why}` : ''}` : `You replied · still open${c.why ? `: ${c.why}` : ''}`;
   return (
-    <span data-reply-note={c.allSettled ? 'settled' : 'open'} className={cx('block w-full text-[13px] text-muted', !wrap && 'truncate', className)}>
-      {c.allSettled ? 'You replied · Mark done?' : `You replied · still open${c.why ? `: ${c.why}` : ''}`}
+    <span data-reply-note={c.allSettled ? 'settled' : c.handedOn ? 'handed' : 'open'} className={cx('block w-full text-[13px] text-muted', !wrap && 'truncate', className)}>
+      {text}
     </span>
   );
 }

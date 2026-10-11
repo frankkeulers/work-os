@@ -31,7 +31,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Decides attention, filing suggestions, the summary and the open asks for each topic.',
     usedBy: 'Triage and the eval',
     defaultText: DEFAULT_TRIAGE_PROMPT,
-    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550', 'd4b00d127a3dd9605964c0b44ac43c7967894f3f', '149c84e01c7eadef74a9eda6cfbf1994536706bc', '92c1953b699525b35e2b3e63ac1a4558852ea085', '74c0880ee869f2ab4326c4f48cffc45a2b46a514', '1778d2e9ea4326a39e614e4427150f69bccb23c3'], // triage v2, v3, v4, v5, v6, v7
+    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550', 'd4b00d127a3dd9605964c0b44ac43c7967894f3f', '149c84e01c7eadef74a9eda6cfbf1994536706bc', '92c1953b699525b35e2b3e63ac1a4558852ea085', '74c0880ee869f2ab4326c4f48cffc45a2b46a514', '1778d2e9ea4326a39e614e4427150f69bccb23c3', '5bc2915dca8210f1dc53de0709d9e87920cedfae'], // triage v2, v3, v4, v5, v6, v7, v8
   },
   {
     id: 'topics',
@@ -49,7 +49,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Decides whether your reply settles a thread’s open asks, so the item can close by itself.',
     usedBy: 'Closing items on your reply',
     defaultText: DEFAULT_SETTLE_PROMPT,
-    previousDefaults: [],
+    previousDefaults: ['24f26389a61817f859938a46b92a4ed56457f653'], // settle v1
   },
   {
     id: 'finish',
@@ -58,7 +58,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Decides whether later messages, by anyone, settled what a topic asked of you, so it can be suggested as Done.',
     usedBy: 'Looks finished',
     defaultText: DEFAULT_FINISH_PROMPT,
-    previousDefaults: [],
+    previousDefaults: ['a1ffd02ebeca78ff82f2a94b6b3f13495efc437b'], // finish v1
   },
   {
     id: 'draft-vault',

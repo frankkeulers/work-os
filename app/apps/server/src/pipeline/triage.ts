@@ -62,7 +62,7 @@ export const TriageAnswer = z.object({
 });
 export type TriageAnswer = z.infer<typeof TriageAnswer>;
 
-const RANK: Record<Attention, number> = { none: 0, today: 1, now: 2 };
+const RANK: Record<Attention, number> = { none: 0, follow: 1, today: 2, now: 3 };
 const atLeast = (a: Attention, min?: Attention): Attention => (min && RANK[min] > RANK[a] ? min : a);
 
 export interface TriageDeps {

@@ -353,6 +353,23 @@ export const SEED_THREADS: ThreadSeed[] = [
     },
   },
 
+  // ---------- Waiting on others (FR-8.1, amended) ----------
+  {
+    key: 'wo1',
+    channelId: 'C09MERDEV',
+    kind: 'thread',
+    title: '#meridia-dev',
+    messages: [
+      { by: FRANK, minsAgo: 3 * H + 10, text: 'Can someone sort out Meridia access for the new solutions engineer? They can’t see the vessel list, and they demo to the pilot customer on Thursday.' },
+      { by: 'U13OPS', minsAgo: 2 * H + 50, text: 'Sure, looking into it. Probably a missing entitlement, I’ll come back to you.' },
+    ],
+    decision: {
+      attention: 'follow',
+      summary: 'Ops is fixing Meridia access for the new solutions engineer before Thursday’s demo.',
+      reason: 'Ops has the next move; you need access sorted before Thursday’s demo.',
+    },
+  },
+
   // ---------- Everything else ----------
   ...(
     [

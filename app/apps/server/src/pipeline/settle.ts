@@ -32,7 +32,8 @@ import { estimateTokens, packBatches, threadTokens, type TriageMessage, type Tri
 // append carries `settle.checked`, a `topic.askDone` per settled ask of a topic with several, and
 // `item.done` when every ask is settled and closing is on. A crash in between leaves the item
 // waiting, and it is checked again. A failed check retries on the next poll, and after the third
-// failure the item stays as it is: nothing closes on a failure.
+// failure the item stays as it is: nothing closes on a failure. A reply that hands the item on
+// while Frank still owns the outcome moves it to Waiting on others (FR-8.1, amended).
 
 /** At most this many checks in one call (CK-2.2), and fewer if triage's own limit is lower. */
 export const SETTLE_MAX_PER_CALL = 20;
@@ -129,14 +130,15 @@ export function renderChecks(checks: SettleCheck[], now: Date): string {
 
 /**
  * The model's answer for one check, held to the asks it was given: an ask it left out counts as
- * not settled, so the item closes only when every ask it was sent is settled.
+ * not settled, so the item closes only when every ask it was sent is settled. handedOn counts only
+ * while something is still open.
  */
-export function judge(check: { asks: SettleAsk[] }, d: SettleDecision): { settled: SettleAsk[]; allSettled: boolean; why?: string } {
+export function judge(check: { asks: SettleAsk[] }, d: SettleDecision): { settled: SettleAsk[]; allSettled: boolean; handedOn: boolean; why?: string } {
   const verdict = new Map(d.asks.filter((a) => a.index < check.asks.length).map((a) => [a.index, a]));
   const settled = check.asks.filter((a) => verdict.get(a.index)?.settled);
   const open = check.asks.find((a) => !verdict.get(a.index)?.settled);
   const why = open && verdict.get(open.index)?.why;
-  return { settled, allSettled: !open, ...(why && { why }) };
+  return { settled, allSettled: !open, handedOn: !!open && !!d.handedOn, ...(why && { why }) };
 }
 
 /** Checks every reply waiting for one. Throws ClaudeError (for health) or the abort reason; batches that finished before stay. */
@@ -236,7 +238,7 @@ export async function runSettle(d: SettleDeps, signal: AbortSignal): Promise<Set
       };
       const saved = await d.items.update(it.source, it.id, (stored) => (stored && stored.item.revision === it.revision && current() ? { ...stored, settle: snapshot } : undefined));
       if (!saved) continue;
-      const mine: EventDraft[] = [{ type: 'settle.checked', itemId: it.id, data: { revision: it.revision, through, batchId, allSettled: v.allSettled, settled: v.settled.map((x) => askId(x.step)) } }];
+      const mine: EventDraft[] = [{ type: 'settle.checked', itemId: it.id, data: { revision: it.revision, through, batchId, allSettled: v.allSettled, settled: v.settled.map((x) => askId(x.step)), ...(v.handedOn && { handedOn: true as const }) } }];
       // A topic's asks tick off one by one; a single ask is the item itself.
       if (check.asks.length > 1 && !v.allSettled) for (const x of v.settled) mine.push({ type: 'topic.askDone', itemId: it.id, data: { askId: askId(x.step), by: 'reply' } });
       if (v.allSettled && close) mine.push({ type: 'item.done', itemId: it.id, data: { by: 'reply', source: it.source, messageId, check: batchId } });

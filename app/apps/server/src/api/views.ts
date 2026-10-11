@@ -624,7 +624,8 @@ export function usageView(d: ViewDeps): UsageView {
 export function criteria(last: EvalReport | undefined, b: BudgetState): Criterion[] {
   const pct = (v: number) => `${Math.round(v * 100)}%`;
   const c = last?.confusion;
-  const flagged = c ? c[0][0] + c[1][0] + c[2][0] + c[0][1] + c[1][1] + c[2][1] : 0;
+  // now and today predictions, whatever the label (the columns of the confusion matrix)
+  const flagged = c ? c.reduce((s, row) => s + row[0] + row[1], 0) : 0;
   const precision = c && flagged ? (c[0][0] + c[1][1]) / flagged : undefined;
   const recall = last && last.categories.now.support ? last.categories.now.recall : undefined;
   const pending = (id: string, name: string, target: string, statusLabel: string): Criterion => ({ id, name, value: '—', target, status: 'pending', statusLabel });

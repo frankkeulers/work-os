@@ -43,11 +43,18 @@ export function awaitsReply(s: ItemFlags): boolean {
   return s.status === 'open' && s.triageState === 'triaged' && (a === 'now' || a === 'today');
 }
 
-/** A settle check ran: it saw Frank's replies up to `through` (CK-2.3). */
-export function settleChecked(s: ItemFlags, at: string, d: EventData<'settle.checked'>) {
+/**
+ * A settle check ran: it saw Frank's replies up to `through` (CK-2.3). A reply that hands the item
+ * on while Frank still owns the outcome moves it to Waiting on others, as a decision on the
+ * revision the check saw, so an older correction no longer holds it in Needs you. Triage on the
+ * next message from others decides afresh.
+ */
+export function settleChecked<D extends LoggedDecision>(s: ItemFlags<D>, at: string, d: EventData<'settle.checked'>) {
   if (s.settlePending && d.through >= s.settlePending) s.settlePending = undefined;
   s.settleFailures = undefined;
-  s.replyCheck = { at, revision: d.revision, allSettled: d.allSettled, settled: d.settled.length };
+  const handedOn = !!d.handedOn && !d.allSettled && !!s.decision;
+  s.replyCheck = { at, revision: d.revision, allSettled: d.allSettled, settled: d.settled.length, ...(handedOn && { handedOn: true as const }) };
+  if (handedOn && s.decision) s.decision = { ...s.decision, attention: 'follow', itemRevision: Math.max(s.decision.itemRevision, d.revision) };
 }
 
 /** The check on whether others' messages settled a topic ran (CK-2.10). */

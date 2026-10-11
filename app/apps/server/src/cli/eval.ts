@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { SourceId, type EvalReport } from '@work-os/shared';
+import { ATTENTION_ORDER, SourceId, type EvalReport } from '@work-os/shared';
 import { ClaudeAdapter } from '../claude/adapter';
 import { loadPromptFile } from '../claude/promptFiles';
 import { UsageLog } from '../claude/usage';
@@ -33,8 +33,8 @@ function print(r: EvalReport, file: string) {
   console.log('              precision  recall  support');
   for (const [k, v] of Object.entries(r.categories)) console.log(`  ${k.padEnd(11)} ${pct(v.precision).padStart(9)} ${pct(v.recall).padStart(7)} ${String(v.support).padStart(8)}`);
   console.log('');
-  console.log('  labelled ↓ / predicted →   now  today  none');
-  ['now', 'today', 'none'].forEach((k, i) => console.log(`  ${k.padEnd(24)} ${r.confusion[i].map((n) => String(n).padStart(5)).join(' ')}`));
+  console.log('  labelled ↓ / predicted →   now  today follow  none');
+  ATTENTION_ORDER.forEach((k, i) => console.log(`  ${k.padEnd(24)} ${r.confusion[i].map((n) => String(n).padStart(5)).join(' ')}`));
   console.log('');
   for (const [source, s] of Object.entries(r.bySource ?? {})) console.log(`  ${source.padEnd(8)} ${s.labelCount} labels · now ${pct(s.categories.now.precision)} precision ${pct(s.categories.now.recall)} recall · today ${pct(s.categories.today.precision)} precision`);
   console.log(`Tokens ${r.tokens.toLocaleString('en-GB')} · cost-equivalent $${r.costEquivalent.toFixed(4)}`);

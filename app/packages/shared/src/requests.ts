@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Ms365Connector } from './schemas';
+import { Attention, Ms365Connector } from './schemas';
 
 // Request bodies for the API's commands. The server checks every body against these (FR-3.3);
 // the settings themselves are checked field by field, so the UI can show each problem in place.
@@ -27,7 +27,7 @@ export type SnoozeInput = z.infer<typeof SnoozeInput>;
 export const ItemIds = z.object({ ids: z.array(z.string().min(1)).min(1).max(1000) }).strict();
 
 /** POST /api/items/:id/correction (FR-6.2): the triage Frank says it should have been. */
-export const CorrectionBody = z.object({ attention: z.enum(['now', 'today', 'none']), confluence: z.boolean(), vault: z.boolean() }).strict();
+export const CorrectionBody = z.object({ attention: Attention, confluence: z.boolean(), vault: z.boolean() }).strict();
 
 /** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
 export const DraftRequest = z.object({ type: z.enum(['vault_note', 'confluence_entry']), quiet: z.boolean().optional() }).strict(); // quiet: drafted ahead in a batch (FR-11.6)

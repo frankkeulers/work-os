@@ -185,7 +185,7 @@ export function buildAttention(input: AttentionInput): AttentionView {
         detail: it.looksFinished.why ?? 'Others’ messages seem to settle what it asked of you.',
       });
     }
-    if (it.replyCheck && !it.replyCheck.allSettled) {
+    if (it.replyCheck && !it.replyCheck.allSettled && !it.replyCheck.handedOn) {
       entries.push({
         ...base,
         key: `reply_unsettled:${it.id}:${it.replyCheck.at}`,

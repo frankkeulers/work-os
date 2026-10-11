@@ -199,7 +199,7 @@ When a new revision's messages are all Frank's own (`fromMeOnly`), the projectio
 
 **CK-2.2 Settle check.** The item goes to a **settle check**: a Haiku call, separate from triage, that decides whether Frank's message settles the open asks.
 - **Input:** the thread as triage sees it (Frank as "me"), the item's open asks (`next.asks`, or `next` alone), and Frank's latest message marked as such.
-- **Output** (zod, `SettleDecision`): `{ itemId, itemRevision, asks: [{ index, settled: boolean, why: string }], allSettled: boolean }`.
+- **Output** (zod, `SettleDecision`): `{ itemId, itemRevision, asks: [{ index, settled: boolean, why: string }], allSettled: boolean, handedOn?: boolean }`. `handedOn` (prompt `settle v2`, PLAN FR-8.1 amended 11 Oct 2026): the reply hands what is open on to someone else while Frank still owns the outcome; the item moves to Waiting on others instead of staying in Needs you.
 - **No quiet window:** Frank's message ends his turn, so the check runs right after the poll that brought it in.
 - **Batched:** one call per poll, at most 20 items (§5.3 batching rules apply). It has its own purpose in the usage log, `settle`, and counts towards the daily budget.
 - **No tools, no MCP, no preset prompt** (CL-4). The prompt is `config/prompts/settle.md`, versioned like the others (FR-1.7).
@@ -238,7 +238,7 @@ When a new revision's messages are all Frank's own (`fromMeOnly`), the projectio
 
 **CK-2.10 Looks finished** (amendment). A topic can run its course without Frank writing anything: someone else does it, the ask is withdrawn, or the question is answered.
 - **Trigger.** An open item that was Now or Today is re-triaged after messages from others, and the model's own answer is None (before any rule floor, so a mention-me item the floor holds in Today still qualifies). Nothing is suggested for filing, and Settings › Triage rules › "When others settle it" is on for the source: Slack on, Outlook off by default.
-- **Check.** A finish check (Haiku, prompt `finish v1`, separate from settle) judges the asks open before re-triage against the messages since, by anyone. An ask the model leaves out counts as not settled. The answer goes in the item file and as `finish.checked`; a failure is `finish.failed` and shows nothing.
+- **Check.** A finish check (Haiku, prompt `finish v1`, now `v2`, which treats a hand-on that leaves Frank owning the outcome as not settled; separate from settle) judges the asks open before re-triage against the messages since, by anyone. An ask the model leaves out counts as not settled. The answer goes in the item file and as `finish.checked`; a failure is `finish.failed` and shows nothing.
 - **What Frank sees.** When every ask is settled, the row says **Looks finished · <why>** in place, where "You replied" would be; nothing moves or closes. The panel opens with a green **Looks finished** callout: the why, **Done** and **Not finished**. A new message from someone else, a correction or Done clears it.
 - **Labels.** Done on a suggested item writes a positive line to `labels/finish.jsonl` (origin `finish_accepted`); **Not finished** writes a negative one (`finish_rejected`) and corrects the item to Today. `npm run eval -- --purpose finish` scores the finish prompt against them, as settle is scored. Closing by itself (`auto`) waits for at least 30 labels and a false-close rate at or below the C2 target.
 
@@ -348,6 +348,7 @@ The layout matches artboards 1 and 2 of the design: `Main.dc.html` and `Panel.dc
 - *Considered and not chosen:* a new `week` attention level. It would change the labelled set and S1. Revisit if the view rule misplaces items often.
 
 **CK-3.11 Later holds, top to bottom:**
+0. **Waiting on others** (grey; PLAN FR-8.1, amended 11 Oct 2026), only when it holds something: summary, where and age, and "you handed it on" when Frank's reply did. `g l` lands on its first row.
 1. **To file** (teal): one-line summary, source and age, and the target chip. **File in a batch** sits in its header (Stage 4; hidden until then).
 2. **This week:** summary, where, need chip and due chip.
 3. **Snoozed:** one link row, "2 snoozed · next back 15:00", which opens its list in the zone.
@@ -421,7 +422,7 @@ Each row carries its people (Frank left out) and message count as well as the us
 - A meeting opens its Wispr Flow notes in the panel; failing that, its invite item, whatever its state; failing that, a read-only card (time, organiser, invitees, your answer, categories, Open in Outlook).
 - The calendar snapshot now starts at this week's Monday (or yesterday, on a Monday), so the days already gone this week show. Past meetings are never read. Weeks outside the snapshot say so.
 
-**CK-5.8 Filter by state.** A row of chips under the top bar shows or hides each state, with its count: Needs you (Now, Today and failed triage), This week, To file, Low priority, Waiting, Snoozed and Done. On the calendar the states are Going, Not answered, Declined and Cancelled. Done is hidden to begin with, as finished work is rarely what Frank comes looking for; every other state shows, and on the calendar all four do. One click on **Done** brings done items back. Once Frank changes the filter, his choice is kept per source in this browser. The header says "15 of 33 items" while anything is hidden, and **Show all** brings everything back. Hiding the open item's state leaves its panel open; `j`/`k` walk only the rows shown.
+**CK-5.8 Filter by state.** A row of chips under the top bar shows or hides each state, with its count: Needs you (Now, Today and failed triage), This week, Waiting on others, To file, Low priority, Waiting, Snoozed and Done. On the calendar the states are Going, Not answered, Declined and Cancelled. Done is hidden to begin with, as finished work is rarely what Frank comes looking for; every other state shows, and on the calendar all four do. One click on **Done** brings done items back. Once Frank changes the filter, his choice is kept per source in this browser. The header says "15 of 33 items" while anything is hidden, and **Show all** brings everything back. Hiding the open item's state leaves its panel open; `j`/`k` walk only the rows shown.
 
 **CK-5.7 The sidebar.** A source in the sidebar opens its history at `/source/:id`. Its dot and label still show health; health itself is on Usage & health and one click away from the history's header ("Health ›").
 

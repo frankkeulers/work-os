@@ -33,7 +33,7 @@ async function afternoon(page: Page) {
 }
 
 /** Frank answers a Slack item in Needs you; the row it answered, found by what the check did to it. */
-async function reply(page: Page, outcome: 'Settles it' | 'Holds it (“will look later”)' | 'Check fails', mark: string) {
+async function reply(page: Page, outcome: 'Settles it' | 'Holds it (“will look later”)' | 'Hands it on (still yours)' | 'Check fails', mark: string) {
   await control(page, outcome);
   const hit = zone(page, 'Needs you').locator(mark).first();
   await expect(hit).toBeVisible();
@@ -155,4 +155,23 @@ test('J52, dark: "You replied" in the dark theme', async ({ page }) => {
   await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
   await page.addStyleTag({ content: HIDE });
   await page.screenshot({ path: join(APP, 'screenshots/cockpit-replied-dark.png') });
+});
+
+test('J76: you hand it on — it moves to Waiting on others in Later, saying who has it (FR-8.1, amended)', async ({ page }) => {
+  await afternoon(page);
+  const follow = zone(page, 'Later').getByRole('region', { name: 'Waiting on others', exact: true });
+  await expect(follow.locator('[data-row]')).toHaveCount(1); // the seed's Meridia access request
+  const before = await zone(page, 'Needs you').locator('[data-row]').count();
+  await control(page, 'Hands it on (still yours)');
+  await expect(follow.locator('[data-row]')).toHaveCount(2);
+  await expect(zone(page, 'Needs you').locator('[data-row]')).toHaveCount(before - 1);
+  const row = follow.locator('[data-row]').filter({ hasText: 'you handed it on' });
+  await expect(row).toBeVisible();
+  // No "Your reply left asks open" nudge: it waits on someone else now.
+  await row.click();
+  const status = panel(page).getByRole('region', { name: 'Status' });
+  await expect(status).toContainText('Waiting on others');
+  await expect(status).toContainText('You handed it on: Sagar has it now; you need it back by Friday.');
+  await page.addStyleTag({ content: HIDE });
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-follow-light.png') });
 });

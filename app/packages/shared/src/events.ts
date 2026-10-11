@@ -77,7 +77,8 @@ export const EventPayloads = {
   'triage.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
   // Cockpit (CK-2.2): a settle check ran on Frank's reply. `through` is the latest activity it saw;
   // `settled` the asks it found settled, by askId. The reasons stay with the item's content.
-  'settle.checked': z.object({ revision, through: isoDate, batchId: z.string().min(1), allSettled: z.boolean(), settled: z.array(z.string().min(1)) }),
+  // handedOn (FR-8.1, amended): he passed it on but still owns the outcome, so it waits on others.
+  'settle.checked': z.object({ revision, through: isoDate, batchId: z.string().min(1), allSettled: z.boolean(), settled: z.array(z.string().min(1)), handedOn: z.literal(true).optional() }),
   'settle.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
   // Cockpit (CK-2.10): the check after finishCheck ran. allSettled: the topic looks finished, and is
   // suggested as Done. A failed check suggests nothing. The reasons stay with the item's content.

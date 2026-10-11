@@ -4,7 +4,7 @@ import type { ActionType, Message } from '@work-os/shared';
 import { api, isApiError, type ItemView } from '../api';
 import { ActionPanel, defaultType, parseType } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
-import { CategoryTags, CorrectForm, OnCalendar, SnoozeMenu, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../components/item';
+import { CategoryTags, CorrectForm, OnCalendar, SnoozeMenu, attentionName, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../components/item';
 import { Icon, type IconName } from '../components/icons';
 import { useEarlierToggle } from '../components/Earlier';
 import { MessageText, Recipients } from '../components/SlackText';
@@ -156,7 +156,7 @@ function TriageBand({ view }: { view: ItemView }) {
     );
   }
 
-  const laneKey = t.attention === 'now' ? 'now' : t.attention === 'today' ? 'today' : t.confluence || t.vault ? 'file' : 'else';
+  const laneKey = t.attention === 'now' ? 'now' : t.attention === 'today' ? 'today' : t.attention === 'follow' ? 'follow' : t.confluence || t.vault ? 'file' : 'else';
   const m = LANE_META[laneKey];
   const reason = t.by === 'user' ? 'You set this triage. It stands until the thread gets new replies.' : (decision?.reason ?? s.reason);
   let meta: string;
@@ -193,7 +193,7 @@ function TriageBand({ view }: { view: ItemView }) {
       {s.correctedFrom && (
         <div className="text-xs text-ink-2">
           <Icon name="info" size={12} className="mr-1 inline align-[-1px]" />
-          Re-triaged after new replies. You had set {s.correctedFrom === 'none' ? 'None' : s.correctedFrom === 'now' ? 'Now' : 'Today'}.
+          Re-triaged after new replies. You had set {attentionName(s.correctedFrom)}.
         </div>
       )}
       {correcting && (

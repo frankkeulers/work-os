@@ -4,13 +4,14 @@ import type { SourceRow, WeekEvent } from '@work-os/shared';
 // every other state shows until he hides it.
 // Each row or meeting is in exactly one state, so the counts add up to the whole.
 
-export type RowState = 'needs' | 'week' | 'file' | 'else' | 'waiting' | 'snoozed' | 'done';
+export type RowState = 'needs' | 'week' | 'follow' | 'file' | 'else' | 'waiting' | 'snoozed' | 'done';
 export type MeetingState = 'going' | 'unanswered' | 'declined' | 'cancelled';
 export type FilterState = RowState | MeetingState;
 
 export const ROW_STATES: { id: RowState; label: string; dot: string }[] = [
   { id: 'needs', label: 'Needs you', dot: 'var(--orange)' },
   { id: 'week', label: 'This week', dot: 'var(--accent-light)' },
+  { id: 'follow', label: 'Waiting on others', dot: 'var(--gray-solid)' },
   { id: 'file', label: 'To file', dot: 'var(--teal-solid)' },
   { id: 'else', label: 'Low priority', dot: 'var(--gray-mid)' },
   { id: 'waiting', label: 'Waiting', dot: 'var(--gray-mid)' },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Message, Ms365Connector, Rule, Rules, Settings, SettingsFile, isValidRegex, pollIntervalMinutes, sourceSchedule, upgradeSettings } from './schemas';
+import { EvalReport, Message, Ms365Connector, Rule, Rules, Settings, SettingsFile, isValidRegex, pollIntervalMinutes, sourceSchedule, upgradeSettings } from './schemas';
 
 describe('rule validation (FR-4.1)', () => {
   it('accepts slash-delimited and bare regular expressions', () => {
@@ -111,5 +111,29 @@ describe('Outlook (amendments)', () => {
     expect(Settings.shape.calendar.parse(undefined)).toBeUndefined();
     expect(Settings.shape.calendar.safeParse({ categoryColors: { Customer: 'pink' } }).success).toBe(false);
     expect(Settings.shape.calendar.safeParse({ categoryColors: { '': 'red' } }).success).toBe(false);
+  });
+});
+
+describe('eval reports (FR-6.3, Waiting on others)', () => {
+  const pr = (support: number) => ({ precision: 1, recall: 1, support });
+  const base = { id: 'eval-1', at: '2026-10-01T09:00:00.000Z', labelCount: 6, promptVersion: 'triage v8#abc', model: 'haiku-5.5', tokens: 10, costEquivalent: 0.01 };
+
+  it('reads a report saved before follow with an empty follow row and column', () => {
+    const old = { ...base, categories: { now: pr(1), today: pr(2), none: pr(3), confluence: pr(0), vault: pr(0) }, confusion: [[1, 0, 0], [0, 2, 0], [0, 1, 2]] };
+    const r = EvalReport.parse({ ...old, bySource: { slack: { labelCount: 6, categories: old.categories, confusion: old.confusion } } });
+    expect(r.confusion).toEqual([
+      [1, 0, 0, 0],
+      [0, 2, 0, 0],
+      [0, 0, 0, 0],
+      [0, 1, 0, 2],
+    ]);
+    expect(r.categories.follow).toEqual({ precision: 0, recall: 0, support: 0 });
+    expect(r.bySource?.slack?.confusion[3]).toEqual([0, 1, 0, 2]);
+  });
+
+  it('keeps a 4×4 report as it is, and refuses other shapes', () => {
+    const c = [[1, 0, 0, 0], [0, 1, 1, 0], [0, 0, 2, 0], [0, 0, 0, 1]];
+    expect(EvalReport.parse({ ...base, categories: { now: pr(1), today: pr(2), follow: pr(2), none: pr(1), confluence: pr(0), vault: pr(0) }, confusion: c }).confusion).toEqual(c);
+    expect(EvalReport.safeParse({ ...base, categories: { now: pr(1), today: pr(2), none: pr(1), confluence: pr(0), vault: pr(0) }, confusion: [[1, 0], [0, 1]] }).success).toBe(false);
   });
 });

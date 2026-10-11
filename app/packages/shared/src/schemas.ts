@@ -66,8 +66,12 @@ export const Item = z.object({
 });
 export type Item = z.infer<typeof Item>;
 
-export const Attention = z.enum(['now', 'today', 'none']);
+// follow (amendment, FR-8.1): Frank owns the outcome, someone else has the next move.
+export const Attention = z.enum(['now', 'today', 'follow', 'none']);
 export type Attention = z.infer<typeof Attention>;
+
+/** Attention levels in the order the eval's confusion matrix lists them. */
+export const ATTENTION_ORDER: readonly Attention[] = ['now', 'today', 'follow', 'none'];
 
 const FilingSuggestion = z.object({
   suggested: z.boolean(),
@@ -552,6 +556,18 @@ export const UsageRecord = z.object({
 export type UsageRecord = z.infer<typeof UsageRecord>;
 
 const PR = z.object({ precision: z.number().min(0).max(1), recall: z.number().min(0).max(1), support: z.number().int() });
+const EMPTY_PR = { precision: 0, recall: 0, support: 0 };
+const Count = z.number().int().nonnegative();
+
+/**
+ * rows = labelled, columns = predicted, in ATTENTION_ORDER. A report saved before Waiting on others
+ * (3×3: now, today, none) is read with an empty follow row and column, so scores compare across it.
+ */
+const Confusion = z
+  .union([z.array(z.array(Count).length(4)).length(4), z.array(z.array(Count).length(3)).length(3)])
+  .transform((c) => (c.length === 4 ? c : [...c.slice(0, 2), [0, 0, 0], c[2]].map((row) => [row[0], row[1], 0, row[2]])));
+
+const EvalCategories = z.object({ now: PR, today: PR, follow: PR.default(EMPTY_PR), none: PR, confluence: PR, vault: PR });
 
 export const EvalReport = z.object({
   id: z.string().min(1),
@@ -559,25 +575,20 @@ export const EvalReport = z.object({
   labelCount: z.number().int().positive(),
   promptVersion: z.string(),
   model: ModelId,
-  categories: z.object({
-    now: PR,
-    today: PR,
-    none: PR,
-    confluence: PR,
-    vault: PR,
-  }),
-  // rows = labelled (now, today, none), columns = predicted (now, today, none)
-  confusion: z.array(z.array(z.number().int().nonnegative()).length(3)).length(3),
+  categories: EvalCategories,
+  confusion: Confusion,
   tokens: z.number().int().nonnegative(),
   costEquivalent: z.number().nonnegative(),
   /** Labelled threads the model gave no usable answer for; not in the scores. */
   failed: z.number().int().nonnegative().optional(),
   /** Amendment (R2.2): the same scores for each source's labels, when there are labels from several. */
-  bySource: z.partialRecord(SourceId, z.object({ labelCount: z.number().int().positive(), categories: z.object({ now: PR, today: PR, none: PR, confluence: PR, vault: PR }), confusion: z.array(z.array(z.number().int().nonnegative()).length(3)).length(3) })).optional(),
+  bySource: z.partialRecord(SourceId, z.object({ labelCount: z.number().int().positive(), categories: EvalCategories, confusion: Confusion })).optional(),
   /** Amendment (R2.2): the eval ran on this source's labels only. */
   source: SourceId.optional(),
 });
 export type EvalReport = z.infer<typeof EvalReport>;
+/** A report as saved, before reading fills in what older ones lack. */
+export type EvalReportInput = z.input<typeof EvalReport>;
 
 // ---------------------------------------------------------------- settle check (cockpit CK-2.2)
 
@@ -590,6 +601,8 @@ export const SettleDecision = z.object({
   itemRevision: z.number().int().positive(),
   asks: z.array(z.object({ index: z.number().int().nonnegative(), settled: z.boolean(), why: z.string().min(1).max(300) })).min(1),
   allSettled: z.boolean(),
+  // He handed what is open on to someone else but still owns the outcome (FR-8.1, amended).
+  handedOn: z.boolean().optional(),
 });
 export type SettleDecision = z.infer<typeof SettleDecision>;
 

@@ -88,7 +88,7 @@ export function newRec(seed: ThreadSeed, clock: string, uniq = ''): ItemRec {
 /** Where a mock record keeps its activity time, for the shared topic rules. */
 export const recActivity = (r: ItemRec) => r.item;
 
-const RANK: Record<Attention, number> = { none: 0, today: 1, now: 2 };
+const RANK: Record<Attention, number> = { none: 0, follow: 1, today: 2, now: 3 };
 export const atLeast = (a: Attention, min?: Attention): Attention => (min && RANK[min] > RANK[a] ? min : a);
 
 export function buildDecision(
@@ -133,7 +133,7 @@ export function buildDecision(
     ruleId: by.ruleId,
     ...(attention !== script.attention && { modelAttention: script.attention }),
     model: by.model,
-    promptVersion: 'triage v3',
+    promptVersion: 'triage v9',
     batchId: by.batchId,
   };
 }

@@ -75,7 +75,7 @@ export interface ItemSummary {
   doneSource?: SourceId; // doneBy reply: where the reply was
   doneReason?: string; // doneBy source: "You accepted it in Outlook"
   settling?: boolean; // Frank replied; a settle check will look at it
-  replyCheck?: { at: string; allSettled: boolean; settled: number; why?: string }; // the last check on his reply, while it stands
+  replyCheck?: { at: string; allSettled: boolean; settled: number; why?: string; handedOn?: true }; // the last check on his reply, while it stands
   looksFinished?: { at: string; why?: string }; // cockpit CK-2.10: others' messages settled what it asked of Frank; suggested as Done
 }
 

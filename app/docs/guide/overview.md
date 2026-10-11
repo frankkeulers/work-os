@@ -8,7 +8,7 @@ updated: 2026-10-11
 
 Work OS runs on your Mac and reads the Slack conversations you are in, and, once you connect them,
 your [Outlook mail](outlook.md) and the meeting notes from [Wispr Flow](wispr-flow.md). For each one it decides
-whether it needs you now, today or not at all, and whether it holds something worth keeping in
+whether it needs you now, today or not at all (or is waiting on someone else for you), and whether it holds something worth keeping in
 Confluence or your Obsidian vault. You get one short list to work through instead of a dozen
 channels, and filing becomes a review-and-approve step rather than a writing job.
 

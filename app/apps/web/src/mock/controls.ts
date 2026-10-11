@@ -7,7 +7,7 @@ import type { DraftOutcome, MockFlags } from './types';
 export type PollOutcome = 'nothing' | 'vip_dm' | 'batch12' | 'reply_done' | 'reply_snoozed' | 'reply_corrected' | 'reply_drafted';
 
 /** Scenarios › Frank replies (cockpit CK-2.2): what the settle check makes of his reply. */
-export type SettleOutcome = 'settled' | 'open' | 'failed';
+export type SettleOutcome = 'settled' | 'open' | 'handed' | 'failed';
 
 export type StateFlag =
   | 'triage_budget'
