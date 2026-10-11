@@ -154,8 +154,8 @@ run insights from it? This entry records what a spike has to answer. It is not a
 ## 4. Review findings (Medium and Low)
 
 These come from the 11 Oct 2026 review. The Critical and High findings were fixed on the
-`review-fixes` branch. The findings below were checked against the code at the time, so line
-numbers may have moved since.
+`review-fixes` branch; what those fixes left open is listed as RV-S21–S22 and RV-W14–W16. The
+findings below were checked against the code at the time, so line numbers may have moved since.
 
 ### Correctness and robustness: server and pipeline (`RV-S`)
 
@@ -181,6 +181,8 @@ numbers may have moved since.
 | RV-S18 | The cockpit baseline counts decisions the reducer rejects as stale. | `cockpit/baseline.ts` | Apply the same staleness check |
 | RV-S19 | During shutdown, an SSE reconnect attaches to a closed hub and holds `close()` until the deadline. A failing `source.failed` append in a poll is swallowed. | `api/sse.ts`, `runtime/scheduler.ts` | Refuse when closed; set `onError` |
 | RV-S20 | A crash leaves vault temp files behind. An append via rename replaces a symlinked note and resets its mode. | `actions/vaultExecutor.ts`, `store/atomic.ts` | Clean up on startup; write through the link and keep the mode |
+| RV-S21 | An approved write's failure count (MAX_ATTEMPTS) is kept in memory, so a restart starts it again at zero. Failures before the write starts leave nothing in the log to count from. | `actions/service.ts` | Count failures in an event, or in the draft file |
+| RV-S22 | An Outlook email or Wispr Flow meeting that fails to read three times becomes a visible stub item ("couldn't read this…"), not a `source.skipped` notice the bell lists. The failure counts are in memory only. | `sources/outlook/adapter.ts`, `sources/wispr/adapter.ts` | Decide whether stubs are enough; persist the counts in the source state |
 
 ### Security hardening (`RV-H`)
 
@@ -230,6 +232,9 @@ The 11 Oct checks found no problems in these areas:
 | RV-W11 | Mock drift: the mock's inbox doesn't drop old done items or excluded channels; the mock discards in any state; `replied` and `getEarlier` are stubs. On the server, `fileVaultOff` is hard-coded. | `web/src/mock/server.ts`, `api/views.ts` | Align the mock; read the real FileVault check |
 | RV-W12 | Placeholder values shown as data: `outbox`, `rateLimitedToday` and `ruleHits` are always 0. | `api/views.ts` | Compute them or hide them |
 | RV-W13 | Some screenshots are stale (`inbox-light.png`, `panel-vault-light.png`). | `app/screenshots/` | Regenerate them |
+| RV-W14 | While reconnecting, only the action panel's buttons wait (`useOnline`); inbox Done, snooze and the rest fail with a toast. The reconnecting bar is fixed over the top 35 px, covering Back to inbox and the bell while it shows. | `hooks/useConnection.ts`, `pages/SystemScreens.tsx` | Gate the other mutations on `useOnline`; give the bar its own row |
+| RV-W15 | Copy that no longer matches: the Confluence guide says a draft the people check blocks can be fixed by editing the name out, but a blocked draft fails and only Re-draft is offered. Settings › Models says the API key is refused "while the subscription backend is active"; the refusal applies whatever the backend. | `docs/guide/confluence.md`, `settings/sections.tsx` | Fix the wording, or let a blocked draft be edited |
+| RV-W16 | The mock doesn't run the people check again when an edited Confluence entry is approved, so the e2e tests can't cover the refusal. | `web/src/mock/server.ts` | Refuse approval when the edited text matches the mock's people pattern |
 
 ### Maintainability (`RV-M`)
 
