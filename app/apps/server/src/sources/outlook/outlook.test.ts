@@ -157,7 +157,12 @@ describe('the Outlook adapter', () => {
   let recent: RecentEmails;
   const account = { name: FRANK.name, address: FRANK.address, upn: FRANK.address };
   const adapter = (o: { account?: typeof account | undefined } = {}) => new OutlookAdapter({ api: box, account: () => ('account' in o ? o.account : account), recent });
-  const poll = (a: OutlookAdapter, cursor?: string, now = NOW) => a.fetchSince(cursor, { signal: new AbortController().signal, now, reason: 'scheduled' });
+  /** A poll as the pipeline runs it: fetch, then (once saved) commit. `saved: false` is a poll cut off before saving. */
+  const poll = async (a: OutlookAdapter, cursor?: string, now = NOW, saved = true) => {
+    const r = await a.fetchSince(cursor, { signal: new AbortController().signal, now, reason: 'scheduled' });
+    if (saved) await r.commit?.();
+    return r;
+  };
   const inbox = (conversation: string, at: string, over: Partial<Parameters<typeof fakeEmail>[0]> = {}) => {
     const e = fakeEmail({ conversation, subject: `Subject ${conversation}`, from: DANA, to: [FRANK], at, html: html(`Body ${conversation}`), ...over });
     box.deliver('Inbox', e);
@@ -194,6 +199,15 @@ describe('the Outlook adapter', () => {
     const third = await poll(adapter(), again.nextCursor);
     expect(third.items.map((i) => i.id)).toEqual(['outlook:C2']);
     expect(box.reads.at(-1)).toEqual([FakeMs365.uri(box.folders.Inbox[1].id)]);
+  });
+
+  it('reads again what a poll read but never saved (the Mac slept, or saving failed)', async () => {
+    inbox('C1', ago(5 * HOUR));
+    const lost = await poll(adapter(), undefined, NOW, false);
+    expect(lost.items.map((i) => i.id)).toEqual(['outlook:C1']);
+    const again = await poll(adapter()); // the cursor was never saved either
+    expect(again.items.map((i) => i.id)).toEqual(['outlook:C1']);
+    expect(box.reads).toHaveLength(2);
   });
 
   it("stops a folder's mark before an email that wasn't read, and reads it next time", async () => {
@@ -255,6 +269,7 @@ describe('the Outlook adapter', () => {
     const make = outlookFactory(box);
     const settings = { ...defaultSettings('/x'), connectors: { ms365: { id: 'mcpsrv_x', account } } };
     const first = await make(settings).fetchSince(undefined, { signal: new AbortController().signal, now: NOW, reason: 'scheduled' });
+    await first.commit?.();
     await make(settings).fetchSince(first.nextCursor, { signal: new AbortController().signal, now: NOW, reason: 'scheduled' });
     expect(box.reads).toHaveLength(1);
   });

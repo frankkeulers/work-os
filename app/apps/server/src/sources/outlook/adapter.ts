@@ -13,7 +13,8 @@ import { buildItems, isNoise, meOf, type MeInfo } from './normalise';
 //   1. searches Inbox and Sent Items for emails received since each folder's high-water mark (less
 //      a 10-minute overlap for late indexing), oldest first, both folders in one relay run, page by
 //      page up to MAX_PAGES each;
-//   2. skips what it has already read (this process) and Outlook's receipts and auto-replies;
+//   2. skips what it has already read and saved (this process) and Outlook's receipts and
+//      auto-replies;
 //   3. reads the rest whole, oldest first, up to MAX_READS per poll, ten per relay run;
 //   4. groups them into one item per conversation;
 //   5. moves each folder's mark to the last email of its unbroken run of handled ones (read, skipped
@@ -39,7 +40,7 @@ export function parseCursor(cursor: string | undefined, now: Date): Marks {
 
 export const formatCursor = (m: Marks) => `${m.Inbox}|${m['Sent Items']}`;
 
-/** Emails read lately, so the overlap and a re-listed folder don't read them again. Kept per process. */
+/** Emails read and saved lately, so the overlap and a re-listed folder don't read them again. Kept per process. */
 export class RecentEmails {
   private keys = new Set<string>();
   has(key: string) {
@@ -115,6 +116,7 @@ export class OutlookAdapter implements SourceAdapter {
       .slice(0, MAX_READS);
 
     const emails: { email: EmailDetail; folder: Folder }[] = [];
+    const read: string[] = []; // remembered only once saved (commit): a poll cut off reads them again
     const outcomes = toRead.length ? await this.o.api.read(toRead.map((e) => e.row.uri), ctx.signal) : [];
     toRead.forEach((e, i) => {
       const r = outcomes[i];
@@ -122,7 +124,7 @@ export class OutlookAdapter implements SourceAdapter {
       else if (r && r.gone) this.o.logger?.info({ folder: e.folder }, 'Outlook: an email was gone by the time it was read');
       else return; // not read: listed again next poll
       e.handled = true;
-      this.o.recent.add(e.key);
+      read.push(e.key);
     });
     if (toRead.some((e) => !e.handled)) this.o.logger?.warn({ unread: toRead.filter((e) => !e.handled).length }, 'Outlook: some emails were not read; the next poll tries again');
 
@@ -136,7 +138,7 @@ export class OutlookAdapter implements SourceAdapter {
     const snap = this.o.calendar?.();
     const mail = snap ? emails.filter((x) => !isMeetingMail(x.email, snap)) : emails;
     if (mail.length < emails.length) this.o.logger?.info({ meetingMail: emails.length - mail.length }, 'Outlook: meeting mail left to the calendar');
-    return { items: buildItems(mail, me), nextCursor: formatCursor(next) };
+    return { items: buildItems(mail, me), nextCursor: formatCursor(next), commit: async () => read.forEach((k) => this.o.recent.add(k)) };
   }
 
   /** Each folder's emails since its mark, oldest first; both folders' pages share a relay run. */
