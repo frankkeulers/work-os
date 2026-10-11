@@ -12,3 +12,4 @@ app/logs/
 .env.*
 *.log
 WorkOS-data*/
+app/screenshots/
