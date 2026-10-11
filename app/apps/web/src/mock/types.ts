@@ -162,4 +162,6 @@ export interface MockState {
   nextDraftOutcome: DraftOutcome;
   evalRunning: boolean;
   seq: number;
+  /** The bell's dismissed entries (FR-11.5): key → when. */
+  dismissed?: Record<string, string>;
 }

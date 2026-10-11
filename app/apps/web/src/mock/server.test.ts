@@ -228,3 +228,35 @@ describe('settings', () => {
     expect(after.sources).toMatchObject([{ state: 'current' }]);
   });
 });
+
+describe('the bell (FR-11.3–11.5)', () => {
+  const attention = () => settle(server.getAttention());
+
+  it('shows a draft in progress, then ready, and a failure until dismissed', async () => {
+    const notices: string[] = [];
+    server.subscribe((n) => notices.push(n.topic));
+    const a = await settle(server.requestDraft(id('f4'), 'vault_note'));
+    expect((await attention()).working).toEqual([expect.objectContaining({ actionId: a.id, type: 'vault_note', progress: expect.objectContaining({ stage: 0 }) })]);
+    await run(8000);
+    const ready = await attention();
+    expect(ready.working).toEqual([]);
+    expect(ready.entries.find((e) => e.actionId === a.id)).toMatchObject({ kind: 'draft_ready', cta: 'Review' });
+
+    server.setNextDraftOutcome('people_check');
+    const b = await settle(server.requestDraft(id('t2'), 'confluence_entry'));
+    await run(8000);
+    expect(notices).toContain('draft_failed');
+    const failed = (await attention()).entries.find((e) => e.actionId === b.id)!;
+    expect(failed).toMatchObject({ kind: 'draft_failed', detail: expect.stringMatching(/identifies a person/), dismissible: true });
+    await settle(server.dismissAttention(failed.key));
+    expect((await attention()).entries.find((e) => e.actionId === b.id)).toBeUndefined();
+  });
+
+  it('lists the guidance whose sources changed, until it is marked reviewed', async () => {
+    const entry = (await attention()).entries.find((e) => e.kind === 'guidance_changed');
+    expect(entry).toMatchObject({ subject: expect.any(String), to: '/settings/prompts#confluence-routing' });
+    const routing = (await settle(server.getPrompts())).find((p) => p.id === 'confluence-routing')!;
+    await settle(server.markPromptReviewed('confluence-routing', routing.version));
+    expect((await attention()).entries.find((e) => e.kind === 'guidance_changed')).toBeUndefined();
+  });
+});

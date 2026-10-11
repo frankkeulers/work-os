@@ -168,6 +168,8 @@ export const Action = z.object({
   failureReason: FailureReason.optional(),
   supersedes: z.string().optional(), // previous action, when re-drafted after a conflict
   markDoneWhenFiled: z.boolean().optional(), // approved in a batch: the item is done once all its filings are written (cockpit CK-4.4)
+  quiet: z.boolean().optional(), // drafted ahead while filing in a batch: no macOS notification when it's ready (FR-11.6)
+  failedWhile: z.enum(['drafting', 'writing']).optional(), // what it was doing when it failed: the bell says "draft failed" or "couldn't file" (FR-11.4)
   createdAt: isoDate,
   updatedAt: isoDate,
 });

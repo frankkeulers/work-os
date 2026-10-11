@@ -788,7 +788,7 @@ export function InboxPage() {
     (item: ItemSummary, type: ActionType) => {
       if (needsDraft(item, type, budgetHit)) {
         quietDraft(item.id);
-        void api.requestDraft(item.id, type).catch(errorToast);
+        void api.requestDraft(item.id, type, { quiet: true }).catch(errorToast);
       }
       clearNew(item.id);
       setPanelOpen(true);
@@ -812,7 +812,7 @@ export function InboxPage() {
       const next = ahead && filingFor(ahead);
       if (ahead && next && needsDraft(ahead, next, budgetHit)) {
         quietDraft(ahead.id);
-        void api.requestDraft(ahead.id, next).catch(errorToast);
+        void api.requestDraft(ahead.id, next, { quiet: true }).catch(errorToast);
       }
     },
     [all, fileOn, budgetHit, setPanelOpen, setSearch, setBatch],

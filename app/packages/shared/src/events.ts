@@ -83,7 +83,8 @@ export const EventPayloads = {
   // suggested as Done. A failed check suggests nothing. The reasons stay with the item's content.
   'finish.checked': z.object({ revision, batchId: z.string().min(1), allSettled: z.boolean() }),
   'finish.failed': z.object({ revision, reason: z.string().min(1) }),
-  'action.requested': z.object({ type: ActionType, revision, supersedes: z.string().optional() }),
+  // quiet: drafted ahead while filing in a batch, so no macOS notification when it's ready (FR-11.6).
+  'action.requested': z.object({ type: ActionType, revision, supersedes: z.string().optional(), quiet: z.literal(true).optional() }),
   'action.drafted': z.object({
     type: ActionType,
     revision,
@@ -122,6 +123,8 @@ export const EventPayloads = {
   'system.stopped': z.object({ reason: z.string().min(1) }),
   'system.woke': z.object({ sleptSeconds: z.number().nonnegative() }),
   'health.changed': z.object({ dep: DepId, state: DepState, reason: z.string().optional() }),
+  // Frank dismissed an entry in the bell (FR-11.5). The key names the occurrence, so a new one shows again.
+  'attention.dismissed': z.object({ key: z.string().min(1).max(300) }),
 } as const;
 
 export type EventType = keyof typeof EventPayloads;

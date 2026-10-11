@@ -1,4 +1,4 @@
-import { inTimeRange, needsNotification, type EventDraft, type Notice, type Settings, type WorkEvent } from '@work-os/shared';
+import { inTimeRange, needsNotification, type ActionType, type EventDraft, type Notice, type Settings, type WorkEvent } from '@work-os/shared';
 import type { Logger } from 'pino';
 import type { ItemFiles } from '../store/items';
 import type { Store } from '../store/store';
@@ -15,6 +15,17 @@ import type { Notifier } from './macos';
 export const HOLD_MS = 2 * 60_000;
 export const SUMMARY_MIN = 3;
 
+const DRAFT_LABEL: Record<ActionType, string> = { vault_note: 'Vault note', confluence_entry: 'Confluence entry' };
+
+/** A draft Frank asked for is ready, or failed (FR-11.6). */
+export interface DraftNotification {
+  itemId: string;
+  type: ActionType;
+  title: string;
+  outcome: 'ready' | 'failed';
+  message?: string;
+}
+
 export interface NotificationDeps {
   store: Store;
   items: ItemFiles;
@@ -30,6 +41,7 @@ export interface NotificationDeps {
 export class Notifications {
   private pending = new Map<string, number>(); // item id → when it became Now
   private flushing?: Promise<void>;
+  private sending = new Set<Promise<void>>();
   private unsubscribe: () => void;
 
   constructor(private readonly d: NotificationDeps) {
@@ -56,9 +68,31 @@ export class Notifications {
     return this.flush(false, (at) => at <= cutoff);
   }
 
+  /**
+   * A draft is ready or failed (FR-11.6): Frank asked for it and may have moved on. Each action is
+   * drafted once, so this can't repeat; nothing is recorded. Quiet hours and the off switch hold it
+   * back, and the bell lists it either way. A click opens the item.
+   */
+  draft(n: DraftNotification): Promise<void> {
+    const s = this.d.settings().notifications;
+    if (!s.enabled || inTimeRange(this.d.now(), s.quietHours)) return Promise.resolve();
+    const base = this.d.baseUrl();
+    const p = this.d.notifier
+      .notify({
+        title: `${DRAFT_LABEL[n.type]} draft ${n.outcome === 'ready' ? 'ready' : 'failed'}`,
+        message: n.outcome === 'ready' ? n.title || 'Ready to review.' : `${n.title}${n.message ? `: ${n.message}` : ''}`,
+        group: `work-os-draft-${n.itemId}`,
+        ...(base && { url: `${base}/item/${encodeURIComponent(n.itemId)}` }),
+      })
+      .catch((err) => this.d.logger?.error({ err }, 'Could not send a draft notification'))
+      .finally(() => this.sending.delete(p));
+    this.sending.add(p);
+    return p;
+  }
+
   /** Waits for the notifications in progress. For tests and shutdown. */
   async settled() {
-    while (this.flushing) await this.flushing;
+    while (this.flushing || this.sending.size) await Promise.all([this.flushing, ...this.sending]);
   }
 
   stop() {

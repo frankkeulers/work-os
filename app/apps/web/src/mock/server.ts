@@ -15,6 +15,8 @@ import {
   applyDecision,
   finishChecked,
   budgetsOf,
+  buildAttention,
+  dismiss,
   confirm,
   correct,
   costOf,
@@ -57,6 +59,7 @@ import {
   unsnooze,
   upgradeSettings,
   type Action,
+  type AttentionView,
   type ConfluenceCatalogueView,
   type GuideFilesView,
   type ActionType,
@@ -259,8 +262,8 @@ export class MockServer implements WorkOsApi, MockControls {
     let changed = false;
     for (const rec of Object.values(this.s.items)) {
       if (isSnoozeDue(rec, now)) {
-        unsnooze(rec);
         this.event('item.unsnoozed', undefined, { itemId: rec.item.id });
+        unsnooze(rec, this.s.events.at(-1)!.at); // when, as the log has it
         changed = true;
         this.emit({ topic: 'item', id: rec.item.id });
       }
@@ -1143,19 +1146,19 @@ export class MockServer implements WorkOsApi, MockControls {
     return 'normal';
   }
 
-  async requestDraft(itemId: string, type: ActionType): Promise<Action> {
+  async requestDraft(itemId: string, type: ActionType, opts: { quiet?: boolean } = {}): Promise<Action> {
     await this.gate(COMMAND_MS);
     const rec = this.rec(itemId);
     const existing = this.actionsFor(itemId).find((a) => a.type === type && ACTIVE.includes(a.status));
     if (existing) return structuredClone(existing);
     if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
     const outcome = this.takeOutcome((o) => DRAFT_TIME_OUTCOMES.includes(o) || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
-    return structuredClone(this.createAction(rec, type, outcome));
+    return structuredClone(this.createAction(rec, type, outcome, undefined, opts.quiet));
   }
 
-  private createAction(rec: ItemRec, type: ActionType, outcome: DraftOutcome, supersedes?: string): Action {
+  private createAction(rec: ItemRec, type: ActionType, outcome: DraftOutcome, supersedes?: string, quiet?: boolean): Action {
     const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : 'c'}${this.s.seq + 1}`;
-    this.event('action.requested', { type, revision: rec.item.revision, ...(supersedes && { supersedes }) }, { itemId: rec.item.id, actionId: id });
+    this.event('action.requested', { type, revision: rec.item.revision, ...(supersedes && { supersedes }), ...(quiet && { quiet: true as const }) }, { itemId: rec.item.id, actionId: id });
     const action = this.s.actions[id];
     this.startDrafting(action, outcome);
     this.emit({ topic: 'inbox' }, { topic: 'item', id: rec.item.id });
@@ -1230,7 +1233,13 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'item', id: rec.item.id }, { topic: 'inbox' }, { topic: 'usage' });
     if (ready) {
       this.emit({ topic: 'draft_ready', itemId: rec.item.id, actionId, type: action.type, title: rec.item.title });
-    }
+    } else this.failed(action);
+  }
+
+  /** As the server's fail(): the toast and the bell hear of it (FR-11.4). */
+  private failed(a: Action) {
+    const title = this.s.items[a.itemId]?.item.title ?? '';
+    this.emit({ topic: 'draft_failed', itemId: a.itemId, actionId: a.id, type: a.type, title, message: a.error ?? '' });
   }
 
   private action(id: string) {
@@ -1329,6 +1338,7 @@ export class MockServer implements WorkOsApi, MockControls {
       this.s.results[actionId] = a.error;
       this.event('action.failed', { reason: 'allow_list', pageId: d.pageId }, { itemId: a.itemId, actionId });
       this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
+      this.failed(a);
       return;
     }
 
@@ -1466,6 +1476,40 @@ export class MockServer implements WorkOsApi, MockControls {
       edited: text !== defaultText.trim(),
       sources: sources.map((x) => ({ ...x, state: reviewed && x.state === 'changed' ? 'current' : x.state })),
     };
+  }
+
+  /** The bell (FR-11.3), built as the server builds it. Guidance changes date from the last check. */
+  async getAttention(): Promise<AttentionView> {
+    await this.gate(QUERY_MS);
+    const budgets = this.budgets();
+    const actions = Object.values(this.s.actions);
+    const live = new Set(actions.filter((a) => a.status === 'drafting' || a.status === 'ready' || a.status === 'failed').map((a) => a.itemId));
+    const items = Object.values(this.s.items)
+      .filter((r) => live.has(r.item.id) || (!r.topicOf && r.status === 'open' && (r.backFromSnooze || !!r.looksFinished || !!r.replyCheck)))
+      .map((r) => this.summaryOf(r, budgets));
+    const guidance = SEED_PROMPT_FILES.map((f) => this.promptView(f.id))
+      .map((v) => ({ id: v.id, label: v.label, changed: v.sources.filter((x) => x.state === 'changed').map((x) => x.label), since: this.s.checkedAt }))
+      .filter((g) => g.changed.length);
+    const last = this.s.evals[this.s.evals.length - 1];
+    return buildAttention({
+      now: this.iso(),
+      items,
+      actions,
+      progress: this.progress,
+      results: this.s.results,
+      health: await this.getHealth(),
+      budgets,
+      ...(last && { lastEval: last }),
+      guidance,
+      dismissed: this.s.dismissed ?? {},
+    });
+  }
+
+  async dismissAttention(key: string) {
+    await this.gate(COMMAND_MS);
+    this.event('attention.dismissed', { key });
+    dismiss((this.s.dismissed ??= {}), key, this.iso());
+    this.emit({ topic: 'attention' });
   }
 
   async getPrompts(): Promise<PromptFileView[]> {

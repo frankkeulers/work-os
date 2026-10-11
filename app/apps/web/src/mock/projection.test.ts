@@ -36,6 +36,7 @@ function expectReplayMatches(s: MockState, events: WorkEvent[]) {
       doneReason: rec.doneReason,
       newReplies: rec.newReplies,
       backFromSnooze: rec.backFromSnooze,
+      backAt: rec.backAt,
       failCount: rec.failCount,
       notified: rec.notified,
       routed: rec.routed,

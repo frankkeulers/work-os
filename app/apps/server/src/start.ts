@@ -377,6 +377,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     conventions: async () => (await loadPromptFile(config.dataDir, 'vault-conventions')).text,
     transcript: async (item, signal) => buildSources(settings.settings, factories).find((s) => s.id === item.source)?.transcript?.(item, signal),
     notify: (n) => publish(n),
+    notifyDraft: (n) => void notifications.draft(n),
   });
   await actions.recover();
   lifecycle.onStop('actions', () => actions.stop());

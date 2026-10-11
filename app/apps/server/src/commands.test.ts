@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { Action, ApiErrorBody, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
+import type { Action, ApiErrorBody, AttentionView, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
@@ -799,6 +799,64 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('auth_failed');
     expect((await call('POST', `/api/actions/${r.body.id}/cancel`)).status).toBe(204);
     expect((await item()).actions[0].status).toBe('discarded');
+  });
+
+  describe('the bell (FR-11.3–11.6)', () => {
+    const attention = async () => (await call<AttentionView>('GET', '/api/attention')).body;
+    const settle = async () => {
+      await res.actions.settled();
+      await res.notifications.settled();
+    };
+
+    it('lists a ready draft, with a macOS notification that opens it, until it is approved', async () => {
+      await useVault();
+      const r = await request();
+      await settle();
+      expect((await attention()).entries).toEqual([expect.objectContaining({ key: `draft_ready:${r.body.id}`, kind: 'draft_ready', title: 'Vault note draft ready', subject: '#product', itemId: PROD, dismissible: false })]);
+      expect(notes).toEqual([{ title: 'Vault note draft ready', message: '#product', group: `work-os-draft-${PROD}`, url: `${res.url}/item/${encodeURIComponent(PROD)}` }]);
+      await call('POST', `/api/actions/${r.body.id}/approve`);
+      await settle();
+      expect((await attention()).entries).toEqual([]);
+    });
+
+    it('lists a failed draft with its reason until dismissed, once', async () => {
+      await useVault();
+      await writeFile(join(vault, 'Projects/Product.md'), NOTE);
+      claude.nextTexts.push(JSON.stringify({ kind: 'append', path: 'Projects/Product.md', heading: '## Actions', content: 'x' }));
+      const r = await request();
+      await settle();
+      const [entry] = (await attention()).entries;
+      expect(entry).toMatchObject({ key: `draft_failed:${r.body.id}`, title: 'Vault note draft failed', detail: expect.stringMatching(/no such heading/), dismissible: true });
+      expect(notes.map((n) => n.title)).toEqual(['Vault note draft failed']);
+      expect((await call('POST', '/api/attention/dismiss', { key: entry!.key })).status).toBe(204);
+      expect((await call('POST', '/api/attention/dismiss', { key: entry!.key })).status).toBe(204);
+      expect((await call('POST', '/api/attention/dismiss', {})).status).toBe(422);
+      expect((await attention()).entries).toEqual([]);
+      expect(Object.keys(res.store.projection.dismissed ?? {})).toEqual([entry!.key]);
+    });
+
+    it('sends no macOS notification for a quiet draft, or in quiet hours; the bell lists both', async () => {
+      await useVault();
+      const quiet = await call<Action>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, { type: 'vault_note', quiet: true });
+      await settle();
+      expect(res.store.projection.actions[quiet.body.id]?.quiet).toBe(true);
+      await call('POST', `/api/actions/${quiet.body.id}/discard`);
+      const view = (await call<SettingsView>('GET', '/api/settings')).body;
+      await call('PUT', '/api/settings', { settings: { ...view.settings, notifications: { enabled: true, quietHours: '08:00–10:00' } }, rules: view.rules });
+      await request();
+      await settle();
+      expect(notes).toEqual([]);
+      expect((await attention()).entries.map((e) => e.kind)).toEqual(['draft_ready']);
+    });
+
+    it('shows a draft that waits for Claude, and the login to fix', async () => {
+      await useVault();
+      claude.failNext = Object.assign(new Error('Not logged in · Please run /login'), {});
+      const r = await request();
+      const v = await attention();
+      expect(v.working).toEqual([{ itemId: PROD, actionId: r.body.id, type: 'vault_note', subject: '#product', held: 'Waits for Claude' }]);
+      expect(v.entries).toEqual([expect.objectContaining({ kind: 'fix_needed', title: 'Claude rejected the login' })]);
+    });
   });
 });
 

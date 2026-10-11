@@ -1,15 +1,15 @@
-import { ApproveRequest, CorrectionBody, DraftEdit, DraftRequest, ItemIds, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, ItemIds, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
-import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writePromptFile, type PromptFile } from '../claude/promptFiles';
+import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writePromptFile, type PromptFile, type SourceEnv } from '../claude/promptFiles';
 import { SettingsValidationError } from '../config/settingsState';
 import { Ms365LinkError } from '../sources/ms365/link';
 import type { Lifecycle } from '../runtime/lifecycle';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { agendaView, healthView, inboxView, itemView, knownCategories, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
+import { agendaView, attentionView, healthView, inboxView, itemView, knownCategories, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
 
@@ -160,11 +160,11 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   app.post<{ Params: { id: string } }>('/api/items/:id/actions', async (req, reply) => {
     const id = item(req.params.id);
     const body = DraftRequest.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" }.');
+    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" }, and { quiet } for a draft made ahead in a batch.');
     return reply
       .code(201)
       .headers(noStore)
-      .send(await actions().request(id, body.data.type));
+      .send(await actions().request(id, body.data.type, { quiet: body.data.quiet }));
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/cancel', async (req, reply) => {
     await actions().cancel(req.params.id);
@@ -463,6 +463,45 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!e) throw new HttpError('unavailable', 'This server can’t read the sources (tests or fakes).');
     return reply.headers(noStore).send(await writePrompt(f, body.data.baseVersion, (text) => withCurrentSourceHashes(text, e), false));
   });
+
+  // The bell (FR-11.3–11.5): what needs Frank, and dismissing an entry.
+  const guidance = guidanceWatch(dataDir, env, d);
+  app.get('/api/attention', async (_req, reply) => reply.headers(noStore).send(await attentionView(d, await guidance())));
+  app.post('/api/attention/dismiss', async (req, reply) => {
+    const body = AttentionDismiss.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { key }.');
+    if (!d.store.projection.dismissed?.[body.data.key]) await d.store.append({ type: 'attention.dismissed', data: { key: body.data.key } });
+    return reply.code(204).send();
+  });
+}
+
+/** Reading the guidance files' sources hashes files, so the bell keeps the answer this long, or until a prompt file changes. */
+export const GUIDANCE_TTL_MS = 10 * 60_000;
+
+/** Guidance files whose sources changed since they were distilled (FR-1.7), for the bell; `since` is when this server first saw it. */
+function guidanceWatch(dataDir: string, env: () => SourceEnv | undefined, d: Pick<ViewDeps, 'store' | 'now'>): () => Promise<GuidanceChange[]> {
+  let cached: { at: number; value: GuidanceChange[] } | undefined;
+  const since = new Map<string, string>();
+  d.store.subscribe((events) => {
+    if (events.some((e) => e.type === 'prompt.changed')) cached = undefined;
+  });
+  return async () => {
+    const e = env();
+    if (!e) return [];
+    const now = d.now();
+    if (cached && now.getTime() - cached.at < GUIDANCE_TTL_MS) return cached.value;
+    const views = await Promise.all(PROMPT_FILES.map((f) => promptFileView(dataDir, f, e)));
+    const value: GuidanceChange[] = [];
+    for (const v of views) {
+      const changed = v.sources.filter((s) => s.state === 'changed').map((s) => s.label);
+      if (!changed.length) continue;
+      const key = `${v.id}:${changed.join(',')}`;
+      if (!since.has(key)) since.set(key, now.toISOString());
+      value.push({ id: v.id, label: v.label, changed, since: since.get(key)! });
+    }
+    cached = { at: now.getTime(), value };
+    return value;
+  };
 }
 
 const escapeHtml = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

@@ -61,6 +61,7 @@ export interface ItemSummary {
   actions: Partial<Record<ActionType, ActionSummary>>; // latest action per type
   newReplies: boolean; // new messages since the last triage
   backFromSnooze: boolean;
+  backAt?: string; // when it came back from snooze, while backFromSnooze (FR-11.4)
   modelPaused: boolean; // waiting for model triage while the budget is hit
   snoozedUntil?: string;
   quietUntil?: string; // when a waiting thread becomes eligible for triage
@@ -455,7 +456,67 @@ export type Notice =
   | { topic: 'health' }
   | { topic: 'clock' }
   | { topic: 'notification'; itemId: string; title: string; summary: string }
-  | { topic: 'draft_ready'; itemId: string; actionId: string; type: ActionType; title: string };
+  | { topic: 'draft_ready'; itemId: string; actionId: string; type: ActionType; title: string }
+  | { topic: 'draft_failed'; itemId: string; actionId: string; type: ActionType; title: string; message: string }
+  /** The bell's entries may have changed (FR-11.3). */
+  | { topic: 'attention' };
+
+/**
+ * What the bell lists (FR-11.4). Each kind is derived from state as it stands, so an entry goes once
+ * Frank deals with it; the dismissible ones can also be dismissed (FR-11.5).
+ */
+export type AttentionKind =
+  | 'draft_ready' // a draft waits for review
+  | 'draft_failed' // drafting failed
+  | 'write_failed' // an approved write failed
+  | 'fix_needed' // a login, connector or setting Frank has to fix; or drafts held by the budget
+  | 'snooze_back' // a snoozed item came back
+  | 'looks_finished' // others' messages settled what it asked of Frank (CK-2.10)
+  | 'reply_unsettled' // Frank replied, and the check found asks still open (CK-2.3)
+  | 'eval_done' // a triage eval finished (FR-6.1)
+  | 'guidance_changed'; // a guidance file's sources changed since it was distilled (FR-1.7)
+
+export interface AttentionEntry {
+  /** Names this occurrence: what dismissing remembers, so a new one shows again. */
+  key: string;
+  kind: AttentionKind;
+  /** When it happened: newest first, and what the unseen count compares against. */
+  at: string;
+  /** What happened, e.g. "Vault note draft ready". */
+  title: string;
+  /** What it is about: the item's title, the dependency, the guidance file. */
+  subject: string;
+  /** One more line, when there is something to add, e.g. "New replies since it was drafted". */
+  detail?: string;
+  itemId?: string;
+  actionId?: string;
+  actionType?: ActionType;
+  /** Where its button goes in the app, or (`href`) elsewhere. */
+  to?: string;
+  href?: string;
+  /** The button's label: Review, Open, Fix… */
+  cta: string;
+  dismissible: boolean;
+}
+
+/** A draft being made now, or waiting its turn: shown in the bell, not counted. */
+export interface AttentionWork {
+  itemId: string;
+  actionId: string;
+  type: ActionType;
+  subject: string;
+  /** Absent while it waits its turn. */
+  progress?: DraftProgress;
+  /** Why it waits, when something holds it: the drafts budget, Claude, Confluence. */
+  held?: string;
+}
+
+export interface AttentionView {
+  /** Newest first. */
+  entries: AttentionEntry[];
+  /** Oldest first, as the queue takes them. */
+  working: AttentionWork[];
+}
 
 export interface CorrectionInput {
   attention: Attention;
@@ -519,7 +580,8 @@ export interface WorkOsApi {
   /** Asks routing to merge a conversation's open topics; triage then runs on the merged ones. */
   regroup(conversation: string): Promise<{ merged: number }>;
 
-  requestDraft(itemId: string, type: ActionType): Promise<Action>;
+  /** `quiet`: drafted ahead while filing in a batch, so no macOS notification when it's ready (FR-11.6). */
+  requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean }): Promise<Action>;
   cancelDraft(actionId: string): Promise<void>;
   /** `part`: which note of a draft that files into several (FR-9.7). */
   saveDraftEdit(actionId: string, content: string, part?: number): Promise<void>;
@@ -546,6 +608,11 @@ export interface WorkOsApi {
   resetPrompt(id: PromptFileId, baseVersion: string): Promise<PromptFileView>;
   /** Records the sources as they are now in the file's header, once the guidance has been checked against them. */
   markPromptReviewed(id: PromptFileId, baseVersion: string): Promise<PromptFileView>;
+
+  /** What the bell lists (FR-11.3). */
+  getAttention(): Promise<AttentionView>;
+  /** Dismisses one of the bell's entries by its key (FR-11.5). */
+  dismissAttention(key: string): Promise<void>;
 
   subscribe(onNotice: (n: Notice) => void): () => void;
 }

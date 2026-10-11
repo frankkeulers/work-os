@@ -5,7 +5,7 @@ import type { Action, Attention, ItemKind, Participant, SourceId, TriageCorrecti
 // The inbox state that the event log projects to (PLAN.md §4.3). The server keeps it in memory
 // and in snapshot.json; the mock keeps the same flags on its own records. Bump PROJECTION_VERSION
 // whenever reduce() changes, so the server replays the whole log instead of trusting the snapshot.
-export const PROJECTION_VERSION = 4; // 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10)
+export const PROJECTION_VERSION = 5; // 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10); 5: the bell's dismissals, back-from-snooze times, failedWhile (FR-11.3–11.5)
 
 /**
  * What the inbox knows about an item beyond its content. `D` is the decision type: the server
@@ -22,6 +22,7 @@ export interface ItemFlags<D extends LoggedDecision = LoggedDecision> {
   doneAt?: string;
   newReplies: boolean; // new messages since the last triage, not yet seen
   backFromSnooze: boolean;
+  backAt?: string; // when the snooze last ended: names that occurrence in the bell (FR-11.4)
   failCount: number; // triage attempts that returned invalid output (CL-7)
   notified: boolean; // at most one notification per item (FR-11.2)
   // Topics (amendment): pieces of a conversation (threads, DM windows) on the same subject are
@@ -93,6 +94,11 @@ export interface Projection {
   sources: Partial<Record<SourceId, SourceState>>;
   /** By London date, the last 30 days. Absent in a snapshot written before it existed. */
   closes?: Record<string, CloseStats>;
+  /** The bell's dismissed entries (FR-11.5): key → when. Kept DISMISSED_DAYS. Absent in a snapshot written before it existed. */
+  dismissed?: Record<string, string>;
 }
+
+/** How long a dismissal is remembered: longer than anything in the bell lasts. */
+export const DISMISSED_DAYS = 90;
 
 export const emptyProjection = (): Projection => ({ lastSeq: 0, items: {}, actions: {}, sources: {} });

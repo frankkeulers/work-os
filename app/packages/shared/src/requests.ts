@@ -30,7 +30,10 @@ export const ItemIds = z.object({ ids: z.array(z.string().min(1)).min(1).max(100
 export const CorrectionBody = z.object({ attention: z.enum(['now', 'today', 'none']), confluence: z.boolean(), vault: z.boolean() }).strict();
 
 /** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
-export const DraftRequest = z.object({ type: z.enum(['vault_note', 'confluence_entry']) }).strict();
+export const DraftRequest = z.object({ type: z.enum(['vault_note', 'confluence_entry']), quiet: z.boolean().optional() }).strict(); // quiet: drafted ahead in a batch (FR-11.6)
+
+/** POST /api/attention/dismiss (FR-11.5): an entry in the bell, by its key. */
+export const AttentionDismiss = z.object({ key: z.string().min(1).max(300) }).strict();
 
 /** POST /api/actions/:id/approve (FR-9.4); from a batch, the item is done once all its filings are written (cockpit CK-4.4). */
 export const ApproveRequest = z.object({ markDoneWhenFiled: z.boolean().optional() }).strict();

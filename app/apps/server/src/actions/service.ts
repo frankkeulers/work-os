@@ -79,6 +79,16 @@ export interface ActionDeps {
   /** The Confluence routing guidance (from psg-context-builder) for Confluence drafts. */
   routing: () => Promise<string>;
   notify: (n: Notice) => void;
+  /** A draft is ready or failed: a macOS notification, as Frank may have moved on (FR-11.6). Not for quiet drafts. */
+  notifyDraft?: (n: DraftOutcomeNotice) => void;
+}
+
+export interface DraftOutcomeNotice {
+  itemId: string;
+  type: ActionType;
+  title: string;
+  outcome: 'ready' | 'failed';
+  message?: string;
 }
 
 export interface ActionsView {
@@ -123,13 +133,14 @@ export class ActionService {
 
   // ---------------------------------------------------------------- commands
 
-  async request(itemId: string, type: ActionType): Promise<Action> {
+  /** `quiet`: drafted ahead while filing in a batch, so no macOS notification (FR-11.6). */
+  async request(itemId: string, type: ActionType, opts: { quiet?: boolean } = {}): Promise<Action> {
     const existing = Object.values(this.actions).find((a) => a.itemId === itemId && a.type === type && ACTIVE.includes(a.status));
     if (existing) return this.toAction(existing);
-    return this.create(itemId, type);
+    return this.create(itemId, type, undefined, opts.quiet);
   }
 
-  private async create(itemId: string, type: ActionType, supersedes?: string): Promise<Action> {
+  private async create(itemId: string, type: ActionType, supersedes?: string, quiet?: boolean): Promise<Action> {
     const it = this.d.store.projection.items[itemId];
     if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     if (type === 'confluence_entry') {
@@ -142,7 +153,7 @@ export class ActionService {
       type: 'action.requested',
       itemId,
       actionId: id,
-      data: { type, revision: it.revision, ...(supersedes && { supersedes }) },
+      data: { type, revision: it.revision, ...(supersedes && { supersedes }), ...(quiet && { quiet: true as const }) },
     });
     this.progress.set(id, {
       stages: DRAFT_STAGES[type],
@@ -264,6 +275,18 @@ export class ActionService {
     return { ...a };
   }
 
+  /** The draft being made now, by action id: the bell shows its stage (FR-11.3). Others wait their turn. */
+  running(): Record<string, DraftProgress> {
+    const id = this.drafting?.id;
+    const p = id && this.progress.get(id);
+    return p ? { [id]: p } : {};
+  }
+
+  /** Why a failed action failed, in the words the item's panel shows. */
+  async result(id: string): Promise<string | undefined> {
+    return (await this.d.drafts.read(id))?.result;
+  }
+
   // ---------------------------------------------------------------- the queue and the outbox
 
   /** After a restart: a draft file lost with its action ready or approved can't be written (FR-14.7). */
@@ -326,7 +349,8 @@ export class ActionService {
     }
   }
 
-  private async fail(a: ActionState, reason: FailureReason, message: string) {
+  /** `silent`: a conflict that is re-drafted at once, so nothing needs Frank. */
+  private async fail(a: ActionState, reason: FailureReason, message: string, silent = false) {
     await this.d.drafts.update(a.id, a.itemId, (s) => ({
       ...s,
       result: message,
@@ -340,6 +364,11 @@ export class ActionService {
     this.progress.delete(a.id);
     this.attempts.delete(a.id);
     this.retryAt.delete(a.id);
+    if (silent) return;
+    // Frank may have moved on since he asked for it (FR-11.4, FR-11.6).
+    const title = this.d.store.projection.items[a.itemId]?.title ?? '';
+    this.d.notify({ topic: 'draft_failed', itemId: a.itemId, actionId: a.id, type: a.type, title, message });
+    if (!this.actions[a.id]?.quiet) this.d.notifyDraft?.({ itemId: a.itemId, type: a.type, title, outcome: 'failed', message });
   }
 
   private async startDraft(a: ActionState) {
@@ -464,6 +493,7 @@ export class ActionService {
       type: a.type,
       title: it?.title ?? '',
     });
+    if (!a.quiet) this.d.notifyDraft?.({ itemId: a.itemId, type: a.type, title: it?.title ?? '', outcome: 'ready' });
   }
 
   private async execute(a: ActionState) {
@@ -593,10 +623,11 @@ export class ActionService {
 
   /** The target changed after drafting: fail this one and draft again, budget permitting. */
   private async conflict(a: ActionState, message: string) {
-    await this.fail(a, 'conflict', message);
-    if (this.d.draftsBudgetHit() || !this.d.store.projection.items[a.itemId]) return;
+    const redraft = !this.d.draftsBudgetHit() && !!this.d.store.projection.items[a.itemId];
+    await this.fail(a, 'conflict', message, redraft);
+    if (!redraft) return;
     try {
-      await this.create(a.itemId, a.type, a.id);
+      await this.create(a.itemId, a.type, a.id, a.quiet);
     } catch (err) {
       this.d.logger?.warn({ err, actionId: a.id }, 'Could not re-draft after a conflict');
     }

@@ -145,10 +145,11 @@ export function snooze(s: ItemFlags, until: string) {
 export const isSnoozeDue = (s: ItemFlags, now: string) => s.status === 'snoozed' && !!s.snoozedUntil && s.snoozedUntil <= now;
 
 /** The snooze time passed (FR-8.3). */
-export function unsnooze(s: ItemFlags) {
+export function unsnooze(s: ItemFlags, at?: string) {
   s.status = 'open';
   s.snoozedUntil = undefined;
   s.backFromSnooze = true;
+  s.backAt = at;
 }
 
 /** Whether opening the item would clear a flag, so the caller logs item.seen only when it changes something. */

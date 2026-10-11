@@ -1,4 +1,4 @@
-import type { Action, ActionType, AgendaView, ApiErrorBody, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -138,6 +138,8 @@ export class HttpApi implements WorkOsApi {
   getOutlookStatus = () => this.get<OutlookStatusView>('/api/sources/outlook');
   getAgenda = () => this.get<AgendaView>('/api/calendar/agenda');
   getSourceItems = (source: SourceId) => this.get<SourceItemsView>(`/api/sources/${source}/items`);
+  getAttention = () => this.get<AttentionView>('/api/attention');
+  dismissAttention = (key: string) => this.post('/api/attention/dismiss', { key });
   getWeek = (weekStart?: string) => this.get<WeekView>(`/api/calendar/week${weekStart ? `?start=${weekStart}` : ''}`);
 
   pollNow = () => this.post('/api/poll');
@@ -159,7 +161,7 @@ export class HttpApi implements WorkOsApi {
   splitPiece = (pieceId: string) => this.post(`${this.item(pieceId)}/split`);
   regroup = (conversation: string) => this.post<{ merged: number }>('/api/topics/regroup', { conversation });
 
-  requestDraft = (itemId: string, type: ActionType) => this.post<Action>(`${this.item(itemId)}/actions`, { type });
+  requestDraft = (itemId: string, type: ActionType, opts?: { quiet?: boolean }) => this.post<Action>(`${this.item(itemId)}/actions`, { type, ...(opts?.quiet && { quiet: true }) });
   cancelDraft = (id: string) => this.post(`${this.action(id)}/cancel`);
   saveDraftEdit = (id: string, content: string, part?: number) => this.request<void>('PUT', `${this.action(id)}/draft`, part === undefined ? { content } : { content, part });
   redraft = (id: string) => this.post<Action>(`${this.action(id)}/redraft`);

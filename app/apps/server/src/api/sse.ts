@@ -116,6 +116,7 @@ export function noticesFor(events: WorkEvent[]): Notice[] {
     else if (area === 'settings' || area === 'rules') out.push({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
     else if (area === 'prompt') out.push({ topic: 'settings' });
     else if (area === 'health' || area === 'system') out.push({ topic: 'health' });
+    else if (area === 'attention') out.push({ topic: 'attention' }); // a dismissal (FR-11.5)
   }
   return out;
 }

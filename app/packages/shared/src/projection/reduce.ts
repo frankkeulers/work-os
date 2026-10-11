@@ -1,5 +1,5 @@
 import type { WorkEvent } from '../events';
-import { emptyProjection, type ActionState, type Projection } from './state';
+import { DISMISSED_DAYS, emptyProjection, type ActionState, type Projection } from './state';
 import {
   applyDecision,
   confirm,
@@ -49,6 +49,7 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
       target: {},
       draftRef: `drafts/${e.actionId}.json`,
       supersedes: e.data.supersedes,
+      ...(e.data.quiet && { quiet: true }),
       createdAt: e.at,
       updatedAt: e.at,
     };
@@ -74,6 +75,7 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
       a.status = 'done';
       break;
     case 'action.failed':
+      a.failedWhile = a.status === 'drafting' ? 'drafting' : 'writing';
       a.status = 'failed';
       a.failureReason = e.data.reason;
       break;
@@ -84,6 +86,13 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
       break;
   }
   return true;
+}
+
+/** Records a dismissal and forgets those older than DISMISSED_DAYS, so the set stays small. */
+export function dismiss(dismissed: Record<string, string>, key: string, at: string) {
+  const cutoff = new Date(Date.parse(at) - DISMISSED_DAYS * 86_400_000).toISOString();
+  for (const [k, when] of Object.entries(dismissed)) if (when < cutoff) delete dismissed[k];
+  dismissed[key] = at;
 }
 
 const self = <R extends { lastActivityAt: string }>(r: R) => r;
@@ -100,6 +109,10 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
   }
   if (e.type.startsWith('action.')) {
     applyActionEvent(p.actions, e);
+    return p;
+  }
+  if (e.type === 'attention.dismissed') {
+    dismiss((p.dismissed ??= {}), e.data.key, e.at);
     return p;
   }
   if (!e.itemId) return p;
@@ -189,7 +202,7 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
       snooze(item, e.data.until);
       break;
     case 'item.unsnoozed':
-      unsnooze(item);
+      unsnooze(item, e.at);
       break;
     case 'item.seen':
       markSeen(item);

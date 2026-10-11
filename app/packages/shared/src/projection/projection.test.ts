@@ -164,7 +164,28 @@ describe('reduce', () => {
     add('action.approved', 3, undefined, ids).add('action.executing', 4, { attempt: 1, expectedHash: 'sha256:x' }, ids);
     expect(replay(events).actions['act-1'].status).toBe('executing'); // the outbox reconciles this after a crash (FR-14.5)
     add('action.failed', 5, { reason: 'unreachable' }, ids);
-    expect(replay(events).actions['act-1']).toMatchObject({ status: 'failed', failureReason: 'unreachable', updatedAt: at(5) });
+    expect(replay(events).actions['act-1']).toMatchObject({ status: 'failed', failureReason: 'unreachable', failedWhile: 'writing', updatedAt: at(5) });
+  });
+
+  it('records what a failed action was doing, and a quiet request (FR-11.4, FR-11.6)', () => {
+    const { events, add } = log();
+    const ids = { itemId: ITEM, actionId: 'act-1' };
+    add('item.upserted', 0, upserted(1)).add('action.requested', 1, { type: 'vault_note', revision: 1, quiet: true }, ids).add('action.failed', 2, { reason: 'model_error' }, ids);
+    expect(replay(events).actions['act-1']).toMatchObject({ status: 'failed', failedWhile: 'drafting', quiet: true });
+  });
+
+  it('remembers the bell’s dismissals for 90 days (FR-11.5)', () => {
+    const { events, add } = log();
+    add('attention.dismissed', 0, { key: 'eval_done:old' }, {}).add('attention.dismissed', 10, { key: 'draft_failed:a' }, {});
+    expect(replay(events).dismissed).toEqual({ 'eval_done:old': at(0), 'draft_failed:a': at(10) });
+    add('attention.dismissed', 91 * 24 * 60, { key: 'snooze_back:x:t' }, {});
+    expect(Object.keys(replay(events).dismissed ?? {})).toEqual(['snooze_back:x:t']);
+  });
+
+  it('notes when a snooze ended, for the bell (FR-11.4)', () => {
+    const { events, add } = log();
+    add('item.upserted', 0, upserted(1)).add('item.snoozed', 1, { until: at(60) }).add('item.unsnoozed', 60, undefined);
+    expect(replay(events).items[ITEM]).toMatchObject({ backFromSnooze: true, backAt: at(60) });
   });
 
   it('keeps an approval from a batch, and knows when every suggested filing is written (CK-4.4)', () => {

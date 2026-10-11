@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { SourceEnv } from '../claude/promptFiles';
 import {
   anchorOf,
+  buildAttention,
   budgetsOf,
   categoryTags,
   closedByReply,
@@ -20,7 +21,9 @@ import {
   type ActionState,
   type AgendaEvent,
   type AgendaView,
+  type AttentionView,
   type BudgetState,
+  type GuidanceChange,
   type CategoryTag,
   type CorrectionInput,
   type Criterion,
@@ -404,6 +407,44 @@ function rowBuilder(d: ViewDeps, nowIso: string, b: BudgetState) {
     const calendarCategories = calendarCategoriesOf(d, d.items.calendarOf(i.id));
     return calendarCategories ? { ...row, calendarCategories } : row;
   };
+}
+
+/**
+ * The bell (FR-11.3, FR-11.4): what needs Frank, derived from state as it stands. Rows are built only
+ * for the items it can be about: those with a draft in progress, ready or failed, and open topics
+ * that may need a nudge.
+ */
+export async function attentionView(d: ViewDeps, guidance: GuidanceChange[] = []): Promise<AttentionView> {
+  const now = d.now();
+  const b = budgets(d);
+  const p = d.store.projection;
+  const row = rowBuilder(d, now.toISOString(), b);
+  const actions = Object.values(p.actions);
+  const live = new Set(actions.filter((a) => a.status === 'drafting' || a.status === 'ready' || a.status === 'failed').map((a) => a.itemId));
+  const nudge = (i: ItemState) => !i.topicOf && i.status === 'open' && (i.backFromSnooze || !!i.looksFinished || !!i.replyCheck);
+  const items = Object.values(p.items)
+    .filter((i) => live.has(i.id) || nudge(i))
+    .map(row);
+  const shown = new Set(items.map((i) => i.id));
+  const failed = actions.filter((a) => a.status === 'failed' && shown.has(a.itemId));
+  const results: Record<string, string> = {};
+  for (const a of failed) {
+    const r = await d.actions?.result(a.id);
+    if (r) results[a.id] = r;
+  }
+  const last = d.evals?.last;
+  return buildAttention({
+    now: now.toISOString(),
+    items,
+    actions,
+    progress: d.actions?.running() ?? {},
+    results,
+    health: healthView(d, false),
+    budgets: b,
+    ...(last && { lastEval: last }),
+    guidance,
+    dismissed: p.dismissed ?? {},
+  });
 }
 
 /**
