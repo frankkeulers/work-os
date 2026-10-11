@@ -49,7 +49,7 @@ export async function createServer(deps: ServerDeps): Promise<WorkOsServer> {
   deps.store.subscribe((events) => hub.publish(...noticesFor(events)));
   deps.evals?.onChange(() => hub.publish({ topic: 'usage' }, { topic: 'evals' }));
 
-  registerRoutes(app, { ...deps, startedAt });
+  registerRoutes(app, { ...deps, startedAt, publish: (...n) => hub.publish(...n) });
   deps.extraRoutes?.(app);
   registerSse(app, hub);
   await registerStatic(app, { dir: deps.webDir, token: deps.token });

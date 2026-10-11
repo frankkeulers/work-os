@@ -258,6 +258,15 @@ describe('views', () => {
     expect((await get('/api/items/slack%3Anope/earlier')).statusCode).toBe(404);
   });
 
+  it('rebuilds state from the event log on request (Settings › Rebuild state)', async () => {
+    await store.append(upsert(), { type: 'item.done', itemId: ITEM, data: undefined });
+    delete store.projection.items[ITEM];
+    const r = await server.app.inject({ method: 'POST', url: '/api/admin/rebuild-state', headers: auth });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual({ events: 2 });
+    expect(store.projection.items[ITEM].status).toBe('done');
+  });
+
   it('marks many items done in one write, skipping ones already done, and reopens them', async () => {
     const other = 'slack:C9:1790000000.000100';
     await store.append(upsert(), { ...upsert(), itemId: other }, { type: 'item.done', itemId: other, data: undefined });

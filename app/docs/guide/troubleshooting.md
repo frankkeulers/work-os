@@ -139,3 +139,11 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
 
 If the server crashes more than five times in ten minutes, it starts in safe mode: the inbox works
 but nothing is polled. Check the log in the data folder's `logs/`, fix the cause, then Check again.
+
+## Inbox state looks wrong
+
+If items show the wrong status, or one you know about is missing, choose **Rebuild** in
+[Settings › Storage & data](/settings/storage). Work OS replays its whole event log into the inbox
+and saves it, without a restart; nothing is lost, and anything that arrives meanwhile waits a
+moment and then lands as usual. If it says the log no longer matches, restart Work OS: startup
+repairs the log first. With Work OS stopped, `npm run rebuild-state` does the same from Terminal.

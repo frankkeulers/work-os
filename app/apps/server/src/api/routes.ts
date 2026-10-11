@@ -1,4 +1,4 @@
-import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, ItemIds, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, ItemIds, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -6,6 +6,7 @@ import { PROMPT_FILES, promptFile, promptFileView, withCurrentSourceHashes, writ
 import { SettingsValidationError } from '../config/settingsState';
 import { Ms365LinkError } from '../sources/ms365/link';
 import type { Lifecycle } from '../runtime/lifecycle';
+import { RebuildError } from '../store/store';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
@@ -13,7 +14,7 @@ import { agendaView, attentionView, healthView, inboxView, itemView, knownCatego
 
 // One route per WorkOsApi method (PLAN.md API table).
 
-export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: Lifecycle }) {
+export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: Lifecycle; publish?: (...n: Notice[]) => void }) {
   const noStore = { 'cache-control': 'no-store' };
 
   app.get('/api/health', async (_req, reply) => reply.headers(noStore).send(healthView(d, d.lifecycle.isStopping)));
@@ -467,6 +468,18 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   // The bell (FR-11.3–11.5): what needs Frank, and dismissing an entry.
   const guidance = guidanceWatch(dataDir, env, d);
   app.get('/api/attention', async (_req, reply) => reply.headers(noStore).send(await attentionView(d, await guidance())));
+  // Settings › Rebuild state (FR-1.4, Story 1.1): what `npm run rebuild-state` does, for the running server.
+  app.post('/api/admin/rebuild-state', async () => {
+    try {
+      const { events } = await d.store.rebuild();
+      d.publish?.({ topic: 'inbox' }, { topic: 'attention' }, { topic: 'health' });
+      return { events };
+    } catch (err) {
+      if (err instanceof RebuildError) throw new HttpError('conflict', err.message);
+      throw err;
+    }
+  });
+
   app.post('/api/attention/dismiss', async (req, reply) => {
     const body = AttentionDismiss.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { key }.');

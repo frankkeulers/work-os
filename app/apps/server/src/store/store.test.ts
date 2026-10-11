@@ -163,6 +163,25 @@ describe('recovery', () => {
 });
 
 describe('Store', () => {
+  it('rebuilds the live projection from the whole log between appends, and saves it (Settings › Rebuild state)', async () => {
+    const { store } = await Store.open({ dataDir: dir, now });
+    await store.append(upsert(), done());
+    const live = store.projection;
+    delete live.items[ITEM]; // a projection gone wrong; the log still has the truth
+    const OTHER = 'slack:C2:1791189720.000200';
+    const rebuilt = store.rebuild();
+    const later = store.append(upsert(1, OTHER)); // waits for the rebuild, then lands on the rebuilt state
+    expect(await rebuilt).toMatchObject({ events: 2 });
+    await later;
+    expect(store.projection).toBe(live); // the same object: everyone holding it sees the rebuild
+    expect(store.projection.items[ITEM].status).toBe('done');
+    expect(store.projection.items[OTHER].status).toBe('open');
+    expect(store.lastSeq).toBe(3);
+    await store.close();
+    const snap = await loadSnapshot(paths(dir).snapshot);
+    expect(snap.ok && snap.snapshot.state.items[ITEM].status).toBe('done');
+  });
+
   const open = () => Store.open({ dataDir: dir, now });
 
   it('applies events once they are synced, and replays them after a restart', async () => {

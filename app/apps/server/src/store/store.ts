@@ -31,6 +31,14 @@ export interface StoreOptions {
   hooks?: AppenderHooks;
 }
 
+/** The log no longer matches what the running server wrote: a rebuild would lose events. */
+export class RebuildError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RebuildError';
+  }
+}
+
 /** Applies a replayed event, accepting a gap the reader has already reported. */
 function replayInto(p: Projection, e: WorkEvent) {
   if (e.seq > p.lastSeq + 1) p.lastSeq = e.seq - 1;
@@ -43,6 +51,8 @@ export class Store {
   private listeners = new Set<(events: WorkEvent[]) => void>();
   private snapshotting?: Promise<void>;
   private appliedFile?: string; // the file holding the last applied event: the snapshot replays from here
+  private appending = new Set<Promise<unknown>>();
+  private rebuilding?: Promise<{ events: number; ms: number }>;
 
   private constructor(
     readonly projection: Projection,
@@ -113,6 +123,17 @@ export class Store {
 
   /** Appends events and applies them. Resolves once they are on disk (NF-6). */
   async append(...drafts: EventDraft[]): Promise<WorkEvent[]> {
+    while (this.rebuilding) await this.rebuilding.catch(() => undefined);
+    const p = this.applyNext(drafts);
+    this.appending.add(p);
+    try {
+      return await p;
+    } finally {
+      this.appending.delete(p);
+    }
+  }
+
+  private async applyNext(drafts: EventDraft[]): Promise<WorkEvent[]> {
     const { events, file } = await this.log.append(drafts);
     for (const e of events) reduce(this.projection, e);
     if (file) this.appliedFile = file;
@@ -141,6 +162,35 @@ export class Store {
       }
     })();
     return this.snapshotting;
+  }
+
+  /**
+   * Settings › Rebuild state: replays the whole log into the live projection and saves it. Appends
+   * wait meanwhile, so nothing lands between the replay and the swap. The log is only read; a log
+   * that no longer matches what this server wrote changes nothing.
+   */
+  rebuild(): Promise<{ events: number; ms: number }> {
+    this.rebuilding ??= (async () => {
+      try {
+        await Promise.allSettled(this.appending);
+        await this.snapshotting;
+        const t0 = performance.now();
+        const state = emptyProjection();
+        const log = await readLog(paths(this.opts.dataDir).events, { afterSeq: 0, repair: false, onEvent: (e) => replayInto(state, e), now: this.opts.now });
+        if (log.lastSeq !== this.log.lastSeq) throw new RebuildError(`The event log ends at seq ${log.lastSeq}, but this server wrote up to ${this.log.lastSeq}. Nothing was changed; restart Work OS to recover the log.`);
+        const p = this.projection as unknown as Record<string, unknown>;
+        for (const k of Object.keys(p)) delete p[k];
+        Object.assign(p, state);
+        this.appliedFile = log.lastFile;
+        this.eventsSinceSnapshot = Math.max(1, this.eventsSinceSnapshot);
+        await this.snapshot();
+        this.opts.logger?.info({ events: log.events, lastSeq: log.lastSeq }, 'State rebuilt from the event log');
+        return { events: log.events, ms: Math.round(performance.now() - t0) };
+      } finally {
+        this.rebuilding = undefined;
+      }
+    })();
+    return this.rebuilding;
   }
 
   /** Waits for pending writes, then saves a snapshot (SIGTERM). */
