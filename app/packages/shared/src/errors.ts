@@ -1,6 +1,7 @@
 // API error codes and the HTTP status the server returns for each. The web app wraps them in ApiError.
 export type ApiErrorCode =
   | 'network' // 0: server unreachable
+  | 'timeout' // 0: no answer in time; the request may still finish (web client only)
   | 'not_found' // 404
   | 'conflict' // 409: state changed under you
   | 'validation' // 422: settings or rules failed zod validation
@@ -12,6 +13,7 @@ export type ApiErrorCode =
 
 export const API_ERROR_STATUS: Record<ApiErrorCode, number> = {
   network: 0,
+  timeout: 0,
   not_found: 404,
   conflict: 409,
   validation: 422,

@@ -98,6 +98,29 @@ describe('requests', () => {
     expect((await api.getInbox()).items).toEqual([{ id: 'b' }]);
   });
 
+  it('gives up on a request after 20 s, without taking the server for lost (RV-W5)', async () => {
+    vi.useFakeTimers();
+    const hang = vi.fn((_url: string | URL | Request, init: RequestInit = {}) => new Promise<Response>((_ok, fail) => init.signal?.addEventListener('abort', () => fail(new DOMException('aborted', 'AbortError')))));
+    const stuck = new HttpApi('', 'tok', hang as typeof fetch, () => undefined);
+    const usage = stuck.getUsage().catch((e: unknown) => e);
+    const done = stuck.markDone('slack:C1:1').catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(19_999);
+    expect(hang).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await usage).toMatchObject({ code: 'timeout', message: "Work OS didn't answer within 20 s. Try again." });
+    expect(await done).toMatchObject({ code: 'timeout', message: expect.stringMatching(/may still finish/) });
+    expect(stuck.connection).toBe('up');
+    // A call out to Slack or Confluence gets longer.
+    const people = stuck.getPeople().catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(20_000);
+    let settled = false;
+    void people.then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(await people).toMatchObject({ code: 'timeout' });
+  });
+
   it('describes an unreachable server as a health view, so the UI can say so', async () => {
     srv.setDown(true);
     expect((await api.getHealth()).connection).toBe('reconnecting');

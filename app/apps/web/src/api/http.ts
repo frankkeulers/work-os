@@ -14,6 +14,10 @@ export type Connection = HealthView['connection'];
 const SILENCE_MS = 45_000; // the server pings every 20 s
 const DOWN_AFTER_MS = 15_000;
 const BACKOFF_MS = [500, 1000, 2000, 5000];
+/** How long a request may take before the button gives up waiting (RV-W5). */
+const REQUEST_MS = 20_000;
+/** Requests that go out to another service (Slack, Confluence, the claude.ai connectors) or replay the log. */
+const SLOW_MS = 60_000;
 
 /** The token the server puts in index.html. In development Vite's proxy adds it instead. */
 function readToken(): string | undefined {
@@ -49,16 +53,24 @@ export class HttpApi implements WorkOsApi {
 
   // ---------------------------------------------------------------- requests
 
-  private async send(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Response> {
+  private async send(method: string, path: string, body?: unknown, extra: Record<string, string> = {}, timeoutMs = REQUEST_MS): Promise<Response> {
     const headers: Record<string, string> = { ...extra };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
     if (body !== undefined) headers['content-type'] = 'application/json';
     let res: Response;
+    // A server that is up but stuck must not leave a button busy for ever. Giving up isn't losing
+    // the server: the event stream says whether it's there.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      res = await this.fetchFn(this.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+      res = await this.fetchFn(this.base + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });
     } catch {
+      if (ctrl.signal.aborted)
+        throw new ApiError('timeout', method === 'GET' ? `Work OS didn't answer within ${timeoutMs / 1000} s. Try again.` : `Work OS didn't answer within ${timeoutMs / 1000} s. It may still finish: check before trying again.`);
       this.lost();
       throw new ApiError('network', 'Work OS server is not reachable on 127.0.0.1.');
+    } finally {
+      clearTimeout(timer);
     }
     // The server never answers 502 or 504; a proxy in front of it does (Vite in development) when
     // the server is down. That is the same as not reaching it.
@@ -79,14 +91,14 @@ export class HttpApi implements WorkOsApi {
     return res;
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await this.send(method, path, body);
+  private async request<T>(method: string, path: string, body?: unknown, timeoutMs?: number): Promise<T> {
+    const res = await this.send(method, path, body, {}, timeoutMs);
     if (res.status === 204 || res.status === 202) return undefined as T;
     return (await res.json()) as T;
   }
 
-  private get = <T>(path: string) => this.request<T>('GET', path);
-  private post = <T = void>(path: string, body?: unknown) => this.request<T>('POST', path, body ?? {});
+  private get = <T>(path: string, timeoutMs?: number) => this.request<T>('GET', path, undefined, timeoutMs);
+  private post = <T = void>(path: string, body?: unknown, timeoutMs?: number) => this.request<T>('POST', path, body ?? {}, timeoutMs);
   private item = (id: string) => `/api/items/${encodeURIComponent(id)}`;
   private action = (id: string) => `/api/actions/${encodeURIComponent(id)}`;
 
@@ -126,15 +138,15 @@ export class HttpApi implements WorkOsApi {
     return view;
   };
   getItem = (id: string) => this.get<ItemView>(this.item(id));
-  getEarlier = (id: string) => this.get<EarlierView>(`${this.item(id)}/earlier`);
-  getChannels = () => this.get<string[]>('/api/channels');
-  getPeople = () => this.get<PersonOption[]>('/api/people');
-  getConfluenceCatalogue = () => this.get<ConfluenceCatalogueView>('/api/confluence/catalogue');
+  getEarlier = (id: string) => this.get<EarlierView>(`${this.item(id)}/earlier`, SLOW_MS);
+  getChannels = () => this.get<string[]>('/api/channels', SLOW_MS);
+  getPeople = () => this.get<PersonOption[]>('/api/people', SLOW_MS);
+  getConfluenceCatalogue = () => this.get<ConfluenceCatalogueView>('/api/confluence/catalogue', SLOW_MS);
   getGuide = () => this.get<GuideFilesView>('/api/guide');
   getUsage = () => this.get<UsageView>('/api/usage');
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');
   getSettings = () => this.get<SettingsView>('/api/settings');
-  getWisprStatus = () => this.get<WisprStatusView>('/api/sources/wispr');
+  getWisprStatus = () => this.get<WisprStatusView>('/api/sources/wispr', SLOW_MS);
   getOutlookStatus = () => this.get<OutlookStatusView>('/api/sources/outlook');
   getAgenda = () => this.get<AgendaView>('/api/calendar/agenda');
   getSourceItems = (source: SourceId) => this.get<SourceItemsView>(`/api/sources/${source}/items`);
@@ -143,9 +155,9 @@ export class HttpApi implements WorkOsApi {
   getWeek = (weekStart?: string) => this.get<WeekView>(`/api/calendar/week${weekStart ? `?start=${weekStart}` : ''}`);
 
   pollNow = () => this.post('/api/poll');
-  connectWispr = () => this.post<WisprConnectView>('/api/sources/wispr/connect');
+  connectWispr = () => this.post<WisprConnectView>('/api/sources/wispr/connect', undefined, SLOW_MS);
   disconnectWispr = () => this.post('/api/sources/wispr/disconnect');
-  connectOutlook = (connectorId?: string) => this.post<OutlookStatusView>('/api/sources/outlook/connect', connectorId ? { connectorId } : {});
+  connectOutlook = (connectorId?: string) => this.post<OutlookStatusView>('/api/sources/outlook/connect', connectorId ? { connectorId } : {}, SLOW_MS);
   disconnectOutlook = () => this.post('/api/sources/outlook/disconnect');
   markDone = (id: string) => this.post(`${this.item(id)}/done`);
   reopen = (id: string) => this.post(`${this.item(id)}/reopen`);
@@ -170,7 +182,7 @@ export class HttpApi implements WorkOsApi {
   approveAction = (id: string, opts?: { markDoneWhenFiled?: boolean }) => this.post(`${this.action(id)}/approve`, opts?.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined);
 
   runEval = () => this.post('/api/evals');
-  rebuildState = () => this.post<{ events: number }>('/api/admin/rebuild-state');
+  rebuildState = () => this.post<{ events: number }>('/api/admin/rebuild-state', undefined, SLOW_MS);
   saveSettings = (settings: Settings, rules: Rule[], base?: { settings: Settings; rules: Rule[] }) => this.request<SettingsSaved>('PUT', '/api/settings', { settings, rules, ...(base && { base }) });
   getPrompts = () => this.get<PromptFileView[]>('/api/prompts');
   savePrompt = (id: PromptFileId, text: string, baseVersion: string) => this.request<PromptFileView>('PUT', `/api/prompts/${id}`, { text, baseVersion });
