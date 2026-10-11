@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { Action, ApiErrorBody, AttentionView, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
+import type { Action, ApiErrorBody, AttentionView, EvalReport, FiledView, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
@@ -796,6 +796,20 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect(v.results[r.body.id]).toBe(`Dry-run: Created ${written}. Logged action.executed.`);
     await expect(readFile(join(vault, 'Inbox/product.md'))).rejects.toThrow(); // the vault is untouched
     expect((await call<ApiErrorBody>('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(409);
+  });
+
+  it('lists what was filed today, with its outcome and where it went (UX-12)', async () => {
+    await useVault();
+    const r = await request();
+    const empty = (await call<FiledView>('GET', '/api/filed')).body;
+    expect(empty).toMatchObject({ filings: [], dryRun: true, targets: { vaultPath: vault } });
+    await call('POST', `/api/actions/${r.body.id}/approve`);
+    await res.actions.settled();
+    const { filings } = (await call<FiledView>('GET', '/api/filed')).body;
+    const written = join(dir, 'sandbox/vault/Inbox/product.md');
+    expect(filings).toEqual([
+      expect.objectContaining({ actionId: r.body.id, itemId: PROD, type: 'vault_note', title: '#product', itemDone: false, paths: ['Inbox/product.md'], result: `Dry-run: Created ${written}. Logged action.executed.` }),
+    ]);
   });
 
   it('marks an item filed in a batch done once every filing it suggests is written, in the same append (CK-4.4)', async () => {

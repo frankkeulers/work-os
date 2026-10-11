@@ -31,6 +31,7 @@ import { CockpitRow, LaterRow, RepliedRow, ReplyNote } from './inbox/cockpit/row
 import { TimeColumn } from './inbox/cockpit/TimeColumn';
 import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox/cockpit/zones';
 import { BatchDone, ItemPanel } from './inbox/ItemPanel';
+import { FiledToday } from './inbox/FiledToday';
 import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
 import { useDraftAhead } from './inbox/draftAhead';
 import { LeaveDialog, PanelSlide } from './inbox/PanelSlide';
@@ -1018,6 +1019,7 @@ export function InboxPage() {
               renderLower={lowerRow}
               pill={<NewPill group="file" items={pillItems('file')} above={stable.pending.file.every((p) => p.above)} onGo={() => goNew('file')} />}
               fileAction={batchButton}
+              filedToday={<FiledToday onOpen={openItem} />}
               scrollerRef={laterRef}
             />
           </>
@@ -1059,6 +1061,7 @@ export function InboxPage() {
                       </Button>
                     )}
                   </div>
+                  {open === 'done' && <FiledToday onOpen={openItem} />}
                   <div className="border-b border-line-soft">{by[open].length ? by[open].flatMap(lowerRow) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}</div>
                 </section>
               )}

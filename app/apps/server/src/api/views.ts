@@ -4,6 +4,7 @@ import type { SourceEnv } from '../claude/promptFiles';
 import {
   anchorOf,
   buildAttention,
+  buildFiled,
   budgetsOf,
   categoryTags,
   closedByReply,
@@ -23,6 +24,7 @@ import {
   type AgendaView,
   type AttentionView,
   type BudgetState,
+  type FiledView,
   type GuidanceChange,
   type CategoryTag,
   type CorrectionInput,
@@ -452,6 +454,24 @@ export async function attentionView(d: ViewDeps, guidance: GuidanceChange[] = []
  * of it. Unlike the inbox it keeps done items of any age and excluded channels' items (flagged).
  * A topic's parts stay in it: the topic's panel shows every piece.
  */
+/** What was filed today, for the Done list (UX-12). Reads one draft file per filing, for its outcome. */
+export async function filedView(d: ViewDeps): Promise<FiledView> {
+  const p = d.store.projection;
+  const now = d.now().toISOString();
+  const day = londonParts(now).dateKey;
+  const actions = Object.values(p.actions).filter((a) => a.status === 'done' && londonParts(a.updatedAt).dateKey === day);
+  const items = new Map<string, { title: string; summary: string; done: boolean }>();
+  const results: Record<string, string> = {};
+  for (const a of actions) {
+    const it = p.items[a.itemId];
+    if (it) items.set(it.id, { title: it.kind === 'dm' ? (d.dmTitle?.(it.id) ?? mpdmTitle(it.title) ?? it.title) : it.title, summary: d.items.text(it.id)?.summary ?? '', done: it.status === 'done' });
+    const r = await d.actions?.result(a.id);
+    if (r) results[a.id] = r;
+  }
+  const s = d.settings.editable.settings;
+  return buildFiled({ now, actions, items, results, dryRun: d.settings.settings?.dryRun ?? true, targets: { confluenceSite: s.confluence.siteUrl, spaceKey: s.confluence.spaceKey, vaultPath: s.vaultPath } });
+}
+
 export function sourceView(d: ViewDeps, source: SourceId): SourceItemsView {
   const now = d.now();
   const s = d.settings.editable.settings;

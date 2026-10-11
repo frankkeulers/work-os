@@ -174,6 +174,12 @@ What you see when a reply closes an item:
   under the groups.
 - In Done, each item says how it closed: **Your reply in Slack**, **Answered in Outlook** (an
   invite), **Closed in Slack** (the thread was deleted) or **Done by you**.
+- Done opens with **Filed today**: each vault note, Confluence entry and to-do written since
+  midnight, newest first. A row shows the outcome as the action panel words it (which note, which
+  page and version), with **Open note** or **Open page**, so you can check the funnel without going
+  to Obsidian or Confluence. In dry-run the note is in the sandbox, so there is no Open note.
+  **Reopen** puts an item that filing closed back in the inbox; what was written stays. Click a
+  row's summary to open the item.
 
 When the check says your reply didn't settle it, the row and the panel's next step read **You
 replied · still open:** and why, such as "You said you'd look later". If closing on reply is off for

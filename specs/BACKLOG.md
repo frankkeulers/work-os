@@ -57,7 +57,7 @@ Ranked by friction removed. Here is the core funnel on the wide cockpit as it st
 | UX-9 | **Gmail-style multi-select.** `x` toggles, shift-click selects a range, then `e`, `s` or `b` (file in a batch) act on the selection. | Bulk today is only "Mark all done" per channel. | — | idea |
 | UX-10 | **An end-of-day sweep.** A batch over Needs you: `e`/`s`/`r`/`f`/`v` per item, with a tally at the end. | Aims at C3 (Needs you empty at 18:00). | UX-1 | idea |
 | UX-11 | **A `?` overlay** that shows the keys for the current context (list, panel, draft, batch). | Today `?` leaves the inbox for the guide. | UX-1 | idea |
-| UX-12 | **Done today shows filings**: what was written where, with Open note or Open page, and Undo. | Lets you trust the funnel without checking Obsidian or Confluence. | — | idea |
+| UX-12 | **Done today shows filings**: what was written where, with Open note or Open page, and Undo. | Lets you trust the funnel without checking Obsidian or Confluence. | — | built (PLAN FR-8.3 amended): Undo is **Reopen**, which reopens the item; what was written stays |
 | UX-13 | **Don't open the panel on load** on the cockpit. | It covers Later until you close it once. | — | built (cockpit SPEC CK-3.2 amended): today's list below 1600 px still opens on its first item |
 
 ---

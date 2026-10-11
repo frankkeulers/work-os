@@ -512,6 +512,32 @@ export interface AttentionWork {
   held?: string;
 }
 
+/** One filing written today (BACKLOG UX-12): what went where, for the Done list. */
+export interface Filing {
+  actionId: string;
+  itemId: string;
+  type: ActionType;
+  /** When it was written. */
+  at: string;
+  /** The item: where it came from, and its summary. */
+  title: string;
+  summary: string;
+  /** The item is done (so Reopen undoes it), or still open. */
+  itemDone: boolean;
+  /** The outcome as the action panel shows it, e.g. "Appended under ## Decisions in …". */
+  result?: string;
+  /** Vault notes, relative to the vault (to-dos: the Tasks note). */
+  paths?: string[];
+  pageId?: string;
+}
+
+/** Today's filings, newest first (UX-12), with what links to them need. */
+export interface FiledView {
+  filings: Filing[];
+  dryRun: boolean;
+  targets: { confluenceSite: string; spaceKey: string; vaultPath: string };
+}
+
 export interface AttentionView {
   /** Newest first. */
   entries: AttentionEntry[];
@@ -620,6 +646,8 @@ export interface WorkOsApi {
   getAttention(): Promise<AttentionView>;
   /** Dismisses one of the bell's entries by its key (FR-11.5). */
   dismissAttention(key: string): Promise<void>;
+  /** What was filed today, for the Done list (UX-12). */
+  getFiled(): Promise<FiledView>;
 
   subscribe(onNotice: (n: Notice) => void): () => void;
 }

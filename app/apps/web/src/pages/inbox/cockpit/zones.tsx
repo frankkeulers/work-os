@@ -158,6 +158,7 @@ export function LaterZone({
   renderLower,
   pill,
   fileAction,
+  filedToday,
   scrollerRef,
 }: {
   /** Waiting on others (FR-8.1, amended): Frank owns the outcome, someone else has the next move. */
@@ -172,6 +173,8 @@ export function LaterZone({
   pill: ReactNode;
   /** File in a batch (CK-4.1), in the To file header. */
   fileAction?: ReactNode;
+  /** What was filed today, at the top of the Done list (UX-12). */
+  filedToday?: ReactNode;
   scrollerRef: RefObject<HTMLElement | null>;
 }) {
   const now = useNow(30_000);
@@ -201,6 +204,7 @@ export function LaterZone({
               )}
               <p className="m-0 w-full pb-1 pl-9 text-xs text-muted">{LOWER[list].note}</p>
             </div>
+            {list === 'done' && filedToday}
             <div className="border-b border-line-soft">{by[list].length ? by[list].flatMap(renderLower) : <p className="m-0 border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</p>}</div>
           </section>
         ) : (

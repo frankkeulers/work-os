@@ -10,7 +10,7 @@ import { RebuildError } from '../store/store';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { agendaView, attentionView, healthView, inboxView, itemView, knownCategories, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
+import { agendaView, attentionView, filedView, healthView, inboxView, itemView, knownCategories, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
 
@@ -486,6 +486,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   // The bell (FR-11.3–11.5): what needs Frank, and dismissing an entry.
   const guidance = guidanceWatch(dataDir, env, d);
   app.get('/api/attention', async (_req, reply) => reply.headers(noStore).send(await attentionView(d, await guidance())));
+  app.get('/api/filed', async (_req, reply) => reply.headers(noStore).send(await filedView(d)));
   // Settings › Rebuild state (FR-1.4, Story 1.1): what `npm run rebuild-state` does, for the running server.
   app.post('/api/admin/rebuild-state', async () => {
     try {

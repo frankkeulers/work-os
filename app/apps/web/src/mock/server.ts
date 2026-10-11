@@ -18,6 +18,7 @@ import {
   finishChecked,
   budgetsOf,
   buildAttention,
+  buildFiled,
   dismiss,
   confirm,
   correct,
@@ -63,6 +64,7 @@ import {
   type Action,
   type Draft,
   type AttentionView,
+  type FiledView,
   type ConfluenceCatalogueView,
   type GuideFilesView,
   type ActionType,
@@ -1578,6 +1580,19 @@ export class MockServer implements WorkOsApi, MockControls {
       guidance,
       dismissed: this.s.dismissed ?? {},
     });
+  }
+
+  async getFiled(): Promise<FiledView> {
+    await this.gate(QUERY_MS);
+    const budgets = this.budgets();
+    const items = new Map(
+      Object.values(this.s.items).map((r) => {
+        const row = this.summaryOf(r, budgets);
+        return [r.item.id, { title: row.title, summary: row.summary, done: r.status === 'done' }] as const;
+      }),
+    );
+    const { confluence, vaultPath, dryRun } = this.s.settings;
+    return buildFiled({ now: this.iso(), actions: Object.values(this.s.actions), items, results: this.s.results, dryRun, targets: { confluenceSite: confluence.siteUrl, spaceKey: confluence.spaceKey, vaultPath } });
   }
 
   async dismissAttention(key: string) {
