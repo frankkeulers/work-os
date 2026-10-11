@@ -2,8 +2,8 @@
 title: The inbox
 group: Inbox
 order: 30
-summary: The three zones on a wide screen, Needs you and To file, what the chips mean, topics, and how to correct a decision.
-updated: 2026-10-10
+summary: The three zones on a wide screen, Needs you and To file, the bell, what the chips mean, topics, and how to correct a decision.
+updated: 2026-10-11
 ---
 
 ## Three zones on a wide screen
@@ -177,6 +177,32 @@ with no early read. The same page turns closing off: the check still runs, and t
 done?** instead. The checks count towards the day's triage budget, and when Claude can't be reached
 nothing closes: the check is tried up to three times.
 
+## The bell: what needs your follow-up
+
+The bell at the right of every page's top bar lists what is waiting for you, so you can start a
+draft, get on with something else, and come back when it's ready.
+
+- **The count** says how many things need you. It turns blue when something new arrives, and
+  goes grey once you have opened the bell. With nothing to follow up, there is no count.
+- **Drafts:** a draft ready to review, a draft that failed, and an approved write that couldn't
+  be filed. A ready draft says so when new replies came in after it was drafted, or when it has
+  waited more than a day.
+- **Fixes:** a login or connector to fix (Slack, Claude, Outlook), safe mode, settings that
+  don't load, and drafts held back by the drafts budget.
+- **Nudges:** an item back from snooze, a topic that looks finished, and a reply of yours that
+  left asks open.
+- **Housekeeping:** a finished triage eval, and a guidance file whose sources have changed.
+- **Working on** lists drafts in progress, with the step each is on, or why one is waiting.
+
+Each entry's button takes you where you act on it: **Review**, **Open** or **Fix**. Entries go by
+themselves once you've dealt with them; you approve the draft, fix the login, mark the item done.
+Failures, nudges and housekeeping can also be dismissed. A draft ready for review and a fix you
+still need to make can't be, as they still need you.
+
+A draft that is ready or fails also sends a macOS notification, and a toast when you are in Work
+OS. Quiet hours apply, as for new Now items. See
+[Settings › Notifications](/settings/notifications).
+
 ## The item panel
 
 Click a row to open it in a panel on the right. It shows the decision (attention and why), the
@@ -230,7 +256,8 @@ reads **Filing 1 of 4**.
 - **Skip** (`→`) leaves the item in To file and moves on. **Discard** works as usual.
 - The next item's draft runs while you review the current one, so it is usually ready when you
   get there. Only one runs ahead: stopping part-way wastes at most one draft. The batch's drafts
-  don't raise a "draft ready" toast, and neither does a draft for the item open in the panel.
+  don't raise a "draft ready" toast or a macOS notification, and a draft for the item open in the
+  panel raises no toast. They are still listed in the bell.
 - At the end the panel shows what happened, such as **3 filed · 1 skipped**. `Esc` closes it.
   `Esc` part-way, or opening another item, stops the batch; the rest stay in To file.
 

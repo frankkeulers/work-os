@@ -66,6 +66,10 @@ For each journey, write what you notice in the **Notes** column: confusion, miss
 | J21 | Revision collisions | Poll outcome → New reply on: a done item, a snoozed item, a corrected item, a drafted item. Then Clock → +10 min: replies wait out the 10-minute quiet window like any thread, and the next scheduled poll re-triages all four in one call. | Each case follows the defaults under Open questions. Are they right? | FR-5.4 | |
 | J22 | Wake from sleep | Clock → Wake from 3 h sleep. | Is the catch-up poll visible straight away? | FR-2.7, Story 2.1 | |
 | J23 | Failed triage | Find the Triage failed row in Needs you (#data-products-ops). Click Retry. | Does the item land in a lane? Is the failure wording clear? | CL-7 | |
+| J69 | Draft, move on, hear back | Start J69. Click Draft vault note, then Back to inbox at once. Open the bell. Wait, then open it again and click Review. Approve. | While it drafts, the bell shows it under Working on with its stage. Once ready, the count turns blue and a toast appears. After approving, the entry is gone. | FR-11.3, FR-11.4, FR-11.6 | |
+| J70 | A draft fails while away | Start J70. Click Draft vault note, then Back to inbox. | A "draft failed" toast with the reason. The bell keeps it until you re-draft, discard or dismiss it. | FR-11.4, FR-11.5 | |
+| J71 | Something to fix | Start J71. Open the bell on the Inbox, Settings, Usage & health and the Guide. | Outlook not connected is listed on every page, with Fix opening claude.ai's connectors. It can't be dismissed. | FR-11.4 | |
+| J72 | Nudges and housekeeping | Start J72. Open the bell after a moment. | Your reply left asks open, Back from snooze and Guidance sources changed, each with a way to act and Dismiss. | FR-11.4, FR-11.5 | |
 
 ### Budgets, health and usage
 

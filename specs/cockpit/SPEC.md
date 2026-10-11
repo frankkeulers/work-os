@@ -149,6 +149,7 @@ Everything else keeps the DESIGN.md scale. Later rows stay 14 / 500.
 - **New staleness rule:** if any enabled source's last successful poll is older than 2× its current interval (work or off hours), the pill turns amber: "Slack stale · last read 34 min ago". This catches a server that is silently not polling.
 - The health banner stays for things Frank must act on. The pill doesn't replace it; it makes the state visible from his seat.
 - The sidebar health dot stays.
+- Amendment (FR-11.3): the bell is the last thing on the right, after the usage button, on every page. Its count shows only while something needs a follow-up, so the corner stays quiet otherwise.
 
 **CK-1.8 Dark mode for everything new.** Every colour the cockpit adds is a token with a light and a dark value, under `:root[data-theme="dark"]` and `prefers-color-scheme` like the existing ones. The new tokens:
 

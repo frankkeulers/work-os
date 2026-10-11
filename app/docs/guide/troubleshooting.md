@@ -3,7 +3,7 @@ title: Troubleshooting
 group: Help
 order: 80
 summary: What the health pill and banner mean, storing tokens, and what to do when something stops.
-updated: 2026-10-09
+updated: 2026-10-11
 ---
 
 ## Health
@@ -21,7 +21,8 @@ top of the inbox names the problem and the fix, with **Check again** to try at o
 | Paused | Stopped on purpose, or waiting for something else to be fixed. |
 
 You are told by notification about a problem at most once every four hours per service, never in
-quiet hours, and only about being offline after 30 minutes awake in work hours.
+quiet hours, and only about being offline after 30 minutes awake in work hours. A login or
+connector you have to fix is also listed in the bell, until it works again.
 
 ### The health pill
 

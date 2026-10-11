@@ -797,6 +797,43 @@ As built (M3 step 19):
   - The 4-hour memory is in memory only, so a restart may repeat an alert once.
 - **terminal-notifier.** It is used when installed (`/opt/homebrew/bin` or `/usr/local/bin`, checked directly because launchd's PATH lacks them); otherwise osascript, whose notifications can't open a URL. Text goes in as arguments, and a leading `-` or `[` is escaped. **It is not installed on this Mac yet: `brew install terminal-notifier`.** `npm run agent:status` shows which one is in use. Tests and `--fakes` runs never show notifications.
 
+**FR-11.3 The bell.** A bell at the right of every page's top bar lists what needs Frank's follow-up, so he can start a draft, carry on, and come back when it is ready. It is derived from state as it stands (`GET /api/attention`, built by `buildAttention` in `packages/shared/src/attention.ts`, the same in the server and the mock), so an entry goes as soon as he deals with it. Nothing is stored but dismissals.
+
+- **The count** is the number of entries. It is accent while some arrived since he last opened the bell, and quiet once he has. With nothing to follow up there is no count at all. When the bell was last opened is kept per browser.
+- **Working on**, below the entries, lists drafts in progress with their stage ("Finding related notes · 2 of 3"), or why one waits: its turn, the drafts budget, Claude, Confluence. These don't count.
+- **Every page** has it: the Inbox, a source's page, Settings, the Guide, Usage & health and the item page. The macOS-style cards moved below it.
+- **Refreshing:** the client fetches the bell again on the notices that already say its views changed (`inbox`, `item`, `health`, `usage`, `evals`, `settings`), plus `attention` after a dismissal. The SSE stream's other notices are unchanged.
+
+**FR-11.4 What it lists.** Each entry has a title, what it is about, sometimes one more line, and a button.
+
+| Kind | Shows when | Goes when | Dismiss |
+|---|---|---|---|
+| Draft ready | a vault note or Confluence entry draft waits for review. Says so when new replies came in since, or after a day. | approved, discarded or re-drafted | no |
+| Draft failed | drafting failed, with the server's reason | re-drafted or discarded | yes |
+| Couldn't file | an approved write failed (`failedWhile: writing`). A conflict that re-drafts at once doesn't show. | re-drafted or discarded | yes |
+| Fix needed | a dependency rejected the login or is paused, safe mode, a failed startup check no dependency covers, or drafts waiting for the drafts budget | fixed | no |
+| Back from snooze | a snoozed item came back | opened | yes |
+| Looks finished | others' messages settled what a topic asked of Frank (CK-2.10) | Done or Not finished | yes |
+| Your reply left asks open | the settle check found asks his reply didn't settle (CK-2.3) | done, or a later check | yes |
+| Triage eval finished | an eval finished in the last 24 hours | the report is opened | yes |
+| Guidance sources changed | a guidance file's sources changed since it was distilled (FR-1.7). Checked at most every 10 minutes. | marked reviewed | yes |
+
+- **Only the current action per type counts** (`currentAction`), so a failure replaced by a re-draft goes.
+- **A draft on a done item** shows only if it became ready or failed after the item was closed. That is the draft Frank asked for on his way out; one he left behind when he closed the item stays out.
+- **A failed draft** also raises a `draft_failed` notice. The UI shows it as a toast unless the item is on screen or the draft was made ahead in a batch.
+
+**FR-11.5 Dismissing.** A dismissible entry's key names its occurrence: `draft_failed:<action>`, `snooze_back:<item>:<when>`, and so on. `POST /api/attention/dismiss {key}` logs `attention.dismissed`, and the projection keeps the key for 90 days. A new occurrence has a new key, so it shows again.
+
+**FR-11.6 macOS notifications for drafts.** A draft that is ready or failed notifies, as Frank may have moved on. Clicking the notification opens the item.
+
+- **Same rules as FR-11.2:** quiet hours and the off switch apply, and the bell lists it either way.
+- **Batch drafts don't notify:** drafts made ahead while filing in a batch are requested with `quiet: true` (CK-4.2).
+- **Nothing is recorded:** each action is drafted once, so the notification can't repeat after a restart.
+
+As built:
+
+- The projection gains `dismissed`, `backAt` (when a snooze ended) and, on actions, `failedWhile` and `quiet`. PROJECTION_VERSION is now 5.
+
 ### 7.12 E11 Hardening
 
 - **FR-12.1** Retention job runs daily (section 4.3).

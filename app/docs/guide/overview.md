@@ -3,7 +3,7 @@ title: What Work OS does
 group: Start here
 order: 10
 summary: A local inbox that reads Slack, decides what needs you, and files what is worth keeping.
-updated: 2026-10-09
+updated: 2026-10-11
 ---
 
 Work OS runs on your Mac and reads the Slack conversations you are in, and, once you connect them,
@@ -50,3 +50,7 @@ when a dependency (Slack, Claude, Confluence, the Keychain, the network) has a p
 to do about it. The dot beside Usage & health in
 the sidebar shows the same at a glance: green when all is well, amber with a problem, red in safe
 mode. Hover it for the reason. [Usage & health](/usage) has the detail. [Troubleshooting](troubleshooting.md) covers the common cases.
+
+The bell at the right of every page's top bar lists everything that needs your follow-up:
+drafts that are ready or failed, logins and connectors to fix, and items to look at again. See
+[The bell](inbox.md#the-bell-what-needs-your-follow-up).
