@@ -27,8 +27,8 @@ const current = (page: Page) => new URL(page.url()).searchParams.get('item')!;
 
 async function afternoon(page: Page) {
   await page.goto('/');
-  await expect(panel(page)).toBeVisible();
-  await page.keyboard.press('Escape');
+  // The cockpit opens with the panel closed (UX-13), so new rows land in place.
+  await expect(page.locator('[data-row]').first()).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   await control(page, '13:48 with Outlook and the calendar on (cockpit)');
   await expect(page.locator('[data-row]').filter({ hasText: 'Insights APIs v2 pricing' })).toBeVisible({ timeout: 15_000 });

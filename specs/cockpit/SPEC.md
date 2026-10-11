@@ -291,7 +291,7 @@ The layout matches artboards 1 and 2 of the design: `Main.dc.html` and `Panel.dc
 - The sidebar defaults to the 60 px rail on this layout. The `[` key still toggles it, and the choice is kept.
 - **Narrower windows:** between 1280 and 1599 px, Later folds into the footer row of today's design (Low priority, This week, Snoozed, Done as links). Below 1280 px, the time column becomes today's agenda strip. That lower layout is the current design, so nothing is lost on a small window.
 
-**CK-3.2 The panel** slides over from the right as today, 640 px wide, below the top bar, covering Later and part of Needs you. The scrim covers the visible zones. The selected row keeps its accent wash and 3 px bar. A click on a row in any zone switches the item.
+**CK-3.2 The panel** slides over from the right as today, 640 px wide, below the top bar, covering Later and part of Needs you. The scrim covers the visible zones. The selected row keeps its accent wash and 3 px bar. A click on a row in any zone switches the item. *Amended 11 Oct 2026 (BACKLOG UX-13):* the cockpit opens with the panel closed, so Later is in view; today's list below 1600 px still opens on its first item until Frank closes it.
 
 **CK-3.3 Keyboard.** `j`/`k` walk Now → Today → To file → This week, then any open footer list (Snoozed, Low priority, Done). New: `g n` goes to the first Needs you item, `g l` to the first Later item, and `t` toggles Today/Tomorrow in the time column. Update `shortcuts.md`.
 

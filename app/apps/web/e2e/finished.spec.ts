@@ -17,9 +17,8 @@ const WHY = 'The Meridia PM locked the FQ3 three with Matt and says nothing is n
 
 async function open(page: Page) {
   await page.goto('/');
-  // With the panel closed, new rows land in place rather than waiting (CK-1.2).
-  await expect(panel(page)).toBeVisible();
-  await page.keyboard.press('Escape');
+  // The cockpit opens with the panel closed (UX-13), so new rows land in place.
+  await expect(page.locator('[data-row]').first()).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   await page.getByRole('button', { name: /Scenarios/ }).click();
   await page.getByRole('group', { name: 'Scenario tab' }).getByRole('button', { name: 'Controls' }).click();

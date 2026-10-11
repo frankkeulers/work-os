@@ -27,9 +27,8 @@ const zone = (page: Page, name: 'Time' | 'Needs you' | 'Later') => page.getByRol
 /** The cockpit at 13:48, the panel closed, with the Outlook mail that Connect brings in. */
 async function afternoon(page: Page) {
   await page.goto('/');
-  // The panel opens on the first item; closed, new rows land in place rather than behind a pill.
-  await expect(panel(page)).toBeVisible();
-  await page.keyboard.press('Escape');
+  // The cockpit opens with the panel closed (UX-13), so new rows land in place.
+  await expect(page.locator('[data-row]').first()).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   await control(page, '13:48 with Outlook and the calendar on (cockpit)');
   await expect(page.getByTestId('clock')).toHaveText(/^13:4[89]$/);
@@ -269,4 +268,19 @@ test('J59: below 1600 px the Inbox keeps the list and the agenda strip (CK-3.1, 
   await page.setViewportSize({ width: 1728, height: 1000 });
   await expect(zone(page, 'Time')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Inbox list' })).toHaveCount(0);
+});
+
+test('the cockpit opens with the panel closed, so Later is in view; the list still opens on its first item (UX-13)', async ({ page }) => {
+  await page.goto('/');
+  await expect(zone(page, 'Later').locator('[data-row]').first()).toBeVisible();
+  await page.waitForTimeout(500); // long enough for the panel to have opened, had it been going to
+  await expect(panel(page)).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get('item')).toBeNull();
+  // A pick opens it as before.
+  await zone(page, 'Needs you').locator('[data-row]').first().click();
+  await expect(panel(page)).toBeVisible();
+  // Below 1600 px, today's list opens the panel on its first item when Work OS opens.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/');
+  await expect(panel(page)).toBeVisible();
 });

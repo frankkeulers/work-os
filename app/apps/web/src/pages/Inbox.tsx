@@ -825,17 +825,23 @@ export function InboxPage() {
   const batchPos = batch && !batch.done && sel ? batch.ids.indexOf(sel) : -1;
   if (batch && !batch.done && sel && batchPos < 0) setBatch(null);
 
-  // The panel opens on the first item until it's closed. A stale ?item= (after a reset) moves on.
-  // The preference is read, not watched: picking a row sets it a moment before the URL changes,
-  // and reacting to that would open the first item over the one you picked.
+  // Today's list opens the panel on the first item when Work OS opens, until it's closed; the
+  // cockpit doesn't, as the panel would cover Later (UX-13). Only once, as the inbox arrives: the
+  // preference is set a moment before a pick's URL changes, and opening the first item in that gap
+  // (a poll landing as File in a batch starts) would replace the one picked. A stale ?item= (after
+  // a reset) moves on to the first item on the list, and closes the panel on the cockpit.
   const first = order[0];
   const missing = !!inbox && !!sel && !selItem;
+  const arrived = useRef(false);
   useEffect(() => {
     if (!inbox) return;
-    const open = usePrefs.getState().panelOpen;
+    const open = !wide && usePrefs.getState().panelOpen;
     if (missing) setSearch(open && first ? { item: first } : {}, { replace: true });
-    else if (!sel && open && first) setSearch({ item: first }, { replace: true });
-  }, [inbox, missing, sel, first, setSearch]);
+    else if (!arrived.current && (sel || first)) {
+      arrived.current = true;
+      if (!sel && open) setSearch({ item: first }, { replace: true });
+    }
+  }, [inbox, missing, sel, first, wide, setSearch]);
 
   // g then n or l, within a second (CK-3.3).
   const gAt = useRef(0);

@@ -85,8 +85,8 @@ test.describe('on the cockpit', () => {
   test('a batch plays filed although it moves on before the write lands', async ({ page }) => {
     await page.goto('/');
     const panel = page.getByRole('complementary', { name: 'Item panel' });
-    await expect(panel).toBeVisible();
-    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-row]').first()).toBeVisible();
+    await expect(panel).toHaveCount(0); // the cockpit opens with the panel closed (UX-13)
     await controls(page);
     await ctl(page, '13:48 with Outlook and the calendar on (cockpit)').click();
     await page.keyboard.press('Backquote');

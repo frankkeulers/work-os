@@ -58,7 +58,7 @@ Ranked by friction removed. Here is the core funnel on the wide cockpit as it st
 | UX-10 | **An end-of-day sweep.** A batch over Needs you: `e`/`s`/`r`/`f`/`v` per item, with a tally at the end. | Aims at C3 (Needs you empty at 18:00). | UX-1 | idea |
 | UX-11 | **A `?` overlay** that shows the keys for the current context (list, panel, draft, batch). | Today `?` leaves the inbox for the guide. | UX-1 | idea |
 | UX-12 | **Done today shows filings**: what was written where, with Open note or Open page, and Undo. | Lets you trust the funnel without checking Obsidian or Confluence. | — | idea |
-| UX-13 | **Don't open the panel on load** on the cockpit. | It covers Later until you close it once. | — | idea |
+| UX-13 | **Don't open the panel on load** on the cockpit. | It covers Later until you close it once. | — | built (cockpit SPEC CK-3.2 amended): today's list below 1600 px still opens on its first item |
 
 ---
 
@@ -161,8 +161,8 @@ findings below were checked against the code at the time, so line numbers may ha
 
 | ID | Finding | Where | Suggested fix |
 |---|---|---|---|
-| RV-S1 | A double submit creates duplicate drafts: two Sonnet calls for one click. | `actions/service.ts` `request()` | An in-memory pending set keyed `itemId\|type`, held until the append resolves |
-| RV-S2 | Single Done isn't idempotent, so you get two `item.done` events and two Undo toasts. Bulk Done dedupes before resolving topic anchors. | `api/routes.ts` (done routes) | Skip items already done; dedupe after mapping to the anchor |
+| RV-S1 | A double submit creates duplicate drafts: two Sonnet calls for one click. | `actions/service.ts` `request()` | **Fixed 11 Oct 2026:** a second request for the same item and type while one is pending gets the same action |
+| RV-S2 | Single Done isn't idempotent, so you get two `item.done` events and two Undo toasts. Bulk Done dedupes before resolving topic anchors. | `api/routes.ts` (done routes) | **Fixed 11 Oct 2026:** Done and reopen skip items already there or in flight, after mapping to the anchor |
 | RV-S3 | Rules are lost on topics. A fixed now/today rule that matches a part doesn't reach the anchor, and fixed rules fire again after you've replied. | `pipeline/poll.ts`, `pipeline/triage.ts`, `shared/rules.ts` | Evaluate rules on the anchor; match fixed rules on messages since your last one |
 | RV-S4 | A poll and a "Reply in…" re-read can race on the same item, so your reply re-triages the item instead of getting a settle check. | `runtime/runtime.ts`, `pipeline/poll.ts` | Run re-reads through the poll queue, or read `prev` under the item lock |
 | RV-S5 | Startup recovery quarantines events that fail today's schema, so a rollback loses state. | `store/recover.ts` | Keep unknown events in the log, skip them in the reducer, add upcasters by `schemaVersion` |
@@ -223,8 +223,8 @@ The 11 Oct checks found no problems in these areas:
 | RV-W2 | `Dialog` refocuses its × on every parent render, because its effect depends on an inline `onClose`. There is no focus trap. | `components/ui.tsx` | Keep `onClose` in a ref; add a focus trap |
 | RV-W3 | The item panel says "Loading…" forever when the item fails to load. | `hooks/usePanelHost.ts`, `ItemPanel.tsx` | Show the error with Retry |
 | RV-W4 | "Done and next" breaks out of a filing batch. | `hooks/usePanelHost.ts` | In batch mode, the footer becomes Approve, Skip and Stop (UX-2) |
-| RV-W5 | Requests have no timeout, so buttons can stay busy for ever. | `api/http.ts` | `AbortSignal.timeout(15 s)` |
-| RV-W6 | Toasts cap at four and don't pause on hover, so fast triage loses Undo. | `store/toasts.ts`, `Toasts.tsx` | An undo stack on `z` (UX-1); pause on hover |
+| RV-W5 | Requests have no timeout, so buttons can stay busy for ever. | `api/http.ts` | **Fixed 11 Oct 2026:** 20 s, or 60 s for calls out to Slack, Confluence or the connectors; a write that times out says it may still finish |
+| RV-W6 | Toasts cap at four and don't pause on hover, so fast triage loses Undo. | `store/toasts.ts`, `Toasts.tsx` | **Mostly fixed:** `z` undoes from a stack that outlives the toasts (UX-1). Pause on hover is still open |
 | RV-W7 | Focus and accessibility: opening the panel focuses the row behind it; menus have no arrow keys; the Full-scope search box blurs as soon as it's focused. | `usePanelHost.ts`, `ui.tsx`, `Inbox.tsx` | Focus the panel heading; roving tabindex; make the box a button |
 | RV-W8 | The "Action items for you" checkboxes aren't saved. | `pages/inbox/ItemPanel.tsx` | Resolved by UX-5: they now pick the action items for a to-do |
 | RV-W9 | The sidebar Inbox badge counts differently from the lane pills. | `Shell.tsx`, `lib/next.ts` | Use `laneCounts` in both |

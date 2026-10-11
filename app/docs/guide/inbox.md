@@ -24,7 +24,8 @@ while something is in Now, briefly teal after a filing is written.
   arrow returns. Drag its left edge to make it wider or narrower (360 to 600 px); double-click the
   edge to put it back to 440 px.
 
-Clicking a row in any column opens it in the item panel, 640 px wide, over Later. `j` and `k` walk
+Clicking a row in any column opens it in the item panel, 640 px wide, over Later. The cockpit opens
+with the panel closed, so Later is in view until you pick something. `j` and `k` walk
 Now, Today, Waiting on others, To file, then This week; `g n` jumps to the first item in Needs you and `g l` to the
 first in Later. In a narrower window the inbox is a single list with the agenda strip above it, as
 described below; nothing is lost.
