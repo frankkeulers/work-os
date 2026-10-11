@@ -28,6 +28,8 @@ const START = Date.parse('2026-10-06T08:00:00Z'); // Tuesday 09:00 London
 const MIN = 60_000;
 let dir: string;
 let res: Extract<RunResult, { running: true }>;
+/** Starts a server on this test's data directory and fakes (beforeEach starts the first). */
+let start: () => Promise<RunResult>;
 let slack: FakeSlack;
 let claude: FakeClaude;
 let wispr: FakeWispr;
@@ -73,7 +75,7 @@ beforeEach(async () => {
   claude = fakeClaude();
   wispr = new FakeWispr(); // off until a test turns it on in settings
   const directory = new SlackDirectory(new SlackApi(secrets, slack.fetch));
-  const r = await run({
+  start = () => run({
     env: { WORKOS_INSTANCE: instance, WORKOS_DATA_DIR: dir, WORKOS_PORT: '0' },
     secrets,
     clock,
@@ -86,6 +88,7 @@ beforeEach(async () => {
     confluenceFetch: (url, init) => confluence.fetch(url, init),
     notifier: { notify: async (n) => void notes.push(n) },
   });
+  const r = await start();
   if (!r.running) throw new Error('expected a start');
   res = r;
   await res.runtime.settled(); // the first tick polls
@@ -781,6 +784,19 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     const ok = await request();
     await rm(join(dir, 'drafts', `${ok.body.id}.json`));
     await res.actions.recover();
+    expect((await item()).actions[0]).toMatchObject({ id: ok.body.id, status: 'failed', failureReason: 'draft_missing' });
+  });
+
+  it('starts after a restart that finds a ready draft whose file is lost, and fails that draft', async () => {
+    await useVault();
+    const ok = await request();
+    expect((await item()).actions[0]).toMatchObject({ id: ok.body.id, status: 'ready' });
+    await res.lifecycle.stop('test');
+    await rm(join(dir, 'drafts', `${ok.body.id}.json`));
+    const again = await start(); // recover() fails the draft and tells Frank, before notifications used to exist
+    if (!again.running) throw new Error('expected a start');
+    res = again;
+    await res.runtime.settled();
     expect((await item()).actions[0]).toMatchObject({ id: ok.body.id, status: 'failed', failureReason: 'draft_missing' });
   });
 

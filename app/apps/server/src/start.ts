@@ -346,6 +346,10 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   const drafts = new DraftStore(join(config.dataDir, 'drafts'));
   // Belt and braces, as for Claude: a test without a fake Confluence fails instead of calling one.
   const confluenceApi = new ConfluenceApi(secrets, () => settings.editable.settings.confluence.siteUrl, deps.confluenceFetch ?? (process.env.VITEST ? noConfluence : fetch));
+  // Notifications (FR-11.x): new Now items, and health problems that need Frank. Built before
+  // the actions, whose recover() can already report a lost draft.
+  let baseUrl: string | undefined = undefined; // set once the server listens
+  const notifications = new Notifications({ store, items, notifier, settings: () => settings.editable.settings, now, baseUrl: () => baseUrl, publish: (n) => publish(n), logger });
   const actions = new ActionService({
     store,
     items,
@@ -381,9 +385,6 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   });
   await actions.recover();
   lifecycle.onStop('actions', () => actions.stop());
-  // Notifications (FR-11.x): new Now items, and health problems that need Frank.
-  let baseUrl: string | undefined = undefined; // set once the server listens
-  const notifications = new Notifications({ store, items, notifier, settings: () => settings.editable.settings, now, baseUrl: () => baseUrl, publish: (n) => publish(n), logger });
   const alerts = new HealthAlerts({
     notifier,
     settings: () => settings.editable.settings,
