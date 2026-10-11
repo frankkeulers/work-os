@@ -160,11 +160,11 @@ test('inbox, poll, correction, done, a restart, a vault note, a Confluence entry
   await expect(page.getByRole('table', { name: 'Attention confusion matrix' })).toBeVisible();
 });
 
-test('a proxy answering 502 (Vite with the server down) shows the reconnecting screen, then the inbox once it is back', async ({ page }) => {
+test('a proxy answering 502 (Vite with the server down) shows the reconnecting bar, then the unreachable screen, then the inbox once it is back', async ({ page }) => {
   // Every API call answers as Vite's proxy does when nothing listens behind it.
   await page.route('**/api/**', (route) => route.fulfill({ status: 502, body: '' }));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Reconnecting to Work OS…' })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: 'Reconnecting to Work OS…' })).toBeVisible();
   // More than 15 s without a connection: the screen says how to start the server.
   await expect(page.getByRole('heading', { name: 'Can’t reach the Work OS server' })).toBeVisible({ timeout: 25_000 });
   await page.screenshot({ path: join(APP, 'screenshots/server-unreachable-light.png') });
@@ -195,6 +195,16 @@ test('the prompt and guidance files are listed from the data directory, and a sa
   await page.getByRole('button', { name: 'Reset to default' }).click();
   await page.getByRole('dialog', { name: 'Reset Vault conventions?' }).getByRole('button', { name: 'Reset to default' }).click();
   await expect(page.locator('[data-prompt="vault-conventions"]')).toContainText('vault-conventions v4#');
+});
+
+test('Settings › Rebuild state replays the event log on the running server (FR-1.4, Story 1.1)', async ({ page }) => {
+  await page.goto('/settings/storage');
+  await page.getByRole('button', { name: 'Rebuild', exact: true }).click();
+  await expect(page.getByText('State rebuilt')).toBeVisible();
+  await expect(page.getByText(/^Replayed [\d,]+ events\. Nothing was lost\.$/)).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/server-rebuild-state-light.png') });
+  await page.goto('/');
+  await expect(lane(page, 'now')).not.toHaveCount(0); // the inbox, as before
 });
 
 test('the guide is read live from its folder: an edit shows on focus, without a deploy (FR-1.8)', async ({ page }) => {

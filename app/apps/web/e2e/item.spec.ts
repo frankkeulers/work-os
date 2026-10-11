@@ -58,6 +58,7 @@ test('J73 a write that fails shows Not written, and Retry write writes the same 
   await expect(panel(page).getByText('Not written.')).toBeVisible(DRAFT_TIMEOUT);
   await expect(panel(page).getByText(/Full Disk Access/)).toBeVisible();
   await expect(panel(page).getByText(/didn’t return a usable draft/)).toHaveCount(0);
+  await page.screenshot({ path: join(APP, 'screenshots/item-not-written-light.png'), animations: 'disabled' });
   await panel(page).getByRole('button', { name: 'Retry write' }).click();
   await expect(panel(page).getByRole('status')).toContainText('Dry-run', DRAFT_TIMEOUT);
 });
@@ -69,6 +70,7 @@ test('J74 a conflict with the drafts budget used up offers Re-draft and Discard,
   await expect(panel(page).getByText('Changed since draft.')).toBeVisible(DRAFT_TIMEOUT);
   await expect(panel(page).getByText(/can’t be re-drafted until the drafts budget resets/)).toBeVisible(DRAFT_TIMEOUT);
   await expect(panel(page).getByRole('button', { name: 'Re-draft' })).toBeDisabled();
+  await page.screenshot({ path: join(APP, 'screenshots/item-conflict-no-budget-light.png'), animations: 'disabled' });
   await panel(page).getByRole('button', { name: 'Discard' }).click();
   await expect(panel(page).getByText('Changed since draft.')).toHaveCount(0);
 });
@@ -129,10 +131,13 @@ test('an unsaved draft edit survives a dropped connection, and the server going 
 
   // A blip: the page stays, with the edit; saving waits until it's back.
   await server('Reconnecting');
+  await page.getByRole('button', { name: 'Close scenarios' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Reconnecting to Work OS…' })).toBeVisible();
   await expect(page.getByLabel('Draft text')).toContainText('Kept through the blip');
   await expect(panel(page).getByRole('button', { name: 'Save edits' })).toBeDisabled();
+  await page.screenshot({ path: join(APP, 'screenshots/item-reconnecting-edit-light.png'), animations: 'disabled' });
   await expect(panel(page).getByRole('button', { name: 'Save edits' })).toBeEnabled({ timeout: 10_000 });
+  await page.getByRole('button', { name: /Scenarios/ }).click();
 
   // The server goes away for longer: the page is replaced, and the edit comes back with it.
   await server('Reconnecting');
