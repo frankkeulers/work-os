@@ -72,6 +72,14 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
 
 `"type":"known"` means it is accepted; `"type":"anonymous"` means it is not.
 
+## Vault
+
+- **"macOS refused access"** on an approved note: the autostarted Work OS hasn't been allowed into
+  the folder that holds your vault (often under Documents). Allow it in System Settings › Privacy &
+  Security › Full Disk Access (or Files and Folders), then re-draft. Nothing was written.
+- **"failed 5 times"**: a write that keeps failing stops after five tries, roughly ten minutes,
+  instead of retrying quietly. The message says why. Time offline doesn't count towards the five.
+
 ## Confluence
 
 - **"Confluence rejected the login"**: the token is wrong, expired or cut short. Store it again as

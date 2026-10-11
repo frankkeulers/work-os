@@ -103,6 +103,8 @@ export class ActionService {
   private drafting?: { id: string; ctrl: AbortController };
   private executing = false;
   private attempts = new Map<string, number>();
+  /** Transient failures per action, however far each attempt got: what MAX_ATTEMPTS counts. */
+  private failures = new Map<string, number>();
   private retryAt = new Map<string, number>();
   private inFlight = new Set<Promise<unknown>>();
 
@@ -363,6 +365,7 @@ export class ActionService {
     });
     this.progress.delete(a.id);
     this.attempts.delete(a.id);
+    this.failures.delete(a.id);
     this.retryAt.delete(a.id);
     if (silent) return;
     // Frank may have moved on since he asked for it (FR-11.4, FR-11.6).
@@ -610,12 +613,21 @@ export class ActionService {
     const close = a.markDoneWhenFiled && it?.status === 'open' && filedAll(it, mine);
     await this.d.store.append({ type: 'action.executed', itemId: a.itemId, actionId: a.id, data }, ...(close ? [{ type: 'item.done' as const, itemId: a.itemId, data: undefined }] : []));
     this.attempts.delete(a.id);
+    this.failures.delete(a.id);
     this.retryAt.delete(a.id);
   }
 
-  /** A transient failure: try again later, up to MAX_ATTEMPTS (FR-14.5). */
+  /**
+   * A failure: try again later, up to MAX_ATTEMPTS (FR-14.5). Every failure counts, including one
+   * before the write started; offline time and an open breaker never get here, so they don't.
+   * macOS refusing access is not transient: it fails at once, with what to allow.
+   */
   private async retryLater(a: ActionState, err: unknown, what: string) {
-    const n = this.attempts.get(a.id) ?? 1;
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === 'EPERM' || code === 'EACCES')
+      return this.fail(a, 'unreachable', `${what} failed: macOS refused access (${code}). Allow Work OS (node) in System Settings › Privacy & Security › Full Disk Access, or Files and Folders for the vault's folder, then re-draft. Nothing was written.`);
+    const n = (this.failures.get(a.id) ?? 0) + 1;
+    this.failures.set(a.id, n);
     this.d.logger?.warn({ err, actionId: a.id, attempt: n }, `${what} failed`);
     if (n >= MAX_ATTEMPTS) return this.fail(a, 'unreachable', `${what} failed ${n} times (${(err as Error).message}). Nothing was written.`);
     this.retryAt.set(a.id, this.d.now().getTime() + RETRY_BASE_MS * n);

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Action, ApiErrorBody, AttentionView, EvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
@@ -785,6 +785,34 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     await rm(join(dir, 'drafts', `${ok.body.id}.json`));
     await res.actions.recover();
     expect((await item()).actions[0]).toMatchObject({ id: ok.body.id, status: 'failed', failureReason: 'draft_missing' });
+  });
+
+  it('fails an approved note at once when macOS refuses the vault, saying what to allow (FR-14.5)', async () => {
+    await useVault();
+    await writeFile(join(vault, 'Projects/Product.md'), NOTE);
+    claude.nextTexts.push(JSON.stringify({ kind: 'append', path: 'Projects/Product.md', heading: '## Decisions', content: '- ETA wording agreed.' }));
+    const r = await request();
+    await chmod(join(vault, 'Projects/Product.md'), 0o000); // as when launchd hasn't been allowed into ~/Documents
+    try {
+      await call('POST', `/api/actions/${r.body.id}/approve`);
+      await res.actions.settled();
+      expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'unreachable', error: expect.stringMatching(/Full Disk Access/) });
+    } finally {
+      await chmod(join(vault, 'Projects/Product.md'), 0o644);
+    }
+  });
+
+  it('gives up on an approved note after MAX_ATTEMPTS failures before the write, rather than retrying silently for ever (FR-14.5)', async () => {
+    await useVault();
+    await writeFile(join(vault, 'Projects/Product.md'), NOTE);
+    claude.nextTexts.push(JSON.stringify({ kind: 'append', path: 'Projects/Product.md', heading: '## Decisions', content: '- ETA wording agreed.' }));
+    const r = await request();
+    await rm(join(vault, 'Projects/Product.md'));
+    await mkdir(join(vault, 'Projects/Product.md')); // reading the note now fails (EISDIR), every time
+    await call('POST', `/api/actions/${r.body.id}/approve`);
+    for (let i = 0; i < 12 * 20; i++) await tick(); // 20 minutes: 30 s, 60 s, 90 s, 120 s between tries
+    await res.actions.settled();
+    expect((await item()).actions[0]).toMatchObject({ id: r.body.id, status: 'failed', failureReason: 'unreachable', error: expect.stringMatching(/failed 5 times/) });
   });
 
   it('starts after a restart that finds a ready draft whose file is lost, and fails that draft', async () => {
