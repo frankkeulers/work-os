@@ -997,6 +997,7 @@ export class MockServer implements WorkOsApi, MockControls {
 
   async markDone(itemId: string) {
     await this.gate(COMMAND_MS);
+    if (this.rec(itemId).status === 'done') return; // as the server: Done twice is one Done (RV-S2)
     markDone(this.rec(itemId), this.iso());
     followAnchor(this.s.items, itemId);
     this.event('item.done', undefined, { itemId });
@@ -1029,6 +1030,7 @@ export class MockServer implements WorkOsApi, MockControls {
 
   async reopen(itemId: string) {
     await this.gate(COMMAND_MS);
+    if (this.rec(itemId).status === 'open') return;
     reopen(this.rec(itemId));
     followAnchor(this.s.items, itemId);
     this.event('item.reopened', undefined, { itemId });

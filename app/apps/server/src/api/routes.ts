@@ -46,9 +46,22 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!d.store.projection.items[id]) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     return anchorOf(d.store.projection.items, id);
   };
-  // Many at once (a channel's items, or all of Low priority): one write, skipping those already there.
+  // Many at once (a channel's items, or all of Low priority): one write, skipping those already there,
+  // and those a Done or reopen is already on its way for: a double click is one event (RV-S2).
   // Frank's Done or Undo may say the settle check was wrong: labelled from the state before (CK-2.6).
-  const doneOrReopen = async (type: 'item.done' | 'item.reopened', ids: string[]) => {
+  const changing = new Set<string>();
+  const doneOrReopen = async (type: 'item.done' | 'item.reopened', given: string[]) => {
+    const ids = [...new Set(given.map(item))].filter((id) => !changing.has(id) && (type === 'item.done' ? d.store.projection.items[id].status !== 'done' : d.store.projection.items[id].status !== 'open'));
+    if (!ids.length) return 0;
+    for (const id of ids) changing.add(id);
+    try {
+      await write(type, ids);
+    } finally {
+      for (const id of ids) changing.delete(id);
+    }
+    return ids.length;
+  };
+  const write = async (type: 'item.done' | 'item.reopened', ids: string[]) => {
     const before = ids.map((id) => ({ ...d.store.projection.items[id] }));
     await d.store.append(...ids.map((itemId) => ({ type, itemId, data: undefined })));
     await d.settleLabels?.label(d, before, type === 'item.done' ? 'done' : 'reopened').catch(() => 0); // a label is never worth failing the click
@@ -58,18 +71,18 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   const many = (type: 'item.done' | 'item.reopened') => async (req: { body: unknown }) => {
     const body = ItemIds.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { ids } with at least one item ID.', [{ path: 'ids', message: 'Pick at least one item' }]);
-    const ids = [...new Set(body.data.ids)].map(item).filter((id) => (d.store.projection.items[id].status === 'done') === (type === 'item.reopened'));
-    if (ids.length) await doneOrReopen(type, ids);
-    return { count: ids.length };
+    // Bulk reopen is Undo of a bulk Done: only what is done comes back, not what is snoozed.
+    const ids = type === 'item.reopened' ? body.data.ids.filter((id) => d.store.projection.items[id]?.status !== 'snoozed') : body.data.ids;
+    return { count: await doneOrReopen(type, ids) };
   };
   app.post('/api/items/done', many('item.done'));
   app.post('/api/items/reopen', many('item.reopened'));
   app.post<{ Params: { id: string } }>('/api/items/:id/done', async (req, reply) => {
-    await doneOrReopen('item.done', [item(req.params.id)]);
+    await doneOrReopen('item.done', [req.params.id]);
     return reply.code(204).send();
   });
   app.post<{ Params: { id: string } }>('/api/items/:id/reopen', async (req, reply) => {
-    await doneOrReopen('item.reopened', [item(req.params.id)]);
+    await doneOrReopen('item.reopened', [req.params.id]);
     return reply.code(204).send();
   });
   app.post<{ Params: { id: string } }>('/api/items/:id/snooze', async (req, reply) => {

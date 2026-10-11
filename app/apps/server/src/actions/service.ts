@@ -107,6 +107,7 @@ export class ActionService {
   private drafting?: { id: string; ctrl: AbortController };
   private executing = false;
   private attempts = new Map<string, number>();
+  private readonly requesting = new Map<string, Promise<Action>>();
   /** Transient failures per action, however far each attempt got: what MAX_ATTEMPTS counts. */
   private failures = new Map<string, number>();
   private retryAt = new Map<string, number>();
@@ -154,6 +155,17 @@ export class ActionService {
    * to-do's lines to start from (UX-5); a ready to-do is replaced by one with these.
    */
   async request(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[] } = {}): Promise<Action> {
+    // A request still on its way in answers a second one for the same filing: a double click, or
+    // a draft ahead meeting Frank's own, starts one draft (RV-S1).
+    const key = `${itemId}|${type}`;
+    const pending = this.requesting.get(key);
+    if (pending) return pending;
+    const p = this.requestNow(itemId, type, opts).finally(() => this.requesting.delete(key));
+    this.requesting.set(key, p);
+    return p;
+  }
+
+  private async requestNow(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[] }): Promise<Action> {
     const existing = Object.values(this.actions).find((a) => a.itemId === itemId && a.type === type && ACTIVE.includes(a.status));
     if (existing && type === 'todo' && opts.steps && existing.status === 'ready') {
       await this.d.store.append({ type: 'action.discarded', itemId, actionId: existing.id, data: { reason: 'redraft' } });

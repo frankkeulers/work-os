@@ -200,6 +200,24 @@ describe('done, reopen and snooze (FR-8.2, FR-8.3)', () => {
     expect((await inbox()).items.find((i) => i.id === id)?.backFromSnooze).toBe(true);
   });
 
+  it('a double click is one Done, and Done on a done item writes nothing (RV-S2)', async () => {
+    const events = async () => {
+      const log = (await readdir(join(dir, 'events'))).filter((f) => f.endsWith('.jsonl'));
+      return (await Promise.all(log.map((f) => readFile(join(dir, 'events', f), 'utf8')))).join('').trim().split('\n').map((l) => JSON.parse(l) as { type: string; itemId?: string });
+    };
+    const of = async (type: string) => (await events()).filter((e) => e.type === type && e.itemId === id).length;
+    const both = await Promise.all([call('POST', url('done')), call('POST', url('done'))]);
+    expect(both.map((r) => r.status)).toEqual([204, 204]);
+    expect(await of('item.done')).toBe(1);
+    expect((await call('POST', url('done'))).status).toBe(204);
+    expect(await of('item.done')).toBe(1);
+    // Reopen likewise, and in bulk the same item twice is one event.
+    await Promise.all([call('POST', url('reopen')), call('POST', url('reopen'))]);
+    expect(await of('item.reopened')).toBe(1);
+    expect((await call<{ count: number }>('POST', '/api/items/done', { ids: [id, id] })).body.count).toBe(1);
+    expect(await of('item.done')).toBe(2);
+  });
+
   it('answers 404 for an unknown item', async () => {
     const r = await call<ApiErrorBody>('POST', '/api/items/slack%3AC9%3A1/done');
     expect(r.status).toBe(404);
@@ -741,6 +759,16 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     await res.actions.settled();
     return r;
   };
+
+  it('a double click starts one draft, not two (RV-S1)', async () => {
+    await useVault();
+    const url = `/api/items/${encodeURIComponent(PROD)}/actions`;
+    const [a, b] = await Promise.all([call<Action>('POST', url, { type: 'vault_note' }), call<Action>('POST', url, { type: 'vault_note' })]);
+    await res.actions.settled();
+    expect(a.body.id).toBe(b.body.id);
+    expect((await item()).actions.filter((x) => x.type === 'vault_note')).toHaveLength(1);
+    expect(claude.calls.filter((c) => /draft-vault/.test(c.system ?? ''))).toHaveLength(1);
+  });
 
   it('drafts a new note, and on approval code writes it to the sandbox in dry-run', async () => {
     await useVault();
