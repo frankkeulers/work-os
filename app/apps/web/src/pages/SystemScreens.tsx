@@ -19,18 +19,26 @@ function Screen({ icon, tone, title, children, action }: { icon: IconName | 'spi
   );
 }
 
+/**
+ * A dropped connection keeps the page, and any edit in progress, under this bar; only a server that
+ * stays away (down) replaces the page.
+ */
+export function ReconnectingBar() {
+  return (
+    <div role="status" className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-2 border-b border-line bg-surface px-4 py-2 text-[13px] text-ink-2 shadow-[0_1px_2px_rgba(20,23,28,0.06)]">
+      <Spinner size={12} />
+      <span>
+        <strong className="font-semibold text-ink">Reconnecting to Work OS…</strong> Your edits are kept. Saving and approving wait until it’s back.
+      </span>
+    </div>
+  );
+}
+
 const Code = ({ children }: { children: ReactNode }) => (
   <code className="block rounded-lg bg-tray px-3 py-2 font-mono text-[13px] text-ink">{children}</code>
 );
 
-export function UnreachableScreen({ reconnecting, onRetry }: { reconnecting: boolean; onRetry: () => void }) {
-  if (reconnecting) {
-    return (
-      <Screen icon="spinner" tone="neutral" title="Reconnecting to Work OS…">
-        <p className="m-0">The connection to the local server dropped, often because the laptop just woke up. Retrying every 5 seconds. Nothing is lost: state lives in the event log.</p>
-      </Screen>
-    );
-  }
+export function UnreachableScreen({ onRetry }: { onRetry: () => void }) {
   return (
     <Screen icon="wifiOff" tone="bad" title="Can’t reach the Work OS server" action={<Button variant="solid" icon="poll" onClick={onRetry}>Try again</Button>}>
       <p className="m-0">The server runs on this Mac, bound to 127.0.0.1, and serves this page. It has stopped or hasn’t started yet.</p>

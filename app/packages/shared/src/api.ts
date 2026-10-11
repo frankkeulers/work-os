@@ -529,6 +529,9 @@ export interface WorkOsApi {
   /** Server time. The real client returns the local clock; the mock returns its simulated clock. */
   now(): Date;
 
+  /** The link to the server as this client sees it right now (HealthView.connection follows it). */
+  readonly connection: HealthView['connection'];
+
   getHealth(): Promise<HealthView>;
   /** Re-runs the startup checks and dependency probes now (FR-12.2). */
   recheck(): Promise<void>;

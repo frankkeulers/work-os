@@ -140,6 +140,13 @@ edits, and uses no draft from the day's budget; **Re-draft** starts over from th
   Bedrock fallback instead of your subscription, so calls are billed separately. Switch back to
   the subscription there unless you meant it.
 
+## Connection to Work OS
+
+- **"Reconnecting to Work OS…" bar**: the page lost the local server for a moment, often as the
+  laptop wakes. The page stays as it was, including a draft you are editing; saving and approving
+  wait until the bar goes. If the server stays away for more than about 15 seconds, the page is
+  replaced by **Can't reach the Work OS server**, and an unsaved edit comes back when it returns.
+
 ## Safe mode
 
 If the server crashes more than five times in ten minutes, it starts in safe mode: the inbox works

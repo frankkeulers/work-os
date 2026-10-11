@@ -1,11 +1,13 @@
-import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { currentAction, entryVersion, isFiledDraft, type Action, type ActionType, type ConfluenceDraft, type ConfluenceFiledDraft, type Draft, type VaultFiledDraft, type VaultMultiDraft } from '@work-os/shared';
 import { api, type ItemView } from '../api';
+import { useOnline } from '../hooks/useConnection';
 import { fmtTokens } from '../lib/format';
 import { confluencePageUrl, obsidianNoteUrl } from '../lib/links';
 import { TYPE_LABEL, draftState, type DraftState } from '../lib/lanes';
 import { SOURCE_NAME } from '../lib/next';
+import { forgetEdit, keepEdit, keptEdit } from '../store/draftEdits';
 import { errorToast, toast } from '../store/toasts';
 import { BrandIcon } from './BrandIcon';
 import { GuideLink } from './GuideLink';
@@ -417,6 +419,25 @@ function DraftingProgress({ action, view }: { action: Action; view: ItemView }) 
   );
 }
 
+/** The text Frank edits: one note's, for a draft that files into several. */
+const draftText = (d: Draft, part?: number) => (isFiledDraft(d) ? '' : d.kind === 'vault_multi' ? (d.parts[part ?? 0]?.content ?? '') : d.content);
+
+type Editing = { actionId: string; part?: number; text: string; original: string };
+
+/** An edit kept from before the panel last went away (store/draftEdits), if its draft hasn't changed since. */
+function restoreEdit(view: ItemView, type: ActionType): Editing | null {
+  const a = currentAction(view.actions, type);
+  const d = a && view.drafts[a.id];
+  if (!a || a.status !== 'ready' || !d || isFiledDraft(d)) return null;
+  for (const part of d.kind === 'vault_multi' ? d.parts.map((_, i) => i) : [undefined]) {
+    const kept = keptEdit(a.id, part);
+    if (!kept) continue;
+    if (kept.original === draftText(d, part)) return { actionId: a.id, part, ...kept };
+    forgetEdit(a.id, part); // the draft changed since: the copy is stale
+  }
+  return null;
+}
+
 export function ActionPanel({
   view,
   type,
@@ -442,9 +463,12 @@ export function ActionPanel({
   const navigate = useNavigate();
   const { summary: s, item } = view;
   // `part`: which note, for a draft that files into several (FR-9.7).
-  const [editing, setEditing] = useState<{ actionId: string; part?: number; text: string; original: string } | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(() => restoreEdit(view, type));
   const [confirm, setConfirm] = useState<Confirm>(null);
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  // While the server is away nothing that changes state can be sent; the buttons wait, the edit stays.
+  const online = useOnline();
+  const busy = working || !online;
   const [checksOpen, setChecksOpen] = useState(false);
   const [docMode, setDocMode] = useState<DocMode>('rich');
 
@@ -462,6 +486,24 @@ export function ActionPanel({
   const dirty = !!editing && editing.text !== editing.original;
 
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
+
+  // The edit in progress is kept (store/draftEdits), and comes back when the panel does: after the
+  // server was away, or a reload. Leaving on purpose while connected drops it.
+  const stopEditing = () => setEditing((e) => (e && forgetEdit(e.actionId, e.part), null));
+  useEffect(() => {
+    if (editing) keepEdit(editing.actionId, editing.part, { text: editing.text, original: editing.original });
+  }, [editing]);
+  const editingNow = useRef(editing);
+  useEffect(() => {
+    editingNow.current = editing;
+  });
+  useEffect(
+    () => () => {
+      const e = editingNow.current;
+      if (e && api.connection === 'up') forgetEdit(e.actionId, e.part); // left on purpose, not taken away
+    },
+    [],
+  );
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -481,7 +523,7 @@ export function ActionPanel({
       title: 'Re-draft and lose your edits?',
       body: 'A new draft replaces this one, including the changes you made to its text.',
       label: 'Re-draft',
-      run: () => (setEditing(null), void run(() => api.redraft(action.id))),
+      run: () => (stopEditing(), void run(() => api.redraft(action.id))),
     });
   const discard = () =>
     action &&
@@ -490,7 +532,7 @@ export function ActionPanel({
       body: 'The draft and your edits are dropped. Nothing is written. You can draft again later.',
       label: 'Discard',
       danger: true,
-      run: () => (setEditing(null), void run(() => api.discardAction(action.id))),
+      run: () => (stopEditing(), void run(() => api.discardAction(action.id))),
     });
 
   // A failed write is written again as drafted, once Frank has fixed the cause: no new draft (FR-14.5).
@@ -678,7 +720,7 @@ export function ActionPanel({
         </div>
       );
   } else if (draft) {
-    const textOf = (part?: number) => (isFiledDraft(draft) ? '' : draft.kind === 'vault_multi' ? (draft.parts[part ?? 0]?.content ?? '') : draft.content);
+    const textOf = (part?: number) => draftText(draft, part);
     const isEditing = (part?: number) => editing?.actionId === action.id && editing.part === part;
     const dupes = (!isFiledDraft(draft) && draft.kind !== 'vault_append' && draft.possibleDuplicates) || [];
     const docFor = (part?: number): DocProps => ({
@@ -697,7 +739,7 @@ export function ActionPanel({
     };
     const checks = checksFor(draft, inScope, view.dryRun);
     const cancelEdit = () =>
-      dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', danger: true, run: () => setEditing(null) }) : setEditing(null);
+      dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', danger: true, run: stopEditing }) : stopEditing();
     const frameFor = (part?: number): FrameProps => ({
       edited: draft.kind === 'vault_multi' ? !!draft.parts[part ?? 0]?.edited : draft.edited,
       editing: isEditing(part),
@@ -714,7 +756,7 @@ export function ActionPanel({
             onClick={() =>
               void run(async () => {
                 await api.saveDraftEdit(action.id, editing!.text, part);
-                setEditing(null);
+                stopEditing();
                 toast('Edits saved. The draft is marked as edited.');
               })
             }

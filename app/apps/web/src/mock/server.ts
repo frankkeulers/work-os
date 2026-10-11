@@ -162,6 +162,10 @@ export class MockServer implements WorkOsApi, MockControls {
 
   // ---------------------------------------------------------------- clock & persistence
 
+  get connection() {
+    return this.s.flags.connection;
+  }
+
   now(): Date {
     return new Date(this.clockAnchor + (Date.now() - this.realAnchor));
   }

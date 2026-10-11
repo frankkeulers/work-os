@@ -71,9 +71,12 @@ test('state flags: budgets, Slack, FileVault and rebuilt notices show as banners
 test('server and startup states replace the app, and the drawer brings it back', async ({ page }) => {
   await ctl(page, 'Down').click();
   await expect(page.getByRole('heading', { name: 'Can’t reach the Work OS server' })).toBeVisible();
+  // Reconnecting keeps the page under a bar, so nothing in progress is lost; it goes once connected.
   await ctl(page, 'Reconnecting').click();
-  await expect(page.getByRole('heading', { name: 'Reconnecting to Work OS…' })).toBeVisible();
-  await expect(group(page, 'Needs you')).toBeVisible({ timeout: 10_000 });
+  const bar = page.getByRole('status').filter({ hasText: 'Reconnecting to Work OS…' });
+  await expect(bar).toBeVisible();
+  await expect(group(page, 'Needs you')).toBeVisible();
+  await expect(bar).toHaveCount(0, { timeout: 10_000 });
 
   for (const [control, heading] of [
     ['API key set', 'Work OS refused to start'],

@@ -5,13 +5,14 @@ import { API_MODE, api } from './api';
 import { Shell } from './components/Shell';
 import { Toasts } from './components/Toasts';
 import { onTopics, useApiQuery } from './hooks/useApiQuery';
+import { ConnectionContext } from './hooks/useConnection';
 import { TYPE_LABEL } from './lib/lanes';
 import { EvalReportPage } from './pages/EvalReport';
 import { InboxPage } from './pages/Inbox';
 import { ItemDetailPage } from './pages/ItemDetail';
 import { SettingsPage } from './pages/Settings';
 import { SourcePage } from './pages/Source';
-import { StartupFailedScreen, UnreachableScreen } from './pages/SystemScreens';
+import { ReconnectingBar, StartupFailedScreen, UnreachableScreen } from './pages/SystemScreens';
 import { UsagePage } from './pages/Usage';
 import { ScenarioDrawer } from './scenarios/ScenarioDrawer';
 import { takeQuiet } from './store/quietDrafts';
@@ -96,15 +97,17 @@ function Root() {
   const h = health.data;
   let body = <Outlet />;
   // A first load that failed some other way still says so, rather than leaving the page blank.
-  if (!h) body = health.error ? <UnreachableScreen reconnecting={false} onRetry={health.reload} /> : <div className="min-h-screen bg-bg" />;
-  else if (h.connection !== 'up') body = <UnreachableScreen reconnecting={h.connection === 'reconnecting'} onRetry={health.reload} />;
+  if (!h) body = health.error ? <UnreachableScreen onRetry={health.reload} /> : <div className="min-h-screen bg-bg" />;
+  // Reconnecting keeps the page, so an edit in progress survives a blip; only down replaces it.
+  else if (h.connection === 'down') body = <UnreachableScreen onRetry={health.reload} />;
   else if (h.startupFailure) body = <StartupFailedScreen failure={h.startupFailure} onRetry={health.reload} />;
   return (
-    <>
+    <ConnectionContext value={h?.connection ?? 'up'}>
+      {h?.connection === 'reconnecting' && !h.startupFailure && <ReconnectingBar />}
       {body}
       <Toasts />
       {API_MODE === 'mock' && <ScenarioDrawer />}
-    </>
+    </ConnectionContext>
   );
 }
 

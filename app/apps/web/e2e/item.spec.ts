@@ -117,6 +117,34 @@ test('J08 edit a vault append, then the leave guard and re-draft confirmation', 
   await expect(page).toHaveURL((u) => u.pathname === '/');
 });
 
+test('an unsaved draft edit survives a dropped connection, and the server going away', async ({ page }) => {
+  const server = (name: 'Up' | 'Down' | 'Reconnecting') => page.getByRole('complementary', { name: 'Scenarios' }).getByRole('button', { name, exact: true }).click();
+  await startJourney(page, 'J08');
+  await panel(page).getByRole('tab', { name: /Vault note/ }).click();
+  await panel(page).getByRole('button', { name: 'Draft vault note' }).click();
+  await panel(page).getByRole('button', { name: 'Edit text' }).click(DRAFT_TIMEOUT);
+  await replaceDraftText(page, 'Kept through the blip');
+  await page.getByRole('button', { name: /Scenarios/ }).click();
+  await page.getByRole('group', { name: 'Scenario tab' }).getByRole('button', { name: 'Controls' }).click();
+
+  // A blip: the page stays, with the edit; saving waits until it's back.
+  await server('Reconnecting');
+  await expect(page.getByRole('status').filter({ hasText: 'Reconnecting to Work OS…' })).toBeVisible();
+  await expect(page.getByLabel('Draft text')).toContainText('Kept through the blip');
+  await expect(panel(page).getByRole('button', { name: 'Save edits' })).toBeDisabled();
+  await expect(panel(page).getByRole('button', { name: 'Save edits' })).toBeEnabled({ timeout: 10_000 });
+
+  // The server goes away for longer: the page is replaced, and the edit comes back with it.
+  await server('Reconnecting');
+  await server('Down');
+  await expect(page.getByRole('heading', { name: 'Can’t reach the Work OS server' })).toBeVisible();
+  await server('Up');
+  await expect(page.getByLabel('Draft text')).toContainText('Kept through the blip', DRAFT_TIMEOUT);
+  await page.getByRole('button', { name: 'Close scenarios' }).click();
+  await panel(page).getByRole('button', { name: 'Save edits' }).click();
+  await expect(panel(page).getByText('Edited', { exact: true })).toBeVisible();
+});
+
 test('J66 a vault draft that finds the meeting already filed writes nothing (FR-9.6)', async ({ page }) => {
   await startJourney(page, 'J66');
   await panel(page).getByRole('tab', { name: /Vault note/ }).click();
