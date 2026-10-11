@@ -520,7 +520,7 @@ export function ActionPanel({
   type: ActionType;
   setType: (t: ActionType) => void;
   onDirty: (dirty: boolean) => void;
-  /** Filing in a batch (cockpit CK-4.3): the approval marks the item done once filed, then the batch moves on. */
+  /** Filing in a batch (cockpit CK-4.3) or a sweep (UX-10): once approved, it moves on. */
   onApproved?: (t: ActionType) => void;
   /** Inside the Inbox item panel's Next step card: no frame of its own, and "Done and next" moves the panel on. */
   embedded?: boolean;
@@ -604,12 +604,13 @@ export function ActionPanel({
       run: () => (stopEditing(), void run(() => api.discardAction(action.id))),
     });
 
-  // Close on file (UX-4): a To file item is done once its suggested filings are written, as in a
-  // batch. A to-do is never one of them, and the rest of an item with a step left stays open.
-  const closesOnFile = !onApproved && type !== 'todo' && s.lane === 'file' && s.status === 'open';
+  // Close on file (UX-4, CK-4.4): a To file item is done once its suggested filings are written,
+  // alone or in a batch. A to-do is never one of them, and the rest of an item with a step left
+  // stays open, as does a Needs you item filed in a sweep. A batch shows its tally, not a toast.
+  const closesOnFile = type !== 'todo' && s.lane === 'file' && s.status === 'open';
   const approve = (a: Action) => async () => {
-    await api.approveAction(a.id, onApproved || closesOnFile ? { markDoneWhenFiled: true } : undefined);
-    if (closesOnFile) watchCloseOnFile(a.id, item.id, item.title);
+    await api.approveAction(a.id, closesOnFile ? { markDoneWhenFiled: true } : undefined);
+    if (closesOnFile && !onApproved) watchCloseOnFile(a.id, item.id, item.title);
     onApproved?.(type);
   };
   const canApprove = action?.status === 'ready' && !!draft && !busy && !confirm;

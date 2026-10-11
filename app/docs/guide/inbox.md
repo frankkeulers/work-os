@@ -311,6 +311,22 @@ reads **Filing 1 of 4**.
 - At the end the panel shows what happened, such as **3 filed · 1 skipped**. `Esc` closes it.
   `Esc` part-way, or opening another item, stops the batch; the rest stay in To file.
 
+## Sweep Needs you
+
+At the end of the day, **Sweep** in the Needs you header takes you through Needs you one item at
+a time, reading **Sweep 1 of 5**. Deal with each by one key and the sweep moves on:
+
+- `e` marks it done; `s` snoozes it (then a number, or `s` for the suggested time).
+- `r` opens it in the source to reply, as does the Next step's reply button. Your reply closes it
+  once it settles it.
+- `f` or `v` opens the Confluence or vault draft; **Approve and next** (`⌘↵`) files it and moves
+  on. The item stays in Needs you, as it may still need a reply.
+- `→` skips it.
+
+At the end, or when you press `Esc`, the panel shows what happened, such as **2 done · 1 snoozed ·
+1 replied · 1 filed · 1 skipped**, and how many are still in Needs you. `Esc` closes it. Opening
+another item ends the sweep.
+
 ## Topics
 
 Slack splits one conversation into pieces: each reply thread is a piece, and a DM or group DM

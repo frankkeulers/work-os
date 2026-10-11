@@ -41,7 +41,7 @@ where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` c
 | `f` | File to Confluence: open the draft, starting it if needed |
 | `v` | File to the vault: open the draft, starting it if needed |
 | `a` | Add to-do: your open steps, as tasks in your Tasks note |
-| `→` | Skip, while filing in a batch: the item stays in To file |
+| `→` | Skip, while filing in a batch or sweeping Needs you: the item stays where it is |
 
 ## Draft
 

@@ -30,7 +30,8 @@ import { DoneByChip, DueChip, NeedTag, StatusChip } from './inbox/chips';
 import { CockpitRow, LaterRow, RepliedRow, ReplyNote } from './inbox/cockpit/rows';
 import { TimeColumn } from './inbox/cockpit/TimeColumn';
 import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox/cockpit/zones';
-import { BatchDone, ItemPanel } from './inbox/ItemPanel';
+import { BatchDone, ItemPanel, SweepDone } from './inbox/ItemPanel';
+import { counted, newSweep, nextInSweep, type Sweep } from './inbox/sweep';
 import { FiledToday } from './inbox/FiledToday';
 import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
 import { useDraftAhead } from './inbox/draftAhead';
@@ -777,6 +778,8 @@ export function InboxPage() {
 
   // File in a batch (CK-4.1–4.4): ended by closing the panel or opening an item outside it.
   const [batch, setBatch] = useState<Batch | null>(null);
+  // The end-of-day sweep (UX-10): ended by Esc, which shows its tally, or by opening an item outside it.
+  const [sweep, setSweep] = useState<Sweep | null>(null);
   const host = usePanelHost({
     items: all,
     order,
@@ -827,6 +830,38 @@ export function InboxPage() {
   const batchPos = batch && !batch.done && sel ? batch.ids.indexOf(sel) : -1;
   if (batch && !batch.done && sel && batchPos < 0) setBatch(null);
 
+  // The sweep takes Needs you as it shows, and moves on as each item is dealt with.
+  const sweepIds = useMemo(() => needsRows.filter((r) => !r.leaving && r.item.status === 'open').map((r) => r.item.id), [needsRows]);
+  // The next item still open, or past the last one: the panel closes, and the sweep shows its tally.
+  const sweepOn = useCallback(
+    (s: Sweep, from: number) => {
+      const next = nextInSweep(s, from, all);
+      if (next) pick(next);
+      else {
+        setPanelOpen(false);
+        setSearch({}, { replace: true });
+      }
+    },
+    [all, pick, setPanelOpen, setSearch],
+  );
+  // Picked first, so the sweep never sees a moment with no item open.
+  const sweepFrom = (s: Sweep, from: number) => {
+    sweepOn(s, from);
+    setSweep(s);
+  };
+  const sweepPos = sweep && !sweep.finished && sel ? sweep.ids.indexOf(sel) : -1;
+  // Opening an item outside it ends the sweep; closing the panel (Esc) shows the tally.
+  if (sweep && !sweep.finished && sel && sweepPos < 0) setSweep(null);
+  else if (sweep && !sweep.finished && !sel) setSweep({ ...sweep, finished: true });
+  // e and s act on the item as ever. Once it is done or snoozed, the sweep counts it, then moves on.
+  const cur = sweepPos >= 0 ? selItem : undefined;
+  if (sweep && cur && !sweep.counted.includes(cur.id) && (cur.status === 'done' || cur.status === 'snoozed')) setSweep({ ...counted(sweep, cur.id, cur.status), from: cur.id });
+  else if (sweep?.from && sweep.from !== sel) setSweep({ ...sweep, from: undefined });
+  const moveFrom = sweep?.from && sweep.from === sel ? sweepPos : -1;
+  useEffect(() => {
+    if (sweep && moveFrom >= 0) sweepOn(sweep, moveFrom + 1);
+  }, [sweep, moveFrom, sweepOn]);
+
   // Today's list opens the panel on the first item when Work OS opens, until it's closed; the
   // cockpit doesn't, as the panel would cover Later (UX-13). Only once, as the inbox arrives: the
   // preference is set a moment before a pick's URL changes, and opening the first item in that gap
@@ -872,6 +907,9 @@ export function InboxPage() {
       } else if (e.key === 'Escape' && batch?.done) {
         e.preventDefault();
         setBatch(null);
+      } else if (e.key === 'Escape' && sweep?.finished) {
+        e.preventDefault();
+        setSweep(null);
       } else if (e.key === 'Escape' && wide && open) {
         // A list open in the Later zone goes back to its default view.
         e.preventDefault();
@@ -886,7 +924,7 @@ export function InboxPage() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [step, close, sel, navigate, pick, firstNeeds, firstLater, wide, open, batch]);
+  }, [step, close, sel, navigate, pick, firstNeeds, firstLater, wide, open, batch, sweep]);
 
   useEffect(() => {
     document.title = 'Inbox · Work OS';
@@ -939,6 +977,22 @@ export function InboxPage() {
       File in a batch
     </Button>
   );
+  // In the Needs you header (UX-10). Not a click outside the panel: it opens the sweep there.
+  const sweepButton = sweepIds.length > 0 && (
+    <Button size="sm" icon="forward" data-row-action title="Go through Needs you one item at a time: e done, s snooze, r reply, f or v file, → skip" onClick={() => sweepFrom(newSweep(sweepIds), 0)}>
+      Sweep
+    </Button>
+  );
+  const sweepPanel =
+    sweep && sweepPos >= 0
+      ? {
+          pos: sweepPos + 1,
+          total: sweep.ids.length,
+          onSkip: () => sweepFrom(counted(sweep, sweep.ids[sweepPos], 'skipped'), sweepPos + 1),
+          onReplied: () => sweepFrom(counted(sweep, sweep.ids[sweepPos], 'replied'), sweepPos + 1),
+          onApproved: () => sweepFrom(counted(sweep, sweep.ids[sweepPos], 'filed'), sweepPos + 1),
+        }
+      : undefined;
   const batchPanel =
     batch && batchPos >= 0
       ? {
@@ -1002,7 +1056,12 @@ export function InboxPage() {
               render={(r, n, list) => row(r, n, list, 'needs')}
               pill={<NewPill group="needs" items={pillItems('needs')} above={stable.pending.needs.every((p) => p.above)} onGo={() => goNew('needs')} />}
               scrollerRef={listRef}
-              sortMenu={<SortMenu />}
+              sortMenu={
+                <>
+                  {sweepButton}
+                  <SortMenu />
+                </>
+              }
               empty={inbox.firstRun ? <FirstRun inbox={inbox} /> : undefined}
               footer={<RepliesLine closed={inbox.closedByReply} onReview={() => setOpen('replied')} className="h-12" />}
             >
@@ -1039,6 +1098,7 @@ export function InboxPage() {
                     <div className="flex items-baseline gap-2 px-6 pb-2 pt-3">
                       <GroupHead dot={g.dot} title={g.title} count={by[g.id].length} />
                       {g.id === 'file' && <span className="ml-auto self-center">{batchButton}</span>}
+                      {g.id === 'needs' && <span className="ml-auto self-center">{sweepButton}</span>}
                     </div>
                     <div className="border-b border-line-soft">
                       {groupRows[g.id].length ? groupRows[g.id].flatMap((r, n, list) => row(r, n, list)) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
@@ -1083,15 +1143,21 @@ export function InboxPage() {
               onPrev={() => step(-1)}
               onNext={() => step(1)}
               onClose={close}
-              onDoneNext={doneAndNext}
+              onDoneNext={sweepPanel ? () => void markDoneWithUndo(panel.item) : doneAndNext}
               onDirty={onDirty}
               batch={batchPanel}
+              sweep={sweepPanel}
             />
           </PanelSlide>
         )}
         {!panel && batch?.done && (
           <div data-state="open" className={cx('item-panel absolute inset-y-0 right-0 z-30 flex w-full flex-col', wide ? 'max-w-[640px]' : 'max-w-[600px]')}>
             <BatchDone batch={batch} onClose={() => setBatch(null)} />
+          </div>
+        )}
+        {!panel && sweep?.finished && (
+          <div data-state="open" className={cx('item-panel absolute inset-y-0 right-0 z-30 flex w-full flex-col', wide ? 'max-w-[640px]' : 'max-w-[600px]')}>
+            <SweepDone sweep={sweep} left={by.needs.filter((i) => i.status === 'open').length} onClose={() => setSweep(null)} />
           </div>
         )}
       </div>

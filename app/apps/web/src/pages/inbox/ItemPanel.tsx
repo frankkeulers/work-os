@@ -18,6 +18,7 @@ import { errorToast, toast } from '../../store/toasts';
 import { DueChip, LaneChip, NeedTag, StatusChip } from './chips';
 import { ReplyNote } from './cockpit/rows';
 import { tally, type Batch } from './batch';
+import { sweepTally, type Sweep } from './sweep';
 
 const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
@@ -130,7 +131,22 @@ function FinishCallout({ item }: { item: ItemSummary }) {
   );
 }
 
-function NextStepCard({ item, draftsBudgetHit, closesOnReply, onFile, workflow }: { item: ItemSummary; draftsBudgetHit: boolean; closesOnReply: boolean; onFile: (t: ActionType) => void; workflow?: ReactNode }) {
+function NextStepCard({
+  item,
+  draftsBudgetHit,
+  closesOnReply,
+  onFile,
+  onReplied,
+  workflow,
+}: {
+  item: ItemSummary;
+  draftsBudgetHit: boolean;
+  closesOnReply: boolean;
+  onFile: (t: ActionType) => void;
+  /** In a sweep (UX-10), replying moves it on. */
+  onReplied?: () => void;
+  workflow?: ReactNode;
+}) {
   const now = useNow(30_000);
   const step = shownStep(item, draftsBudgetHit, now);
   const hint = suggestedSnooze(item, now);
@@ -155,7 +171,14 @@ function NextStepCard({ item, draftsBudgetHit, closesOnReply, onFile, workflow }
         </div>
         <div className="flex flex-wrap gap-2">
           {p.kind === 'open' ? (
-            <Button variant="solid" icon={item.kind === 'dm' || item.kind === 'chat' ? 'dm' : 'external'} onClick={() => openInSource(item, { replying: true })}>
+            <Button
+              variant="solid"
+              icon={item.kind === 'dm' || item.kind === 'chat' ? 'dm' : 'external'}
+              onClick={() => {
+                openInSource(item, { replying: true });
+                onReplied?.();
+              }}
+            >
               {p.label}
             </Button>
           ) : (
@@ -560,6 +583,7 @@ export function ItemPanel({
   onDoneNext,
   onDirty,
   batch,
+  sweep,
 }: {
   item: ItemSummary;
   view?: ItemView;
@@ -567,6 +591,8 @@ export function ItemPanel({
   total: number;
   /** Filing in a batch (cockpit CK-4.1–4.3): where it is, Skip (→), and what an approval does. */
   batch?: { pos: number; total: number; onSkip: () => void; onApproved: (t: ActionType) => void };
+  /** The end-of-day sweep (UX-10): where it is, Skip (→), and what a reply or an approval does. Done and Snooze move it on by themselves. */
+  sweep?: { pos: number; total: number; onSkip: () => void; onReplied: () => void; onApproved: (t: ActionType) => void };
   filing?: ActionType;
   setFiling: (t: ActionType | undefined) => void;
   draftsBudgetHit: boolean;
@@ -644,14 +670,15 @@ export function ItemPanel({
       } else if (e.key === 'r') {
         e.preventDefault();
         openInSource(item, { replying: open });
-      } else if (e.key === 'ArrowRight' && batch) {
+        if (open) sweep?.onReplied();
+      } else if (e.key === 'ArrowRight' && (batch || sweep)) {
         e.preventDefault();
-        batch.onSkip();
+        (batch ?? sweep)!.onSkip();
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [item, open, onDoneNext, setSnoozeOpen, batch, file]);
+  }, [item, open, onDoneNext, setSnoozeOpen, batch, sweep, file]);
 
   const reopen = () => void api.reopen(item.id).then(() => toast(item.status === 'snoozed' ? 'Unsnoozed.' : 'Reopened.'), errorToast);
   const ago = fmtAgo(item.lastActivityAt, now);
@@ -670,6 +697,20 @@ export function ItemPanel({
             </span>
             <span className="flex-1" />
             <Button size="sm" icon="forward" title="Skip: leave it in To file (→)" onClick={batch.onSkip}>
+              Skip <Kbd>→</Kbd>
+            </Button>
+          </>
+        ) : sweep ? (
+          <>
+            <span className="pl-2 text-[13px] font-semibold text-orange-fg" data-testid="sweep-pos">
+              Sweep {sweep.pos} of {sweep.total}
+            </span>
+            <span className="hidden min-w-0 flex-1 items-center justify-center gap-1 truncate text-xs text-muted min-[1100px]:flex">
+              <Kbd>e</Kbd> done <Kbd>s</Kbd> snooze <Kbd>r</Kbd> reply <Kbd>f</Kbd>
+              <Kbd>v</Kbd> file
+            </span>
+            <span className="flex-1 min-[1100px]:hidden" />
+            <Button size="sm" icon="forward" title="Skip: leave it in Needs you (→)" onClick={sweep.onSkip}>
               Skip <Kbd>→</Kbd>
             </Button>
           </>
@@ -762,10 +803,11 @@ export function ItemPanel({
           draftsBudgetHit={draftsBudgetHit}
           closesOnReply={!!view?.closesOnReply}
           onFile={file}
+          onReplied={sweep?.onReplied}
           workflow={
             filing && view ? (
               <div ref={filingRef} className="scroll-mt-4">
-                <ActionPanel key={item.id} embedded view={view} type={filing} setType={setFiling} onDirty={dirty} onDoneNext={onDoneNext} onClose={() => setFiling(undefined)} onApproved={batch?.onApproved} />
+                <ActionPanel key={item.id} embedded view={view} type={filing} setType={setFiling} onDirty={dirty} onDoneNext={onDoneNext} onClose={() => setFiling(undefined)} onApproved={batch?.onApproved ?? sweep?.onApproved} />
               </div>
             ) : undefined
           }
@@ -841,6 +883,33 @@ export function BatchDone({ batch, onClose }: { batch: Batch; onClose: () => voi
         </h2>
         <p className="m-0 max-w-[460px] text-sm leading-relaxed text-ink-2">
           Each filed item goes to Done once its writes land. Skipped items stay in To file.
+        </p>
+        <Button onClick={onClose}>
+          Close <Kbd>Esc</Kbd>
+        </Button>
+      </div>
+    </aside>
+  );
+}
+
+/** The end of a sweep (UX-10): what happened to Needs you, and what is left, until Esc. */
+export function SweepDone({ sweep, left, onClose }: { sweep: Sweep; left: number; onClose: () => void }) {
+  return (
+    <aside aria-label="Sweep done" className="flex h-full min-h-0 flex-col border-l border-line bg-surface shadow-[-12px_0_32px_rgba(20,23,28,0.06)]">
+      <div className="flex items-center gap-1 border-b border-line-soft px-4 py-2.5">
+        <span className="pl-2 text-[13px] font-semibold text-orange-fg">Swept Needs you</span>
+        <span className="flex-1" />
+        <IconButton label="Close panel" title="Close panel (Esc)" icon="x" onClick={onClose} />
+      </div>
+      <div className="flex flex-col items-start gap-3 px-6 pt-8">
+        <span className={cx('inline-flex size-10 items-center justify-center rounded-full', left ? 'bg-orange-wash text-orange-fg' : 'bg-teal-wash text-teal-ink')}>
+          <Icon name={left ? 'clock' : 'check'} size={20} strokeWidth={2.5} />
+        </span>
+        <h2 className="m-0 text-[19px] font-semibold" data-testid="sweep-tally">
+          {sweepTally(sweep)}
+        </h2>
+        <p className="m-0 max-w-[460px] text-sm leading-relaxed text-ink-2">
+          {left ? `${plural(left, 'item')} still in Needs you. Replies you sent close their items once they settle them.` : 'Needs you is clear. Replies you sent close their items once they settle them.'}
         </p>
         <Button onClick={onClose}>
           Close <Kbd>Esc</Kbd>

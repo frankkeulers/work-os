@@ -5,7 +5,7 @@ import { Dialog } from './ui';
 // The ? overlay (BACKLOG UX-11): the keys for where Frank is, without leaving it. The guide's
 // shortcuts page (docs/guide/shortcuts.md) lists them all; keep the two in step.
 
-export type KeyContext = 'batch' | 'draft' | 'item' | 'list' | 'guide';
+export type KeyContext = 'batch' | 'sweep' | 'draft' | 'item' | 'list' | 'guide';
 
 /** Keys pressed together; `then` and `/` between them are read, not pressed. */
 type Row = [keys: string[], does: string];
@@ -17,6 +17,17 @@ const SECTIONS: Record<KeyContext | 'everywhere', { title: string; rows: Row[] }
       [['⌘', '↵'], 'Approve and go to the next item'],
       [['→'], 'Skip: the item stays in To file'],
       [['Esc'], 'Stop the batch'],
+    ],
+  },
+  sweep: {
+    title: 'Sweep',
+    rows: [
+      [['e'], 'Done, and on to the next'],
+      [['s'], 'Snooze, and on to the next'],
+      [['r'], 'Reply in the source, and on to the next'],
+      [['f', '/', 'v'], 'File it; approving goes on to the next'],
+      [['→'], 'Skip: the item stays in Needs you'],
+      [['Esc'], 'Stop, and see the tally'],
     ],
   },
   draft: {
@@ -75,8 +86,10 @@ export function keyContexts(pathname: string): KeyContext[] {
   const inbox = pathname === '/';
   const item = pathname.startsWith('/item/') || !!document.querySelector('aside[aria-label="Item panel"]');
   const out: KeyContext[] = [];
-  if (document.querySelector('[data-testid="batch-pos"]')) out.push('batch');
-  else if (document.querySelector('[data-action-bar]')) out.push('draft');
+  const batch = !!document.querySelector('[data-testid="batch-pos"]');
+  if (batch) out.push('batch'); // its keys cover the draft's
+  if (document.querySelector('[data-testid="sweep-pos"]')) out.push('sweep');
+  if (!batch && document.querySelector('[data-action-bar]')) out.push('draft');
   if (item) out.push('item');
   if (inbox) out.push('list');
   return out;
