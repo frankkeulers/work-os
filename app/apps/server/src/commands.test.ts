@@ -453,6 +453,27 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect((await inbox()).items.find((i) => i.id === PROD)).toMatchObject({ triageState: 'triaged', lane: 'today' });
   });
 
+  it('"Try again" while Claude fails answers with an error and leaves no unhandled rejection (crashes the server)', async () => {
+    slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'Updated the draft' });
+    claude.nextTexts.push('not json', '{"decisions":[{"id":"x"}]}');
+    await call('POST', '/api/poll');
+    await res.runtime.settled();
+    for (let i = 0; i < 12 * 12; i++) await tick();
+    expect((await inbox()).items.find((i) => i.id === PROD)?.triageState).toBe('failed');
+    const unhandled: unknown[] = [];
+    const onUnhandled = (err: unknown) => void unhandled.push(err);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      claude.failNext = new Error('Overloaded');
+      const retry = await call<ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/retry-triage`);
+      expect(retry.status).toBe(503);
+      await new Promise((r) => setTimeout(r, 20)); // unhandled rejections are reported on a later turn
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
   it('reports a lost Claude login to health and leaves the items waiting', async () => {
     slack.post('C01PROD', { ts: isoToTs(START + 1 * MIN), thread_ts: P, user: 'U02DANA', text: 'Updated the draft' });
     claude.failNext = Object.assign(new Error('Not logged in · Please run /login'), {});

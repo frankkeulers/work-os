@@ -570,8 +570,9 @@ export class Runtime {
     this.d.onHealthChange?.(c);
   }
 
+  /** Tracks the work for settled(); its caller handles the outcome, so the copy kept here never rejects unhandled (a rejection crashes the server). */
   private track<T>(p: Promise<T>) {
     this.inFlight.add(p);
-    void p.finally(() => this.inFlight.delete(p));
+    void p.finally(() => this.inFlight.delete(p)).catch(() => undefined);
   }
 }
