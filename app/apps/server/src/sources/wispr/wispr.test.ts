@@ -123,6 +123,22 @@ describe('Wispr Flow source (R2.7)', () => {
     expect(r.items.map((i) => i.id)).toEqual([`wispr:${uuid(1)}`]);
   });
 
+  it('reads the other meetings when one answers in an unexpected shape, and lets that one through as unreadable after three polls', async () => {
+    const { fake, adapter } = setup();
+    fake
+      .add({ id: uuid(1), modified_at: ts(3), title: 'Older' })
+      .add({ id: uuid(2), modified_at: ts(2), title: 'Pricing workshop', summary: 42 as unknown as string })
+      .add({ id: uuid(3), modified_at: ts(1), title: 'Newer' });
+    const first = await adapter.fetchSince(undefined, ctx());
+    expect(first.items.map((i) => i.title).sort()).toEqual(['Newer', 'Older']);
+    expect(first.nextCursor).toBe(cursorKey(fake.meetings.get(uuid(1))!)); // held before the one that failed
+    const second = await adapter.fetchSince(first.nextCursor, ctx());
+    expect(second.nextCursor).toBe(first.nextCursor);
+    const third = await adapter.fetchSince(second.nextCursor, ctx());
+    expect(third.items.find((i) => i.title === 'Pricing workshop')?.messages[0].text).toMatch(/couldn’t read this meeting/);
+    expect(third.nextCursor).toBe(cursorKey(fake.meetings.get(uuid(3))!));
+  });
+
   it('reads a transcript for drafting: whole, without fences, in ranges, cut at the cap', async () => {
     const { fake, adapter } = setup();
     const line = (n: number) => `Speaker ${n % 3}: point ${n} about the AIS gap report.`;

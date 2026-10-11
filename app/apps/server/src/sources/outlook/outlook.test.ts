@@ -234,6 +234,29 @@ describe('the Outlook adapter', () => {
     expect(r.nextCursor.split('|')[0]).toBe(a.receivedDateTime.replace('Z', '000Z'));
   });
 
+  it('lets an email whose read keeps failing through as unreadable after three polls, so the folder moves on', async () => {
+    inbox('C1', ago(5 * HOUR));
+    const b = inbox('C2', ago(4 * HOUR), { subject: 'Contract renewal' });
+    const c = inbox('C3', ago(3 * HOUR));
+    box.readFaults.set(FakeMs365.uri(b.id), 'Service unavailable');
+    const first = await poll(adapter());
+    expect(first.items.map((i) => i.id)).toEqual(['outlook:C1', 'outlook:C3']);
+    const second = await poll(adapter(), first.nextCursor);
+    expect(second.items).toEqual([]);
+    expect(second.nextCursor).toBe(first.nextCursor); // still held before it
+    const third = await poll(adapter(), second.nextCursor);
+    expect(third.items).toEqual([expect.objectContaining({ title: 'Contract renewal', messages: [expect.objectContaining({ text: expect.stringMatching(/couldn’t read this email/) })] })]);
+    expect(third.nextCursor.split('|')[0]).toBe(c.receivedDateTime.replace('Z', '000Z'));
+  });
+
+  it('counts a lone email answered in an unexpected shape as a failed read: tools changed twice, then let through', async () => {
+    const e = inbox('C1', ago(5 * HOUR), { subject: 'Odd one' });
+    box.readFaults.set(FakeMs365.uri(e.id), 'shape');
+    await expect(poll(adapter())).rejects.toMatchObject({ failure: { reason: 'tools_changed' } });
+    await expect(poll(adapter())).rejects.toMatchObject({ failure: { reason: 'tools_changed' } });
+    expect((await poll(adapter())).items.map((i) => i.title)).toEqual(['Odd one']);
+  });
+
   it("never reads Outlook's receipts and auto-replies, but moves past them", async () => {
     const e = inbox('C1', ago(5 * HOUR), { subject: 'Accepted: Weekly sync' });
     const r = await poll(adapter());
@@ -338,6 +361,15 @@ describe('the Microsoft 365 relay client (contract)', () => {
     const q = sdk((_t, input) => (input.uri === 'mail:///messages/a' ? { raw: [text(detail)] } : input.uri === 'mail:///messages/b' ? { error: 'ErrorItemNotFound' } : { error: 'Service unavailable' }));
     const out = await relay(q).read(['mail:///messages/a', 'mail:///messages/b', 'mail:///messages/c'], signal());
     expect(out).toEqual([{ ok: true, email: expect.objectContaining({ id: 'a', conversationId: 'C1' }) }, { ok: false, error: 'ErrorItemNotFound', gone: true }, { ok: false, error: 'Service unavailable', gone: false }]);
+  });
+
+  it('fails only the email answered in another shape when the others read, and skips a row it cannot read', async () => {
+    const detail: Partial<EmailDetail> = { id: 'a', conversationId: 'C1', receivedDateTime: '2026-10-08T09:00:00Z', body: { contentType: 'html', content: '<p>Hi</p>' } };
+    const q = sdk((_t, input) => (input.uri === 'mail:///messages/a' ? { raw: [text(detail)] } : { raw: [text({ id: 'b', subject: 'no conversation id' })] }));
+    const out = await relay(q).read(['mail:///messages/a', 'mail:///messages/b'], signal());
+    expect(out).toEqual([{ ok: true, email: expect.objectContaining({ id: 'a' }) }, { ok: false, error: expect.stringMatching(/unexpected shape/), gone: false }]);
+    expect(searchPage([text(row('a')), text({ ...row('b'), receivedDateTime: 5 })]).emails.map((e) => e.id)).toEqual(['a']);
+    expect(() => searchPage([text({ ...row('b'), receivedDateTime: 5 })])).toThrow(/changed shape/);
   });
 
   it('reports a read the connector answered in another shape as the tools having changed', async () => {

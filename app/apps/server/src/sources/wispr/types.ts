@@ -28,7 +28,8 @@ export const WisprMeetingRow = z.object({
 export type WisprMeetingRow = z.infer<typeof WisprMeetingRow>;
 
 export const WisprSearchPage = z.object({
-  meetings: z.array(WisprMeetingRow),
+  // Each row is checked on its own (adapter): one odd row is skipped, not the whole page.
+  meetings: z.array(z.unknown()),
   has_more: z.boolean(),
   next_cursor: text,
 });

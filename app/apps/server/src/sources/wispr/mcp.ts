@@ -76,6 +76,8 @@ function errorText(r: Awaited<ReturnType<Client['callTool']>>): string {
 export class WisprMcp {
   /** The signed-in name, once a session has asked (identity, Settings). */
   account?: string;
+  /** Failed reads per meeting, across polls: one that keeps failing is let through (adapter). */
+  readonly readFailures = new Map<string, number>();
 
   constructor(private readonly connect: Connector) {}
 

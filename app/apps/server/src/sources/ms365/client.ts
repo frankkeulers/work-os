@@ -90,14 +90,20 @@ function parse<S extends z.ZodType>(schema: S, v: unknown, what: string): z.infe
 export function searchPage(raw: unknown): SearchPage {
   const values = blocks(raw);
   const emails: EmailRow[] = [];
+  let bad = 0;
   let nextOffset: number | undefined;
   for (const v of values) {
-    if (v && typeof v === 'object' && 'id' in v) emails.push(parse(EmailRow, v, 'outlook_email_search'));
-    else if (v && typeof v === 'object') {
+    if (v && typeof v === 'object' && 'id' in v) {
+      // One odd row is skipped; only rows that are all odd mean the tool changed.
+      const r = EmailRow.safeParse(v);
+      if (r.success) emails.push(r.data);
+      else bad++;
+    } else if (v && typeof v === 'object') {
       const p = SearchPaging.safeParse(v);
       if (p.success && p.data.moreResults && p.data.nextOffset !== undefined) nextOffset = p.data.nextOffset;
     }
   }
+  if (bad && !emails.length) throw changed('outlook_email_search');
   return { emails, ...(nextOffset !== undefined && { nextOffset }) };
 }
 
@@ -190,13 +196,20 @@ export class Ms365Relay implements Ms365Api {
       uris.map((uri) => ({ uri })),
       signal,
     );
-    return results.map((r): { ok: true; value: z.infer<S> } | { ok: false; error: string; gone: boolean } | undefined => {
+    let odd = 0;
+    const out = results.map((r): { ok: true; value: z.infer<S> } | { ok: false; error: string; gone: boolean } | undefined => {
       if (!r) return undefined;
       if (!r.ok) return { ok: false, error: r.error, gone: GONE_RE.test(r.error) };
       const v = blocks(r.raw)[0];
       if (typeof v === 'string' && GONE_RE.test(v)) return { ok: false, error: v, gone: true };
-      return { ok: true, value: parse(schema, v, 'read_resource') };
+      const p = schema.safeParse(v);
+      if (p.success) return { ok: true, value: p.data };
+      odd++;
+      return { ok: false, error: 'read_resource answered in an unexpected shape', gone: false };
     });
+    // Every read answered oddly: the tool changed. One odd answer among good ones is that record's.
+    if (odd && odd === out.filter((o) => o).length) throw changed('read_resource');
+    return out;
   }
 
   async me(signal: AbortSignal): Promise<Me> {

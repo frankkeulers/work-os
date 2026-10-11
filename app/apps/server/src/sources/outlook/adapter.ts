@@ -3,7 +3,7 @@ import type { Logger } from '../../log';
 import { isMeetingMail } from '../calendar/mail';
 import type { CalendarSnapshot } from '../calendar/store';
 import { SourceError } from '../errors';
-import type { Ms365Api, SearchArgs } from '../ms365/client';
+import type { Ms365Api, ReadOutcome, SearchArgs } from '../ms365/client';
 import type { EmailDetail, EmailRow, Folder } from '../ms365/types';
 import { fixedTs } from '../time';
 import type { FetchContext, FetchResult, SourceAdapter } from '../types';
@@ -19,6 +19,8 @@ import { buildItems, isNoise, meOf, type MeInfo } from './normalise';
 //   4. groups them into one item per conversation;
 //   5. moves each folder's mark to the last email of its unbroken run of handled ones (read, skipped
 //      or gone), so an email whose read failed or didn't fit this poll is listed again next time.
+//      An email whose read fails MAX_READ_FAILURES times goes to the inbox as unreadable (its
+//      subject and sender, with a note), so one bad email can't hold its folder back for good.
 // The cursor is "<Inbox mark>|<Sent Items mark>": both only move forward, so it sorts as text.
 // Sent Items is context: triage sees Frank's replies as "me"; it doesn't move lanes on its own.
 
@@ -28,6 +30,8 @@ export const OVERLAP_MS = 10 * 60_000;
 export const MAX_PAGES = 4; // per folder per poll: 100 emails
 export const MAX_READS = 60; // per poll: six relay runs
 const RECENT_MAX = 2000;
+export const MAX_READ_FAILURES = 3;
+export const UNREADABLE = 'Work OS couldn’t read this email after three tries, so only its subject and sender are here. Open it in Outlook.';
 
 type Marks = Record<Folder, string>;
 
@@ -43,14 +47,39 @@ export const formatCursor = (m: Marks) => `${m.Inbox}|${m['Sent Items']}`;
 /** Emails read and saved lately, so the overlap and a re-listed folder don't read them again. Kept per process. */
 export class RecentEmails {
   private keys = new Set<string>();
+  private failures = new Map<string, number>();
   has(key: string) {
     return this.keys.has(key);
   }
   add(key: string) {
     this.keys.delete(key);
     this.keys.add(key);
+    this.failures.delete(key);
     if (this.keys.size > RECENT_MAX) this.keys.delete(this.keys.values().next().value!);
   }
+  /** Counts a failed read of this email; returns how many there have been. */
+  failed(key: string) {
+    const n = (this.failures.get(key) ?? 0) + 1;
+    this.failures.set(key, n);
+    if (this.failures.size > RECENT_MAX) this.failures.delete(this.failures.keys().next().value!);
+    return n;
+  }
+}
+
+/** What search knows of an email, as an email read whole: for one that can't be read (UNREADABLE). */
+function unreadable(row: EmailRow): EmailDetail {
+  const sender = row.sender?.trim() ?? '';
+  const address = /<([^>]+)>/.exec(sender)?.[1] ?? (sender.includes('@') ? sender : undefined);
+  const name = sender.replace(/<[^>]*>/, '').trim() || address;
+  return {
+    id: row.id,
+    subject: row.subject,
+    body: { contentType: 'text', content: UNREADABLE },
+    from: { name, address },
+    receivedDateTime: row.receivedDateTime,
+    conversationId: `unreadable-${row.id}`,
+    internetMessageId: row.internetMessageId,
+  };
 }
 
 const keyOf = (r: EmailRow) => r.internetMessageId?.trim() || r.id;
@@ -117,15 +146,29 @@ export class OutlookAdapter implements SourceAdapter {
 
     const emails: { email: EmailDetail; folder: Folder }[] = [];
     const read: string[] = []; // remembered only once saved (commit): a poll cut off reads them again
-    const outcomes = toRead.length ? await this.o.api.read(toRead.map((e) => e.row.uri), ctx.signal) : [];
+    let outcomes: ReadOutcome[] = [];
+    let odd: SourceError | undefined;
+    try {
+      outcomes = toRead.length ? await this.o.api.read(toRead.map((e) => e.row.uri), ctx.signal) : [];
+    } catch (err) {
+      // A lone email answered in an unexpected shape fails the whole read: count it like any
+      // failed read, so it can't stall the folder; until it is let through, health still hears.
+      if (!(err instanceof SourceError && err.failure.reason === 'tools_changed' && toRead.length === 1)) throw err;
+      odd = err;
+      outcomes = [{ ok: false, error: err.message, gone: false }];
+    }
     toRead.forEach((e, i) => {
       const r = outcomes[i];
       if (r?.ok) emails.push({ email: r.email, folder: e.folder });
       else if (r && r.gone) this.o.logger?.info({ folder: e.folder }, 'Outlook: an email was gone by the time it was read');
-      else return; // not read: listed again next poll
+      else if (r && this.o.recent.failed(e.key) >= MAX_READ_FAILURES) {
+        this.o.logger?.warn({ folder: e.folder, error: r.error }, 'Outlook: an email failed to read three times; it goes to the inbox as unreadable');
+        emails.push({ email: unreadable(e.row), folder: e.folder });
+      } else return; // not read (failed, or not made): listed again next poll
       e.handled = true;
       read.push(e.key);
     });
+    if (odd && !toRead[0].handled) throw odd;
     if (toRead.some((e) => !e.handled)) this.o.logger?.warn({ unread: toRead.filter((e) => !e.handled).length }, 'Outlook: some emails were not read; the next poll tries again');
 
     const next = { ...marks };

@@ -97,6 +97,9 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
   or enter its ID in [Settings › Outlook](/settings/outlook).
 - **"Microsoft 365 not working", saying it changed its tools**: Work OS stops reading Outlook
   rather than guess what the new tools mean. It needs an update; reconnecting won't help.
+- **An item says Work OS "couldn't read this email"**: its read failed three polls running, so it
+  came through with only its subject and sender rather than hold back the emails after it. Open it
+  in Outlook.
 - **An email you expected isn't in the inbox**: receipts and automatic replies are skipped, and a
   poll reads at most 60 emails; the rest come on the next poll. With the calendar on, invitation,
   update and cancellation emails are left to the calendar: look for the invite's item instead.
@@ -116,6 +119,9 @@ curl -s -u 'you@polestarglobal.com:TOKEN' https://pole-star.atlassian.net/wiki/r
   that the meeting has finished processing there.
 - **"Wispr Flow not working", saying it changed its MCP tools**: Work OS stops reading rather than
   guess what the new tools mean. It needs an update; reconnecting won't help.
+- **A meeting says Work OS "couldn't read this meeting's notes"**: Wispr Flow answered oddly for
+  that one meeting three polls running, so it came through with its title only. The other meetings
+  were read as usual. Open it in Wispr Flow.
 
 ## Claude
 

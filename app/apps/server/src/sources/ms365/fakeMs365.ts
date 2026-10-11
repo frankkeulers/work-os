@@ -20,7 +20,7 @@ export class FakeMs365 implements Ms365Api {
   me_: Me;
   /** 'connected' | 'needs-auth' | … as claude.ai would report it. */
   status_ = 'connected';
-  /** By URI: a read that fails ('gone' or an error text), or is never made ('skip'). */
+  /** By URI: a read that fails ('gone', 'shape' or an error text), or is never made ('skip'). */
   readFaults = new Map<string, 'gone' | 'skip' | string>();
   searches: SearchArgs[][] = [];
   reads: string[][] = [];
@@ -73,9 +73,12 @@ export class FakeMs365 implements Ms365Api {
     this.check();
     this.reads.push(uris);
     const all = [...this.folders.Inbox, ...this.folders['Sent Items']];
+    // 'shape': answered in an unexpected shape. Alone it fails the whole read, as the relay does.
+    if (uris.length && uris.every((u) => this.readFaults.get(u) === 'shape')) throw new SourceError('ms365', { state: 'degraded', reason: 'tools_changed' }, 'Microsoft 365: read_resource changed shape');
     return uris.map((uri): ReadOutcome => {
       const fault = this.readFaults.get(uri);
       if (fault === 'skip') return undefined;
+      if (fault === 'shape') return { ok: false, error: 'read_resource answered in an unexpected shape', gone: false };
       if (fault === 'gone') return { ok: false, error: 'ErrorItemNotFound: The specified object was not found in the store.', gone: true };
       if (fault) return { ok: false, error: fault, gone: false };
       const e = all.find((x) => FakeMs365.uri(x.id) === uri);

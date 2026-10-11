@@ -5,7 +5,7 @@ import { mapLimit } from '../limit';
 import type { FetchContext, FetchResult, SourceAdapter } from '../types';
 import type { Call, WisprMcp } from './mcp';
 import { buildItem, cursorKey, fixedTs, ME_ID, meetingIdOf, participantsOf, ready } from './normalise';
-import { WisprAccount, WisprMeeting, WisprParticipants, WisprSearchPage, type WisprMeetingRow } from './types';
+import { WisprAccount, WisprMeeting, WisprMeetingRow, WisprParticipants, WisprSearchPage } from './types';
 
 // The Wispr Flow source (R2.7, P0-11). One poll:
 //   1. lists meetings with no query, which Wispr returns newest-modified first, page by page, until
@@ -13,6 +13,9 @@ import { WisprAccount, WisprMeeting, WisprParticipants, WisprSearchPage, type Wi
 //   2. reads each finalised one with its participants, three at a time;
 //   3. moves the cursor to the newest meeting seen, finalised or not: a meeting finalised later gets
 //      a newer modified_at, so it comes round again.
+// A meeting Wispr answers in an unexpected shape or with an error doesn't hold up the others: the
+// cursor stays before it, so it is read again, and after MAX_READ_FAILURES polls it goes to the
+// inbox as unreadable (its title, with a note).
 
 export const PAGE_SIZE = 50;
 export const MAX_PAGES = 10;
@@ -21,6 +24,8 @@ export const CONCURRENCY = 3;
 /** How much transcript a draft gets: about 26k tokens, read 40,000 characters at a time. */
 export const TRANSCRIPT_MAX_CHARS = 60_000;
 const TRANSCRIPT_CHUNK = 40_000;
+export const MAX_READ_FAILURES = 3;
+export const UNREADABLE = 'Work OS couldn’t read this meeting’s notes after three tries. Open it in Wispr Flow.';
 const CONTINUE_RE = /\(\.\.\.truncated, \d+ chars remaining; continue with view_transcript\.start_char=(\d+)\.\.\.\)\s*$/;
 
 export class WisprAdapter implements SourceAdapter {
@@ -59,8 +64,38 @@ export class WisprAdapter implements SourceAdapter {
         const mid = meetingIdOf(id);
         if (mid) ids.add(mid);
       }
-      const items = await mapLimit([...ids], CONCURRENCY, (id) => this.read(call, id, me));
-      const newest = rows.map(cursorKey).sort().at(-1);
+      const held: string[] = []; // cursor keys of meetings to read again next poll
+      let odd: SourceError | undefined;
+      let readOk = false;
+      const items = await mapLimit([...ids], CONCURRENCY, async (id) => {
+        try {
+          const it = await this.read(call, id, me);
+          readOk = true;
+          this.o.mcp.readFailures.delete(id);
+          return it;
+        } catch (err) {
+          const row = rows.find((r) => r.id === id);
+          if (!row || !(err instanceof SourceError) || !RECORD_FAILURES.has(err.failure.reason)) throw err;
+          const n = (this.o.mcp.readFailures.get(id) ?? 0) + 1;
+          this.o.mcp.readFailures.set(id, n);
+          if (n >= MAX_READ_FAILURES) {
+            this.o.logger?.warn({ meeting: id, reason: err.failure.reason }, 'Wispr Flow: a meeting failed to read three times; it goes to the inbox as unreadable');
+            this.o.mcp.readFailures.delete(id);
+            return buildItem({ ...row, summary: UNREADABLE, content: null }, [{ id: ME_ID, name: me }]);
+          }
+          if (err.failure.reason === 'tools_changed') odd ??= err;
+          held.push(cursorKey(row));
+          return undefined;
+        }
+      });
+      // Every read answered oddly: more likely the tool changed than the meetings, so health hears.
+      if (odd && !readOk && items.every((i) => !i)) throw odd;
+      const first = held.sort()[0];
+      const newest = rows
+        .map(cursorKey)
+        .filter((k) => !first || k < first)
+        .sort()
+        .at(-1);
       return { items: items.filter((i): i is Item => !!i), nextCursor: newest && newest > floor ? newest : floor };
     });
   }
@@ -71,7 +106,10 @@ export class WisprAdapter implements SourceAdapter {
     let next: string | undefined;
     for (let page = 0; page < MAX_PAGES; page++) {
       const r = await call('search_meetings', { limit: PAGE_SIZE, ...(next && { cursor: next }) }, WisprSearchPage);
-      for (const m of r.meetings) {
+      const parsed = r.meetings.map((m) => WisprMeetingRow.safeParse(m));
+      if (parsed.length && parsed.every((p) => !p.success)) throw new SourceError('wisprMcp', { state: 'degraded', reason: 'tools_changed' }, 'Wispr Flow: search_meetings answered in an unexpected shape');
+      if (parsed.some((p) => !p.success)) this.o.logger?.warn({ skipped: parsed.filter((p) => !p.success).length }, 'Wispr Flow: skipped meetings listed in an unexpected shape');
+      for (const m of parsed.flatMap((p) => (p.success ? [p.data] : []))) {
         if (cursorKey(m) <= floor) return out;
         if (!out.some((x) => x.id === m.id)) out.push(m);
       }
@@ -123,3 +161,6 @@ function clean(text: string): string | undefined {
 }
 
 export const wisprFactory = (mcp: WisprMcp, logger?: Logger) => () => new WisprAdapter({ mcp, logger });
+
+/** A meeting's own trouble, not the server's: its answer had an unexpected shape, or the tool erred on it. */
+const RECORD_FAILURES = new Set(['tools_changed', 'tool_error']);
