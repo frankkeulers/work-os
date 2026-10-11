@@ -288,6 +288,18 @@ test('J80 v drafts the vault note; the action bar stays in view; ⌘↵ approves
   await expect(itemPanel(page).getByRole('button', { name: 'Reopen' })).toHaveCount(0);
 });
 
+test('J82 landing on a To file item starts its suggested draft, quietly, so review is instant (UX-3)', async ({ page }) => {
+  const row = rows(page, 'To file').filter({ hasText: 'Claude Code' });
+  await row.click();
+  // Gone again at once: the draft runs on, and says nothing when it's ready.
+  await page.keyboard.press('Escape');
+  await expect(itemPanel(page)).toHaveCount(0);
+  await row.click();
+  const step = itemPanel(page).getByRole('region', { name: 'Next step' });
+  await expect(step.getByRole('button', { name: 'Review vault note' })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('status').filter({ hasText: 'draft ready' })).toHaveCount(0);
+});
+
 test('J81 x discards the draft; s then a number snoozes, and s s takes the suggested time (UX-1)', async ({ page }) => {
   await rows(page, 'To file').filter({ hasText: 'imo_str' }).click();
   await itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('button', { name: 'Review Confluence entry' }).click();

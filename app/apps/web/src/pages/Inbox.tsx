@@ -23,7 +23,7 @@ import { targetChip } from '../lib/lanes';
 import { INBOX_SORT_LABEL, SOURCE_NAME, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
 import { NEW_FOR_MS, usePrefs } from '../store/prefs';
 import { useUserMoves } from '../store/userMoves';
-import { quietDraft } from '../store/quietDrafts';
+import { requestQuietDraft } from '../store/quietDrafts';
 import { errorToast, toast } from '../store/toasts';
 import { DoneByChip, DueChip, NeedTag, StatusChip } from './inbox/chips';
 import { CockpitRow, LaterRow, RepliedRow, ReplyNote } from './inbox/cockpit/rows';
@@ -31,6 +31,7 @@ import { TimeColumn } from './inbox/cockpit/TimeColumn';
 import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox/cockpit/zones';
 import { BatchDone, ItemPanel } from './inbox/ItemPanel';
 import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
+import { useDraftAhead } from './inbox/draftAhead';
 import { LeaveDialog, PanelSlide } from './inbox/PanelSlide';
 import { rowEl, usePanelHost } from './inbox/usePanelHost';
 import { NotificationBell } from '../components/NotificationBell';
@@ -792,13 +793,11 @@ export function InboxPage() {
   // The batch opens each item on its filing, its draft started, with the next item's draft
   // running ahead: only one, so stopping wastes at most one draft (CK-4.2).
   const budgetHit = !!inbox?.budgets.drafts.hit;
+  useDraftAhead(all, sel, inbox?.budgets);
   const batchIds = useMemo(() => fileRows.filter((r) => !r.leaving && batchable(r.item)).map((r) => r.item.id), [fileRows]);
   const fileOn = useCallback(
     (item: ItemSummary, type: ActionType) => {
-      if (needsDraft(item, type, budgetHit)) {
-        quietDraft(item.id);
-        void api.requestDraft(item.id, type, { quiet: true }).catch(errorToast);
-      }
+      if (needsDraft(item, type, budgetHit)) void requestQuietDraft(item.id, type).catch(errorToast);
       clearNew(item.id);
       setPanelOpen(true);
       setSearch({ item: item.id, file: typeParam(type) }, { replace: true });
@@ -819,10 +818,7 @@ export function InboxPage() {
       setBatch({ ...b, approved: [] });
       fileOn(cur, filingFor(cur)!);
       const next = ahead && filingFor(ahead);
-      if (ahead && next && needsDraft(ahead, next, budgetHit)) {
-        quietDraft(ahead.id);
-        void api.requestDraft(ahead.id, next, { quiet: true }).catch(errorToast);
-      }
+      if (ahead && next && needsDraft(ahead, next, budgetHit)) void requestQuietDraft(ahead.id, next).catch(errorToast);
     },
     [all, fileOn, budgetHit, setPanelOpen, setSearch, setBatch],
   );
