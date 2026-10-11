@@ -682,9 +682,9 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     // The call could read the vault, and nothing else (FR-9.1).
     const draftCall = claude.calls.at(-1)!;
     expect(draftCall.options).toMatchObject({ tools: ['Read', 'Grep', 'Glob'], cwd: vault });
-    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v4 -->/);
+    expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v5 -->/);
     // The vault conventions written on first run go with the request.
-    expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v3 -->/);
+    expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v4 -->/);
 
     // Frank edits, then approves; the outbox writes once it may.
     expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: '# Product\n\nEdited.\n' })).status).toBe(204);
@@ -1290,6 +1290,86 @@ describe('meeting drafts (R2.3, R2.7)', () => {
       claude.nextTexts.push(JSON.stringify({ kind: 'new', path: 'Work/Meetings/Frank × Lanny — SkyWatch 2026-10-06.md', content: '# SkyWatch\n' }));
       const { id } = await draftFor(LANNY_ID);
       expect((await view(LANNY_ID)).drafts[id]).toMatchObject({ kind: 'vault_new', possibleDuplicates: [{ path: TEAMS_NOTE, why: 'same date, attendee: Lanny Day' }] });
+    });
+
+    describe('files a meeting by topic (FR-9.7)', () => {
+      const EO = 'Work/Earth Observation MVP.md';
+      const LOG = 'Work/Decision Log.md';
+      const SHARE = 'https://notes.wisprflow.ai/shared/lanny';
+      beforeEach(async () => {
+        await writeFile(join(vault(), EO), '---\nupdated: 2026-09-01\n---\n# Earth Observation MVP\n\n## Partners\n\n- Planet for optical.\n');
+        await writeFile(join(vault(), LOG), '# Decision Log\n\n## Decisions\n\n- **Decision** (2026-09-02, Frank): one API for imagery.\n');
+      });
+
+      it('appends to each topic note that owns a fact, and approving writes them all', async () => {
+        claude.nextTexts.push(
+          JSON.stringify({
+            kind: 'notes',
+            notes: [
+              { kind: 'append', path: EO, heading: '## Partners', content: `- SkyWatch for tasking (2026-10-06) ([meeting](${SHARE})).` },
+              { kind: 'append', path: LOG, heading: '## Decisions', content: `- **Decision** (2026-10-06, Frank): SkyWatch first ([meeting](${SHARE})).` },
+            ],
+          }),
+        );
+        const { id } = await draftFor(LANNY_ID);
+        let v = await view(LANNY_ID);
+        expect(v.drafts[id]).toMatchObject({ kind: 'vault_multi', parts: [{ kind: 'append', path: EO, heading: '## Partners', context: ['# Earth Observation MVP', '## Partners', '- Planet for optical.'] }, { kind: 'append', path: LOG }] });
+        expect(v.drafts[id]).not.toHaveProperty('possibleDuplicates'); // no new note beside the Teams note
+        expect(v.actions[0]).toMatchObject({ status: 'ready', target: { path: EO, paths: [EO, LOG] } });
+
+        // Each note is edited on its own.
+        expect((await call('PUT', `/api/actions/${id}/draft`, { content: 'x' })).status).toBe(422);
+        expect((await call('PUT', `/api/actions/${id}/draft`, { content: 'x', part: 2 })).status).toBe(422);
+        expect((await call('PUT', `/api/actions/${id}/draft`, { content: `- SkyWatch first, then Planet ([meeting](${SHARE})).`, part: 1 })).status).toBe(204);
+        v = await view(LANNY_ID);
+        expect(v.drafts[id]).toMatchObject({ edited: true, parts: [{ content: expect.stringContaining('tasking') }, { content: expect.stringContaining('then Planet'), edited: true }] });
+        expect(v.drafts[id]).not.toHaveProperty('parts.0.edited');
+
+        expect((await call('POST', `/api/actions/${id}/approve`)).status).toBe(202);
+        await res.actions.settled();
+        v = await view(LANNY_ID);
+        expect(v.actions[0].status).toBe('done');
+        const box = join(dir, 'sandbox/vault');
+        expect(await readFile(join(box, EO), 'utf8')).toMatch(/^---\nupdated: 2026-10-06\n---[\s\S]*- Planet for optical\.\n\n- SkyWatch for tasking/);
+        expect(await readFile(join(box, LOG), 'utf8')).toContain('- SkyWatch first, then Planet');
+        expect(v.results[id]).toBe(`Dry-run: Filed into ${box}: appended under ## Partners in ${EO}; appended under ## Decisions in ${LOG}. Logged action.executed.`);
+        const log = (await readdir(join(dir, 'events'))).filter((f) => f.endsWith('.jsonl'));
+        const events = (await Promise.all(log.map((f) => readFile(join(dir, 'events', f), 'utf8')))).join('').trim().split('\n').map((l) => JSON.parse(l) as { type: string; actionId?: string; data?: unknown });
+        expect(events.find((e) => e.type === 'action.executed' && e.actionId === id)?.data).toEqual({ dryRun: true, path: join(box, EO), paths: [join(box, EO), join(box, LOG)] });
+        expect(await readFile(join(vault(), EO), 'utf8')).not.toContain('SkyWatch'); // the vault is untouched
+      });
+
+      it('keeps a one-note answer as a plain append, and fails an answer with a heading a note lacks', async () => {
+        claude.nextTexts.push(JSON.stringify({ kind: 'notes', notes: [{ kind: 'append', path: EO, heading: '## Partners', content: `- SkyWatch ([meeting](${SHARE})).` }] }));
+        const one = await draftFor(LANNY_ID);
+        expect((await view(LANNY_ID)).drafts[one.id]).toMatchObject({ kind: 'vault_append', path: EO, heading: '## Partners' });
+        expect((await call('POST', `/api/actions/${one.id}/discard`)).status).toBe(204);
+        claude.nextTexts.push(
+          JSON.stringify({
+            kind: 'notes',
+            notes: [
+              { kind: 'append', path: EO, heading: '## Partners', content: '- SkyWatch.' },
+              { kind: 'append', path: LOG, heading: '## Risks', content: '- Licence.' },
+            ],
+          }),
+        );
+        const bad = await draftFor(LANNY_ID);
+        expect((await view(LANNY_ID)).actions.find((a) => a.id === bad.id)).toMatchObject({ status: 'failed', failureReason: 'model_error', error: expect.stringMatching(/Decision Log\.md has no such heading/) });
+      });
+
+      it('warns about the Teams note when one of the parts is a new meeting note', async () => {
+        claude.nextTexts.push(
+          JSON.stringify({
+            kind: 'notes',
+            notes: [
+              { kind: 'append', path: EO, heading: '## Partners', content: '- SkyWatch.' },
+              { kind: 'new', path: 'Work/Meetings/Frank × Lanny — SkyWatch 2026-10-06.md', content: '# SkyWatch\n' },
+            ],
+          }),
+        );
+        const { id } = await draftFor(LANNY_ID);
+        expect((await view(LANNY_ID)).drafts[id]).toMatchObject({ kind: 'vault_multi', possibleDuplicates: [{ path: TEAMS_NOTE, why: 'same date, attendee: Lanny Day' }] });
+      });
     });
 
     it('fails a “filed” answer that names a note that isn’t there', async () => {

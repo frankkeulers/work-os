@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { currentAction, entryVersion, isFiledDraft, type Action, type ActionType, type ConfluenceDraft, type ConfluenceFiledDraft, type Draft, type VaultAppendDraft, type VaultFiledDraft } from '@work-os/shared';
+import { currentAction, entryVersion, isFiledDraft, type Action, type ActionType, type ConfluenceDraft, type ConfluenceFiledDraft, type Draft, type VaultFiledDraft, type VaultMultiDraft } from '@work-os/shared';
 import { api, type ItemView } from '../api';
 import { fmtTokens } from '../lib/format';
 import { confluencePageUrl, obsidianNoteUrl } from '../lib/links';
@@ -67,7 +67,7 @@ function PlainText({ text }: { text: string }) {
   );
 }
 
-type DocProps = { value: string; editing: boolean; onChange: (md: string) => void; mode: DocMode };
+type DocProps = { value: string; editing: boolean; onChange: (md: string) => void; mode: DocMode; label?: string };
 
 function Doc({ label = 'Draft text', ...props }: Omit<DocProps, 'onChange'> & { onChange?: DocProps['onChange']; label?: string }) {
   return (
@@ -97,16 +97,16 @@ function ConfluencePreview({ d, item, doc, frame }: { d: ConfluenceDraft; item: 
  * The lines an append adds, under the note's existing lines (faded) so you see where they land.
  * A teal bar marks what's new, in both views and while editing.
  */
-function VaultAppendDoc({ d, doc, frame }: { d: VaultAppendDraft; doc: DocProps; frame: FrameProps }) {
+function VaultAppendDoc({ context, doc, frame }: { context: string[]; doc: DocProps; frame: FrameProps }) {
   return (
     <DraftFrame
       {...frame}
       label="+ new lines"
       className="rounded-[10px] border border-line bg-surface px-5 pb-4 pt-2.5"
       context={
-        d.context.length > 0 && (
+        context.length > 0 && (
           <div className="opacity-60">
-            <Doc label="Existing lines" value={d.context.join('\n')} editing={false} mode={doc.mode} />
+            <Doc label="Existing lines" value={context.join('\n')} editing={false} mode={doc.mode} />
           </div>
         )
       }
@@ -125,6 +125,26 @@ function VaultDoc({ doc, frame }: { doc: DocProps; frame: FrameProps }) {
     </DraftFrame>
   );
 }
+
+/**
+ * A thread or meeting filed into several notes (FR-9.7): each note with where it lands and its own
+ * text to read and edit. Approving writes them all.
+ */
+function VaultMultiDoc({ d, doc, frame, links }: { d: VaultMultiDraft; doc: (part: number) => DocProps; frame: (part: number) => FrameProps; links: TargetLinks }) {
+  return (
+    <ol className="m-0 flex list-none flex-col gap-4 p-0" aria-label="Notes in this draft">
+      {d.parts.map((p, i) => (
+        <li key={`${p.path}#${i}`} className="flex flex-col gap-2">
+          <NoteTarget kind={p.kind} path={p.path} heading={p.kind === 'append' ? p.heading : undefined} links={links} />
+          {p.kind === 'append' ? <VaultAppendDoc context={p.context} doc={doc(i)} frame={frame(i)} /> : <VaultDoc doc={doc(i)} frame={frame(i)} />}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Names one note's text, so each reads apart from the others. */
+const partLabel = (p: VaultMultiDraft['parts'][number]) => `Draft text for ${p.path}${p.kind === 'append' ? ` under ${p.heading.replace(/^#+\s*/, '')}` : ''}`;
 
 /** Nothing to file (FR-9.6, FR-10.7): the check found the note or section that already holds it. */
 function FiledDoc({ d }: { d: VaultFiledDraft | ConfluenceFiledDraft }) {
@@ -178,20 +198,36 @@ function TargetLine({ d, inScope, links }: { d: Draft; inScope: boolean; links: 
         {!inScope && <span className="sr-only">Excluded from the Confluence scope</span>}
       </div>
     );
+  if (d.kind === 'vault_multi') {
+    const added = new Set(d.parts.filter((p) => p.kind === 'append').map((p) => p.path)).size;
+    const created = d.parts.filter((p) => p.kind === 'new').length;
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
+        <span className="text-muted">Files into</span>
+        <BrandIcon brand="obsidian" size={14} decorative />
+        <span className="font-semibold">{[added && `${added} existing ${added === 1 ? 'note' : 'notes'}`, created && `${created} new ${created === 1 ? 'note' : 'notes'}`].filter(Boolean).join(' and ')}</span>
+      </div>
+    );
+  }
+  return <NoteTarget kind={d.kind === 'vault_new' ? 'new' : d.kind === 'vault_filed' ? 'filed' : 'append'} path={d.path} heading={d.kind === 'vault_append' ? d.heading : undefined} links={links} />;
+}
+
+/** Where a vault note lands: a new note, an append under a heading, or the note that already holds it. */
+function NoteTarget({ kind, path, heading, links }: { kind: 'new' | 'append' | 'filed'; path: string; heading?: string; links: TargetLinks }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px]">
-      <span className="text-muted">{d.kind === 'vault_new' ? 'New note' : d.kind === 'vault_filed' ? 'Already in' : 'Append to'}</span>
+      <span className="text-muted">{kind === 'new' ? 'New note' : kind === 'filed' ? 'Already in' : 'Append to'}</span>
       <BrandIcon brand="obsidian" size={14} decorative />
-      {d.kind !== 'vault_new' || links.noteExists ? (
-        <TargetLink href={links.note(d.path)} title="Open the note in Obsidian">
-          <span className="font-mono text-[12px]">{d.path}</span>
+      {kind !== 'new' || links.noteExists ? (
+        <TargetLink href={links.note(path)} title="Open the note in Obsidian">
+          <span className="font-mono text-[12px]">{path}</span>
         </TargetLink>
       ) : (
         <span className="break-all font-mono text-[12px] font-semibold" title="The note is created when you approve">
-          {d.path}
+          {path}
         </span>
       )}
-      {d.kind === 'vault_append' && <Under heading={d.heading} />}
+      {heading && <Under heading={heading} />}
     </div>
   );
 }
@@ -219,7 +255,15 @@ function checksFor(d: Draft, inScope: boolean, dryRun: boolean): Check[] {
           { ok: true, label: 'People check passed' },
           dupes,
         ]
-      : [{ ok: true, label: 'Follows vault conventions' }, dupes, d.kind === 'vault_append' ? { ok: 'info', label: 'File hash check at write' } : { ok: 'info', label: 'Refuses to overwrite an existing note' }];
+      : [
+          { ok: true, label: 'Follows vault conventions' },
+          dupes,
+          d.kind === 'vault_multi'
+            ? { ok: 'info', label: 'Every note checked before any is written', detail: `${new Set(d.parts.map((p) => p.path)).size} notes` }
+            : d.kind === 'vault_append'
+              ? { ok: 'info', label: 'File hash check at write' }
+              : { ok: 'info', label: 'Refuses to overwrite an existing note' },
+        ];
   if (dryRun) c.push({ ok: 'warn', label: 'Dry-run: writes go to the sandbox only' });
   return c;
 }
@@ -397,7 +441,8 @@ export function ActionPanel({
 }) {
   const navigate = useNavigate();
   const { summary: s, item } = view;
-  const [editing, setEditing] = useState<{ actionId: string; text: string; original: string } | null>(null);
+  // `part`: which note, for a draft that files into several (FR-9.7).
+  const [editing, setEditing] = useState<{ actionId: string; part?: number; text: string; original: string } | null>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [busy, setBusy] = useState(false);
   const [checksOpen, setChecksOpen] = useState(false);
@@ -583,15 +628,17 @@ export function ActionPanel({
         </div>
       );
   } else if (draft) {
-    const isEditing = editing?.actionId === action.id;
-    const text = isFiledDraft(draft) ? '' : draft.content;
+    const textOf = (part?: number) => (isFiledDraft(draft) ? '' : draft.kind === 'vault_multi' ? (draft.parts[part ?? 0]?.content ?? '') : draft.content);
+    const isEditing = (part?: number) => editing?.actionId === action.id && editing.part === part;
     const dupes = (!isFiledDraft(draft) && draft.kind !== 'vault_append' && draft.possibleDuplicates) || [];
-    const doc: DocProps = {
-      value: isEditing ? editing.text : text,
-      editing: isEditing,
+    const docFor = (part?: number): DocProps => ({
+      value: isEditing(part) ? editing!.text : textOf(part),
+      editing: isEditing(part),
       onChange: (text) => setEditing((e) => (e ? { ...e, text } : e)),
       mode: docMode,
-    };
+      ...(draft.kind === 'vault_multi' && { label: partLabel(draft.parts[part ?? 0]) }),
+    });
+    const doc = docFor();
     const written = action.status === 'done' && !view.dryRun;
     const links: TargetLinks = {
       page: (id) => confluencePageUrl(view.targets.confluenceSite, view.targets.spaceKey, id),
@@ -601,11 +648,11 @@ export function ActionPanel({
     const checks = checksFor(draft, inScope, view.dryRun);
     const cancelEdit = () =>
       dirty ? setConfirm({ title: 'Discard your edits?', body: 'The draft goes back to the last saved text.', label: 'Discard edits', danger: true, run: () => setEditing(null) }) : setEditing(null);
-    const frame: FrameProps = {
-      edited: draft.edited,
-      editing: isEditing,
+    const frameFor = (part?: number): FrameProps => ({
+      edited: draft.kind === 'vault_multi' ? !!draft.parts[part ?? 0]?.edited : draft.edited,
+      editing: isEditing(part),
       canEdit: action.status === 'ready' && !editing,
-      onEdit: () => setEditing({ actionId: action.id, text, original: text }),
+      onEdit: () => setEditing({ actionId: action.id, part, text: textOf(part), original: textOf(part) }),
       mode: docMode,
       setMode: setDocMode,
       editActions: (
@@ -616,7 +663,7 @@ export function ActionPanel({
             disabled={busy || !dirty}
             onClick={() =>
               void run(async () => {
-                await api.saveDraftEdit(action.id, doc.value);
+                await api.saveDraftEdit(action.id, editing!.text, part);
                 setEditing(null);
                 toast('Edits saved. The draft is marked as edited.');
               })
@@ -629,7 +676,8 @@ export function ActionPanel({
           </Button>
         </>
       ),
-    };
+    });
+    const frame = frameFor();
     body = (
       <div className="flex flex-col gap-3">
         <TargetLine d={draft} inScope={inScope} links={links} />
@@ -689,8 +737,10 @@ export function ActionPanel({
           <FiledDoc d={draft} />
         ) : draft.kind === 'confluence' ? (
           <ConfluencePreview d={draft} item={item} doc={doc} frame={frame} />
+        ) : draft.kind === 'vault_multi' ? (
+          <VaultMultiDoc d={draft} doc={docFor} frame={frameFor} links={links} />
         ) : draft.kind === 'vault_append' ? (
-          <VaultAppendDoc d={draft} doc={doc} frame={frame} />
+          <VaultAppendDoc context={draft.context} doc={doc} frame={frame} />
         ) : (
           <VaultDoc doc={doc} frame={frame} />
         )}
@@ -729,6 +779,7 @@ export function ActionPanel({
                 <BrandIcon brand="confluence" size={14} decorative /> Open page
               </a>
             ) : (
+              draft.kind !== 'vault_multi' &&
               (written || draft.kind === 'vault_filed') && (
                 <a href={links.note(draft.path)} className={linkButton}>
                   <BrandIcon brand="obsidian" size={14} decorative /> Open note

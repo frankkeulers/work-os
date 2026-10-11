@@ -18,6 +18,9 @@ export const StoredDraft = z.object({
   baseHash: z.string().nullable().optional(),
   /** What the target will hash to once written. Saved before each write attempt (FR-14.5). */
   expectedHash: z.string().optional(),
+  /** The same two, by note path, for a draft that files into several notes (FR-9.7). */
+  baseHashes: z.record(z.string(), z.string().nullable()).optional(),
+  expectedHashes: z.record(z.string(), z.string()).optional(),
   /** The outcome shown in the item panel. */
   result: z.string().optional(),
 });

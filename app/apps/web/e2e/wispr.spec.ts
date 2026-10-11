@@ -92,6 +92,48 @@ test('a Wispr Flow meeting lands in the inbox after Connect, with its action ite
   await page.screenshot({ path: join(APP, 'screenshots/inbox-meeting-light.png') });
 });
 
+test('a meeting files by topic: one draft appends to each note that owns a decision, each edited on its own (FR-9.7)', async ({ page }) => {
+  await page.goto('/');
+  await connect(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: /Inbox/ }).click();
+  const row = meetingRow(page);
+  await showNew(page, row);
+  await row.click();
+  const panel = itemPanel(page);
+  await panel.getByRole('button', { name: 'Draft vault note' }).first().click();
+  const action = panel.getByRole('region', { name: 'Action', exact: true });
+  const notes = action.getByRole('list', { name: 'Notes in this draft' }).locator(':scope > li'); // not the bullets inside a note
+  await expect(notes).toHaveCount(2, { timeout: 20_000 });
+  await expect(action.getByText('2 existing notes', { exact: true })).toBeVisible();
+  await expect(notes.nth(0)).toContainText('Append to');
+  await expect(notes.nth(0).getByRole('link', { name: 'Work/Voyage Insights.md' })).toHaveAttribute('href', /^obsidian:\/\/open\?/);
+  await expect(notes.nth(0)).toContainText('Pricing');
+  await expect(notes.nth(1).getByRole('link', { name: 'Work/Decision Log.md' })).toBeVisible();
+  await expect(action.getByText('New note', { exact: true })).toHaveCount(0); // no meeting note: everything has a home
+  await expect(action).not.toContainText('tier comparison'); // the action item stays out of the vault
+
+  // Each note has its own Edit; saving one leaves the other as drafted.
+  await notes.nth(1).getByRole('button', { name: 'Edit text' }).click();
+  const editor = page.getByLabel('Draft text for Work/Decision Log.md under Decisions');
+  await expect(editor).toBeFocused();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Pilots renew per vessel, agreed with Sales.');
+  await action.getByRole('button', { name: 'Save edits' }).click();
+  await expect(page.getByRole('status').getByText('Edits saved. The draft is marked as edited.')).toBeVisible();
+  await expect(notes.nth(1)).toContainText('Pilots renew per vessel, agreed with Sales.');
+  await expect(notes.nth(0)).toContainText('the per-call tier stays off renewals');
+  await expect(notes.nth(1).getByText('Edited', { exact: true })).toBeVisible();
+  await expect(notes.nth(0).getByText('Edited', { exact: true })).toHaveCount(0);
+  await dismissToasts(page);
+  await action.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await page.screenshot({ path: join(APP, 'screenshots/inbox-vault-multi-light.png') });
+
+  await action.getByRole('button', { name: 'Approve and write to sandbox' }).click();
+  const status = action.getByRole('status');
+  await expect(status).toContainText('Dry-run: Filed into', { timeout: 20_000 });
+  await expect(status).toContainText('appended under ## Pricing in Work/Voyage Insights.md; appended under ## Decisions in Work/Decision Log.md');
+});
+
 test('Poll now shows a spinner on the source polling, and the others queued, in the sidebar (FR-2.6)', async ({ page }) => {
   await connect(page);
   const nav = page.getByRole('navigation', { name: 'Main' });

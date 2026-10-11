@@ -262,16 +262,16 @@ itemRevision copied from the check, and one entry per ask:
 {"decisions":[{"itemId":"<id>","itemRevision":<n>,"asks":[{"index":0,"settled":true,"why":"<one sentence>"}],"allSettled":true}]}
 `;
 
-export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v4 -->
-You draft a note for Frank's Obsidian vault from a Slack thread or a meeting. Frank is Product Innovation Lead at
+export const DEFAULT_VAULT_PROMPT = `<!-- prompt: draft-vault v5 -->
+You file a Slack thread or a meeting into Frank's Obsidian vault. Frank is Product Innovation Lead at
 Pole Star Global. The vault is his knowledge base, written for models and agents to read: decisions,
 facts, findings and meeting outcomes, one canonical note per topic. Messages written by Frank have
 the author "me".
 
 You may read the vault with Read, Grep and Glob to find where this belongs. Start where the vault
 conventions below say (the manifest and the Work map of content), decide on note summaries before
-opening bodies, and read only what you need. You cannot write anything; code writes the note after
-Frank approves it.
+opening bodies, and read only what you need. You cannot write anything; code writes the notes after
+Frank approves them.
 
 First, check whether the vault already holds this. Never file the same thread or meeting twice.
 - <existing-notes> lists notes code found that link to this thread or meeting, or, for a meeting,
@@ -280,32 +280,37 @@ First, check whether the vault already holds this. Never file the same thread or
 - Also Grep the vault for the thread's permalink. A meeting can already have a note from another
   recording (Plaud, Teams, a pasted summary) under a different title and source.
 - A note holds the same meeting when it is the same day, the same people and the same subject.
-- If a note already holds this thread or meeting, add only what it lacks: decisions, action items
-  or facts it does not have, under its matching heading, with the new link as a second source. If
-  it lacks nothing worth keeping, answer "filed" with that note's path and one line on why.
-- Create a new note only when no note covers it.
+- If a note already holds this thread or meeting, add only what it lacks: decisions or facts it
+  does not have, under its matching heading, with the new link as a second source. If the vault
+  lacks nothing worth keeping, answer "filed" with that note's path and one line on why.
+
+Then file each fact where it belongs. Update existing notes wherever you can:
+- Split the thread or meeting by topic. Put each decision, fact or finding under the heading of the
+  note that owns its topic, as the conventions say. One thread or meeting often feeds several
+  notes: a product note, the Decision Log, a customer signals note.
+- Create a new note only for content no existing note covers. For a meeting, that is a meeting note
+  holding only what fits nowhere else. When everything has a home, there is no meeting note.
+- End every block you add with the source link (the thread's permalink), so a later check can tell
+  this thread or meeting is filed.
 
 Follow the vault conventions below: where things go, frontmatter, tags, headings, links and style.
-Prefer adding under a heading of the note that owns the topic; create a new note only when nothing
-covers it.
 
-Write in British English. Keep it short: what was decided or learnt and why, as current fact, with
-a link back to the thread or meeting (its permalink). No action items or to-dos outside a meeting
-note. Do not copy the thread verbatim.
+Write in British English. Keep it short: what was decided or learnt and why, as current fact. No
+action items, to-dos or next steps, except in a meeting note you create, which records the action
+items agreed. Never create a note only to hold action items. Do not copy the thread verbatim.
 
 A thread with "kind": "meeting" is a meeting Wispr Flow recorded. Its messages are Wispr's summary
 and Frank's own notes; "transcript", when present, is what was said, one "Speaker: text" turn per
-line, with unnamed speakers as "Speaker 1", "Speaker 2". Draft a meeting note as the conventions
-describe meeting notes, with its decisions and action items, taking detail from the transcript
-where the summary is thin. Never quote the transcript at length. When "transcript" says it is not
-available, draft from the summary and notes alone.
+line, with unnamed speakers as "Speaker 1", "Speaker 2". Take detail from the transcript where the
+summary is thin. Never quote the transcript at length. When "transcript" says it is not available,
+draft from the summary and notes alone.
 
 Answer with JSON only, no prose, in one of these shapes:
-{"kind":"new","path":"Folder/Note name.md","content":"<the whole note, with frontmatter>"}
-{"kind":"append","path":"Folder/Existing note.md","heading":"## Exact heading line","content":"<the block to add under that heading>"}
+{"kind":"notes","notes":[{"kind":"append","path":"Folder/Existing note.md","heading":"## Exact heading line","content":"<the block to add under that heading>"},{"kind":"new","path":"Folder/Note name.md","content":"<the whole note, with frontmatter>"}]}
 {"kind":"filed","path":"Folder/Existing note.md","why":"<one line: which note already holds it, and that nothing is new>"}
-"path" is relative to the vault root. For "append", "heading" must be a heading line that exists
-in the note, copied exactly, and "content" is only the new block.
+"notes" lists every note you add to or create, appends first, at most 6; one entry is fine. "path"
+is relative to the vault root. For "append", "heading" must be a heading line that exists in the
+note, copied exactly, and "content" is only the new block.
 `;
 
 export const DEFAULT_PICK_CONFLUENCE_PROMPT = `<!-- prompt: pick-confluence v2 -->

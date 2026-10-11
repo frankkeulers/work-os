@@ -1248,13 +1248,15 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'item', id: a.itemId }, { topic: 'inbox' });
   }
 
-  async saveDraftEdit(actionId: string, content: string) {
+  async saveDraftEdit(actionId: string, content: string, part?: number) {
     await this.gate(COMMAND_MS);
     const a = this.action(actionId);
     const d = this.s.drafts[actionId];
     if (a.status !== 'ready' || !d) throw new ApiError('conflict', 'This draft can no longer be edited.');
     if (isFiledDraft(d)) throw new ApiError('conflict', 'This draft files nothing, so there is nothing to edit. Re-draft to file it anyway.');
-    this.s.drafts[actionId] = { ...d, content, edited: true };
+    if ((d.kind === 'vault_multi') !== (part !== undefined) || (d.kind === 'vault_multi' && !(part! < d.parts.length)))
+      throw new ApiError('validation', d.kind === 'vault_multi' ? 'Say which note of the draft to edit.' : 'This draft has one text to edit.');
+    this.s.drafts[actionId] = d.kind === 'vault_multi' ? { ...d, parts: d.parts.map((p, i) => (i === part ? { ...p, content, edited: true } : p)), edited: true } : { ...d, content, edited: true };
     this.event('action.edited', undefined, { itemId: a.itemId, actionId });
     this.emit({ topic: 'item', id: a.itemId });
   }
@@ -1307,7 +1309,9 @@ export class MockServer implements WorkOsApi, MockControls {
 
     if (conflict !== 'normal') {
       a.error =
-        d.kind === 'vault_append'
+        d.kind === 'vault_multi'
+          ? `${d.parts[0].path} changed after drafting (file hash differs). Re-drafting instead of writing.`
+          : d.kind === 'vault_append'
           ? `${d.path} changed after drafting (file hash differs). Re-drafting instead of writing.`
           : d.kind === 'vault_new' || d.kind === 'vault_filed'
             ? `A note now exists at ${d.path}. Re-drafting instead of overwriting it.`
@@ -1339,6 +1343,12 @@ export class MockServer implements WorkOsApi, MockControls {
         ? `Dry-run: write logged only. ${d.pageTitle} stays at v${d.baseVersion}. Logged action.executed.`
         : `Written to ${d.pageTitle}, now v${d.baseVersion + 1}. Logged action.executed.`;
       this.event('action.executed', { dryRun: dry, pageId: d.pageId, pageVersion: dry ? d.baseVersion : d.baseVersion + 1 }, { itemId: a.itemId, actionId });
+    } else if (d.kind === 'vault_multi') {
+      // FR-9.7: every note, in one approval.
+      const root = dry ? `${this.s.settings.dataDir}/sandbox/vault` : this.s.settings.vaultPath;
+      const paths = [...new Set(d.parts.map((p) => `${root}/${p.path}`))];
+      msg = `${dry ? `Dry-run: Filed into ${root}: ` : 'Filed: '}${d.parts.map((p) => (p.kind === 'append' ? `appended under ${p.heading} in ${p.path}` : `created ${p.path}`)).join('; ')}. Logged action.executed.`;
+      this.event('action.executed', { dryRun: dry, path: paths[0], paths }, { itemId: a.itemId, actionId });
     } else {
       const where = dry ? `${this.s.settings.dataDir}/sandbox/vault/${d.path}` : `${this.s.settings.vaultPath}/${d.path}`;
       msg = `${dry ? 'Dry-run: ' : ''}${d.kind === 'vault_append' ? `Appended under ${d.heading} in` : 'Created'} ${where}. Logged action.executed.`;

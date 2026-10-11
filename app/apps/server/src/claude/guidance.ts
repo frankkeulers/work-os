@@ -127,7 +127,7 @@ any page's Status or changelog table.
 - Never invent a figure, date, source or resource. A thin entry is better than a plausible wrong one.
 `;
 
-export const DEFAULT_VAULT_CONVENTIONS = `<!-- prompt: vault-conventions v3 -->
+export const DEFAULT_VAULT_CONVENTIONS = `<!-- prompt: vault-conventions v4 -->
 <!-- Distilled 2026-10-07 from the vault's Notes System note and llms.txt, plus the obsidian-vault-reader skill's retrieval order. The tag taxonomy is read live. -->
 <!-- source: vault-notes-system sha1:e2a144e5a040 -->
 <!-- source: vault-llms sha1:9c789ec5fa6d -->
@@ -163,7 +163,10 @@ are allowed here (unlike Confluence), but keep them factual and in the note that
 - Cross-product material: "Work/Decision Log.md" (decisions spanning products), "Work/Customer
   Signals — Cross-Product.md", "Work/Recent Deals.md", "Work/Competitors/Competitor News & Market Signals.md".
 - Single-product decisions live in the product note, not the Decision Log.
-- A meeting gets its own note in "Work/Meetings/", named "Topic — Subtitle YYYY-MM-DD.md".
+- A meeting is filed by topic, like a thread: each decision, fact or finding goes under the
+  heading of the note that owns it. One meeting often feeds several notes.
+- A meeting note in "Work/Meetings/", named "Topic — Subtitle YYYY-MM-DD.md", holds only what no
+  existing note covers. When everything has a home, there is no meeting note.
 - Never append to "Work/Work.md" or any other MOC: they are links only.
 - People profiles live in "Work/People/".
 
@@ -175,6 +178,7 @@ are allowed here (unlike Confluence), but keep them factual and in the note that
 - Keep an inline date on each fact: "(2026-10-07)".
 - Decision Log bullets: "- **Decision** (YYYY-MM-DD, owner): what was decided; why in one line;
   scope or impact; [[link to the owning note]]".
+- End each block with its source link, so a later check can tell this thread or meeting is filed.
 - Size budget: hub notes ≤25 KB, sections ≤6 KB, meeting notes ≤8 KB. Keep additions to a few lines.
 
 ## New notes
@@ -202,11 +206,12 @@ review tag with a one-line "review_note:".
 Capture decisions and their reasons, facts and findings that stay true beyond this week, patterns,
 and context a future reader would need. Do not capture action items, to-dos, next steps, "waiting
 on X", or transient status. The one exception: a meeting note records the action items agreed in
-that meeting.
+that meeting. Never create a meeting note only to hold action items; without one, they stay out of
+the vault.
 
 ## Links
-Use [[wikilinks]] to related notes that exist (check with Glob). Link the Slack thread by its
-permalink.
+Use [[wikilinks]] to related notes that exist (check with Glob). Link the source by its link: the
+Slack permalink, or for a meeting the Wispr Flow share link.
 
 ## Style
 Lead with the fact. Short sentences, active voice, British English. No preamble, no restating the

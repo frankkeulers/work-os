@@ -786,9 +786,31 @@ export const WISPR_MEETING: ThreadSeed = {
     },
     { by: FRANK, minsAgo: 2 * H + 29, text: 'Check the per-vessel numbers against the Q3 actuals before sending.' },
   ],
+  // FR-9.7: filed by topic, into the notes that own each decision; the action item stays out of the vault.
+  drafts: {
+    vault: {
+      kind: 'vault_multi',
+      parts: [
+        {
+          kind: 'append',
+          path: 'Work/Voyage Insights.md',
+          heading: '## Pricing',
+          context: ['## Pricing', '- Per-vessel and per-call tiers both offered to pilots since July.'],
+          content: '- Pilots renew on the per-vessel tier. Usage-based pricing waits for six months of API data, so the per-call tier stays off renewals ([pricing workshop](https://notes.wisprflow.ai/shared/mock-pricing)).',
+        },
+        {
+          kind: 'append',
+          path: 'Work/Decision Log.md',
+          heading: '## Decisions',
+          context: ['## Decisions', '- **Decision** (Sep, Frank): Insights APIs v2 keeps v1 pricing until migration. [[Insights APIs]]'],
+          content: '- **Decision** (Head of Sales): Voyage Insights pilots renew per vessel; usage pricing needs six months of API data first. [[Voyage Insights]] ([pricing workshop](https://notes.wisprflow.ai/shared/mock-pricing))',
+        },
+      ],
+    },
+  },
   decision: {
     attention: 'today',
-    vault: 'Work/Meetings/',
+    vault: 'Work/Voyage Insights.md › Pricing',
     summary: 'Pilots renew on the per-vessel tier; you owe Finance the tier comparison by Friday.',
     reason: 'The summary’s next steps name you.',
     next: {

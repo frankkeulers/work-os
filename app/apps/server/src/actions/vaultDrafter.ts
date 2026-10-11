@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Item, Me, Settings, VaultAppendDraft, VaultFiledDraft, VaultNewDraft } from '@work-os/shared';
+import type { Item, Me, Settings, VaultAppendDraft, VaultFiledDraft, VaultMultiDraft, VaultNewDraft, VaultPart } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import type { Prompt } from '../claude/prompts';
@@ -14,11 +14,17 @@ import { checkNotePath, insertUnderHeading, readOrNull, sha256, VaultPathError }
 // proposes a new note or an append under a heading. Code checks the proposal against the vault as
 // it is now and records the file's hash, which the executor compares before writing (FR-9.4).
 // Before the call, code lists the notes that may already hold this thread or meeting; the draft
-// adds only what they lack, or answers "filed" when they lack nothing (FR-9.6).
+// adds only what they lack, or answers "filed" when they lack nothing (FR-9.6). A thread or meeting
+// that spans topics files into several notes at once, each fact under the note that owns it (FR-9.7).
+
+const NewAnswer = z.object({ kind: z.literal('new'), path: z.string().min(1), content: z.string().min(1) });
+const AppendAnswer = z.object({ kind: z.literal('append'), path: z.string().min(1), heading: z.string().min(1), content: z.string().min(1) });
+export const MAX_NOTES = 6; // the topics one meeting can sensibly feed; more is a sign the draft is scattering it
 
 export const VaultAnswer = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('new'), path: z.string().min(1), content: z.string().min(1) }),
-  z.object({ kind: z.literal('append'), path: z.string().min(1), heading: z.string().min(1), content: z.string().min(1) }),
+  z.object({ kind: z.literal('notes'), notes: z.array(z.discriminatedUnion('kind', [AppendAnswer, NewAnswer])).min(1).max(MAX_NOTES) }),
+  NewAnswer,
+  AppendAnswer,
   z.object({ kind: z.literal('filed'), path: z.string().min(1), why: z.string().min(1) }),
 ]);
 
@@ -76,7 +82,7 @@ export function renderVaultRequest(item: Item, me: Me, conventions: string, now:
   ].join('\n');
 }
 
-export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Promise<{ draft: VaultNewDraft | VaultAppendDraft | VaultFiledDraft; baseHash: string | null }> {
+export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Promise<{ draft: VaultNewDraft | VaultAppendDraft | VaultMultiDraft | VaultFiledDraft; baseHash?: string | null; baseHashes?: Record<string, string | null> }> {
   const model = d.settings.models.draftVault;
   const t0 = performance.now();
   const existing = await findExistingNotes({ roots: [...(d.sandboxRoot ? [d.sandboxRoot] : []), d.vaultRoot], item, me, links: d.links });
@@ -104,27 +110,47 @@ export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Pro
     edited: false,
   };
   const a = r.value;
-  let path: string;
-  try {
-    path = await checkNotePath(d.vaultRoot, a.path);
-  } catch (e) {
-    if (e instanceof VaultPathError) throw new DraftError(e.message);
-    throw e;
-  }
-  const current = (d.sandboxRoot ? await readOrNull(join(d.sandboxRoot, path)) : null) ?? (await readOrNull(join(d.vaultRoot, path)));
+  const notePath = (p: string) =>
+    checkNotePath(d.vaultRoot, p).catch((e: unknown) => Promise.reject(e instanceof VaultPathError ? new DraftError(e.message) : e));
+  const read = async (path: string) => (d.sandboxRoot ? await readOrNull(join(d.sandboxRoot, path)) : null) ?? (await readOrNull(join(d.vaultRoot, path)));
   if (a.kind === 'filed') {
-    if (current === null) throw new DraftError(`The draft says ${path} already holds this, but there is no such note.`);
+    const path = await notePath(a.path);
+    if ((await read(path)) === null) throw new DraftError(`The draft says ${path} already holds this, but there is no such note.`);
     return { draft: { kind: 'vault_filed', path, why: a.why.trim(), ...meta }, baseHash: null };
   }
-  if (a.kind === 'new') {
-    if (current !== null) throw new DraftError(`The draft would create ${path}, but that note already exists.`);
-    // The backstop: a new note beside a strong match is shown with a warning, not blocked, as two
-    // meetings with the same people on one day do happen.
-    const strong = existing.filter((n) => n.strength === 'strong').map((n) => ({ path: n.path, why: n.why.join(', ') }));
-    return { draft: { kind: 'vault_new', path, content: a.content, ...meta, ...(strong.length && { possibleDuplicates: strong }) }, baseHash: null };
+
+  // Each note as it is now, and as the parts before change it: two appends to one note land in turn.
+  const answers = a.kind === 'notes' ? a.notes : [a];
+  const base = new Map<string, string | null>();
+  const working = new Map<string, string>();
+  const parts: VaultPart[] = [];
+  for (const p of answers) {
+    const path = await notePath(p.path);
+    if (!base.has(path)) base.set(path, await read(path));
+    const current = base.get(path)!;
+    if (p.kind === 'new') {
+      if (current !== null) throw new DraftError(`The draft would create ${path}, but that note already exists.`);
+      if (working.has(path)) throw new DraftError(`The draft writes ${path} twice.`);
+      working.set(path, p.content);
+      parts.push({ kind: 'new', path, content: p.content });
+      continue;
+    }
+    if (current === null) throw new DraftError(`The draft would append to ${path}, but there is no such note.`);
+    const ins = insertUnderHeading(working.get(path) ?? current, p.heading, p.content);
+    if (!ins) throw new DraftError(`The draft would append under “${p.heading}”, but ${path} has no such heading.`);
+    working.set(path, ins.content);
+    parts.push({ kind: 'append', path, heading: p.heading.trim(), context: ins.context, content: p.content });
   }
-  if (current === null) throw new DraftError(`The draft would append to ${path}, but there is no such note.`);
-  const ins = insertUnderHeading(current, a.heading, a.content);
-  if (!ins) throw new DraftError(`The draft would append under “${a.heading}”, but ${path} has no such heading.`);
-  return { draft: { kind: 'vault_append', path, heading: a.heading.trim(), context: ins.context, content: a.content, ...meta }, baseHash: sha256(current) };
+
+  // The backstop: a new note beside a strong match is shown with a warning, not blocked, as two
+  // meetings with the same people on one day do happen. A match the draft adds to is no warning.
+  const strong = existing.filter((n) => n.strength === 'strong' && !base.has(n.path)).map((n) => ({ path: n.path, why: n.why.join(', ') }));
+  const dupes = parts.some((p) => p.kind === 'new') && strong.length ? { possibleDuplicates: strong } : {};
+  if (parts.length > 1) {
+    const baseHashes = Object.fromEntries([...base].map(([path, text]) => [path, text === null ? null : sha256(text)]));
+    return { draft: { kind: 'vault_multi', parts, ...meta, ...dupes }, baseHashes };
+  }
+  const [p] = parts;
+  if (p.kind === 'new') return { draft: { kind: 'vault_new', path: p.path, content: p.content, ...meta, ...dupes }, baseHash: null };
+  return { draft: { ...p, kind: 'vault_append', ...meta }, baseHash: sha256(base.get(p.path)!) };
 }

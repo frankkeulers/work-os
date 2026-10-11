@@ -64,10 +64,10 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     id: 'draft-vault',
     file: 'prompts/draft-vault.md',
     label: 'Draft vault note',
-    description: 'Drafts a new note or an append for the Obsidian vault, reading the vault read-only, after checking the vault doesn’t already hold it.',
+    description: 'Files a thread or meeting into the Obsidian vault: appends under the topic notes that own each fact, and a new note only for what fits nowhere, after checking the vault doesn’t already hold it.',
     usedBy: 'Draft vault note',
     defaultText: DEFAULT_VAULT_PROMPT,
-    previousDefaults: ['e7eb3efd72a888f525ea0b05e750f9b3f2b1060c', 'dfa8657114bbe2a91c2bbdecf3c5cceb34d6200a', 'e2c0deeb8646af8d010dee432153d54ad9347c21'], // draft-vault v1, v2, v3
+    previousDefaults: ['e7eb3efd72a888f525ea0b05e750f9b3f2b1060c', 'dfa8657114bbe2a91c2bbdecf3c5cceb34d6200a', 'e2c0deeb8646af8d010dee432153d54ad9347c21', 'ca6bbaf811a6d86f4c7113a9b32515cc398733a4'], // draft-vault v1, v2, v3, v4
   },
   {
     id: 'pick-confluence',
@@ -103,7 +103,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Where notes go in the vault, frontmatter, tags and style. From the vault’s Notes System note.',
     usedBy: 'Draft vault note',
     defaultText: DEFAULT_VAULT_CONVENTIONS,
-    previousDefaults: ['898d14c3e478bd5da0c0143ca15980cc985e38f9', 'b6d4d9a6fe41e3699876314aa78f3ea715b816ce'], // vault-conventions v1, v2
+    previousDefaults: ['898d14c3e478bd5da0c0143ca15980cc985e38f9', 'b6d4d9a6fe41e3699876314aa78f3ea715b816ce', '442190029d37e366c14c35110930672db7ce2f59'], // vault-conventions v1, v2, v3
   },
   {
     id: 'confluence-routing',

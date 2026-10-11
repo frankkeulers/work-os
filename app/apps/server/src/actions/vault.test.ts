@@ -148,3 +148,72 @@ describe('vault executor (FR-9.4, FR-14.5)', () => {
     expect(await planVaultWrite(targets(false), filed)).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/no longer exists/) });
   });
 });
+
+describe('a draft that files into several notes (FR-9.7)', () => {
+  const targets = (dryRun: boolean) => ({ vaultRoot: vault, sandboxRoot: sandbox, dryRun, today: '2026-10-07' });
+  const TOPIC = '---\nupdated: 2026-09-01\n---\n# Product\n\n## Status\n\n- Beta in August.\n';
+  const multi = (base: Record<string, string | null>, expectedHashes?: Record<string, string>): StoredDraft => ({
+    schemaVersion: 1,
+    actionId: 'act-5',
+    itemId: 'wispr:m2',
+    draft: {
+      kind: 'vault_multi',
+      parts: [
+        { kind: 'append', path: 'Projects/MVI V2.md', heading: '## Decisions', context: [], content: '- Licence wording agreed ([meeting](https://notes.wisprflow.ai/shared/x)).' },
+        { kind: 'append', path: 'Projects/Product.md', heading: '## Status', context: [], content: '- GA moved to November ([meeting](https://notes.wisprflow.ai/shared/x)).' },
+        { kind: 'append', path: 'Projects/MVI V2.md', heading: '## Open questions', context: [], content: '- Who owns the SLA?' },
+        { kind: 'new', path: 'Work/Meetings/Sync 2026-10-07.md', content: '# Sync\n' },
+      ],
+      ...meta,
+    },
+    baseHashes: base,
+    ...(expectedHashes && { expectedHashes }),
+  });
+  const bases = () => ({ 'Projects/MVI V2.md': sha256(NOTE), 'Projects/Product.md': sha256(TOPIC), 'Work/Meetings/Sync 2026-10-07.md': null });
+  beforeEach(async () => {
+    await writeFile(join(vault, 'Projects/MVI V2.md'), NOTE);
+    await writeFile(join(vault, 'Projects/Product.md'), TOPIC);
+  });
+
+  it('writes every note, two appends to one note in one write, then sees them all as written', async () => {
+    const plan = await planVaultWrite(targets(false), multi(bases()));
+    if (plan.kind !== 'writes') throw new Error(`expected writes, got ${plan.kind}`);
+    expect(plan.writes.map((w) => w.file)).toEqual([join(vault, 'Projects/MVI V2.md'), join(vault, 'Projects/Product.md'), join(vault, 'Work/Meetings/Sync 2026-10-07.md')]);
+    expect(plan.message).toBe('Filed: appended under ## Decisions in Projects/MVI V2.md; appended under ## Status in Projects/Product.md; appended under ## Open questions in Projects/MVI V2.md; created Work/Meetings/Sync 2026-10-07.md. Logged action.executed.');
+    for (const w of plan.writes) await writeVaultFile(w);
+    const mvi = await readFile(join(vault, 'Projects/MVI V2.md'), 'utf8');
+    expect(mvi).toContain('- Ship bulk export first.\n\n- Licence wording agreed');
+    expect(mvi.endsWith('- Pricing?\n\n- Who owns the SLA?\n')).toBe(true);
+    expect(await readFile(join(vault, 'Projects/Product.md'), 'utf8')).toMatch(/^---\nupdated: 2026-10-07\n---[\s\S]*- GA moved to November/);
+    expect(await readFile(join(vault, 'Work/Meetings/Sync 2026-10-07.md'), 'utf8')).toBe('# Sync\n');
+    expect(await planVaultWrite(targets(false), multi(bases(), plan.expectedHashes))).toMatchObject({ kind: 'already', files: plan.files });
+  });
+
+  it('writes nothing when any one note changed after drafting', async () => {
+    await writeFile(join(vault, 'Projects/Product.md'), `${TOPIC}- Edited in Obsidian.\n`);
+    expect(await planVaultWrite(targets(false), multi(bases()))).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/^Projects\/Product\.md changed after drafting/) });
+    expect(await readFile(join(vault, 'Projects/MVI V2.md'), 'utf8')).toBe(NOTE);
+  });
+
+  it('after a write cut short, writes only the notes still to go (FR-14.5)', async () => {
+    const first = await planVaultWrite(targets(true), multi(bases()));
+    if (first.kind !== 'writes') throw new Error(`expected writes, got ${first.kind}`);
+    await writeVaultFile(first.writes[0]); // then the power goes
+    const again = await planVaultWrite(targets(true), multi(bases(), first.expectedHashes));
+    if (again.kind !== 'writes') throw new Error(`expected writes, got ${again.kind}`);
+    expect(again.writes.map((w) => w.file)).toEqual([join(sandbox, 'Projects/Product.md'), join(sandbox, 'Work/Meetings/Sync 2026-10-07.md')]);
+    expect(again.expectedHashes).toEqual(first.expectedHashes);
+    expect(again.message).toMatch(/^Dry-run: Filed into /);
+    expect(await readFile(join(vault, 'Projects/MVI V2.md'), 'utf8')).toBe(NOTE); // dry-run leaves the vault alone
+  });
+
+  it('refuses the whole draft when one path is outside the vault, and conflicts when a new note appeared', async () => {
+    const bad = multi(bases());
+    if (bad.draft?.kind !== 'vault_multi') throw new Error('expected vault_multi');
+    bad.draft.parts[1] = { ...bad.draft.parts[1], path: '../escape.md' };
+    expect(await planVaultWrite(targets(false), bad)).toMatchObject({ kind: 'refused' });
+    await mkdir(join(vault, 'Work/Meetings'), { recursive: true });
+    await writeFile(join(vault, 'Work/Meetings/Sync 2026-10-07.md'), '# Someone else\n');
+    expect(await planVaultWrite(targets(false), multi(bases()))).toMatchObject({ kind: 'conflict', message: expect.stringMatching(/A note now exists/) });
+  });
+});

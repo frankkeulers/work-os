@@ -14,6 +14,7 @@ import type {
   StartupFailure,
   TriageDecision,
   UsageRecord,
+  VaultPart,
   WorkEvent,
 } from '@work-os/shared';
 
@@ -31,7 +32,8 @@ export interface ScriptedDecision {
 
 export type VaultTemplate =
   | { kind: 'vault_new'; path: string; content: string }
-  | { kind: 'vault_append'; path: string; heading: string; context: string[]; content: string };
+  | { kind: 'vault_append'; path: string; heading: string; context: string[]; content: string }
+  | { kind: 'vault_multi'; parts: VaultPart[] };
 
 export interface ConfluenceTemplate {
   pageId: string;

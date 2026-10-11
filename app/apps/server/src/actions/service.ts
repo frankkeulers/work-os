@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId } from '@work-os/shared';
+import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId, VaultMultiDraft } from '@work-os/shared';
 import { draftTarget, filedAll, isFiledDraft, londonParts, topicItem } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
@@ -165,15 +165,19 @@ export class ActionService {
     });
   }
 
-  async edit(id: string, content: string) {
+  /** `part`: which note, for a draft that files into several (FR-9.7). */
+  async edit(id: string, content: string, part?: number) {
     const a = this.action(id);
     const stored = await this.d.drafts.read(id);
     if (a.status !== 'ready' || !stored?.draft) throw new HttpError('conflict', 'This draft can no longer be edited.');
     if (isFiledDraft(stored.draft)) throw new HttpError('conflict', 'This draft files nothing, so there is nothing to edit. Re-draft to file it anyway.');
-    await this.d.drafts.update(id, a.itemId, (s) => ({
-      ...s,
-      draft: { ...s.draft!, content, edited: true },
-    }));
+    const multi = stored.draft.kind === 'vault_multi';
+    if (multi !== (part !== undefined) || (multi && !(part! < (stored.draft as VaultMultiDraft).parts.length)))
+      throw new HttpError('validation', multi ? 'Say which note of the draft to edit.' : 'This draft has one text to edit.');
+    await this.d.drafts.update(id, a.itemId, (s) => {
+      const d = s.draft!;
+      return { ...s, draft: d.kind === 'vault_multi' ? { ...d, parts: d.parts.map((p, i) => (i === part ? { ...p, content, edited: true } : p)), edited: true } : { ...d, content, edited: true } as Draft };
+    });
     await this.d.store.append({
       type: 'action.edited',
       itemId: a.itemId,
@@ -377,7 +381,7 @@ export class ActionService {
       try {
         this.stage(a.id, 1);
         const transcript = content.item.kind === 'meeting' ? await this.transcriptFor(content.item, signal) : undefined;
-        const result: { draft: Draft; baseHash?: string | null } =
+        const result: { draft: Draft; baseHash?: string | null; baseHashes?: Record<string, string | null> } =
           a.type === 'vault_note'
             ? await draftVaultNote(
                 {
@@ -420,6 +424,7 @@ export class ActionService {
           ...s,
           draft: result.draft,
           ...(result.baseHash !== undefined && { baseHash: result.baseHash }),
+          ...(result.baseHashes !== undefined && { baseHashes: result.baseHashes }),
         }));
       } catch (err) {
         if (signal.aborted) return; // cancelled, or asleep: still drafting, so it runs again
@@ -490,6 +495,18 @@ export class ActionService {
       if (plan.kind === 'refused') return this.fail(a, 'allow_list', plan.message);
       if (plan.kind === 'conflict') return this.conflict(a, plan.message);
       if (plan.kind === 'filed') return await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file, unchanged: true });
+      if (plan.kind === 'writes') {
+        // Several notes (FR-9.7): every expected hash is saved before the first write, so an
+        // attempt cut short is finished, note by note, rather than repeated.
+        const attempt = this.nextAttempt(a.id);
+        await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHashes: plan.expectedHashes }));
+        await this.d.store.append({ type: 'action.executing', itemId: a.itemId, actionId: a.id, data: { attempt, expectedHashes: plan.expectedHashes } });
+        crashPoint('before-write');
+        for (const w of plan.writes) await writeVaultFile(w);
+        crashPoint('after-write');
+        return await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.files[0], paths: plan.files });
+      }
+      if (plan.kind === 'already' && plan.files) return await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.files[0], paths: plan.files });
       if (plan.kind === 'write') {
         const attempt = this.nextAttempt(a.id);
         await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHash: plan.expectedHash }));
@@ -551,7 +568,7 @@ export class ActionService {
     if (n) this.attempts.set(id, n - 1);
   }
 
-  private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; pageId?: string; pageVersion?: number; unchanged?: true }) {
+  private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; paths?: string[]; pageId?: string; pageVersion?: number; unchanged?: true }) {
     await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, result: message }));
     // Filed in a batch (CK-4.4): the write that completes the item's filings also marks it done, in the same append.
     const it = this.d.store.projection.items[a.itemId];

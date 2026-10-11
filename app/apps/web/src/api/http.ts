@@ -161,7 +161,7 @@ export class HttpApi implements WorkOsApi {
 
   requestDraft = (itemId: string, type: ActionType) => this.post<Action>(`${this.item(itemId)}/actions`, { type });
   cancelDraft = (id: string) => this.post(`${this.action(id)}/cancel`);
-  saveDraftEdit = (id: string, content: string) => this.request<void>('PUT', `${this.action(id)}/draft`, { content });
+  saveDraftEdit = (id: string, content: string, part?: number) => this.request<void>('PUT', `${this.action(id)}/draft`, part === undefined ? { content } : { content, part });
   redraft = (id: string) => this.post<Action>(`${this.action(id)}/redraft`);
   discardAction = (id: string) => this.post(`${this.action(id)}/discard`);
   approveAction = (id: string, opts?: { markDoneWhenFiled?: boolean }) => this.post(`${this.action(id)}/approve`, opts?.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined);

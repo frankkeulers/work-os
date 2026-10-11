@@ -95,10 +95,11 @@ export const EventPayloads = {
   // Approved while filing in a batch (cockpit CK-4.4): the item is marked done once every filing it suggests is written.
   'action.approved': z.object({ markDoneWhenFiled: z.literal(true).optional() }).strict().optional(),
   // Synced before every write attempt, so a write interrupted by sleep or a crash is reconciled, not repeated (FR-14.5).
-  'action.executing': z.object({ attempt: z.number().int().positive(), expectedHash: z.string().optional() }),
+  'action.executing': z.object({ attempt: z.number().int().positive(), expectedHash: z.string().optional(), expectedHashes: z.record(z.string(), z.string()).optional() }),
   'action.executed': z.object({
     dryRun: z.boolean(),
     path: z.string().optional(),
+    paths: z.array(z.string()).optional(), // every note written, when a draft files into several (FR-9.7)
     pageId: z.string().optional(),
     pageVersion: z.number().int().positive().optional(),
     // FR-9.6, FR-10.7: approved as already filed, so nothing was written.

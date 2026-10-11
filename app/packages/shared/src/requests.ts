@@ -43,5 +43,5 @@ export type PromptSave = z.infer<typeof PromptSave>;
 export const PromptReset = z.object({ baseVersion: z.string().min(1) }).strict();
 export type PromptReset = z.infer<typeof PromptReset>;
 
-/** PUT /api/actions/:id/draft (FR-9.3): Frank's edited text. */
-export const DraftEdit = z.object({ content: z.string().max(200_000) }).strict();
+/** PUT /api/actions/:id/draft (FR-9.3): Frank's edited text; `part` picks one note of a draft that files into several (FR-9.7). */
+export const DraftEdit = z.object({ content: z.string().max(200_000), part: z.number().int().nonnegative().optional() }).strict();

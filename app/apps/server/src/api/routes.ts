@@ -172,8 +172,8 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   });
   app.put<{ Params: { id: string } }>('/api/actions/:id/draft', async (req, reply) => {
     const body = DraftEdit.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { content }.');
-    await actions().edit(req.params.id, body.data.content);
+    if (!body.success) throw new HttpError('validation', 'Send { content }, and { part } for a draft that files into several notes.');
+    await actions().edit(req.params.id, body.data.content, body.data.part);
     return reply.code(204).send();
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) =>

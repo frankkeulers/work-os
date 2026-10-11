@@ -521,7 +521,8 @@ export interface WorkOsApi {
 
   requestDraft(itemId: string, type: ActionType): Promise<Action>;
   cancelDraft(actionId: string): Promise<void>;
-  saveDraftEdit(actionId: string, content: string): Promise<void>;
+  /** `part`: which note of a draft that files into several (FR-9.7). */
+  saveDraftEdit(actionId: string, content: string, part?: number): Promise<void>;
   redraft(actionId: string): Promise<Action>;
   discardAction(actionId: string): Promise<void>;
   /** `markDoneWhenFiled`: approved while filing in a batch; the item is done once all its filings are written (cockpit CK-4.4). */

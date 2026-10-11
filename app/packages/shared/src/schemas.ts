@@ -150,6 +150,7 @@ export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
   path: z.string().optional(),
+  paths: z.array(z.string()).optional(), // a vault draft that files into several notes (FR-9.7)
   pageId: z.string().optional(),
   baseVersion: z.number().int().optional(),
 });
@@ -210,6 +211,22 @@ export const VaultAppendDraft = DraftMeta.extend({
   context: z.array(z.string()), // existing lines shown above the insertion point
   content: z.string(),
 });
+/** One note of a draft that files into several (FR-9.7): an append under a heading, or a new note. */
+export const VaultPart = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('append'), path: z.string().min(1), heading: z.string().min(1), context: z.array(z.string()), content: z.string(), edited: z.boolean().optional() }),
+  z.object({ kind: z.literal('new'), path: z.string().min(1), content: z.string(), edited: z.boolean().optional() }),
+]);
+export type VaultPart = z.infer<typeof VaultPart>;
+/**
+ * A thread or meeting filed into several notes at once (FR-9.7): each fact under the topic note that
+ * owns it, and a new note only for what fits nowhere. Approving writes every part, or none.
+ */
+export const VaultMultiDraft = DraftMeta.extend({
+  kind: z.literal('vault_multi'),
+  parts: z.array(VaultPart).min(2),
+  /** As on a new note: when one of the parts is a new note beside a likely match (FR-9.6). */
+  possibleDuplicates: z.array(PossibleDuplicate).optional(),
+});
 export const ConfluenceDraft = DraftMeta.extend({
   kind: z.literal('confluence'),
   pageId: z.string().min(1),
@@ -233,17 +250,21 @@ export const ConfluenceFiledDraft = DraftMeta.extend({
   baseVersion: z.number().int().positive(),
   why: z.string().min(1),
 });
-export const Draft = z.discriminatedUnion('kind', [VaultNewDraft, VaultAppendDraft, VaultFiledDraft, ConfluenceDraft, ConfluenceFiledDraft]);
+export const Draft = z.discriminatedUnion('kind', [VaultNewDraft, VaultAppendDraft, VaultMultiDraft, VaultFiledDraft, ConfluenceDraft, ConfluenceFiledDraft]);
 export type Draft = z.infer<typeof Draft>;
 export type VaultNewDraft = z.infer<typeof VaultNewDraft>;
 export type VaultAppendDraft = z.infer<typeof VaultAppendDraft>;
+export type VaultMultiDraft = z.infer<typeof VaultMultiDraft>;
 export type VaultFiledDraft = z.infer<typeof VaultFiledDraft>;
 export type ConfluenceDraft = z.infer<typeof ConfluenceDraft>;
 export type ConfluenceFiledDraft = z.infer<typeof ConfluenceFiledDraft>;
 /** A draft that files nothing: what it would file is already there (FR-9.6, FR-10.7). */
 export const isFiledDraft = (d: Draft): d is VaultFiledDraft | ConfluenceFiledDraft => d.kind === 'vault_filed' || d.kind === 'confluence_filed';
-/** Where an approved draft goes: the page and its version for Confluence, the note path for the vault. */
-export const draftTarget = (d: Draft): { pageId: string; baseVersion: number } | { path: string } => ('pageId' in d ? { pageId: d.pageId, baseVersion: d.baseVersion } : { path: d.path });
+/** Every note a vault draft writes, in order (FR-9.7). */
+export const draftPaths = (d: VaultNewDraft | VaultAppendDraft | VaultMultiDraft | VaultFiledDraft): string[] => (d.kind === 'vault_multi' ? [...new Set(d.parts.map((p) => p.path))] : [d.path]);
+/** Where an approved draft goes: the page and its version for Confluence, the note path (the first, and all of them for several) for the vault. */
+export const draftTarget = (d: Draft): { pageId: string; baseVersion: number } | { path: string; paths?: string[] } =>
+  'pageId' in d ? { pageId: d.pageId, baseVersion: d.baseVersion } : d.kind === 'vault_multi' ? { path: d.parts[0].path, paths: draftPaths(d) } : { path: d.path };
 
 // The event log (EventType, WorkEvent and their payloads) lives in events.ts.
 
