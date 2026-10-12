@@ -479,14 +479,14 @@ describe('the filing policy (FR-15.1)', () => {
     try {
       const fallback = await loadTriagePrompt(dir);
       expect(fallback.version).toMatch(/^triage v10#/);
-      expect(fallback.policyVersion).toMatch(/^filing-policy v1#/);
-      expect(fallback.text).toMatch(/^<!-- prompt: triage v10 -->[\s\S]*\n\n<filing-policy>\n<!-- prompt: filing-policy v1 -->[\s\S]*\[R1\][\s\S]*\n<\/filing-policy>$/);
+      expect(fallback.policyVersion).toMatch(/^filing-policy v2#/);
+      expect(fallback.text).toMatch(/^<!-- prompt: triage v10 -->[\s\S]*\n\n<filing-policy>\n<!-- prompt: filing-policy v2 -->[\s\S]*\[R1\][\s\S]*\n<\/filing-policy>$/);
       await mkdir(join(dir, 'config/prompts'), { recursive: true });
-      await writeFile(join(dir, 'config/prompts/filing-policy.md'), '<!-- prompt: filing-policy v2 -->\n## To file\n- [F1] Only customer decisions.');
+      await writeFile(join(dir, 'config/prompts/filing-policy.md'), '<!-- prompt: filing-policy v3 -->\n## To file\n- [F1] Only customer decisions.');
       const mine = await loadTriagePrompt(dir);
       expect(mine.version).toBe(fallback.version);
-      expect(mine.policyVersion).toMatch(/^filing-policy v2#/);
-      expect(mine.text).toContain('<filing-policy>\n<!-- prompt: filing-policy v2 -->\n## To file\n- [F1] Only customer decisions.\n</filing-policy>');
+      expect(mine.policyVersion).toMatch(/^filing-policy v3#/);
+      expect(mine.text).toContain('<filing-policy>\n<!-- prompt: filing-policy v3 -->\n## To file\n- [F1] Only customer decisions.\n</filing-policy>');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

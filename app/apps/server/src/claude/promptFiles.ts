@@ -40,7 +40,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Your rules for what triage files, drafts ahead, offers as ready to approve and suggests as a to-do. Sent with the triage prompt.',
     usedBy: 'Triage, drafts ahead and the filing eval',
     defaultText: DEFAULT_FILING_POLICY,
-    previousDefaults: [],
+    previousDefaults: ['a01b31f8971dee32860e05abb16e02a363e091ef'], // filing-policy v1
   },
   {
     id: 'tune-policy',

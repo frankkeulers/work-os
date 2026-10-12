@@ -154,7 +154,7 @@ Answer with JSON only, no prose, in exactly this shape, one entry per thread, us
 
 // The filing policy (FR-15.1): Frank's rules for what triage files, drafts ahead, offers as ready
 // to approve and suggests as a to-do. Triage sends it after its own prompt, in <filing-policy>.
-export const DEFAULT_FILING_POLICY = `<!-- prompt: filing-policy v1 -->
+export const DEFAULT_FILING_POLICY = `<!-- prompt: filing-policy v2 -->
 # Filing policy
 
 What triage suggests filing, what it drafts ahead, what it offers as ready to approve, and what it
@@ -179,6 +179,9 @@ file.
 - [F4] An email: customer requirements, commitments and decisions suit Confluence, as in chat.
   Newsletters, notifications, automated mail and mailing lists are never filed.
 - [F5] A meeting invitation is never filed.
+- [F6] Not Frank's to file: product context for products he isn't PM for, the Shipping & Offshore
+  ones (Podium, FleetWeather, SSAS, FleetTrak). Their PMs keep those PRD pages. Neither Confluence
+  nor the vault, whichever channel or person it comes from.
 
 ## Pre-draft
 

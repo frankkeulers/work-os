@@ -239,8 +239,8 @@ describe('triage (FR-5, Story 5.1, CL-6, CL-7)', () => {
     expect(claude.calls[0].options).toMatchObject({ tools: [], mcpServers: {}, settingSources: [], maxTurns: 1, persistSession: false });
     expect(claude.calls[0].system).toMatch(/^<!-- prompt: triage v10 -->/);
     // FR-15.1: the filing policy goes after it, and the decision records both versions.
-    expect(claude.calls[0].system).toMatch(/\n<filing-policy>\n<!-- prompt: filing-policy v1 -->[\s\S]*<\/filing-policy>$/);
-    expect(res.store.projection.items[PROD].decision).toMatchObject({ promptVersion: expect.stringMatching(/^triage v10#/), policyVersion: expect.stringMatching(/^filing-policy v1#/) });
+    expect(claude.calls[0].system).toMatch(/\n<filing-policy>\n<!-- prompt: filing-policy v2 -->[\s\S]*<\/filing-policy>$/);
+    expect(res.store.projection.items[PROD].decision).toMatchObject({ promptVersion: expect.stringMatching(/^triage v10#/), policyVersion: expect.stringMatching(/^filing-policy v2#/) });
     const usage = (await call<UsageView>('GET', '/api/usage')).body;
     expect(usage.budgets.triage.used).toBe(1);
     expect((await call<HealthView>('GET', '/api/health')).body.deps.find((d) => d.id === 'claude')?.state).toBe('ok');
@@ -1314,7 +1314,7 @@ describe('filing eval (FR-15.8)', () => {
     const reports = (await call<FilingEvalReport[]>('GET', '/api/filing-evals')).body;
     // The fake suggests the vault for it, with no flags: filed, but neither drafted ahead nor ready.
     expect(reports).toEqual([expect.objectContaining({ labelCount: 1, scores: expect.objectContaining({ toFile: expect.objectContaining({ precision: 1, n: 1 }), ready: expect.objectContaining({ predicted: 0, support: 1 }) }) })]);
-    expect(reports[0].policyVersion).toMatch(/^filing-policy v1#/);
+    expect(reports[0].policyVersion).toMatch(/^filing-policy v2#/);
     expect((await readdir(join(dir, 'logs'))).filter((f) => f.startsWith('filing-eval-'))).toHaveLength(1);
     // The triage eval's reports are its own.
     expect((await call<EvalReport[]>('GET', '/api/evals')).body).toEqual([]);
@@ -1359,10 +1359,10 @@ describe('policy proposals (FR-15.9)', () => {
     const p = await run();
     expect(p).toMatchObject({ status: 'open', loop: 'filing', promptId: 'filing-policy', train: expect.any(Number), heldOut: expect.any(Number), model: 'opus-5.5' });
     expect(p.train + p.heldOut).toBe(12);
-    expect(p.text).toMatch(/^<!-- prompt: filing-policy v2 -->/);
+    expect(p.text).toMatch(/^<!-- prompt: filing-policy v3 -->/);
     expect(p.diff?.filter((d) => d.op === 'add').map((d) => d.text)).toContain('- [R9] A decision on a named product, stated as settled by its owner: its Confluence entry.');
     expect(p.scores?.before.map((r) => r.key)).toEqual(['toFile', 'predraft', 'ready', 'todo']);
-    expect(claude.calls.at(-3)!.prompt).toMatch(/^<policy>\n<!-- prompt: filing-policy v1 -->/);
+    expect(claude.calls.at(-3)!.prompt).toMatch(/^<policy>\n<!-- prompt: filing-policy v2 -->/);
     // Learning shows it, and the bell offers it.
     const learning = (await call<SettingsView>('GET', '/api/settings')).body.learning!.filing;
     expect(learning).toMatchObject({ labels: { items: 12, explicit: 12, implicit: 0 }, newLabels: 0, proposing: false, proposal: { id: p.id, status: 'open' } });
@@ -1373,7 +1373,7 @@ describe('policy proposals (FR-15.9)', () => {
     res.store.subscribe((es) => seen.push(...es.filter((e) => e.type === 'prompt.changed').map((e) => JSON.stringify(e.data))));
     const applied = await call<PromptFileView>('POST', `/api/proposals/${p.id}/apply`);
     expect(applied.status).toBe(200);
-    expect(applied.body.version).toMatch(/^filing-policy v2#/);
+    expect(applied.body.version).toMatch(/^filing-policy v3#/);
     expect(await readFile(join(dir, 'config/prompts/filing-policy.md'), 'utf8')).toBe(`${p.text}\n`);
     expect(seen.map((s) => JSON.parse(s))).toEqual([{ id: 'filing-policy', version: applied.body.version, reset: false, proposalId: p.id }]);
     expect((await proposals())[0]).toMatchObject({ status: 'applied', appliedVersion: applied.body.version });
@@ -1391,7 +1391,7 @@ describe('policy proposals (FR-15.9)', () => {
     expect((await call('PUT', POLICY, { text: `${current.text}\n- [T3] Mine.`, baseVersion: current.version })).status).toBe(200);
     const r = await call<ApiErrorBody>('POST', `/api/proposals/${p.id}/apply`);
     expect(r.status).toBe(409);
-    expect(r.body.message).toMatch(/^Filing policy changed since this was proposed \(now filing-policy v1#[0-9a-f]{8}\)\. Propose again from the policy as it is now\.$/);
+    expect(r.body.message).toMatch(/^Filing policy changed since this was proposed \(now filing-policy v2#[0-9a-f]{8}\)\. Propose again from the policy as it is now\.$/);
     expect(await readFile(join(dir, 'config/prompts/filing-policy.md'), 'utf8')).toContain('[T3] Mine.');
     expect((await call('POST', `/api/proposals/${p.id}/dismiss`)).status).toBe(204);
     expect((await proposals())[0]).toMatchObject({ status: 'dismissed' });
@@ -1424,7 +1424,7 @@ describe('proposals for the triage, settle and finish prompts (FR-15.11)', () =>
     expect(tune.prompt).toContain('<loop>triage</loop>');
     expect(tune.prompt).toContain('attention: label now (Frank corrected it); the prompt said none');
     // The held-out scoring sends the proposed triage prompt with the filing policy as it is.
-    expect(claude.calls.at(-1)!.system).toMatch(/When in doubt between two answers[\s\S]*<filing-policy>\n<!-- prompt: filing-policy v1 -->/);
+    expect(claude.calls.at(-1)!.system).toMatch(/When in doubt between two answers[\s\S]*<filing-policy>\n<!-- prompt: filing-policy v2 -->/);
     const learning = (await call<SettingsView>('GET', '/api/settings')).body.learning!;
     expect(learning.triage).toMatchObject({ labels: { items: 12, explicit: 12, implicit: 0 }, newLabels: 0, proposing: false, proposal: { id: p.id } });
     expect(learning.filing.proposal).toBeUndefined();
