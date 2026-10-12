@@ -123,6 +123,7 @@ export const JOURNEYS: Journey[] = [
   { id: 'J95', group: 'Cockpit', title: 'Estimates on To Dos', start: (c) => (c.seedTodos(), '/') },
   { id: 'J96', group: 'Cockpit', title: 'Time for To Dos', start: (c) => (c.seedTodos(), '/') },
   { id: 'J97', group: 'Cockpit', title: 'After Done', start: (c) => (c.seedTodos(), '/') },
+  { id: 'J100', group: 'Cockpit', title: 'Hours for To Dos', start: (c) => (c.seedTodos(), '/') },
   // Write failures (FR-14.5).
   { id: 'J73', group: 'Vault', title: 'Not written: Retry write', start: (c) => (fresh(c), c.setNextDraftOutcome('write_unreachable'), item(c, 'f4', '?tab=vault')) },
   { id: 'J74', group: 'Confluence', title: 'Conflict, drafts budget used up', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), c.setFlag('drafts_budget'), item(c, 'f1')) },

@@ -203,7 +203,12 @@ describe('To Dos (E15, FR-16.1, FR-16.2)', () => {
 
   it('finds each open To Do free time around the seed’s meetings, and keeps the time Frank sets (FR-16.8, FR-16.9)', async () => {
     server.seedTodos();
-    const open = (await settle(server.getInbox())).todos.filter((t) => t.status === 'open');
+    const all = (await settle(server.getInbox())).todos.filter((t) => t.status === 'open');
+    // Planned only in the hours for To Dos, 09:00–17:00: the 30 minutes due at 17:30 don't fit in
+    // what is left today (16:45–17:00, after Product weekly), so the first time after is Tue 09:00.
+    const changelog = all.find((t) => t.step.startsWith('Add the imo_str'))!;
+    expect(changelog.noSlot).toEqual({ reason: 'no_fit_before_deadline', firstAfter: { start: '2026-10-06T08:00:00.000Z', end: '2026-10-06T08:30:00.000Z' } });
+    const open = all.filter((t) => t !== changelog);
     expect(open.every((t) => t.slot?.by === 'plan')).toBe(true);
     // 13:48: the renewal call runs 14:00–15:00, so the overdue one is first, at 15:15 (BST).
     const late = open.find((t) => t.step.startsWith('Send Matt'))!;

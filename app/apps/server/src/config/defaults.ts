@@ -1,4 +1,4 @@
-import { CONFLUENCE_SCOPE_DEFAULTS, type Rule, type Settings } from '@work-os/shared';
+import { CONFLUENCE_SCOPE_DEFAULTS, TODO_HOURS_DEFAULT, type Rule, type Settings } from '@work-os/shared';
 
 // First-run settings (FR-1.1). Safe by default: dry-run on, so nothing is written to Confluence or
 // the real vault until Frank turns it off. Confluence points at the PSG context tree in PRD.
@@ -8,7 +8,7 @@ export function defaultSettings(dataDir: string): Settings {
     dataDir,
     slack: { fetchMode: 'search', includeChannels: [], excludeChannels: [], customerChannels: [] },
     people: { vips: [] },
-    schedule: { workHours: 'Mon–Fri 08:00–18:30', intervalWorkMinutes: 10, intervalOffMinutes: 60 },
+    schedule: { workHours: 'Mon–Fri 08:00–18:30', intervalWorkMinutes: 10, intervalOffMinutes: 60, todoHours: TODO_HOURS_DEFAULT },
     triage: { quietMinutes: 10, maxThreadsPerCall: 25, maxInputTokens: 40000, keepLastMessages: 3 },
     models: { triage: 'haiku-5.5', draftVault: 'sonnet-5.5', draftConfluence: 'sonnet-5.5' },
     claudeBackend: 'subscription',

@@ -1,4 +1,4 @@
-import { SCHEDULE_MAX_ATTEMPTS, SCHEDULE_MAX_PER_CALL, ScheduleAnswer, clampPlan, londonParts, type EventDraft, type Projection, type Settings, type TodoState } from '@work-os/shared';
+import { SCHEDULE_MAX_ATTEMPTS, SCHEDULE_MAX_PER_CALL, ScheduleAnswer, clampPlan, londonParts, todoHours, type EventDraft, type Projection, type Settings, type TodoState } from '@work-os/shared';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
 import type { Prompt } from '../claude/prompts';
@@ -140,7 +140,7 @@ export async function runSchedule(d: ScheduleDeps, signal: AbortSignal): Promise
           purpose: 'schedule',
           model: settings.models.triage,
           system: prompt.text,
-          prompt: renderSchedule(inputs, { now, workHours: settings.schedule.workHours, ...(events && { calendar: calendarFor(events, now) }) }),
+          prompt: renderSchedule(inputs, { now, workHours: todoHours(settings), ...(events && { calendar: calendarFor(events, now) }) }),
           promptVersion: prompt.version,
           timeoutMs: DEADLINES.triage,
           signal,

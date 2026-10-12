@@ -168,8 +168,11 @@ To Dos really take ([Learning](learning.md)). The prompt is **To Do estimates** 
 
 ### Time to do it
 
-With [Outlook Calendar](outlook.md) on, Work OS finds each open To Do some free time in your work
-hours, around your meetings, before it's due. Nothing is booked: the time shows in Work OS only,
+With [Outlook Calendar](outlook.md) on, Work OS finds each open To Do some free time in your hours
+for To Dos, around your meetings, before it's due. Those are 09:00 to 17:00 on weekdays; change them
+in [Settings › Schedule](/settings/schedule) under **Hours for To Dos**, written like
+`Mon–Fri 09:00–17:00`. They are separate from your **Work hours**, which only set how often sources
+poll. Nothing is booked: the time shows in Work OS only,
 never in Outlook or your Tasks note.
 
 - **On the row**, after the source: "Today 15:15–15:45" or "Tue 09:00–09:30". A dashed outline
@@ -182,7 +185,7 @@ never in Outlook or your Tasks note.
   it in [Settings › Schedule](/settings/schedule) under **Gap around meetings**.
 - **It stays put.** A new meeting moves only the To Dos it lands on.
 - **No time before it's due:** the row says so, shows the first free time after, and **Use** keeps
-  that time for it. A To Do longer than a working day gets no time: split it or pick one yourself.
+  that time for it. A To Do longer than your hours for To Dos in a day gets no time: split it or pick one yourself.
 
 **Pick your own time:** click the time, or the estimate chip, or press `p`. Set **When you'll do
 it** and **Save**. Your time has a solid outline, Work OS never moves it, and it plans the rest

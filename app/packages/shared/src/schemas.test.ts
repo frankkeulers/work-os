@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EvalReport, Message, Ms365Connector, Rule, Rules, Settings, SettingsFile, isValidRegex, pollIntervalMinutes, sourceSchedule, upgradeSettings } from './schemas';
+import { EvalReport, Message, Ms365Connector, Rule, Rules, Settings, SettingsFile, isValidRegex, pollIntervalMinutes, sourceSchedule, todoHours, upgradeSettings } from './schemas';
 
 describe('rule validation (FR-4.1)', () => {
   it('accepts slash-delimited and bare regular expressions', () => {
@@ -69,6 +69,26 @@ describe('per-source schedules (R2.1)', () => {
     expect(parsed.success).toBe(true);
     expect(Settings.shape.sources.safeParse({ wispr: { intervalWorkMinutes: 0 } }).success).toBe(false);
     expect(Settings.shape.sources.safeParse({ fax: { enabled: true } }).success).toBe(false);
+  });
+});
+
+describe('hours for To Dos (FR-16.8)', () => {
+  const schedule = { workHours: 'Mon–Fri 08:00–18:30', intervalWorkMinutes: 10, intervalOffMinutes: 60 };
+  const parse = (todoHours: string) => Settings.shape.schedule.safeParse({ ...schedule, todoHours });
+
+  it('are 09:00 to 17:00 on weekdays unless Frank sets his own, whatever the work hours', () => {
+    expect(todoHours({ schedule })).toBe('Mon–Fri 09:00–17:00');
+    expect(todoHours({ schedule: { ...schedule, todoHours: 'Mon–Thu 10:00–16:00' } })).toBe('Mon–Thu 10:00–16:00');
+    expect(Settings.shape.schedule.safeParse(schedule).success).toBe(true); // settings from before stay valid
+  });
+
+  it('take days and hours as Mon–Fri 09:00–17:00, with a hyphen too, the end after the start', () => {
+    expect(parse('Mon–Fri 09:00–17:00').success).toBe(true);
+    expect(parse(' Mon-Fri 08:30-12:00 ').data?.todoHours).toBe('Mon-Fri 08:30-12:00');
+    expect(parse('9 to 5').error?.issues[0].message).toBe('Write it like Mon–Fri 09:00–17:00');
+    expect(parse('Mon–Fri 9:00–17:00').success).toBe(false);
+    expect(parse('Mon–Fri 09:00–24:00').success).toBe(false);
+    expect(parse('Mon–Fri 17:00–09:00').error?.issues[0].message).toBe('The end must be after the start');
   });
 });
 

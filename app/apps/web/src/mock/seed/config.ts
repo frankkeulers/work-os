@@ -1,4 +1,4 @@
-import type { Rule, Settings } from '@work-os/shared';
+import { TODO_HOURS_DEFAULT, type Rule, type Settings } from '@work-os/shared';
 import { MOCK_SCOPE } from './catalogue';
 
 // Matches the Settings & rules artboard. Dry-run is on by default in development (FR-1.6).
@@ -11,7 +11,7 @@ export const SEED_SETTINGS: Settings = {
     customerChannels: ['#ext-pilot-alpha', '#ext-pilot-bravo'],
   },
   people: { vips: ['Matt M.', 'VP Engineering'] },
-  schedule: { workHours: 'Mon–Fri 08:00–18:30', intervalWorkMinutes: 10, intervalOffMinutes: 60 },
+  schedule: { workHours: 'Mon–Fri 08:00–18:30', intervalWorkMinutes: 10, intervalOffMinutes: 60, todoHours: TODO_HOURS_DEFAULT },
   triage: { quietMinutes: 10, maxThreadsPerCall: 25, maxInputTokens: 40000, keepLastMessages: 3 },
   models: { triage: 'haiku-5.5', draftVault: 'sonnet-5.5', draftConfluence: 'sonnet-5.5' },
   claudeBackend: 'subscription',

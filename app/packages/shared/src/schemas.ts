@@ -402,6 +402,19 @@ export type ModelId = z.infer<typeof ModelId>;
 const SettingsModelId = z.preprocess((v) => (v === 'haiku-4.5' ? 'haiku-5.5' : v), ModelId);
 
 const minutes = z.number({ error: 'Enter a number' }).int('Whole minutes only').positive('Must be more than 0');
+
+/** When To Dos are planned unless Frank sets his own (FR-16.8): narrower than the polling's work hours. */
+export const TODO_HOURS_DEFAULT = 'Mon–Fri 09:00–17:00';
+const HOURS_RE = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*[–-]\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+([01]\d|2[0-3]):([0-5]\d)\s*[–-]\s*([01]\d|2[0-3]):([0-5]\d)$/;
+/** Days and hours as "Mon–Fri 09:00–17:00", the end after the start: To Dos aren't planned across midnight. */
+const todoHoursSpec = z
+  .string()
+  .trim()
+  .regex(HOURS_RE, 'Write it like Mon–Fri 09:00–17:00')
+  .refine((v) => {
+    const m = HOURS_RE.exec(v);
+    return !m || Number(m[3]) * 60 + Number(m[4]) < Number(m[5]) * 60 + Number(m[6]);
+  }, 'The end must be after the start');
 const timeRange = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d[–-]([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM–HH:MM');
 
 // Per-source polling (FR-1.3). Every field is optional and falls back to the defaults in
@@ -474,6 +487,8 @@ export const Settings = z.object({
     intervalOffMinutes: minutes,
     // Amendment (FR-16.8): minutes kept clear either side of a meeting when planning To Dos; 10 when unset.
     slotBufferMinutes: z.number().int().min(0, 'At least 0').max(60, 'At most 60').optional(),
+    // Amendment (FR-16.8): the hours To Dos are planned in, Mon–Fri 09:00–17:00 when unset. See todoHours().
+    todoHours: todoHoursSpec.optional(),
   }),
   triage: z.object({
     quietMinutes: minutes,
@@ -573,6 +588,11 @@ export function sourceSchedule(settings: Pick<Settings, 'schedule' | 'sources'>,
 }
 
 /** The minutes between a source's polls at `at` (work or off hours); undefined when it doesn't poll then. */
+/** The hours To Dos are planned in (FR-16.8): Frank's own, else 09:00 to 17:00 on weekdays. */
+export function todoHours(settings: Pick<Settings, 'schedule'>): string {
+  return settings.schedule.todoHours ?? TODO_HOURS_DEFAULT;
+}
+
 export function pollIntervalMinutes(settings: Pick<Settings, 'schedule' | 'sources'>, id: SourceId, at: Date | string): number | undefined {
   const s = sourceSchedule(settings, id);
   if (!s.enabled) return undefined;

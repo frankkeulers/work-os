@@ -23,6 +23,7 @@ import {
   followupsOf,
   type FollowupAnswerBody,
   slotOf,
+  todoHours,
   todoSlots,
   SLOT_BUFFER_MINUTES,
   awaitsReply,
@@ -318,7 +319,7 @@ export class MockServer implements WorkOsApi, MockControls {
   private todoSlots() {
     const events = this.calendarOn() ? [...CALENDAR, ...CALENDAR_WEEK] : undefined;
     const s = this.s.settings.schedule;
-    return todoSlots(Object.values(this.s.todos ?? {}), { now: this.now(), workHours: s.workHours, ...(events && { events, calendarTo: londonAt(this.now(), '00:00', 15) }), bufferMinutes: s.slotBufferMinutes ?? SLOT_BUFFER_MINUTES });
+    return todoSlots(Object.values(this.s.todos ?? {}), { now: this.now(), workHours: todoHours(this.s.settings), ...(events && { events, calendarTo: londonAt(this.now(), '00:00', 15) }), bufferMinutes: s.slotBufferMinutes ?? SLOT_BUFFER_MINUTES });
   }
 
   private todoSummary(id: string, slots = this.todoSlots()): TodoSummary | undefined {

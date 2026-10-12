@@ -80,6 +80,18 @@ describe('the To Do planner (FR-16.8, FR-16.9)', () => {
     expect(planner.slots()?.['todo-a']).toEqual({ kind: 'none', reason: 'no_calendar' });
   });
 
+  it('plans only in the hours for To Dos, not the wider work hours polling uses', async () => {
+    const late = new Date('2026-10-12T15:45:00.000Z'); // Mon 16:45 London, still in work hours (to 18:30)
+    const at = (s: typeof settings) => new TodoPlanner({ store, now: () => late, config: () => ({ settings: s }), calendar: () => cal });
+    await todo('todo-a');
+    expect(settings.schedule).toMatchObject({ workHours: 'Mon–Fri 08:00–18:30', todoHours: 'Mon–Fri 09:00–17:00' });
+    await at(settings).plan();
+    expect(slot('todo-a')).toEqual({ start: '2026-10-13T08:00:00.000Z', end: '2026-10-13T08:30:00.000Z', by: 'plan' }); // Tue 09:00, not today at 17:00
+    // Narrower hours of his own: the slot moves into them.
+    await at({ ...settings, schedule: { ...settings.schedule, todoHours: 'Mon–Fri 10:00–12:00' } }).plan();
+    expect(slot('todo-a')?.start).toBe('2026-10-13T09:00:00.000Z'); // Tue 10:00
+  });
+
   it('leaves done To Dos alone', async () => {
     await todo('todo-a');
     await store.append({ type: 'todo.done', ...ids, data: { todoId: 'todo-a', by: 'you' } });

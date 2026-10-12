@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { SCHEDULE_MAX_PER_CALL, ScheduleAnswer, clampPlan, londonParts, type LoopScore, type Rate, type Settings, type SourceId } from '@work-os/shared';
+import { SCHEDULE_MAX_PER_CALL, ScheduleAnswer, clampPlan, londonParts, todoHours, type LoopScore, type Rate, type Settings, type SourceId } from '@work-os/shared';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
 import type { Prompt } from '../claude/prompts';
@@ -168,7 +168,7 @@ export async function predictSchedule(d: ScheduleEvalDeps, cases: readonly Sched
             system: d.prompt.text,
             prompt: renderSchedule(
               batch.map((c) => c.input),
-              { now, workHours: d.settings.schedule.workHours },
+              { now, workHours: todoHours(d.settings) },
             ),
             promptVersion: d.prompt.version,
             timeoutMs: DEADLINES.triage,

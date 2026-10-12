@@ -1,4 +1,4 @@
-import { SLOT_BUFFER_MINUTES, todoSlots, type EventDraft, type Settings, type SlotResult, type TodoState } from '@work-os/shared';
+import { SLOT_BUFFER_MINUTES, todoHours, todoSlots, type EventDraft, type Settings, type SlotResult, type TodoState } from '@work-os/shared';
 import type { Logger } from '../log';
 import type { CalendarSnapshot } from '../sources/calendar/store';
 import type { Store } from '../store/store';
@@ -33,7 +33,7 @@ export class TodoPlanner {
     const snap = cal.on ? cal.snapshot : undefined;
     return todoSlots(Object.values(this.d.store.projection.todos ?? {}), {
       now: this.d.now(),
-      workHours: s.workHours,
+      workHours: todoHours(this.d.config().settings),
       ...(snap && { events: snap.events, calendarTo: snap.to }),
       bufferMinutes: s.slotBufferMinutes ?? SLOT_BUFFER_MINUTES,
     });

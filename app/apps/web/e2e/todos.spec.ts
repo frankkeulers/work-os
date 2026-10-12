@@ -159,9 +159,9 @@ test.describe('wide window (cockpit)', () => {
     await editor.getByRole('button', { name: 'Save' }).click();
     await expect(share.locator('[data-todo-slot="you"]')).toHaveText('Tue 09:00–09:15');
     await expect(shareBlock).toHaveCount(0);
-    // Tomorrow's column has it, solid: Frank's own time.
+    // Tomorrow's column has it, solid: Frank's own time. (Those that don't fit before 17:00 today are there too.)
     await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Tomorrow' }).click();
-    await expect(page.getByRole('list', { name: 'To Dos planned tomorrow' }).locator('[data-timeline-todo]')).toHaveAttribute('data-slot-by', 'you');
+    await expect(page.getByRole('list', { name: 'To Dos planned tomorrow' }).locator(`[data-timeline-todo="${await share.getAttribute('data-todo')}"]`)).toHaveAttribute('data-slot-by', 'you');
     await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Today', exact: true }).click();
 
     // Hand it back.
@@ -169,6 +169,28 @@ test.describe('wide window (cockpit)', () => {
     await editor.getByRole('button', { name: 'Let Work OS plan' }).click();
     await editor.getByRole('button', { name: 'Save' }).click();
     await expect(share.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:30–15:45');
+  });
+
+  test('J100 To Dos are planned in their own hours, 09:00–17:00 unless you set others in Settings › Schedule (FR-16.8)', async ({ page }) => {
+    await withTodos(page);
+    const send = page.getByRole('region', { name: 'To do today' }).locator('[data-todo]', { hasText: 'Send Matt the one-line' });
+    await expect(send.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:15–15:30');
+
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Schedule' }).click();
+    const hours = page.getByLabel('Hours for To Dos');
+    await expect(hours).toHaveValue('Mon–Fri 09:00–17:00');
+    await expect(page.getByLabel('Work hours', { exact: true })).toHaveValue('Mon–Fri 08:00–18:30'); // polling's, wider
+    await hours.fill('9 to 5');
+    await expect(page.getByText('Write it like Mon–Fri 09:00–17:00')).toBeVisible();
+    await hours.fill('Mon–Fri 16:00–17:00');
+    await hours.blur();
+    await expect(page.getByRole('status').filter({ hasText: 'Changes saved' })).toBeVisible();
+    await shoot(page, page.getByRole('main', { name: 'Schedule' }), 'settings-todo-hours');
+
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Inbox' }).click();
+    // Product weekly is 16:00–16:30, with 10 minutes clear after it: the first free time left.
+    await expect(send.locator('[data-todo-slot="plan"]')).toHaveText('Today 16:45–17:00');
   });
 
   test('J97 Done suggests what comes next: copy the reply and open the thread, add the next To Do; nothing is sent (FR-16.11, FR-16.12)', async ({ page }) => {
