@@ -224,6 +224,7 @@ function agendaEvent(d: ViewDeps, e: SnapEvent, links: { notes?: string; invite?
     ...(e.showAs && { showAs: e.showAs }),
     ...(organizer && { organizer }),
     ...(e.link && { link: e.link }),
+    ...(e.joinUrl && { joinUrl: e.joinUrl }),
     ...((e.isOrganizer || e.response) && { response: e.isOrganizer ? 'organizer' : e.response }),
     ...(links.invite && { inviteItemId: links.invite }),
     ...(links.notes && { notesItemId: links.notes }),

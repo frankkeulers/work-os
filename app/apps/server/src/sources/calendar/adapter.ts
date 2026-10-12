@@ -100,11 +100,13 @@ export class CalendarAdapter implements SourceAdapter {
       hashes.set(row.id, hash);
       const was = prevById.get(row.id);
       if (was?.hash === hash) {
-        // Categories come with search, so a change to them needs no read.
+        // Categories come with search, so a change to them needs no read. A join link search shows
+        // wins; one only a read found is kept.
         const { categories: _was, ...kept } = was;
-        listed.set(row.id, { ...kept, uri: row.uri, showAs: fresh.showAs, isOrganizer: fresh.isOrganizer, ...(fresh.categories && { categories: fresh.categories }) });
+        listed.set(row.id, { ...kept, uri: row.uri, showAs: fresh.showAs, isOrganizer: fresh.isOrganizer, ...(fresh.categories && { categories: fresh.categories }), ...(fresh.joinUrl && { joinUrl: fresh.joinUrl }) });
       } else {
-        listed.set(row.id, { ...fresh, ...(was?.response !== undefined && { response: was.response }) });
+        // A moved meeting keeps its join link: one a read found stays until a read finds another.
+        listed.set(row.id, { ...fresh, ...(was?.response !== undefined && { response: was.response }), ...(!fresh.joinUrl && was?.joinUrl && { joinUrl: was.joinUrl }) });
         changed.add(row.id);
       }
     }

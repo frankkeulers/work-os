@@ -15,7 +15,7 @@ import type { EventDetail } from '../ms365/types';
 import type { MeInfo } from '../outlook/normalise';
 import { CalendarAdapter, MAX_READS, windowStart } from './adapter';
 import { isMeetingMail } from './mail';
-import { inviteBody, inviteItemId, responseOf, snapFromRow } from './normalise';
+import { inviteBody, inviteItemId, responseOf, snapFromRow, teamsJoinUrl } from './normalise';
 import { CalendarStore } from './store';
 import { wallToUtc, whenText } from './time';
 
@@ -64,6 +64,16 @@ describe('calendar normalise', () => {
     expect(body).toContain('Fleet coverage');
     expect(body).not.toMatch(/Teams|Passcode|Meeting ID|teams\.microsoft|___/);
     expect(inviteBody({ contentType: 'html', content: TEAMS })).toBe('');
+  });
+
+  it('finds a Teams join link in a join URL, a body or search’s summary, and nothing else', () => {
+    // Search's summary, as the connector gives it when the Teams block opens the body.
+    expect(teamsJoinUrl('____\r\nMicrosoft Teams meeting\r\nJoin: https://teams.microsoft.com/meet/21335181223291?p=LIHecMmaadB7jNURcd\r\nMeeting ID: 213 351 812 232 91')).toBe('https://teams.microsoft.com/meet/21335181223291?p=LIHecMmaadB7jNURcd');
+    const meetup = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_NWIz%40thread.v2/0?context=%7b%22Tid%22%3a%22344c%22%7d';
+    expect(teamsJoinUrl(undefined, `<a href="${meetup.replace('?', '?x=1&amp;')}">Join</a>`)).toBe(meetup.replace('?', '?x=1&'));
+    expect(teamsJoinUrl(meetup, TEAMS)).toBe(meetup); // the read's join URL first
+    expect(teamsJoinUrl(null, '<a href="https://teams.microsoft.com/meetingOptions/?organizerId=1">Meeting options</a> <a href="https://aka.ms/JoinTeamsMeeting">Need help?</a>')).toBeUndefined();
+    expect(teamsJoinUrl('http://teams.microsoft.com/meet/1?p=a', 'Join on Zoom: https://zoom.us/j/123')).toBeUndefined();
   });
 
   it('finds Frank’s answer in his own attendee entry', () => {
@@ -152,12 +162,39 @@ describe('the calendar adapter', () => {
     expect(store.snapshot?.events.find((e) => e.id === q4.id)?.categories).toBeUndefined();
   });
 
-  it('keeps no body, Teams text or join link in the snapshot', async () => {
+  it('keeps no body or Teams text in the snapshot, only the join link (Frank, 12 Oct 2026)', async () => {
     box.calendar.push(invite());
     await poll();
     const saved = JSON.stringify(store.snapshot);
     expect(saved).toContain('Q4 roadmap review');
-    expect(saved).not.toMatch(/priorities|Passcode|Meeting ID|teams\.microsoft/);
+    expect(saved).not.toMatch(/priorities|Passcode|AbC123|Meeting ID|123 456 789/);
+    expect(store.snapshot?.events[0].joinUrl).toBe('https://teams.microsoft.com/l/meetup-join/abc');
+  });
+
+  it('takes a meeting’s join link from search, or from a read when an agenda pushes it out of the summary', async () => {
+    const block = (url: string) => `<p>________________________________________________________________________________</p><p>Microsoft Teams meeting</p><p>Join: ${url}</p><p>Meeting ID: 213 351</p><p>Passcode: Tz2Nq3Gh</p>`;
+    // Frank's own meeting is never read: its link comes from search's summary.
+    const own = invite({ subject: 'Product weekly', organizer: FRANK, attendees: [{ ...DANA }], html: block('https://teams.microsoft.com/meet/111?p=own') });
+    // A long agenda above the Teams block: search's summary stops before the link, the read has it.
+    const agenda = `<p>Agenda:</p><p>${'Delivery progress, KPIs, migration, cost, product, AI adoption. '.repeat(5)}</p>`;
+    const brief = invite({ subject: 'Tech brief', attendees: [{ ...FRANK, response: 'accepted' }], start: at(3), end: at(4), html: `${agenda}${block('https://teams.microsoft.com/meet/222?p=b')}`, joinUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_222' });
+    const room = invite({ subject: 'In the office', organizer: FRANK, attendees: [{ ...DANA }], html: '<p>Board room</p>' });
+    box.calendar.push(own, brief, room);
+    await poll();
+    const joinOf = (e: { id: string }) => store.snapshot?.events.find((x) => x.id === e.id)?.joinUrl;
+    expect(box.eventReads.flat()).not.toContain(uri(own));
+    expect(joinOf(own)).toBe('https://teams.microsoft.com/meet/111?p=own');
+    expect(joinOf(brief)).toBe('https://teams.microsoft.com/l/meetup-join/19%3ameeting_222');
+    expect(joinOf(room)).toBeUndefined();
+
+    // Unchanged, the brief isn't read again and keeps its link; moved and not read (it has started), it keeps it too.
+    const reads = box.eventReads.length;
+    await poll();
+    expect(box.eventReads.length).toBe(reads);
+    expect(joinOf(brief)).toBe('https://teams.microsoft.com/l/meetup-join/19%3ameeting_222');
+    move(brief, -1);
+    await poll();
+    expect(joinOf(brief)).toBe('https://teams.microsoft.com/l/meetup-join/19%3ameeting_222');
   });
 
   it('reads an open invite again each poll, and closes it once Frank answers in Outlook', async () => {

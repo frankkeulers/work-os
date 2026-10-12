@@ -5,7 +5,8 @@ import { writeJsonAtomic } from '../../store/atomic';
 // state/calendar.json (R2.8): the calendar as the last poll saw it, from this week's Monday to two weeks
 // ahead. It is the agenda and the week view (CK-5.6), and what the next poll compares against to see what moved, was
 // cancelled or was answered. It is not the event log: nothing here is history. Subjects, times,
-// names and addresses and category names only: never an event's body, its Teams text or its join link.
+// names and addresses, category names and the Teams join link only (Frank, 12 Oct 2026): never an
+// event's body or the rest of its Teams text.
 
 const Person = z.object({ name: z.string().optional(), address: z.string().optional(), type: z.string().optional() });
 export type SnapPerson = z.infer<typeof Person>;
@@ -31,6 +32,8 @@ export const SnapEvent = z.object({
   created: z.string().optional(),
   /** Outlook category names, from search (R2.8). */
   categories: z.array(z.string()).optional(),
+  /** The Teams join link, from search's summary or a read; unset for a meeting without one. */
+  joinUrl: z.string().optional(),
 });
 export type SnapEvent = z.infer<typeof SnapEvent>;
 

@@ -3,7 +3,7 @@ title: The inbox
 group: Inbox
 order: 30
 summary: The three zones on a wide screen, Needs you, Waiting on others and To file, the bell, what the chips mean, topics, and how to correct a decision.
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 ## Three zones on a wide screen
@@ -279,9 +279,10 @@ retention period, an item keeps its title and link but its text is gone ("text e
 - **Outlook** lists mail by day, with each email's subject above its summary.
 - **Wispr Flow** lists meeting notes by week.
 - **Outlook Calendar** shows the week, Monday to Sunday. Cancelled and declined meetings are
-  struck through rather than left out. A meeting marked **Notes** opens its Wispr Flow notes, and
-  one marked **Invite** opens its invite. Any other meeting opens a card with who's invited and a
-  link to Outlook. The arrows move a week at a time. The calendar keeps this week and the next two,
+  struck through rather than left out. A meeting with an Outlook category is shaded in that
+  category's colour (the first one, when it has several). A meeting marked **Notes** opens its Wispr
+  Flow notes, and one marked **Invite** opens its invite. Any other meeting opens a card with who's
+  invited, **Join in Teams** for a Teams meeting, and a link to Outlook. The arrows move a week at a time. The calendar keeps this week and the next two,
   so earlier weeks are empty.
 
 Each row says where triage put it: its lane, **Done by you**, or **Filed · Confluence**. The chips

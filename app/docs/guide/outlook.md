@@ -3,7 +3,7 @@ title: Outlook mail and calendar
 group: Inbox
 order: 44
 summary: Your Inbox, Sent Items and calendar through the Microsoft 365 connector on claude.ai, one item per conversation, with today's meetings above the inbox.
-updated: 2026-10-09
+updated: 2026-10-12
 ---
 
 Work OS reads your Outlook mail through the **Microsoft 365 connector** you already use on
@@ -74,8 +74,9 @@ first.
 - **Not answered** marks a meeting someone else invited you to that you haven't accepted or
   declined yet. Choose it to open the invite's item.
 - **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,
-  who organised it and who is invited, its categories, and your answer. Never a meeting's description, its Teams
-  link or its passcode.
+  who organised it and who is invited, its categories, your answer, and a Teams meeting's join link,
+  so you can join from the calendar. Never a meeting's description, or the rest of its Teams
+  details such as the meeting ID and passcode.
 - Work OS only reads. It never answers, moves or changes a meeting.
 
 The calendar polls on its own schedule, every 30 minutes in work hours and every 2 hours outside
@@ -106,7 +107,8 @@ when it ends, until it does. Choose a meeting there to open it in Outlook, where
 ### Categories
 
 The Outlook categories on your meetings come with the calendar. A meeting with one has that
-category's colour down its left edge on the agenda, and a light shade of it behind. An invite or a
+category's colour down its left edge on the agenda and in the calendar's week, and a light shade of
+it behind. An invite or a
 Wispr Flow meeting joined to it has a dot in each category's colour beside its title in the inbox,
 and lists its categories under the summary.
 

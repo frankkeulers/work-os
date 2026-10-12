@@ -137,6 +137,14 @@ test('J64: Outlook mail by day, and the calendar as a week — a meeting opens i
   await expect(week.locator('[data-week-event="AAMkMOCKDESIGN"]')).toHaveAttribute('data-state', 'declined');
   await expect(week.locator('[data-week-event="AAMkMOCKDEMO"]')).toBeVisible();
   await expect(page.getByTestId('week-now-line')).toBeVisible();
+  // A meeting with Outlook categories takes the first one's colour; one without stays plain (R2.8).
+  const demo = week.locator('[data-week-event="AAMkMOCKDEMO"]');
+  const oneOne = week.locator('[data-week-event="AAMkMOCKONEONE"]');
+  await expect(demo).toHaveAttribute('data-category-color', /.+/);
+  await expect(week.locator('[data-week-event="AAMkMOCKSTANDUP"]')).not.toHaveAttribute('data-category-color');
+  const background = (l: typeof demo) => l.evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(await background(demo)).not.toBe(await background(week.locator('[data-week-event="AAMkMOCKSIGNOFF"]')));
+  expect(await background(demo)).toBe(await background(oneOne)); // both Product, both still to come
   await shoot(page, 'source-calendar');
 
   // A meeting with an invite opens it in the panel; one with nothing behind it, a card.
@@ -151,6 +159,15 @@ test('J64: Outlook mail by day, and the calendar as a week — a meeting opens i
   await expect(card).toContainText('1:1 with Head of Product');
   await expect(card).toContainText('Head of Product');
   await expect(card.getByRole('link', { name: 'Open in Outlook' })).toHaveAttribute('href', /AAMkMOCKONEONE/);
+  // A Teams meeting joins from the card, in a new tab.
+  const join = card.getByRole('link', { name: 'Join in Teams' });
+  await expect(join).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/l\/meetup-join\/.*AAMkMOCKONEONE/);
+  await expect(join).toHaveAttribute('target', '_blank');
+  await shoot(page, 'source-calendar-card');
+  // One held in a room has nothing to join.
+  await week.locator('[data-week-event="AAMkMOCKDESIGN"]').click();
+  await expect(card).toContainText('Fleet map design review');
+  await expect(card.getByRole('link', { name: 'Join in Teams' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(card).toHaveCount(0);
 
