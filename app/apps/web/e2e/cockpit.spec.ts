@@ -40,12 +40,11 @@ async function afternoon(page: Page) {
 test('J56: three zones at a glance — the time, what needs you, and what can wait (CK-3.1, 3.4–3.8, 3.11)', async ({ page }) => {
   await afternoon(page);
 
-  // Three zones, side by side; the agenda strip and the sidebar's meeting cues give way to the time column.
+  // Three zones, side by side; the agenda strip gives way to the time column.
   for (const z of ['Time', 'Needs you', 'Later'] as const) await expect(zone(page, z)).toBeVisible();
   expect((await zone(page, 'Time').boundingBox())!.width).toBeCloseTo(400, 0);
   expect((await zone(page, 'Later').boundingBox())!.width).toBeCloseTo(440, 0);
   await expect(page.getByRole('region', { name: 'Agenda' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible(); // the 60 px rail
 
   // The next meeting, and what's due before it.
@@ -252,8 +251,8 @@ test('J65: the time column lines up with the other headers and folds to a rail; 
   await laterHandle.dblclick();
   await expect(laterHandle).toHaveAttribute('aria-valuenow', '440');
 
-  // Folded, it's a rail with the clock, and the sidebar's meeting cues come back (13:58, two minutes
-  // before the renewal call); kept on reload.
+  // Folded, it's a rail with the clock; kept on reload. The sidebar's meeting cue (13:58, two minutes
+  // before the renewal call) shows either way, so the sidebar doesn't shift (CK-3.7 amended).
   await time.getByRole('button', { name: 'Collapse the time column' }).click();
   await expect(time).toHaveAttribute('data-collapsed', 'true');
   expect((await time.boundingBox())!.width).toBeCloseTo(56, 0);
@@ -266,7 +265,10 @@ test('J65: the time column lines up with the other headers and folds to a rail; 
   await expect(time).toHaveAttribute('data-collapsed', 'true');
   await time.getByRole('button', { name: 'Expand the time column' }).click();
   await expect(page.getByTestId('next-meeting')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toBeVisible();
+  // The sidebar is the 60 px rail here, so the cue is one tile: the renewal call, two minutes out.
+  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveAttribute('data-meeting-cues', '1');
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-meeting-cue-light.png'), style: HIDE, animations: 'disabled' });
 });
 
 test('J59: below 1600 px the Inbox keeps the list and the agenda strip (CK-3.1, 3.7)', async ({ page }) => {

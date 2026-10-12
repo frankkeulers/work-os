@@ -92,9 +92,9 @@ and Teams meetings whose join link it hasn't found yet); it shows on
 
 ### Now and next
 
-On a wide screen the time column's meeting card does this job, and the sidebar leaves it out. In a
-narrower window, five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
-the title and a countdown, on every page; on the agenda, its meeting says **in 4 min**. In the last
+Five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
+the title and a countdown, on every page, the inbox included; on the agenda, its meeting says
+**in 4 min**. In the last
 two minutes the countdown turns amber. Once it starts, the sidebar shows it under **Now**, with
 when it ends, until it does. Choose a Teams meeting there to join it in your browser; any other
 meeting opens in Outlook.
