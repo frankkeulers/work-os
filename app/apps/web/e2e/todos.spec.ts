@@ -87,6 +87,45 @@ test.describe('wide window (cockpit)', () => {
     await expect(page.getByRole('status').filter({ hasText: 'Done · Book a kick-off' })).toContainText('Not ticked: its line isn’t in the Tasks note');
     await expect(later.locator('[data-todo]', { hasText: 'Book a kick-off' })).toContainText('not ticked in the Tasks note');
   });
+
+  test('J95 each To Do shows its estimate and when it would ideally be done, and you can set your own (FR-16.6, FR-16.7)', async ({ page }) => {
+    await withTodos(page);
+    const needs = page.getByRole('region', { name: 'To do today' });
+    const later = page.getByRole('region', { name: 'Later' }).getByRole('region', { name: 'To do' });
+    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
+    await expect(share.getByRole('button', { name: /^Plan:/ })).toHaveText('~15m');
+    // Unsure: dimmed, and says so.
+    const kickoff = later.locator('[data-todo]', { hasText: 'Book a kick-off' }).getByRole('button', { name: /^Plan:/ });
+    await expect(kickoff).toHaveText('~20m');
+    await expect(kickoff).toHaveAttribute('title', /^A rough estimate: Finding a time/);
+    // Ideally sooner than its deadline, with why.
+    const legal = later.locator('[data-todo]', { hasText: 'Confirm the IMO STR wording with Legal' });
+    await expect(legal.locator('[data-todo-ideal]')).toContainText('ideally');
+    await expect(legal.locator('[data-todo-ideal]')).toHaveAttribute('title', /Legal review wording on Tuesdays/);
+
+    // Set your own: an hour.
+    await share.getByRole('button', { name: /^Plan:/ }).click();
+    const editor = page.getByRole('dialog', { name: 'Plan: Share the graduation gate checklist' });
+    await expect(editor).toContainText('Work OS: The checklist exists');
+    await editor.getByRole('button', { name: '1h' }).click();
+    await shoot(page, editor, 'todos-plan-editor');
+    await editor.getByRole('button', { name: 'Save' }).click();
+    await expect(editor).toHaveCount(0);
+    await expect(share.getByRole('button', { name: /^Plan:/ })).toHaveText('1h');
+    await expect(share.getByRole('button', { name: /^Plan:/ })).toHaveAttribute('title', /^Your estimate/);
+
+    // p on a focused row opens it; Esc closes it and keeps the row's focus.
+    await page.keyboard.press('g');
+    await page.keyboard.press('d');
+    await page.keyboard.press('p');
+    const first = page.getByRole('dialog', { name: 'Plan: Send Matt the one-line MVI V2 go/no-go reason' });
+    await expect(first).toBeVisible();
+    await first.getByRole('button', { name: 'None' }).click();
+    await first.getByRole('button', { name: 'Save' }).click();
+    // No deadline now: no longer overdue, so it leaves Needs you for Later.
+    await expect(later.locator('[data-todo]', { hasText: 'Send Matt the one-line' })).toBeVisible();
+    await expect(needs.locator('[data-todo]', { hasText: 'Send Matt the one-line' })).toHaveCount(0);
+  });
 });
 
 test.describe('list layout', () => {

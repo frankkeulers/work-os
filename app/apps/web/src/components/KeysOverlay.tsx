@@ -57,7 +57,7 @@ const SECTIONS: Record<KeyContext | 'everywhere', { title: string; rows: Row[] }
       [['j', '/', 'k'], 'Next or previous item'],
       [['g', 'then', 'n'], 'The first item in Needs you'],
       [['g', 'then', 'l'], 'The first item in Later'],
-      [['g', 'then', 'd'], 'The first To Do: then e for Done, ↵ to open its item'],
+      [['g', 'then', 'd'], 'The first To Do: then e for Done, p to plan it, ↵ to open its item'],
       [['t'], 'Today or tomorrow in the time column'],
       [['o'], 'Open the item as a full page'],
       [['Esc'], 'Close the item panel'],

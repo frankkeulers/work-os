@@ -287,6 +287,25 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('mirror');
   });
 
+  it('takes the first plan only, counts failed ones, and lets Frank’s own estimate and deadline stand (FR-16.6, FR-16.7)', () => {
+    const l = log();
+    const todoId = created.todoId;
+    l.add('item.upserted', 0, upserted(1)).add('todo.created', 1, created, ids);
+    l.add('todo.planFailed', 2, { todoId, attempts: 1, reason: 'output' }, ids);
+    expect(replay(l.events).todos?.[todoId]).toMatchObject({ planFailures: 1 });
+    l.add('todo.planned', 3, { todoId, effortMinutes: 30, confidence: 'low', ideal: at(200) }, ids);
+    l.add('todo.planned', 4, { todoId, effortMinutes: 90, confidence: 'high' }, ids); // a replay: the first stands
+    expect(replay(l.events).todos?.[todoId]).toMatchObject({ planned: true, effortMinutes: 30, effortBy: 'model', confidence: 'low', ideal: at(200), deadline: at(300) });
+    expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('planFailures');
+    l.add('todo.edited', 5, { todoId, effortMinutes: 45 }, ids);
+    expect(replay(l.events).todos?.[todoId]).toMatchObject({ effortMinutes: 45, effortBy: 'you', ideal: at(200), deadlineFrom: 'triage' });
+    l.add('todo.edited', 6, { todoId, deadline: null }, ids);
+    const p = replay(l.events).todos?.[todoId];
+    expect(p).toMatchObject({ deadlineFrom: 'you' });
+    expect(p).not.toHaveProperty('deadline');
+    expect(p).not.toHaveProperty('ideal');
+  });
+
   it('keeps how long a done To Do took, until taken back or reopened (FR-16.5)', () => {
     const l = log();
     const todoId = created.todoId;

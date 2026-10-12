@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participant, PromptFileId, SourceId, TodoSuggestion, TriageCorrection, TriageDecision } from './schemas';
+import { Confidence } from './schedule';
 
 // The event log (PLAN.md §4.3, §4.4). It is the source of truth: every event carries a gap-free
 // `seq` and a typed payload, so the inbox can be rebuilt from the log alone. Events never carry
@@ -104,6 +105,12 @@ export const EventPayloads = {
   'todo.mirrored': z.object({ todoId, state: z.enum(['ticked', 'open']), dryRun: z.boolean() }),
   'todo.mirrorFailed': z.object({ todoId, reason: MirrorFailure }),
   'todo.timed': z.object({ todoId, minutes: z.number().int().min(1).max(960).nullable() }),
+  // FR-16.6: the model's plan for a To Do, clamped by code (its whys live in todos/), or a try
+  // that failed. FR-16.7: Frank's own estimate or deadline (null: none), which the plan never
+  // overrides.
+  'todo.planned': z.object({ todoId, effortMinutes: z.number().int().min(5).max(480), confidence: Confidence, ideal: isoDate.optional() }),
+  'todo.planFailed': z.object({ todoId, attempts: z.number().int().positive(), reason: z.enum(['output', 'claude', 'content']) }),
+  'todo.edited': z.object({ todoId, effortMinutes: z.number().int().min(5).max(960).optional(), deadline: isoDate.nullable().optional() }),
   // E14 (FR-15.7): Frank's word on one filing's stage from the Filing… menu, for this revision.
   // ready implies predraft; predraft false implies ready false (see filingPlan()).
   'filing.staged': z.object({ revision, type: z.enum(['confluence_entry', 'vault_note']), predraft: z.boolean().optional(), ready: z.boolean().optional() }),

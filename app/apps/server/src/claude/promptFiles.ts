@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { PromptFileId, PromptFileView, PromptSourceView } from '@work-os/shared';
 import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
-import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_FILING_POLICY, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_TUNE_POLICY, DEFAULT_VAULT_PROMPT, promptVersion, triageSystem, type Prompt } from './prompts';
+import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_FILING_POLICY, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SCHEDULE_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_TUNE_POLICY, DEFAULT_VAULT_PROMPT, promptVersion, triageSystem, type Prompt } from './prompts';
 
 // Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the eight prompts and the two
 // filing guidance files. Each is written on first run, read on every call (empty or missing → the
@@ -77,6 +77,15 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     usedBy: 'Looks finished',
     defaultText: DEFAULT_FINISH_PROMPT,
     previousDefaults: ['a1ffd02ebeca78ff82f2a94b6b3f13495efc437b'], // finish v1
+  },
+  {
+    id: 'schedule',
+    file: 'prompts/schedule.md',
+    label: 'To Do estimates',
+    description: 'Estimates how long each of your To Dos takes, how sure it is, and when it would ideally be done, before any deadline it already has.',
+    usedBy: 'To Dos on the inbox',
+    defaultText: DEFAULT_SCHEDULE_PROMPT,
+    previousDefaults: [],
   },
   {
     id: 'draft-vault',

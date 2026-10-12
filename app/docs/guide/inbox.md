@@ -142,6 +142,26 @@ Every to-do you add (`a`) and approve becomes a **To Do** here, one per line it 
 
 The item panel's **Add to-do** row says how many of the item's To Dos are open.
 
+### Estimates
+
+Work OS asks Claude to plan each new To Do, soon after you add it:
+
+- **How long it takes**, on the row as a chip: "~30m". It is dimmed when Claude was unsure. Hover
+  over it to see what the estimate assumes. It says "Planning…" until the estimate arrives.
+- **When it would ideally be done**, only when the conversation gives a reason to do it sooner than
+  its deadline, such as someone waiting on it before a meeting. It shows beside the source as
+  "ideally Tue 12:00", with why on hover. A To Do ideally done today shows under Today. Only its
+  real deadline makes it overdue.
+
+Claude sees the step, where it came from, triage's summary, the end of the conversation, your
+working hours and, with Outlook Calendar on, your meetings over the next week (times and titles
+only). It never gives an ideal date later than the deadline the To Do already has.
+
+**Set your own:** click the estimate chip, or press `p` on a To Do. Pick a length or type minutes,
+set a deadline or choose **None**, then **Save**. Work OS never overrides what you set, and your
+deadline replaces the ideal one. Each change is kept as a label, so Work OS can learn how long your
+To Dos really take. The prompt is **To Do estimates** in [Settings › Prompts](/settings/prompts).
+
 ### Done
 
 Press the ✓ on a To Do's row when it's done. Or press `g` then `d` to go to the first To Do, then
@@ -154,9 +174,9 @@ Press the ✓ on a To Do's row when it's done. Or press `g` then `d` to go to th
   ticked" and why, for example because the line is no longer in the note. The To Do is done
   either way, its row says "not ticked in the Tasks note", and Work OS tries again every 10 minutes.
 - **Took:** the toast asks how long the To Do took, with one tap: 15m, 30m, 1h, 2h or Half day.
-  Tap the same chip again to take it back, or close the toast to skip it. Your answer shows on the
-  row ("took 30m"). Work OS keeps your answers so it can learn how long your To Dos really take.
-  Its estimates come in a later version.
+  The chip nearest the estimate has a dashed outline; it isn't picked until you tap it. Tap the
+  same chip again to take it back, or close the toast to skip it. Your answer shows on the row
+  ("took 30m"). Work OS keeps your answers so it can learn how long your To Dos really take.
 - **Undo** on the toast, or `z`, opens the To Do again and unticks its line. A To Do done today
   also has **Open again** (↶) on its row under **N done today**.
 

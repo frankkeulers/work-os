@@ -3,7 +3,7 @@ import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type { FilingPlans } from './policy';
 import type { LearningLoop, LearningView, PolicyProposal } from './learning';
-import type { FilingFeedbackBody } from './requests';
+import type { FilingFeedbackBody, TodoEdit } from './requests';
 import type { DoneBy } from './projection/state';
 import type { TodoSummary } from './todos';
 import type {
@@ -618,6 +618,8 @@ export interface WorkOsApi {
   reopenTodo(todoId: string): Promise<TodoSummary | null>;
   /** FR-16.5: how long a done To Do took, in minutes; null takes the answer back. */
   setTodoActual(todoId: string, minutes: number | null): Promise<void>;
+  /** FR-16.7: Frank's own estimate or deadline for a To Do, which its plan never overrides. Answers with the To Do. */
+  editTodo(todoId: string, edit: TodoEdit): Promise<TodoSummary | null>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
   /** "Not finished" on a topic that looks finished (cockpit CK-2.10): back to Today, and a label for the finish eval. */
   notFinished(itemId: string): Promise<{ labelCount: number }>;

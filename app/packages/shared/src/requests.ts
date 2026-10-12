@@ -28,6 +28,13 @@ export type SnoozeInput = z.infer<typeof SnoozeInput>;
 /** E15 (FR-16.5): how long a To Do took, in minutes; null takes the answer back. */
 export const TodoActual = z.object({ minutes: z.number().int().min(1).max(960).nullable() }).strict();
 
+/** E15 (FR-16.7): Frank's own estimate (minutes) or deadline (null: none) for a To Do. */
+export const TodoEdit = z
+  .object({ effortMinutes: z.number().int().min(5).max(960).optional(), deadline: z.iso.datetime().nullable().optional() })
+  .strict()
+  .refine((e) => e.effortMinutes !== undefined || e.deadline !== undefined, 'Send an estimate or a deadline');
+export type TodoEdit = z.infer<typeof TodoEdit>;
+
 export const ItemIds = z.object({ ids: z.array(z.string().min(1)).min(1).max(1000) }).strict();
 
 /** POST /api/items/:id/correction (FR-6.2): the triage Frank says it should have been. */

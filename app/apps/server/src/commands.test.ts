@@ -1204,6 +1204,27 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     expect(back?.lineId).toBeUndefined();
   });
 
+  it('plans each new To Do soon after it is written, and keeps Frank’s own estimate and deadline (FR-16.6, FR-16.7)', async () => {
+    await write(['Send the tier comparison', 'Review the pricing deck']);
+    await res.runtime.settled();
+    const [send, review] = await inboxTodos();
+    expect(send).toMatchObject({ effortMinutes: 15, effortBy: 'model', confidence: 'high', estimateWhy: 'A 15-minute step, by the fake.' });
+    expect(send.planning).toBeUndefined();
+    expect(review).toMatchObject({ effortMinutes: 60, confidence: 'medium' });
+    expect((await call<UsageView>('GET', '/api/usage')).body.byPurpose.some((r) => r.purpose === 'schedule')).toBe(true);
+
+    const deadline = new Date(wall + 26 * 60 * MIN).toISOString();
+    const edited = await call<TodoSummary>('POST', `/api/todos/${send.id}/edit`, { effortMinutes: 45, deadline });
+    expect(edited.body).toMatchObject({ effortMinutes: 45, effortBy: 'you', deadline, deadlineFrom: 'you' });
+    expect(edited.body.confidence).toBeUndefined(); // Frank's own: no "rough"
+    expect((await call<ApiErrorBody>('POST', `/api/todos/${send.id}/edit`, {})).status).toBe(422);
+    await res.scheduleLabels.close();
+    const labels = (await readFile(join(dir, 'labels/schedule.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(labels.map((l) => l.origin)).toEqual(['estimate_edit', 'deadline_edit']);
+    expect(labels[0]).toMatchObject({ set: { effortMinutes: 45 }, was: { effortMinutes: 15, effortBy: 'model', confidence: 'high' }, input: { step: 'Send the tier comparison', title: '#product' }, promptVersion: expect.stringMatching(/^schedule v1/) });
+    expect(labels[1]).toMatchObject({ set: { deadline } });
+  });
+
   describe('Done from the inbox (FR-16.4, FR-16.5)', () => {
     const done = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/done`);
     const reopen = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/reopen`);
@@ -1212,7 +1233,7 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     const todoEvents = async () => {
       const log = (await readdir(join(dir, 'events'))).filter((f) => f.endsWith('.jsonl')).sort();
       const lines = (await Promise.all(log.map((f) => readFile(join(dir, 'events', f), 'utf8')))).join('').trim().split('\n');
-      return lines.map((l) => (JSON.parse(l) as { type: string }).type).filter((t) => t.startsWith('todo.'));
+      return lines.map((l) => (JSON.parse(l) as { type: string }).type).filter((t) => /^todo\.(done|reopened|mirrored|mirrorFailed)$/.test(t));
     };
 
     it('ticks only its line in the Tasks note, in the sandbox, and Undo unticks it; neither echoes back', async () => {
@@ -1284,7 +1305,7 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
       await res.scheduleLabels.close();
       const labels = (await readFile(join(dir, 'labels/schedule.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
       expect(labels.map((l) => l.origin)).toEqual(['done', 'actual']);
-      expect(labels[1]).toMatchObject({ schemaVersion: 1, todoId: todo.id, itemId: PROD, source: 'slack', actualMinutes: 30, input: { step: 'Send the tier comparison', sourceTitle: '#product' } });
+      expect(labels[1]).toMatchObject({ schemaVersion: 1, todoId: todo.id, itemId: PROD, source: 'slack', actualMinutes: 30, input: { step: 'Send the tier comparison', title: '#product' } });
     });
   });
 });

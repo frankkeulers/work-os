@@ -4,31 +4,27 @@ import { api } from '../../api';
 import { errorToast, toast } from '../../store/toasts';
 import { SourceMark } from '../../components/BrandIcon';
 import { Icon } from '../../components/icons';
-import { IconButton, cx } from '../../components/ui';
+import { IconButton, cx, usePopover } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
-import { fmtTime } from '../../lib/format';
+import { fmtTime, fmtWhen } from '../../lib/format';
 import { dueInfo } from '../../lib/next';
 import { DueChip } from './chips';
+import { EstimateChip, LENGTHS, durLabel, nearestLength } from './TodoPlan';
 
 // To Dos on the inbox (E15, FR-16.2): every line Frank wrote to the Tasks note, with where it came
 // from and when it is due. The list layout has a To do group after Needs you; the cockpit puts
 // what is overdue or due today in Needs you and the rest in Later. A row opens its source item;
-// its ✓, or `e` on it, marks it done and ticks its line in the Tasks note (FR-16.4).
+// its ✓, or `e` on it, marks it done and ticks its line in the Tasks note (FR-16.4). Its estimate,
+// and when it would ideally be done, come from the model (FR-16.6); Frank can set both (FR-16.7).
 
 const HEAD: Record<Exclude<Group, 'done'>, string> = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming' };
 
-/** How long it took (FR-16.5): one tap, a second tap on the same chip takes it back. */
-const TOOK: readonly (readonly [number, string])[] = [
-  [15, '15m'],
-  [30, '30m'],
-  [60, '1h'],
-  [120, '2h'],
-  [240, 'Half day'],
-];
-
-const tookLabel = (m: number) => TOOK.find(([n]) => n === m)?.[1] ?? (m < 60 ? `${m}m` : `${Math.round(m / 6) / 10}h`);
-
-function TookChips({ todoId, initial }: { todoId: string; initial?: number }) {
+/**
+ * How long it took (FR-16.5): one tap, a second tap on the same chip takes it back. The chip
+ * nearest the estimate is marked, not picked: skipping the question records nothing.
+ */
+function TookChips({ todoId, initial, estimate }: { todoId: string; initial?: number; estimate?: number }) {
+  const guess = estimate ? nearestLength(estimate) : undefined;
   const [picked, setPicked] = useState(initial);
   const pick = (m: number) => {
     const next = picked === m ? undefined : m;
@@ -38,13 +34,14 @@ function TookChips({ todoId, initial }: { todoId: string; initial?: number }) {
   return (
     <div role="group" aria-label="How long it took" className="mt-1.5 flex flex-wrap items-center gap-1">
       <span className="mr-0.5 text-xs text-muted">Took</span>
-      {TOOK.map(([m, label]) => (
+      {LENGTHS.map(([m, label]) => (
         <button
           key={m}
           type="button"
           aria-pressed={picked === m}
+          title={m === guess ? 'Nearest Work OS’s estimate' : undefined}
           onClick={() => pick(m)}
-          className={cx('rounded-full border px-2 py-0.5 text-xs cursor-pointer', picked === m ? 'border-violet-line bg-violet-wash font-semibold text-violet-fg' : 'border-line-soft text-ink-2 hover:bg-surface-2')}
+          className={cx('rounded-full border px-2 py-0.5 text-xs cursor-pointer', picked === m ? 'border-violet-line bg-violet-wash font-semibold text-violet-fg' : m === guess ? 'border-dashed border-violet-line text-ink-2 hover:bg-surface-2' : 'border-line-soft text-ink-2 hover:bg-surface-2')}
         >
           {label}
         </button>
@@ -64,7 +61,7 @@ export async function markTodoDone(todo: TodoSummary) {
     toast(`Done · ${todo.step}`, {
       description: failed ? `Not ticked: ${MIRROR_FAILURE[failed]}` : now?.mirror ? 'Ticking it in the Tasks note…' : 'Ticked in the Tasks note',
       ttl: 12_000,
-      body: <TookChips todoId={todo.id} initial={now?.actualMinutes} />,
+      body: <TookChips todoId={todo.id} initial={now?.actualMinutes} estimate={todo.effortMinutes} />,
       action: { label: 'Undo', run: () => void api.reopenTodo(todo.id).catch(errorToast) },
     });
   } catch (e) {
@@ -85,10 +82,13 @@ async function reopenTodo(todo: TodoSummary) {
 function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: (itemId: string) => void }) {
   const done = todo.status === 'done';
   const due = !done && todo.deadline ? dueInfo({ dueAt: todo.deadline }, now) : undefined;
+  const pop = usePopover();
+  const { setOpen } = pop;
   // Keys on a focused row are its own (`g d` focuses the first): the item panel's don't see them.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget || e.metaKey || e.ctrlKey || e.altKey) return;
     if ((e.key === 'e' || e.key === 'E') && !done) void markTodoDone(todo);
+    else if (e.key === 'p' && !done) setOpen(true);
     else if (e.key === 'Enter') onOpen(todo.itemId);
     else return;
     e.preventDefault();
@@ -114,7 +114,12 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
             <span className="truncate">{todo.sourceTitle}</span>
           </button>
           {done && todo.doneAt && <span className="shrink-0">· {todo.doneBy === 'tasks_note' ? 'ticked in Obsidian' : 'done'} {fmtTime(todo.doneAt)}</span>}
-          {done && todo.actualMinutes && <span className="shrink-0">· took {tookLabel(todo.actualMinutes)}</span>}
+          {done && todo.actualMinutes && <span className="shrink-0">· took {durLabel(todo.actualMinutes)}</span>}
+          {!done && todo.ideal && (
+            <span data-todo-ideal className="shrink-0 text-violet-fg" title={todo.idealWhy ? `Work OS: ${todo.idealWhy}` : undefined}>
+              · ideally {fmtWhen(todo.ideal, now)}
+            </span>
+          )}
           {todo.mirror?.failed ? (
             <span data-todo-mirror="failed" className="shrink-0 text-amber-fg" title={`Work OS tries again every 10 minutes: ${MIRROR_FAILURE[todo.mirror.failed]}.`}>
               · not {todo.mirror.want === 'ticked' ? 'ticked' : 'unticked'} in the Tasks note
@@ -128,6 +133,7 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
           )}
         </div>
       </div>
+      {!done && <EstimateChip todo={todo} {...pop} />}
       {due && <DueChip due={due} />}
       {/* As an item row's Done: faint until the row is hovered or focused. */}
       {done ? (

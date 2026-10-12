@@ -20,6 +20,20 @@ export const TodoText = z.object({
   /** The line as written to the Tasks note, id and all: how a line without an id is found again. */
   line: z.string().min(1),
   source: z.object({ source: SourceId, title: z.string().min(1), permalink: z.string() }),
+  /**
+   * FR-16.6: its plan's words, and the To Do as the schedule prompt saw it, so a label for the
+   * plan carries its input after the item's content has gone to retention.
+   */
+  plan: z
+    .object({
+      at: z.iso.datetime(),
+      model: z.string(),
+      promptVersion: z.string(),
+      input: z.record(z.string(), z.unknown()),
+      estimateWhy: z.string(),
+      deadlineWhy: z.string().optional(),
+    })
+    .optional(),
 });
 export type TodoText = z.infer<typeof TodoText>;
 

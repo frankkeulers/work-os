@@ -269,6 +269,7 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
       triage.md
       topics.md
       settle.md               does Frank's reply settle the asks (cockpit CK-2.2)
+      schedule.md             a To Do's estimate and ideal deadline (E15, FR-16.6)
       pick-confluence.md
       draft-vault.md
       draft-confluence.md
@@ -401,6 +402,7 @@ Every change to inbox or action state is an event, so replaying the log rebuilds
 |---|---|---|
 | Triage | Haiku 4.5 (`haiku`) | One batched call per poll, only when threads are eligible. No tools, no MCP, short custom system prompt, single turn, JSON output. |
 | Settle (cockpit CK-2.2) | The triage model | After a poll brings in Frank's reply to an open item that awaits one: does the reply settle the open asks? Batched, at most 20 per call. No tools, no MCP, its own short prompt (`config/prompts/settle.md`), JSON output. Counts towards the triage budget. |
+| Schedule (E15, FR-16.6) | The triage model | After triage, and soon after a to-do is written: each new To Do's effort, confidence and ideal deadline. Batched, at most 20 per call. No tools, no MCP, its own short prompt (`config/prompts/schedule.md`), JSON output. Counts towards the triage budget. |
 | Draft vault note | Sonnet 5.5 (`sonnet`) | Per click. Read-only vault access to find related notes. Output is the final markdown file. |
 | Draft Confluence entry | Sonnet 5.5 (`sonnet`) | Per click. Read-only Confluence access to choose the page and section. Output is a structured patch. |
 | Multi-source synthesis (later) | Opus 5.5 (`opus`) | Rare. Briefs and weekly reviews. |
@@ -1145,7 +1147,7 @@ Decisions (Frank, 12 Oct 2026):
 The stages:
 - **1a:** the entity, the inbox and the read-back (FR-16.1–16.3).
 - **1b:** Done from the inbox, which ticks the line, and the time chips (FR-16.4–16.5).
-- **2:** the estimate and deadline.
+- **2:** the estimate and deadline (FR-16.6–16.7).
 - **3:** the slot finder and the time column.
 - **4:** follow-ups.
 - **5:** the learning loops and evals.
@@ -1184,14 +1186,26 @@ The stages:
 - **Timing.** It runs at once on Done, then on every tick. A failed mirror is tried again every 10 minutes. The To Do stays done either way.
 - **What Frank sees.** A toast says "Done · {step}", then "Ticked in the Tasks note" or "Not ticked: {why}". It has Undo, and `z` works too. A row whose line couldn't be ticked says so.
 
-**FR-16.5 How long it took.** The Done toast asks **Took** with one-tap chips: 15m · 30m · 1h · 2h · Half day. A second tap takes the answer back, and closing the toast skips it. The answer is logged as `todo.timed` and shown on the row ("took 30m").
+**FR-16.5 How long it took.** The Done toast asks **Took** with one-tap chips: 15m · 30m · 1h · 2h · Half day. A second tap takes the answer back, and closing the toast skips it. The chip nearest the estimate (FR-16.6) has a dashed outline: it is marked, not picked, so a skipped answer records nothing. The answer is logged as `todo.timed` and shown on the row ("took 30m").
 - **Labels.** Each Done and each answer is a line in `labels/schedule.jsonl` (`done`, `actual`), written before its event. A line holds the To Do as the schedule prompt will see it (its step, source and deadline), so Stage 5 has labels to learn from. Edits to the estimate, deadline and slot join it in Stages 2 and 3.
+
+**FR-16.6 The estimate and the ideal deadline.** Each new To Do is planned by the `schedule` prompt (§5.1), which runs after triage, and soon after a to-do is written.
+- **What it sends.** For each To Do, at most 20 a call: the step, its source and title, triage's summary and open asks, the deadline it has, and the end of the conversation (up to 1,500 characters) while the item's content is kept. It also sends the time in London, the working hours and the next week's meetings, when Outlook Calendar is on: start, end and title only, leaving out cancelled, declined and free ones.
+- **What it answers.** `effortMinutes` (5 to 480), `confidence` (low, medium or high), and optionally a `deadline`: when it would ideally be done. A one-line why comes with each.
+- **The clamp (code).** The deadline the To Do already has (triage's, the line's, or Frank's) is a ceiling: an ideal deadline at or after it is dropped, as is one already past or more than 30 days off. Whys are cut to one line.
+- **Logging.** The whys and the input go to `todos/<todoId>.json` first, then `todo.planned` is logged with the estimate, the confidence and the ideal deadline. A failed try logs `todo.planFailed`. After two, the To Do shows without an estimate.
+- **What Frank sees.** An estimate chip on the row ("~30m"), dimmed when the model was unsure, with its why on hover; "Planning…" until it arrives. "ideally Tue 12:00" sits beside the source, with its why on hover. A To Do ideally due today shows under Today. Only its own deadline makes it overdue.
+
+**FR-16.7 Frank's own estimate and deadline.** The estimate chip, or `p` on a focused row, opens the editor. It offers the lengths (15m to Half day, or a number of minutes) and a deadline (date and time, or None).
+- **Logging.** `todo.edited` sets them. A plan never overrides them, and a deadline Frank sets replaces the ideal one.
+- **Labels.** Each change is a label in `labels/schedule.jsonl` (`estimate_edit`, `deadline_edit`), written first. It holds the plan it replaced (`was`), what Frank set (`set`), and the input the plan was made from.
 
 > **Story 16.1** As Frank, I want the to-dos I filed to stay in front of me until they are done.
 >
 > - Given I approved a to-do with two lines, when the write lands, then the inbox's To do group shows both, each with its source and deadline.
 > - Given I tick one in Obsidian, when I look at the inbox within a minute, then it shows as done today, ticked in Obsidian.
 > - Given a To Do on the inbox, when I press its Done, then its line in the Tasks note is ticked and the toast asks how long it took; when I press Undo, then the line is unticked again.
+> - Given a new To Do, when the next triage run ends, then its row shows an estimate, and an ideal deadline when its source gives a reason to do it sooner; when I set my own, then the plan never overrides it.
 
 ---
 

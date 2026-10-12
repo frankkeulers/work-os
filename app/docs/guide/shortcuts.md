@@ -36,6 +36,7 @@ On a To Do's row, after `g` then `d` or a Tab to it:
 | Key | Does |
 |---|---|
 | `e` | Done: ticks its line in your Tasks note ([Done](inbox.md#done)) |
+| `p` | Plan it: your own estimate and deadline ([Estimates](inbox.md#estimates)) |
 | `↵` | Open the item it came from |
 
 ## Item

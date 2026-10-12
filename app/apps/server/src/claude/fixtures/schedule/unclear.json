@@ -1,0 +1,22 @@
+{
+  "about": "A step whose size depends on research not yet done: a longer, low-confidence estimate and no ideal deadline.",
+  "now": "2026-10-12T12:48:00.000Z",
+  "todo": {
+    "id": "todo-0000000000cc",
+    "step": "Book a kick-off with the Data team",
+    "source": "slack",
+    "kind": "thread",
+    "title": "Data products team lead",
+    "summary": "The Data team lead asks for a kick-off on the AIS backfill once Q4 priorities are set."
+  },
+  "answer": {
+    "id": "todo-0000000000cc",
+    "effortMinutes": 20,
+    "confidence": "low",
+    "estimateWhy": "Finding a time that suits five people may take a few rounds."
+  },
+  "plan": {
+    "effortMinutes": 20,
+    "confidence": "low"
+  }
+}

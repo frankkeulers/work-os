@@ -161,7 +161,7 @@ export function budgetsOf(
   let cost = 0;
   for (const u of usage) {
     if (londonParts(u.at).dateKey !== today) continue;
-    if (u.purpose === 'triage' || u.purpose === 'routing' || u.purpose === 'settle') triage += 1; // routing and settle checks count as triage
+    if (u.purpose === 'triage' || u.purpose === 'routing' || u.purpose === 'settle' || u.purpose === 'schedule') triage += 1; // routing, settle checks and To Do plans count as triage
     else if (u.purpose === 'draft_vault' || u.purpose === 'draft_confluence') drafts += 1;
     cost += u.costEquivalent;
   }

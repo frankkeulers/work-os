@@ -111,4 +111,19 @@ describe('To Do groups (E15, FR-16.2)', () => {
     );
     expect(Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v.map((x) => x.id)]))).toEqual({ overdue: ['late'], today: ['four', 'eod'], upcoming: ['later', 'none'], done: ['doneToday'] });
   });
+
+  it('goes by the ideal date when there is one: due today ideally is today, and past it is not overdue (FR-16.6)', () => {
+    const g = todoGroups(
+      [
+        t('idealToday', { deadline: '2026-10-08T11:00:00.000Z', deadlineFrom: 'triage', ideal: '2026-10-05T15:30:00.000Z' }),
+        t('idealPast', { ideal: '2026-10-05T08:00:00.000Z' }),
+        t('idealLater', { ideal: '2026-10-06T11:00:00.000Z' }),
+        t('deadlineLater', { deadline: '2026-10-07T11:00:00.000Z', deadlineFrom: 'line' }),
+      ],
+      now,
+    );
+    expect(g.overdue).toEqual([]);
+    expect(g.today.map((x) => x.id)).toEqual(['idealPast', 'idealToday']);
+    expect(g.upcoming.map((x) => x.id)).toEqual(['idealLater', 'deadlineLater']);
+  });
 });

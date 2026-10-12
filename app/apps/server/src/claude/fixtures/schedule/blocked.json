@@ -1,0 +1,27 @@
+{
+  "about": "Someone is blocked on a short reply: a quick, sure estimate and an ideal deadline before the hard one.",
+  "now": "2026-10-12T12:48:00.000Z",
+  "todo": {
+    "id": "todo-0000000000aa",
+    "step": "Send Matt the one-line MVI V2 go/no-go reason",
+    "source": "slack",
+    "kind": "dm",
+    "title": "Matt M.",
+    "summary": "Matt asks for your MVI V2 go/no-go call before Thursday's exec sync.",
+    "deadline": "2026-10-15T16:30:00.000Z",
+    "deadlineLondon": "Thu 2026-10-15 17:30"
+  },
+  "answer": {
+    "id": "todo-0000000000aa",
+    "effortMinutes": 10,
+    "confidence": "high",
+    "estimateWhy": "A two-line reply with the reason you already gave in the review.",
+    "deadline": "2026-10-14T16:00:00.000Z",
+    "deadlineWhy": "Matt needs it before Thursday's exec sync, so a day ahead gives him time to read it."
+  },
+  "plan": {
+    "effortMinutes": 10,
+    "confidence": "high",
+    "ideal": "2026-10-14T16:00:00.000Z"
+  }
+}

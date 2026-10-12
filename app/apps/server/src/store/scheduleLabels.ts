@@ -3,7 +3,7 @@ import { SourceId } from '@work-os/shared';
 import { z } from 'zod';
 import { JsonlAppender } from './jsonl';
 
-// labels/schedule.jsonl: what a To Do's plan got wrong (E15, FR-16.5). Frank's answers on Done (how
+// labels/schedule.jsonl: what a To Do's plan got wrong (E15, FR-16.5, FR-16.7). Frank's answers on Done (how
 // long it took) and, from FR-16.6 on, edits to its estimate, deadline and slot. Each line
 // carries the To Do as the schedule prompt would see it and the plan it had, so the eval can re-run
 // it after the item's raw content has gone to retention. Written before the event, so a crash
@@ -22,6 +22,8 @@ export const ScheduleLabelRecord = z.object({
   input: z.record(z.string(), z.unknown()),
   /** What the plan was when Frank answered, when there was one. */
   was: z.record(z.string(), z.unknown()).optional(),
+  /** The edits: what Frank set (effortMinutes, or deadline, null for none). */
+  set: z.record(z.string(), z.unknown()).optional(),
   /** `actual`: the minutes Frank chose; null when the answer was taken back. */
   actualMinutes: z.number().int().positive().nullable().optional(),
   model: z.string().optional(),

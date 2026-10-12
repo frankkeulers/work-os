@@ -19,6 +19,7 @@ import {
   pollIntervalMinutes, sourceSchedule,
   shownTodos,
   summaryOf,
+  planOf,
   type TodoState,
   type TodoSummary,
   topicItem,
@@ -440,8 +441,10 @@ export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState): TodoSumma
     ...(inNote !== undefined && { inNote }),
     ...(t.mirror && { mirror: { want: t.mirror.want, ...(t.mirror.failed && { failed: t.mirror.failed }) } }),
     ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
+    ...planOf(t, words.plan),
   };
 }
+
 
 /**
  * A meeting's or invite's Outlook categories while the calendar is read (R2.8): the event's own

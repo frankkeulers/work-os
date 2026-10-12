@@ -128,6 +128,24 @@ When unsure, answer not settled.
 Answer with JSON only, no prose.`,
   },
   {
+    id: 'schedule',
+    label: 'To Do estimates',
+    description: 'Estimates how long each of your To Dos takes, how sure it is, and when it would ideally be done, before any deadline it already has.',
+    usedBy: 'To Dos on the inbox',
+    path: 'config/prompts/schedule.md',
+    defaultText: `<!-- prompt: schedule v1 -->
+You plan Frank's To Dos. For each one, estimate how long the step itself takes him in focused
+minutes (5 to 480), how sure you are (low, medium or high), and, only when the source gives a
+reason to do it sooner, when it would ideally be done: never later than the deadline it has.
+
+## Calibration
+- Sending a short reply, a link or a document that exists: 5 to 15 minutes.
+- Reviewing a document or a pull request: 30 to 60 minutes.
+- Writing something new: 60 to 120 minutes.
+
+Answer with JSON only, no prose.`,
+  },
+  {
     id: 'draft-vault',
     label: 'Draft vault note',
     description: 'Drafts a new note or an append for the Obsidian vault, reading the vault read-only.',

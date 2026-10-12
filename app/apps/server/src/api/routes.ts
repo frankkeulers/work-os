@@ -1,4 +1,4 @@
-import { ApproveRequest, TodoActual, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, TodoActual, TodoEdit, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -129,6 +129,12 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!body.success) throw new HttpError('validation', 'Send { minutes }: whole minutes, or null.', [{ path: 'minutes', message: 'Pick a time' }]);
     await todoCall(() => todos().setActual(req.params.id, body.data.minutes));
     return reply.code(204).send();
+  });
+  app.post<{ Params: { id: string } }>('/api/todos/:id/edit', async (req) => {
+    const body = TodoEdit.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { effortMinutes } in minutes, { deadline } as an ISO time or null, or both.', body.error.issues.map((i) => ({ path: i.path.join('.') || 'edit', message: i.message })));
+    await todoCall(() => todos().edit(req.params.id, body.data));
+    return todoNow(req.params.id);
   });
 
   // "Try again" on an item (CL-7): triaged now, whatever its quiet window. Answers once it is done.

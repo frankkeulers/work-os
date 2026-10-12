@@ -110,8 +110,8 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
 }
 
 /** The To Do events (E15). todo.dismissed is the item's suggestion, not a To Do. */
-const TODO_EVENTS = new Set(['todo.created', 'todo.done', 'todo.reopened', 'todo.mirrored', 'todo.mirrorFailed', 'todo.timed']);
-export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' | 'todo.mirrored' | 'todo.mirrorFailed' | 'todo.timed' }> =>
+const TODO_EVENTS = new Set(['todo.created', 'todo.done', 'todo.reopened', 'todo.mirrored', 'todo.mirrorFailed', 'todo.timed', 'todo.planned', 'todo.planFailed', 'todo.edited']);
+export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' | 'todo.mirrored' | 'todo.mirrorFailed' | 'todo.timed' | 'todo.planned' | 'todo.planFailed' | 'todo.edited' }> =>
   TODO_EVENTS.has(e.type);
 
 /**
@@ -157,6 +157,29 @@ export function applyTodoEvent(todos: Record<string, TodoState>, e: WorkEvent): 
       if (t.status !== 'done') return;
       if (e.data.minutes === null) delete t.actualMinutes;
       else t.actualMinutes = e.data.minutes;
+      return;
+    case 'todo.planned':
+      // Once, and never over Frank's own estimate or deadline.
+      if (t.planned) return;
+      t.planned = true;
+      delete t.planFailures;
+      t.confidence = e.data.confidence;
+      if (t.effortBy !== 'you') Object.assign(t, { effortMinutes: e.data.effortMinutes, effortBy: 'model' });
+      if (e.data.ideal && t.deadlineFrom !== 'you') t.ideal = e.data.ideal;
+      return;
+    case 'todo.planFailed':
+      if (!t.planned) t.planFailures = e.data.attempts;
+      return;
+    case 'todo.edited':
+      if (e.data.effortMinutes !== undefined) Object.assign(t, { effortMinutes: e.data.effortMinutes, effortBy: 'you' });
+      if (e.data.deadline !== undefined) {
+        // Frank's deadline replaces the ideal one too: it is the date he means.
+        delete t.ideal;
+        if (e.data.deadline === null) {
+          delete t.deadline;
+          t.deadlineFrom = 'you';
+        } else Object.assign(t, { deadline: e.data.deadline, deadlineFrom: 'you' });
+      }
       return;
   }
 }

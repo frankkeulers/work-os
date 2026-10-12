@@ -13,6 +13,9 @@ import {
   isTodoEvent,
   type TodoDraft,
   type TodoSummary,
+  type TodoEdit,
+  clampPlan,
+  planOf,
   awaitsReply,
   effectiveTriage,
   STAGE_OF,
@@ -135,6 +138,7 @@ import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, SettleOutcome, StateFlag } from './controls';
 import { asFiled, buildDraft, withPossibleDuplicate } from './drafts';
+import { mockPlan } from './plans';
 import { CALENDAR, CALENDAR_CATEGORIES, CALENDAR_WEEK } from './seed/calendar';
 import { inMockScope, mockCatalogue } from './seed/catalogue';
 import { ME } from './me';
@@ -278,6 +282,10 @@ export class MockServer implements WorkOsApi, MockControls {
     for (const t of newTodos(actionId, d, (id) => !!known[id], backfilled)) {
       (this.s.todoTexts ??= {})[t.todoId] = { step: t.step, line: t.line, source: rec.item.source, sourceTitle: rec.item.title };
       this.event('todo.created', { todoId: t.todoId, ...(t.lineId && { lineId: t.lineId }), ...(t.deadline && { deadline: t.deadline }), deadlineFrom: t.deadlineFrom, ...(backfilled && { backfilled: true as const }) }, { itemId: rec.item.id, actionId });
+      // As the server's schedule run after it (FR-16.6), at once.
+      const plan = clampPlan({ id: t.todoId, ...mockPlan(t.step, this.now()) }, { now: this.now(), ...(t.deadline && { deadline: t.deadline }) });
+      Object.assign(this.s.todoTexts[t.todoId], { estimateWhy: plan.estimateWhy, ...(plan.deadlineWhy && { deadlineWhy: plan.deadlineWhy }) });
+      this.event('todo.planned', { todoId: t.todoId, effortMinutes: plan.effortMinutes, confidence: plan.confidence, ...(plan.ideal && { ideal: plan.ideal }) }, { itemId: rec.item.id, actionId });
     }
   }
 
@@ -305,6 +313,7 @@ export class MockServer implements WorkOsApi, MockControls {
       inNote: !words.missing,
       ...(t.mirror && { mirror: { want: t.mirror.want, ...(t.mirror.failed && { failed: t.mirror.failed }) } }),
       ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
+      ...planOf(t, words.estimateWhy ? { estimateWhy: words.estimateWhy, ...(words.deadlineWhy && { deadlineWhy: words.deadlineWhy }) } : undefined),
     };
   }
 
@@ -1170,6 +1179,18 @@ export class MockServer implements WorkOsApi, MockControls {
     if ((t.actualMinutes ?? null) === minutes) return;
     this.event('todo.timed', { todoId, minutes }, { itemId: t.itemId, actionId: t.actionId });
     this.emit({ topic: 'inbox' });
+  }
+
+  async editTodo(todoId: string, edit: TodoEdit) {
+    await this.gate(COMMAND_MS);
+    const t = this.todo(todoId);
+    const effort = edit.effortMinutes !== undefined && edit.effortMinutes !== t.effortMinutes ? edit.effortMinutes : undefined;
+    const deadline = edit.deadline !== undefined && (edit.deadline ?? undefined) !== t.deadline ? edit.deadline : undefined;
+    if (effort !== undefined || deadline !== undefined) {
+      this.event('todo.edited', { todoId, ...(effort !== undefined && { effortMinutes: effort }), ...(deadline !== undefined && { deadline }) }, { itemId: t.itemId, actionId: t.actionId });
+      this.emit({ topic: 'inbox' });
+    }
+    return this.todoSummary(todoId) ?? null;
   }
 
   async snooze(itemId: string, untilIso: string) {

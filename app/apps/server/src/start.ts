@@ -57,6 +57,7 @@ import { meFrom } from './pipeline/rules';
 import { routeTopics } from './pipeline/topics';
 import { meetingsToday, runTriage, type TriageDeps } from './pipeline/triage';
 import { runFinish } from './pipeline/finish';
+import { runSchedule, type ScheduleDeps } from './pipeline/schedule';
 import { runSettle, settleCheckOf, type SettleDeps } from './pipeline/settle';
 import { confirmTriage, correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
@@ -467,6 +468,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   lifecycle.onStop('schedule-labels', () => scheduleLabels.close());
   const todoMirror = new TodoMirror({ store, todos: todoTexts, targets: () => actions.targets(), path: () => settings.editable.settings.tasksNote, canWrite: () => runtime.canUseClaude(), now, logger });
   const todoService = new TodoService({ store, texts: todoTexts, mirror: todoMirror, labels: scheduleLabels, now, logger });
+  // Each new To Do's estimate and ideal deadline (FR-16.6), after the settle checks.
+  const scheduleDeps: ScheduleDeps = { ...triageDeps, texts: todoTexts, prompt: () => loadPromptFile(config.dataDir, 'schedule'), calendar: () => (calendarMe() ? calendar.snapshot?.events : undefined) };
   const alerts = new HealthAlerts({
     notifier,
     settings: () => settings.editable.settings,
@@ -493,15 +496,16 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     settings,
     logger,
     sources: () => buildSources(settings.settings, factories),
-    // After triage, the settle checks on Frank's replies (cockpit CK-2.2), then the checks on
-    // topics others' messages may have finished (CK-2.10): the same run, so they share its
-    // breaker, its one-at-a-time and its timing after every poll.
+    // After triage, the settle checks on Frank's replies (cockpit CK-2.2), the checks on topics
+    // others' messages may have finished (CK-2.10), then new To Dos' plans (FR-16.6): the same
+    // run, so they share its breaker, its one-at-a-time and its timing after every poll.
     triage: async (signal, only) => {
       const r = await runTriage(triageDeps, signal, { only });
       if (only) return r;
       const settled = await runSettle(settleDeps, signal);
       const finished = await runFinish(finishDeps, signal);
-      return { ...r, calls: r.calls + settled.calls + finished.calls };
+      const planned = await runSchedule(scheduleDeps, signal);
+      return { ...r, calls: r.calls + settled.calls + finished.calls + planned.calls };
     },
     regroup: (signal, conversation) => routeTopics({ ...triageDeps, topicsPrompt: triageDeps.topicsPrompt! }, signal, { regroup: conversation }),
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick(), tasksNote.check(), todoMirror.pump()]),
@@ -519,6 +523,10 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     safeMode: runs.safeMode,
     clearSafeMode: () => clearCrashes(config.dataDir),
     tokenPersisted: persisted,
+  });
+  // A new To Do is planned soon after it is written, not at the next poll (FR-16.6).
+  store.subscribe((es) => {
+    if (es.some((e) => e.type === 'todo.created')) runtime.wantTriage();
   });
 
   const server = await createServer({

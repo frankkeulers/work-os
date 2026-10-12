@@ -194,4 +194,7 @@ export interface MockTodoText {
   sourceTitle: string;
   /** Its line isn't in the Tasks note: shown so, and Done can't tick it. */
   missing?: true;
+  /** Its plan's whys (FR-16.6). */
+  estimateWhy?: string;
+  deadlineWhy?: string;
 }

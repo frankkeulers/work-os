@@ -150,14 +150,14 @@ export function withTick(line: string, on?: string): string {
   return `${m[1]}[x]${DONE_FIELD.test(rest) ? rest : `${rest} ✅ ${on}`}`;
 }
 
-/** Where a To Do's deadline came from: triage's deadline for the step, the line's 📅 date, or none. */
-export type DeadlineFrom = 'triage' | 'line' | 'none';
+/** Where a To Do's deadline came from: triage, the line's date, none, or Frank's own (FR-16.7). */
+export type DeadlineFrom = 'triage' | 'line' | 'none' | 'you';
 
 /**
  * A To Do's deadline: triage's, while the line still has its date; else the line's 📅 date at
  * 17:30 London, as triage reads "end of day"; else none. `dues` are triage's deadlines by task.
  */
-export function todoDeadline(line: string, dues?: Record<string, string>): { deadline?: string; deadlineFrom: DeadlineFrom } {
+export function todoDeadline(line: string, dues?: Record<string, string>): { deadline?: string; deadlineFrom: Exclude<DeadlineFrom, 'you'> } {
   const p = parseTaskLine(line);
   if (!p?.due) return { deadlineFrom: 'none' };
   const iso = dues?.[p.key];
@@ -175,7 +175,7 @@ export interface NewTodo {
   step: string;
   line: string;
   deadline?: string;
-  deadlineFrom: DeadlineFrom;
+  deadlineFrom: Exclude<DeadlineFrom, 'you'>;
 }
 
 /**

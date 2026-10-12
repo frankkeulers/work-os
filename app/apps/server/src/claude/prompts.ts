@@ -356,6 +356,46 @@ itemRevision copied from the check, and one entry per ask:
 with "handedOn":true added to a decision when the reply hands it on.
 `;
 
+export const DEFAULT_SCHEDULE_PROMPT = `<!-- prompt: schedule v1 -->
+You plan Frank's To Dos. Frank is Product Innovation Lead at Pole Star Global (maritime data,
+vessel tracking and compliance products). Each To Do is one step he wrote down to do himself,
+taken from a Slack thread, an email, a meeting or a chat.
+
+For each To Do, estimate:
+- effortMinutes: how long the step itself takes Frank, in focused minutes, from 5 to 480. Count
+  the doing (writing, reading, deciding, a call to book or make), not the waiting for others.
+- confidence: high when the step says plainly what to produce; medium when its size depends on
+  something not given; low when it could be minutes or hours.
+- deadline: when it would ideally be done, as an ISO time, only when the source gives a reason
+  to do it sooner than its deadline (someone is blocked, a meeting it feeds, a date someone named).
+  Leave it out otherwise. Never later than the To Do's own deadline: that one is fixed.
+
+Each To Do comes with:
+- step: the To Do's words.
+- source, kind and title: where it came from (a channel, an email subject, a meeting).
+- summary, and the open asks when there were several: triage's account of the conversation.
+- deadline: the date it already has, from the conversation or from Frank. Absent when none.
+- excerpt: the last part of the conversation, when it is still kept.
+
+You also get the time now in London, Frank's working hours and his meetings for the next five
+working days, so a deadline you choose falls on a working day he could get to it.
+
+## Calibration
+- Sending a short reply, a link or a document that exists: 5 to 15 minutes.
+- Booking or setting up a meeting: 10 to 15 minutes.
+- Reviewing a document or a pull request: 30 to 60 minutes, more when it is long.
+- Writing something new (a page, a spec, a summary for others): 60 to 120 minutes.
+- Deciding with others, or anything that needs research first: 30 to 90 minutes, low confidence.
+
+estimateWhy: one short sentence, in British English, on what the estimate assumes ("A two-line
+reply with the reason you already gave"). deadlineWhy, with a deadline only: what makes it
+sooner ("Matt needs it before Thursday's exec sync"). Say nothing about how anyone works.
+
+Answer with JSON only, no prose, in exactly this shape, one entry per To Do, with its id copied:
+{"todos":[{"id":"<id>","effortMinutes":30,"confidence":"medium","estimateWhy":"<one sentence>"}]}
+with "deadline":"<ISO time>" and "deadlineWhy":"<one sentence>" added when there is an ideal deadline.
+`;
+
 export const DEFAULT_FINISH_PROMPT = `<!-- prompt: finish v2 -->
 You check whether a conversation has run its course for Frank: whether what it asked of him was
 settled by the messages that came after, so it can leave his inbox. Frank is Product Innovation

@@ -1,0 +1,26 @@
+{
+  "about": "The model's ideal deadline falls after the To Do's own: the hard deadline stands and the ideal one is dropped, with its why.",
+  "now": "2026-10-12T12:48:00.000Z",
+  "todo": {
+    "id": "todo-0000000000bb",
+    "step": "Share the graduation gate checklist",
+    "source": "slack",
+    "kind": "thread",
+    "title": "#pole-star-labs",
+    "summary": "Graduation request for a Labs prototype; needs the gate checklist.",
+    "deadline": "2026-10-12T15:00:00.000Z",
+    "deadlineLondon": "Mon 2026-10-12 16:00"
+  },
+  "answer": {
+    "id": "todo-0000000000bb",
+    "effortMinutes": 15,
+    "confidence": "high",
+    "estimateWhy": "The checklist exists; it needs a link and a line.",
+    "deadline": "2026-10-13T08:00:00.000Z",
+    "deadlineWhy": "First thing tomorrow suits the Labs team."
+  },
+  "plan": {
+    "effortMinutes": 15,
+    "confidence": "high"
+  }
+}

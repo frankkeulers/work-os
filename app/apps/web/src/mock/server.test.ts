@@ -187,6 +187,19 @@ describe('To Dos (E15, FR-16.1, FR-16.2)', () => {
     const kickoff = todos.find((t) => t.step.startsWith('Book a kick-off'))!;
     expect(await settle(server.markTodoDone(kickoff.id))).toMatchObject({ status: 'done', inNote: false, mirror: { want: 'ticked', failed: 'no_line' } });
   });
+
+  it('plans each To Do as it is made, and keeps Frank’s own estimate and deadline (FR-16.6, FR-16.7)', async () => {
+    server.seedTodos();
+    const todos = (await settle(server.getInbox())).todos;
+    const legal = todos.find((t) => t.step.startsWith('Confirm the IMO STR wording'))!;
+    expect(legal).toMatchObject({ effortMinutes: 20, effortBy: 'model', confidence: 'medium', idealWhy: expect.stringContaining('Legal') });
+    expect(legal.ideal! < legal.deadline!).toBe(true);
+    const deadline = new Date(server.now().getTime() + 2 * 3_600_000).toISOString();
+    expect(await settle(server.editTodo(legal.id, { effortMinutes: 45, deadline }))).toMatchObject({ effortMinutes: 45, effortBy: 'you', deadline, deadlineFrom: 'you' });
+    const after = (await settle(server.getInbox())).todos.find((t) => t.id === legal.id)!;
+    expect(after.ideal).toBeUndefined();
+    expect(after.confidence).toBeUndefined();
+  });
 });
 
 describe('draft and approval outcomes', () => {

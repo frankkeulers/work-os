@@ -16,6 +16,7 @@ import type { QueryFn } from './adapter';
 // or hands it on ("over to you", "can you take this"), which leaves it open and handed on; a finish
 // check (CK-2.10) likewise, judged on the latest message since. The policy tuner (FR-15.9) adds a
 // ready rule [R9] for settled decisions and raises the policy's version.
+// A To Do plan (FR-16.6) sizes each step by its first word and wants "today" steps by 17:00.
 
 export interface FakeClaude {
   query: QueryFn;
@@ -147,6 +148,27 @@ export function settleFor(checks: Check[]) {
   };
 }
 
+type PlanTodo = { id: string; step: string; deadline?: string };
+
+/**
+ * To Do plans (FR-16.6): a send or share is 15 minutes and sure; booking 15; a review an hour; a
+ * write two hours; anything else 30, unsure. "today" in the step wants it by 17:00 London today,
+ * if that is before its deadline; the clamp drops it otherwise.
+ */
+export function scheduleFor(todos: PlanTodo[], now: Date) {
+  const size = (s: string): [number, 'low' | 'medium' | 'high'] =>
+    /^(send|share|reply)\b/i.test(s) ? [15, 'high'] : /^book\b/i.test(s) ? [15, 'high'] : /\breview\b/i.test(s) ? [60, 'medium'] : /^(write|draft)\b/i.test(s) ? [120, 'medium'] : [30, 'low'];
+  const today = new Date(now);
+  today.setUTCHours(16, 0, 0, 0); // 17:00 BST
+  return {
+    todos: todos.map((t) => {
+      const [effortMinutes, confidence] = size(t.step);
+      const soon = /\btoday\b/i.test(t.step);
+      return { id: t.id, effortMinutes, confidence, estimateWhy: `A ${effortMinutes}-minute step, by the fake.`, ...(soon && { deadline: today.toISOString(), deadlineWhy: 'The step says today.' }) };
+    }),
+  };
+}
+
 const PEOPLE_RE = /\b(lazy|unreliable|performance issue|attitude|behaviour)\b/i;
 
 export function fakeClaude(): FakeClaude {
@@ -167,6 +189,8 @@ export function fakeClaude(): FakeClaude {
         const m = /<threads>\n([\s\S]*)\n<\/threads>/.exec(prompt);
         const convs = /<conversations>\n([\s\S]*)\n<\/conversations>/.exec(prompt);
         const checks = /<checks>\n([\s\S]*)\n<\/checks>/.exec(prompt);
+        const todos = /<todos>\n([\s\S]*)\n<\/todos>/.exec(prompt);
+        const now = /^Now: (\S+)/.exec(prompt)?.[1];
         // A tuner request quotes a whole prompt, so it is recognised first.
         const answer = prompt.startsWith('<policy>')
           ? tuneFor(prompt)
@@ -174,6 +198,8 @@ export function fakeClaude(): FakeClaude {
           ? topicsFor(JSON.parse(convs[1]) as Conversation[])
           : checks
           ? settleFor(JSON.parse(checks[1]) as Check[])
+          : todos
+          ? scheduleFor(JSON.parse(todos[1]) as PlanTodo[], new Date(now ?? Date.now()))
           : prompt.includes('<vault-conventions>')
           ? vaultNoteFor(prompt)
           : prompt.includes('<confluence-catalogue>')
