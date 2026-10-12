@@ -81,6 +81,7 @@ export function snapFromRow(r: EventRow, me: MeInfo): SnapEvent | undefined {
     ...(https(r.webLink) && { link: r.webLink! }),
     ...(categoriesOf(r.categories) && { categories: categoriesOf(r.categories) }),
     ...(teamsJoinUrl(r.summary) && { joinUrl: teamsJoinUrl(r.summary) }),
+    ...(/microsoft teams/i.test(r.location ?? '') && { teams: true }),
   };
 }
 
@@ -119,6 +120,12 @@ export function snapFromDetail(e: EventDetail, base: SnapEvent | undefined, me: 
 
 /** Frank still has to answer it: invited by someone else, not cancelled, not started, unanswered. */
 export const wantsAnswer = (e: SnapEvent, now: Date) => !e.isOrganizer && !e.cancelled && Date.parse(e.start) > now.getTime() && (e.response === 'none' || e.response === 'notResponded');
+
+/**
+ * Worth reading for its join link: a Teams meeting not over whose link search's summary didn't
+ * show (an agenda above the Teams block), not read since search last changed it. Frank's own too.
+ */
+export const wantsJoinLink = (e: SnapEvent, now: Date) => !!e.teams && !e.joinUrl && !e.joinRead && !e.cancelled && Date.parse(e.end) > now.getTime();
 
 /** Worth reading to learn Frank's answer: someone else's meeting with people on it, still to come. */
 export const isCandidate = (e: SnapEvent, now: Date) => !e.isOrganizer && !e.cancelled && e.attendees.length > 0 && Date.parse(e.start) > now.getTime();

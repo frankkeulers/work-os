@@ -74,8 +74,8 @@ first.
 - **Joining.** A Teams meeting shows the Teams mark, and choosing it joins the meeting in your
   browser, not the Teams app, wherever it appears: the time column, the agenda, the sidebar, an
   invite (**Join in Teams**) and the calendar's week. Once the meeting is over it opens in Outlook
-  instead. A meeting you organised whose description starts with a long agenda may have no link:
-  Work OS reads only the start of your own meetings' descriptions. Open it in Outlook to join.
+  instead. A Teams meeting whose description starts with a long agenda gets its link a poll or two
+  after it first shows, once Work OS has read the whole meeting.
 - **Not answered** marks a meeting someone else invited you to that you haven't accepted or
   declined yet. Choose it to open the invite's item.
 - **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,
@@ -86,7 +86,8 @@ first.
 
 The calendar polls on its own schedule, every 30 minutes in work hours and every 2 hours outside
 them; change either under **Calendar** in [Settings › Outlook](/settings/outlook). Each poll is a
-short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it reads; it shows on
+short Claude Haiku run, about $0.002, plus about $0.002 for each ten meetings it reads (invites,
+and Teams meetings whose join link it hasn't found yet); it shows on
 [Usage](/usage). If the last read is old, the strip says when it was.
 
 ### Now and next

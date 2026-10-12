@@ -34,6 +34,10 @@ export const SnapEvent = z.object({
   categories: z.array(z.string()).optional(),
   /** The Teams join link, from search's summary or a read; unset for a meeting without one. */
   joinUrl: z.string().optional(),
+  /** Search's location says it is a Teams meeting. */
+  teams: z.boolean().optional(),
+  /** Read since search last changed it, so a read found any join link it has. */
+  joinRead: z.boolean().optional(),
 });
 export type SnapEvent = z.infer<typeof SnapEvent>;
 

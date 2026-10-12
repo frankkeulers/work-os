@@ -203,6 +203,23 @@ describe('the calendar adapter', () => {
     expect(joinOf(brief)).toBe('https://teams.microsoft.com/l/meetup-join/19%3ameeting_222');
   });
 
+  it('reads a Teams meeting once for a join link search cut off, Frank’s own too, after the reads that matter more', async () => {
+    const agenda = `<p>Agenda:</p><p>${'Delivery progress, KPIs, migration, cost, product, AI adoption. '.repeat(5)}</p><p>Join: https://teams.microsoft.com/meet/333?p=c</p>`;
+    // Frank's own Teams meeting with an agenda first: search says Teams but its summary has no link.
+    const own = invite({ subject: 'Product weekly', organizer: FRANK, attendees: [{ ...DANA }], html: agenda, joinUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_333' });
+    const over = invite({ subject: 'Earlier today', organizer: FRANK, attendees: [{ ...DANA }], start: at(-3), end: at(-2), html: agenda, joinUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_444' });
+    const q4 = invite();
+    box.calendar.push(own, over, q4);
+    await poll();
+    expect(box.eventReads).toEqual([[uri(q4), uri(own)]]); // the invite Frank owes an answer first; nothing for a meeting that is over
+    expect(store.snapshot?.events.find((e) => e.id === own.id)?.joinUrl).toBe('https://teams.microsoft.com/l/meetup-join/19%3ameeting_333');
+    expect(store.snapshot?.events.find((e) => e.id === over.id)?.joinUrl).toBeUndefined();
+
+    await poll();
+    expect(box.eventReads.at(-1)).toEqual([uri(q4)]); // read once: only the open invite again
+    expect(store.snapshot?.events.find((e) => e.id === own.id)?.joinUrl).toBe('https://teams.microsoft.com/l/meetup-join/19%3ameeting_333');
+  });
+
   it('reads an open invite again each poll, and closes it once Frank answers in Outlook', async () => {
     const q4 = invite();
     const seen = invite({ subject: 'Ops sync', attendees: [{ ...FRANK, response: 'accepted' }] });

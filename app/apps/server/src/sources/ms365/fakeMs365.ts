@@ -103,6 +103,7 @@ export class FakeMs365 implements Ms365Api {
       webLink: e.webLink,
       categories: e.categories ?? [],
       summary: summaryOf(e.body?.content),
+      location: e.location?.displayName ?? null,
     };
   }
 
@@ -212,7 +213,7 @@ export function fakeEvent(o: {
   allDay?: boolean;
   created?: string;
   categories?: string[];
-  /** A Teams meeting's join link, as a read gives it. */
+  /** A Teams meeting's join link, as a read gives it; its location then says Microsoft Teams. */
   joinUrl?: string;
 }): EventDetail {
   const id = o.id ?? `AAMkFAKEEVENT${String(++eventSeq).padStart(4, '0')}`;
@@ -230,7 +231,7 @@ export function fakeEvent(o: {
     lastModifiedDateTime: o.created ?? o.start,
     webLink: `https://outlook.office365.com/owa/?itemid=${encodeURIComponent(id)}&exvsurl=1&path=/calendar/item`,
     categories: o.categories ?? [],
-    ...(o.joinUrl && { onlineMeeting: { joinUrl: o.joinUrl } }),
+    ...(o.joinUrl && { onlineMeeting: { joinUrl: o.joinUrl }, location: { displayName: 'Microsoft Teams Meeting' } }),
   };
 }
 
