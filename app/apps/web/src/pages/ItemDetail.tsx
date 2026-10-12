@@ -4,6 +4,7 @@ import type { ActionType, Message } from '@work-os/shared';
 import { api, isApiError, type ItemView } from '../api';
 import { ActionPanel, defaultType, parseType, typeParam } from '../components/ActionPanel';
 import { SourceMark } from '../components/BrandIcon';
+import { JoinTeams } from '../components/JoinTeams';
 import { CategoryTags, CorrectForm, OnCalendar, SnoozeMenu, attentionName, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../components/item';
 import { Icon, type IconName } from '../components/icons';
 import { useEarlierToggle } from '../components/Earlier';
@@ -47,6 +48,7 @@ function Header({ view }: { view: ItemView }) {
           </span>
         </div>
         <h1 className="m-0 text-2xl font-semibold leading-[1.3] tracking-[-0.015em]">{s.summary}</h1>
+        {item.source === 'calendar' && item.meeting && <JoinTeams joinUrl={item.meeting.calendar?.joinUrl} end={item.meeting.end} />}
         {item.source === 'wispr' && item.meeting?.calendar && <OnCalendar calendar={item.meeting.calendar} />}
         {view.calendarCategories && <CategoryTags tags={view.calendarCategories} />}
       </div>

@@ -69,8 +69,13 @@ first.
   meeting and what's due before it on top (see [Three zones](inbox.md#the-time-column)). In a
   narrower window they show in a strip above the inbox, the one on now picked out;
   **Tomorrow** shows the next day's. Cancelled meetings and ones you declined are left out. Choose
-  a meeting to open it in Outlook. When the meetings don't all fit, the strip fades at the edge and
-  an arrow there scrolls to the rest.
+  a Teams meeting to join it, or any other meeting to open it in Outlook. When the meetings don't
+  all fit, the strip fades at the edge and an arrow there scrolls to the rest.
+- **Joining.** A Teams meeting shows the Teams mark, and choosing it joins the meeting in your
+  browser, not the Teams app, wherever it appears: the time column, the agenda, the sidebar, an
+  invite (**Join in Teams**) and the calendar's week. Once the meeting is over it opens in Outlook
+  instead. A meeting you organised whose description starts with a long agenda may have no link:
+  Work OS reads only the start of your own meetings' descriptions. Open it in Outlook to join.
 - **Not answered** marks a meeting someone else invited you to that you haven't accepted or
   declined yet. Choose it to open the invite's item.
 - **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,
@@ -90,7 +95,8 @@ On a wide screen the time column's meeting card does this job, and the sidebar l
 narrower window, five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
 the title and a countdown, on every page; on the agenda, its meeting says **in 4 min**. In the last
 two minutes the countdown turns amber. Once it starts, the sidebar shows it under **Now**, with
-when it ends, until it does. Choose a meeting there to open it in Outlook, where the Join button is.
+when it ends, until it does. Choose a Teams meeting there to join it in your browser; any other
+meeting opens in Outlook.
 
 - It's for meetings you've accepted, accepted tentatively or organised. Not ones you declined or
   haven't answered, all-day events, or ones shown as Free.
@@ -107,8 +113,8 @@ when it ends, until it does. Choose a meeting there to open it in Outlook, where
 ### Categories
 
 The Outlook categories on your meetings come with the calendar. A meeting with one has that
-category's colour down its left edge on the agenda and in the calendar's week, and a light shade of
-it behind. An invite or a
+category's colour down its left edge on the agenda, the time column and the calendar's week, and a
+light shade of it behind. An invite or a
 Wispr Flow meeting joined to it has a dot in each category's colour beside its title in the inbox,
 and lists its categories under the summary.
 

@@ -52,7 +52,10 @@ test('J56: three zones at a glance — the time, what needs you, and what can wa
   const card = page.getByTestId('next-meeting');
   await expect(card).toHaveAttribute('data-phase', 'next');
   await expect(card).toContainText(/NEXT · IN 1[12] MIN/); // the mock clock runs on in real time
-  await expect(card.getByRole('link', { name: '14:00 [Customer] renewal call' })).toHaveAttribute('href', /AAMkMOCKRENEWAL/);
+  // A Teams meeting: the card joins it in the browser; Outlook is a link of its own beside the label.
+  await expect(card.getByRole('link', { name: '14:00 [Customer] renewal call' })).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#\/l\/meetup-join\/19:meeting_AAMkMOCKRENEWAL@/);
+  await expect(card).toContainText('Join in Teams');
+  await expect(card.getByRole('link', { name: 'Outlook', exact: true })).toHaveAttribute('href', /itemid=AAMkMOCKRENEWAL/);
   await expect(card).toContainText('+1 at the same time');
   await expect(card.locator('[data-open-item]')).toHaveText([/#mvi-launch · Confirm the data-licensing/, /Insights APIs v2 pricing · Answer the three pricing/]);
 
@@ -62,6 +65,15 @@ test('J56: three zones at a glance — the time, what needs you, and what can wa
   await expect(meetings).toHaveText([/06:45 Voyage Insights/, /09:00 Product stand-up/, /09:30 MVI V2 launch readiness/, /14:00 \[Customer\] renewal call/, /14:30 Pricing sign-off/, /16:00 Product weekly/]);
   await expect(meetings.filter({ hasText: 'stand-up' })).toHaveAttribute('data-past', 'true');
   await expect(meetings.filter({ hasText: 'renewal call' })).not.toHaveAttribute('data-past');
+  // Each in its first category's colour, shaded behind as on the agenda strip; a Teams meeting to come
+  // joins in the browser, one that has ended opens in Outlook.
+  const renewal = meetings.filter({ hasText: 'renewal call' });
+  await expect(renewal).toHaveAttribute('data-category-color', /.+/);
+  expect(await renewal.getByRole('link').evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(await meetings.filter({ hasText: 'Pricing sign-off' }).getByRole('link').evaluate((el) => getComputedStyle(el).backgroundColor));
+  await expect(renewal.getByRole('link')).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#/);
+  await expect(meetings.filter({ hasText: 'stand-up' }).getByRole('link')).toHaveAttribute('href', /itemid=AAMkMOCKSTANDUP/);
+  // A short meeting is one line; its colour bar still runs its full height.
+  expect((await meetings.filter({ hasText: 'stand-up' }).locator('a > span[aria-hidden]').boundingBox())!.height).toBeGreaterThan(10);
   const pins = zone(page, 'Time').getByRole('list', { name: 'Deadlines' }).getByRole('button');
   await expect(pins).toHaveText([/^Overdue · Confirm the data-licensing/, /^14:00 Answer the three pricing/]);
   await expect(pins.nth(0)).toHaveAttribute('data-pin', 'late');

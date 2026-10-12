@@ -171,6 +171,12 @@ describe('the calendar adapter', () => {
     expect(store.snapshot?.events[0].joinUrl).toBe('https://teams.microsoft.com/l/meetup-join/abc');
   });
 
+  it('puts the join link on the invite item, so it can be joined from there too', async () => {
+    box.calendar.push(invite());
+    const r = await poll();
+    expect(r.items[0].meeting?.calendar?.joinUrl).toBe('https://teams.microsoft.com/l/meetup-join/abc');
+  });
+
   it('takes a meeting’s join link from search, or from a read when an agenda pushes it out of the summary', async () => {
     const block = (url: string) => `<p>________________________________________________________________________________</p><p>Microsoft Teams meeting</p><p>Join: ${url}</p><p>Meeting ID: 213 351</p><p>Passcode: Tz2Nq3Gh</p>`;
     // Frank's own meeting is never read: its link comes from search's summary.

@@ -1,19 +1,19 @@
 import { OUTLOOK_COLORS, londonAt, londonParts, mondayOf, type WeekEvent, type WeekView } from '@work-os/shared';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
-import { BrandIcon } from '../../components/BrandIcon';
 import { CategoryTags } from '../../components/item';
 import { Icon } from '../../components/icons';
+import { JoinTeams } from '../../components/JoinTeams';
 import { Button, IconButton, cx } from '../../components/ui';
 import { fmtAgo, fmtDate, fmtDayDate, fmtTime, plural } from '../../lib/format';
+import { OUTLOOK_CALENDAR } from '../../lib/links';
 import { minuteOf, placeMeetings, timelineSpan, workSpan } from '../../lib/timeline';
 
 // Outlook Calendar's history (cockpit CK-5.6): the week, Monday to Sunday, every meeting the
 // calendar holds, cancelled and declined ones too, marked. A meeting opens its Wispr Flow notes or
 // its invite in the item panel, or else a card with what the calendar says about it, and a link to
-// join it in Teams. A meeting with Outlook categories takes the first one's colour, as on the agenda.
+// join it in Teams, in the browser. A meeting with Outlook categories takes the first one's colour, as on the agenda.
 
-const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
 const PX_PER_HOUR = 48;
 const HOURS_WIDTH = 44;
 const MEETING_MIN_HEIGHT = 18;
@@ -183,7 +183,7 @@ function EventBlock({ e, selected, onEvent, past, allDay }: { e: WeekEvent; sele
       )}
       style={hex ? ({ '--tag': hex } as CSSProperties) : undefined}
     >
-      <span aria-hidden className="w-[3px] shrink-0 rounded-sm" style={{ background: hex ?? 'var(--gray-mid)' }} />
+      <span aria-hidden className="w-[3px] shrink-0 self-stretch rounded-sm" style={{ background: hex ?? 'var(--gray-mid)' }} />
       <span className="min-w-0">
         {!allDay && <b className="font-semibold">{fmtTime(e.start)} </b>}
         <span className={cx(state && 'line-through')}>{e.title}</span>
@@ -252,11 +252,7 @@ export function EventCard({ e, onClose }: { e: WeekEvent; onClose: () => void })
           ) : null}
         </dl>
         <div className="flex flex-wrap gap-2">
-          {e.joinUrl && !e.cancelled && (
-            <a href={e.joinUrl} target="_blank" rel="noreferrer" data-join-teams className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-accent-bg px-3 text-[13px] font-semibold !text-on-solid no-underline hover:brightness-110">
-              <BrandIcon brand="teams" size={16} decorative /> Join in Teams
-            </a>
-          )}
+          {!e.cancelled && <JoinTeams joinUrl={e.joinUrl} end={e.end} solid />}
           <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium !text-ink no-underline hover:bg-surface-2">
             <Icon name="external" size={14} /> Open in Outlook
           </a>

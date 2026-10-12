@@ -161,7 +161,7 @@ test('J64: Outlook mail by day, and the calendar as a week — a meeting opens i
   await expect(card.getByRole('link', { name: 'Open in Outlook' })).toHaveAttribute('href', /AAMkMOCKONEONE/);
   // A Teams meeting joins from the card, in a new tab.
   const join = card.getByRole('link', { name: 'Join in Teams' });
-  await expect(join).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/l\/meetup-join\/.*AAMkMOCKONEONE/);
+  await expect(join).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#\/l\/meetup-join\/19:meeting_AAMkMOCKONEONE@/); // in the browser, not the app
   await expect(join).toHaveAttribute('target', '_blank');
   await shoot(page, 'source-calendar-card');
   // One held in a room has nothing to join.

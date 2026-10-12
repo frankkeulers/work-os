@@ -162,6 +162,9 @@ describe('truncation and batching (§5.3, CL-4)', () => {
     // An invite: Frank is "me" wherever he is on it.
     const invite = { ...meeting, source: 'calendar' as const, kind: 'event' as const, meeting: { ...meeting.meeting!, calendar: { ...meeting.meeting!.calendar!, invitees: [{ id: 'frank@example.com', name: 'Frank Keulers' }] } } };
     expect(threadForTriage(invite, meFrom({ id: 'frank@example.com', name: 'Frank Keulers' }), 3).meeting?.calendar?.invitees).toEqual(['me']);
+    // A Teams join link and the Outlook link stay out of what a model reads.
+    const joinable = { ...invite, meeting: { ...invite.meeting, calendar: { ...invite.meeting.calendar, link: 'https://outlook.office365.com/owa/?itemid=e1', joinUrl: 'https://teams.microsoft.com/meet/1?p=secret' } } };
+    expect(JSON.stringify(threadForTriage(joinable, meFrom({ id: 'frank@example.com', name: 'Frank Keulers' }), 3))).not.toMatch(/teams\.microsoft|secret|outlook\.office365/);
   });
 
   it('sends an email with who it went to, Frank as "me", and a longer cut than chat (Outlook)', () => {

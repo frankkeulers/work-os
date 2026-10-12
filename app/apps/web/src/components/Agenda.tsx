@@ -6,16 +6,17 @@ import { onTopics, useApiQuery } from '../hooks/useApiQuery';
 import { useNow } from '../hooks/useNow';
 import { dayEvents, meetingCues, phaseOf, wantsAnswer, type AgendaDay, type MeetingCue } from '../lib/agenda';
 import { fmtAgo, fmtTime } from '../lib/format';
+import { meetingLink } from '../lib/links';
+import { BrandIcon } from './BrandIcon';
 import { Icon } from './icons';
 import { FutureButton, IconButton, Segmented, cx } from './ui';
 
 // The agenda strip on the inbox (R2.8): today's or tomorrow's meetings from Outlook Calendar, the
-// one on now picked out. A meeting opens in Outlook; "Not answered" opens its invite item. Hidden
+// one on now picked out. A Teams meeting joins in the browser until it ends; other meetings open in
+// Outlook; "Not answered" opens its invite item. Hidden
 // while the calendar is off, except in Full scope, which says how to turn it on.
 
-const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
-
-function AgendaChip({ e, phase, soon, onOpenItem }: { e: AgendaEvent; phase: 'past' | 'now' | 'later'; soon?: MeetingCue; onOpenItem: (id: string) => void }) {
+function AgendaChip({ e, phase, soon, now, onOpenItem }: { e: AgendaEvent; phase: 'past' | 'now' | 'later'; soon?: MeetingCue; now: Date; onOpenItem: (id: string) => void }) {
   const when = e.allDay ? 'All day' : fmtTime(e.start);
   const tag = 'inline-flex min-h-7 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-xs font-medium hover:bg-bg';
   const categories = e.categories ?? [];
@@ -23,6 +24,7 @@ function AgendaChip({ e, phase, soon, onOpenItem }: { e: AgendaEvent; phase: 'pa
   // A meeting with Outlook categories has the first one's colour down its left edge, as in Outlook,
   // and a light shade of it behind (mixed into the surface, so it stays dark in the dark theme).
   const hex = categories.length ? OUTLOOK_COLORS[categories[0].color] : undefined;
+  const go = meetingLink(e, now);
   return (
     <li
       data-agenda-event={e.id}
@@ -32,7 +34,8 @@ function AgendaChip({ e, phase, soon, onOpenItem }: { e: AgendaEvent; phase: 'pa
       className={cx('flex shrink-0 scroll-mx-16 items-center gap-0.5 rounded-lg border pl-2 pr-0.5', categories.length > 0 && 'pl-3', phase === 'now' ? 'border-accent-line bg-accent-wash' : 'border-line-soft bg-surface', phase === 'past' && 'opacity-60')}
       style={hex ? { boxShadow: `inset 4px 0 0 ${hex}`, background: `color-mix(in srgb, ${hex} 14%, var(--surface))` } : undefined}
     >
-      <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" title={`${e.title}${e.organizer ? ` · ${e.organizer}` : ''}${named ? ` · ${named}` : ''}: open in Outlook`} className="flex min-h-9 max-w-[280px] items-center gap-1.5 pr-1.5 !text-ink no-underline hover:underline">
+      <a href={go.href} target="_blank" rel="noreferrer" data-join-teams={go.teams || undefined} title={`${e.title}${e.organizer ? ` · ${e.organizer}` : ''}${named ? ` · ${named}` : ''}: ${go.teams ? 'join in Teams' : 'open in Outlook'}`} className="flex min-h-9 max-w-[280px] items-center gap-1.5 pr-1.5 !text-ink no-underline hover:underline">
+        {go.teams && <BrandIcon brand="teams" size={14} decorative />}
         <span className="font-mono text-xs text-ink-2">{when}</span>
         <span className="truncate">{e.title}</span>
         {phase === 'now' && <span className="rounded bg-accent-bg px-1 text-[10px] font-semibold text-on-solid no-underline">Now</span>}
@@ -135,7 +138,7 @@ export function Agenda({ full, onOpenItem }: { full: boolean; onOpenItem: (id: s
           <>
             <ol ref={listRef} aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 flex list-none gap-1.5 overflow-x-auto p-0 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {list.map((e) => (
-                <AgendaChip key={e.id} e={e} phase={day === 'today' ? phaseOf(e, now) : 'later'} soon={soon.get(e.id)} onOpenItem={onOpenItem} />
+                <AgendaChip key={e.id} e={e} phase={day === 'today' ? phaseOf(e, now) : 'later'} soon={soon.get(e.id)} now={now} onOpenItem={onOpenItem} />
               ))}
             </ol>
             {/* Meetings past either edge fade out under an arrow that scrolls to them; the strip has no

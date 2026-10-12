@@ -195,7 +195,7 @@ export function inviteItem(itemId: string, events: SnapEvent[], messages: Messag
     meeting: {
       start: first.start,
       end: first.end,
-      calendar: { eventId: first.id, title: first.subject || '(no title)', ...(organizer && { organizer }), invitees, ...(https(first.link) && { link: first.link }), ...(first.categories && { categories: first.categories }) },
+      calendar: { eventId: first.id, title: first.subject || '(no title)', ...(organizer && { organizer }), invitees, ...(https(first.link) && { link: first.link }), ...(first.categories && { categories: first.categories }), ...(first.joinUrl && { joinUrl: first.joinUrl }) },
     },
   };
 }

@@ -305,13 +305,13 @@ The layout matches artboards 1 and 2 of the design: `Main.dc.html` and `Panel.dc
   - "NEXT · IN 12 MIN" (amber in the last 2 minutes, from `meetingLeadMinutes`), or "NOW · UNTIL 14:30" while it's on;
   - the time and title;
   - **"Due before it:"** the Needs you items whose `next.dueAt` falls on or before the meeting's start, or "Nothing due before it".
-- Clicking the card opens the event in Outlook. Overlapping meetings show "+1 at the same time", and a hover lists them.
+- Clicking the card opens the event in Outlook. Overlapping meetings show "+1 at the same time", and a hover lists them. *Amended 12 Oct 2026 (Frank):* a Teams meeting's card joins it in the browser (Teams' web client, not the app), labelled "Join in Teams" with its own Outlook link beside the label.
 - With no meeting left today, the card reads "No more meetings today" and shows the first meeting tomorrow.
 - With the calendar off, the card is hidden and the timeline shows pins only.
 
 **CK-3.6 Timeline.**
 - **Range:** Frank's work hours from Settings › Schedule (default 08:00–18:00), widened to include the first and last meeting or pin. The scale is 72 px an hour; below 48 px an hour the column scrolls instead of shrinking further.
-- **Meetings:** a block per timed meeting, in its column, with a 3 px bar in its Outlook category colour (R2.8 `categoryColors`). Past meetings are greyed (`--tray`, `--faint`). All-day events are a single line at the top. A click opens the event in Outlook.
+- **Meetings:** a block per timed meeting, in its column, with a 3 px bar in its Outlook category colour (R2.8 `categoryColors`). Past meetings are greyed (`--tray`, `--faint`). All-day events are a single line at the top. A click opens the event in Outlook. *Amended 12 Oct 2026 (Frank):* a meeting is also shaded in its category colour (mixed into `--surface`, fainter once past), and the bar runs the block's full height however short; a Teams meeting not yet over shows the Teams mark and a click joins it in the browser.
 - **The now-line:** a red 2 px line with the time in a tab. Everything above it is on `--past`. It moves every minute.
 - **Deadline pins:** a pin for each Needs you item with `next.dueAt` today, in a lane to the right of the meetings, with its due time and a short title (≤ 28 characters, from `step` or the summary). Colours follow the chip rule:
   - orange within about 4 h;
@@ -419,7 +419,7 @@ Each row carries its people (Frank left out) and message count as well as the us
 
 **CK-5.6 Outlook Calendar** is a week, Monday to Sunday, London time, with work hours widened to fit the meetings, an all-day row and a now-line. Previous week, next week and This week move it.
 - Cancelled and declined meetings show, struck through and marked.
-- A meeting opens its Wispr Flow notes in the panel; failing that, its invite item, whatever its state; failing that, a read-only card (time, organiser, invitees, your answer, categories, Open in Outlook).
+- A meeting opens its Wispr Flow notes in the panel; failing that, its invite item, whatever its state; failing that, a read-only card (time, organiser, invitees, your answer, categories, Open in Outlook). *Amended 12 Oct 2026 (Frank):* meetings are shaded in their first category's colour, and the card has Join in Teams (browser) for a Teams meeting that isn't over or cancelled.
 - The calendar snapshot now starts at this week's Monday (or yesterday, on a Monday), so the days already gone this week show. Past meetings are never read. Weeks outside the snapshot say so.
 
 **CK-5.8 Filter by state.** A row of chips under the top bar shows or hides each state, with its count: Needs you (Now, Today and failed triage), This week, Waiting on others, To file, Low priority, Waiting, Snoozed and Done. On the calendar the states are Going, Not answered, Declined and Cancelled. Done is hidden to begin with, as finished work is rarely what Frank comes looking for; every other state shows, and on the calendar all four do. One click on **Done** brings done items back. Once Frank changes the filter, his choice is kept per source in this browser. The header says "15 of 33 items" while anything is hidden, and **Show all** brings everything back. Hiding the open item's state leaves its panel open; `j`/`k` walk only the rows shown.
