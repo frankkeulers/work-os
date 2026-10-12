@@ -1,9 +1,9 @@
-import type { FilingScores, PolicyChange } from '@work-os/shared';
+import type { LoopScore, PolicyChange } from '@work-os/shared';
 import { describe, expect, it } from 'vitest';
 import type { ClaudeAdapter, RunSpec } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
 import type { Prompt } from '../claude/prompts';
-import { copiedRun, guard, heldOut, propose, ruleIds, type LoopAdapter } from './tuner';
+import { copiedRun, describeScores, guard, heldOut, propose, ruleIds, type LoopAdapter } from './tuner';
 
 // The tuner (FR-15.9): the split, code's checks on a proposal, and a run end to end with a fake
 // adapter and a fake Claude. No live calls.
@@ -23,8 +23,10 @@ const POLICY = `<!-- prompt: filing-policy v1 -->
 - [T1] A meeting action item that falls to Frank.`;
 const THREAD = 'We agreed the bulk export ships without the PDF option in version one of the release';
 
-const score = (p: number, r = 1, n = 10) => ({ precision: p, recall: r, support: n, predicted: n, n });
-const scores = (p: number): FilingScores => ({ toFile: score(p), predraft: score(p), ready: score(p), todo: score(p) });
+const scores = (p: number): LoopScore[] => [
+  { key: 'toFile', label: 'To file', precision: p, recall: 1, n: 10, target: 0.85 },
+  { key: 'ready', label: 'Ready to approve', precision: p, recall: 1, n: 10, target: 0.95 },
+];
 
 describe('heldOut', () => {
   it('puts the same item on the same side every time, about three in ten held out', () => {
@@ -58,13 +60,26 @@ describe('the checks on a proposal', () => {
     expect(guard(POLICY, POLICY, [{ kind: 'changed', what: THREAD }], [THREAD])).toMatch(/copies/);
     expect(guard(POLICY, `${POLICY}\n- [T2] A promise with a date.`, [], [THREAD])).toBeUndefined();
   });
+
+  it('turns down a proposal that loses or renames the file’s own first line', () => {
+    const body = POLICY.split('\n').slice(1).join('\n');
+    expect(guard(POLICY, body, [], [])).toBe('It doesn’t start with the file’s own line, <!-- prompt: filing-policy vN -->.');
+    expect(guard(POLICY, `<!-- prompt: triage v2 -->\n${body}`, [], [])).toMatch(/file’s own line/);
+    expect(guard(POLICY, `<!-- prompt: filing-policy v2 -->\n${body}`, [], [])).toBeUndefined();
+  });
+
+  it('describes the scores with their targets, as the tuner reads them', () => {
+    expect(describeScores([{ key: 'now', label: 'Now', precision: 0.75, recall: 0.9, n: 12, target: 0.8, recallTarget: 0.9 }, { key: 'none', label: 'None', precision: 0, recall: 0, n: 0 }])).toBe(
+      'Now: precision 75%, recall 90% over 12 labels; target precision 80%; target recall 90%\nNone: no labels',
+    );
+  });
 });
 
 describe('propose', () => {
   type L = { itemId: string; text: string };
   const labels: L[] = Array.from({ length: 20 }, (_, i) => ({ itemId: `slack:C1:${i}.0`, text: THREAD }));
   const evaluated: { version: string; n: number }[] = [];
-  const adapter = (misses = 2, better = true): LoopAdapter<L> => ({
+  const adapter = (misses = 2, better = true, brokenByProposal = 0): LoopAdapter<L> => ({
     loop: 'filing',
     promptId: 'filing-policy',
     itemId: (l) => l.itemId,
@@ -72,13 +87,12 @@ describe('propose', () => {
     evaluate: async (policy, ls) => {
       evaluated.push({ version: policy.version, n: ls.length });
       const proposed = policy.text !== POLICY;
-      return { scores: scores(proposed === better ? 0.9 : 0.7), misses: Array.from({ length: misses }, (_, i) => ({ miss: i })), tokens: 0, cost: 0 };
+      return { scores: scores(proposed === better ? 0.9 : 0.7), misses: Array.from({ length: misses }, (_, i) => ({ miss: i })), failed: proposed ? brokenByProposal : 0, tokens: 0, cost: 0 };
     },
-    summary: (s) => s.toFile.precision,
-    describe: () => 'To file: 70%',
   });
   const calls: RunSpec[] = [];
-  let answer: unknown = { policy: `${POLICY}\n- [T2] Frank promised something with a date.`, changes: [{ rule: 'T2', kind: 'added', what: 'Dated promises.' }] };
+  const REVISED = `${POLICY.replace('filing-policy v1', 'filing-policy v2')}\n- [T2] Frank promised something with a date.`;
+  let answer: unknown = { policy: REVISED, changes: [{ rule: 'T2', kind: 'added', what: 'Dated promises.' }] };
   const claude = {
     structured: async (spec: RunSpec) => {
       calls.push(spec);
@@ -93,19 +107,30 @@ describe('propose', () => {
     const p = await propose(deps, adapter(), labels);
     const held = labels.filter((l) => heldOut(l.itemId)).length;
     expect(p).toMatchObject({ status: 'open', loop: 'filing', promptId: 'filing-policy', baseVersion: 'filing-policy v1#aaaaaaaa', train: 20 - held, heldOut: held, better: true, model: 'opus-5.5', promptVersion: 'tune-policy v1#bbbbbbbb' });
-    expect(p.diff?.filter((d) => d.op !== 'same')).toEqual([{ op: 'add', text: '- [T2] Frank promised something with a date.' }]);
-    expect(p.scores?.after.toFile.precision).toBe(0.9);
+    expect(p.diff?.filter((d) => d.op !== 'same')).toEqual([
+      { op: 'del', text: '<!-- prompt: filing-policy v1 -->' },
+      { op: 'add', text: '<!-- prompt: filing-policy v2 -->' },
+      { op: 'add', text: '- [T2] Frank promised something with a date.' },
+    ]);
+    expect(p.scores?.after[0]).toMatchObject({ key: 'toFile', precision: 0.9 });
     // Train with the current policy; then held out, current and proposed.
     expect(evaluated.map((e) => e.n)).toEqual([20 - held, held, held]);
     expect(evaluated[1].version).toBe('filing-policy v1#aaaaaaaa');
     expect(evaluated[2].version).not.toBe('filing-policy v1#aaaaaaaa'); // the proposed text
     const call = calls.at(-1)!;
     expect(call).toMatchObject({ purpose: 'tune', model: 'opus-5.5', system: 'tune', promptVersion: 'tune-policy v1#bbbbbbbb' });
-    expect(call.prompt).toMatch(/^<policy>\n<!-- prompt: filing-policy v1 -->[\s\S]*<\/policy>\n\n<scores>\nTo file: 70%\n<\/scores>\n\n<misses count="2">/);
+    expect(call.prompt).toMatch(/^<policy>\n<!-- prompt: filing-policy v1 -->[\s\S]*<\/policy>\n\n<loop>filing<\/loop>\n\n<scores>\nTo file: precision 70%, recall 100% over 10 labels; target precision 85%\nReady to approve: [^\n]*\n<\/scores>\n\n<misses count="2">/);
   });
 
   it('marks one that scores no better', async () => {
     expect((await propose(deps, adapter(2, false), labels)).better).toBe(false);
+  });
+
+  it('turns down a proposal that breaks the answer format on held-out items, whatever it scores', async () => {
+    answer = { policy: REVISED, changes: [] };
+    const p = await propose(deps, adapter(2, true, 1), labels);
+    expect(p).toMatchObject({ status: 'rejected', rejected: 'It breaks the answer format: 1 held-out item(s) got no usable answer that the current prompt answers.' });
+    expect(p.text).toBeUndefined();
   });
 
   it('keeps no text from a proposal it turns down', async () => {

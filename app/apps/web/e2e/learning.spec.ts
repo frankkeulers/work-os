@@ -1,8 +1,9 @@
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
-// Settings › Learning and policy proposals (PLAN FR-15.8–15.10): with two weeks of filing labels,
-// run the filing eval, propose a better policy, and apply it from Settings › Prompts.
+// Settings › Learning and policy proposals (PLAN FR-15.8–15.11): with two weeks of filing labels,
+// run the filing eval, propose a better policy, and apply it from Settings › Prompts; and the same
+// for the triage prompt, the settle check and Looks finished.
 
 const APP = join(import.meta.dirname, '../../..');
 const HIDE = '[data-testid="os-notification"], [data-scenarios], [aria-label="Notifications"][aria-live] { display: none !important; }';
@@ -25,12 +26,19 @@ async function withLabels(page: Page) {
   await expect(page.getByRole('heading', { name: 'Learning', level: 2 })).toBeVisible();
 }
 
-const shoot = async (page: Page, el: ReturnType<Page['locator']>, name: string) => {
-  await page.addStyleTag({ content: HIDE });
+/** Light and dark (or light only). Main scrolls on its own, so the viewport grows to fit all of the
+ * element; the toasts are hidden while it shoots and shown again after, for the checks that follow. */
+const shoot = async (page: Page, el: ReturnType<Page['locator']>, name: string, dark = true) => {
+  const hide = await page.addStyleTag({ content: `${HIDE} [aria-live="polite"]:not([aria-label]) { display: none !important; }` });
+  await page.setViewportSize({ width: 1440, height: 3200 });
   await el.screenshot({ path: join(APP, `screenshots/${name}-light.png`), animations: 'disabled' });
-  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
-  await el.screenshot({ path: join(APP, `screenshots/${name}-dark.png`), animations: 'disabled' });
-  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+  if (dark) {
+    await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+    await el.screenshot({ path: join(APP, `screenshots/${name}-dark.png`), animations: 'disabled' });
+    await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+  }
+  await page.setViewportSize({ width: 1440, height: 1700 });
+  await hide.evaluate((h) => h.remove());
 };
 
 test('J91 Learning: run the filing eval, propose a better policy, apply it from Prompts (FR-15.8–15.10)', async ({ page }) => {
@@ -54,10 +62,10 @@ test('J91 Learning: run the filing eval, propose a better policy, apply it from 
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Propose a better policy' }).click();
-  await expect(page.getByTestId('proposal-status')).toContainText('is waiting, and scores better', { timeout: 10_000 });
+  await expect(page.getByTestId('proposal-status-filing')).toContainText('is waiting, and scores better', { timeout: 10_000 });
   await shoot(page, page.getByRole('main', { name: 'Learning' }), 'settings-learning');
 
-  await expect(page.getByTestId('proposal-status').getByRole('link', { name: 'Review it' })).toHaveAttribute('href', '/settings/prompts#filing-policy');
+  await expect(page.getByTestId('proposal-status-filing').getByRole('link', { name: 'Review it' })).toHaveAttribute('href', '/settings/prompts#filing-policy');
   // The bell's entry opens Settings › Prompts scrolled to the proposal.
   await bell(page).click();
   await entry(page, 'A filing policy change is proposed').getByRole('button', { name: 'Review' }).click();
@@ -76,7 +84,7 @@ test('J91 Learning: run the filing eval, propose a better policy, apply it from 
   await expect(page.locator('[data-prompt="filing-policy"]')).toContainText('filing-policy v2#');
 
   await page.getByRole('link', { name: 'Learning', exact: true }).click();
-  await expect(page.getByTestId('proposal-status')).toContainText('was applied');
+  await expect(page.getByTestId('proposal-status-filing')).toContainText('was applied');
 });
 
 test('J91 the switches: draft ahead, Ready to approve and to-do suggestions save at once (FR-15.10)', async ({ page }) => {
@@ -91,4 +99,36 @@ test('J91 the switches: draft ahead, Ready to approve and to-do suggestions save
   await expect(toFile.locator('[data-row]').filter({ hasText: 'v2 vessel-events endpoint drops the legacy imo_str field' })).toBeVisible();
   await expect(toFile).not.toContainText('Ready · R1');
   await expect(toFile.locator('[data-subhead="ready"]')).toHaveCount(0);
+});
+
+test('J92 the other loops: propose a better triage prompt and apply it; Looks finished waits for 10 labels (FR-15.11)', async ({ page }) => {
+  await withLabels(page);
+  const main = page.getByRole('main', { name: 'Learning' });
+  await expect(page.getByTestId('triage-labels')).toContainText('from your corrections and Triage was right');
+  await expect(page.getByTestId('settle-labels')).toContainText('14 items · from your Undo and Done');
+  await expect(page.getByTestId('finish-labels')).toContainText('6 items · your answers to Looks finished');
+  await expect(main.getByText('Needs 10 labelled items; there are 6.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Propose a better Looks finished check' })).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Propose a better triage prompt' }).click();
+  await expect(page.getByTestId('proposal-status-triage')).toContainText('is waiting, and scores better', { timeout: 10_000 });
+  await expect(page.getByTestId('proposal-status-filing')).toHaveCount(0); // each loop has its own
+  await shoot(page, main, 'settings-learning-loops', false);
+
+  await bell(page).click();
+  await entry(page, 'A triage prompt change is proposed').getByRole('button', { name: 'Review' }).click();
+  await expect(page).toHaveURL(/\/settings\/prompts#triage$/);
+  const banner = page.getByRole('region', { name: 'Proposed change' });
+  await expect(banner).toBeInViewport();
+  await expect(banner).toContainText('Changed: A customer waiting on Frank’s decision before a date is at least Today');
+  const now = banner.getByRole('table', { name: 'Held-out scores, current → proposed' }).locator('[data-field="now"]');
+  await expect(now).toContainText('82% → 82%');
+  await expect(now).toContainText('78% → 89%'); // recall, against its 90% target
+  await expect(now).toContainText('≥ 80%, recall ≥ 90%');
+  await shoot(page, banner, 'prompts-proposal-triage', false);
+
+  await banner.getByRole('button', { name: 'Apply' }).click();
+  await expect(page.getByText('Triage updated')).toBeVisible();
+  await expect(banner).toHaveCount(0);
+  await expect(page.locator('[data-prompt="triage"]')).toContainText('triage v11#');
 });

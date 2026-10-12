@@ -54,17 +54,17 @@ export interface EvalDeps {
   logger?: Logger;
 }
 
-/**
- * Runs triage over the latest label of each item, or of one source's items (R2.2: a new source goes
- * live on its own scores). Throws ClaudeError when Claude can't be called.
- */
-export async function runEval(d: EvalDeps, records: LabelRecord[], o: { source?: SourceId } = {}): Promise<EvalReport> {
-  const labels = latestLabels(records).filter((l) => !o.source || l.source === o.source);
-  if (!labels.length) throw new Error(o.source ? `No labelled threads from ${o.source} yet.` : 'No labelled threads yet.');
+/** One labelled item and what the prompt now says for it. */
+export interface Predicted extends Scored {
+  record: LabelRecord;
+}
+
+/** What the prompt says for each label. Throws ClaudeError when Claude can't be called. */
+export async function predictTriage(d: EvalDeps, labels: readonly LabelRecord[]): Promise<{ rows: Predicted[]; failed: number; tokens: number; cost: number }> {
   const t = d.settings.triage;
   const model = d.settings.models.triage;
-  const batches = packBatches(labels, (l) => threadTokens(l.thread), { maxThreads: t.maxThreadsPerCall, maxInputTokens: t.maxInputTokens, overheadTokens: estimateTokens(d.prompt.text) + 200 });
-  const rows: Scored[] = [];
+  const batches = packBatches([...labels], (l) => threadTokens(l.thread), { maxThreads: t.maxThreadsPerCall, maxInputTokens: t.maxInputTokens, overheadTokens: estimateTokens(d.prompt.text) + 200 });
+  const rows: Predicted[] = [];
   let tokens = 0;
   let cost = 0;
   let failed = 0;
@@ -97,13 +97,25 @@ export async function runEval(d: EvalDeps, records: LabelRecord[], o: { source?:
           failed++;
           continue;
         }
-        rows.push({ source: l.source, label: l.label, predicted: { attention: a.attention, confluence: a.confluence.suggested, vault: a.vault.suggested } });
+        rows.push({ record: l, source: l.source, label: l.label, predicted: { attention: a.attention, confluence: a.confluence.suggested, vault: a.vault.suggested } });
       }
     } catch (err) {
       if (!(err instanceof ClaudeOutputError)) throw err;
       failed += batch.length; // out of shape twice: counted, not scored
     }
   }
+  return { rows, failed, tokens, cost };
+}
+
+/**
+ * Runs triage over the latest label of each item, or of one source's items (R2.2: a new source goes
+ * live on its own scores). Throws ClaudeError when Claude can't be called.
+ */
+export async function runEval(d: EvalDeps, records: LabelRecord[], o: { source?: SourceId } = {}): Promise<EvalReport> {
+  const labels = latestLabels(records).filter((l) => !o.source || l.source === o.source);
+  if (!labels.length) throw new Error(o.source ? `No labelled threads from ${o.source} yet.` : 'No labelled threads yet.');
+  const model = d.settings.models.triage;
+  const { rows, failed, tokens, cost } = await predictTriage(d, labels);
   const at = d.now().toISOString();
   const report: EvalReport = {
     id: `eval-${at}`,

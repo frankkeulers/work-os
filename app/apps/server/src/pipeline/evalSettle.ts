@@ -47,29 +47,33 @@ export interface SettleEvalDeps {
   logger?: Logger;
 }
 
-/**
- * Re-runs each item's latest labelled check. Throws ClaudeError when Claude can't be called. The
- * finish eval (cockpit CK-2.10) is the same over labels/finish.jsonl, with its prompt and `render`.
- */
-export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecord[], render: (checks: SettleCheck[], now: Date) => string = renderChecks): Promise<SettleEvalReport> {
-  const labels = latestSettleLabels(records);
-  if (!labels.length) throw new Error('No settle labels yet.');
+export type RenderChecks = (checks: SettleCheck[], now: Date) => string;
+
+/** One labelled check and whether the prompt now closes it. */
+export interface SettlePredicted {
+  label: SettleLabelRecord;
+  closes: boolean;
+}
+
+/** What the prompt says for each labelled check. Throws ClaudeError when Claude can't be called. */
+export async function predictSettle(d: SettleEvalDeps, labels: readonly SettleLabelRecord[], render: RenderChecks = renderChecks): Promise<{ rows: SettlePredicted[]; failed: number; tokens: number; cost: number }> {
   const t = d.settings.triage;
-  const model = d.settings.models.triage;
   const check = (l: SettleLabelRecord) => l.check as unknown as SettleCheck;
-  const batches = packBatches(labels, (l) => threadTokens(check(l).thread) + estimateTokens(JSON.stringify(check(l).asks)), {
+  const batches = packBatches([...labels], (l) => threadTokens(check(l).thread) + estimateTokens(JSON.stringify(check(l).asks)), {
     maxThreads: Math.min(SETTLE_MAX_PER_CALL, t.maxThreadsPerCall),
     maxInputTokens: t.maxInputTokens,
     overheadTokens: estimateTokens(d.prompt.text) + 200,
   });
-  const r: Pick<SettleEvalReport, 'failed' | 'falseCloses' | 'missedCloses' | 'correct' | 'bySource' | 'byOrigin' | 'tokens'> = { failed: 0, falseCloses: 0, missedCloses: 0, correct: 0, bySource: {}, byOrigin: {}, tokens: 0 };
+  const rows: SettlePredicted[] = [];
+  let failed = 0;
+  let tokens = 0;
   let cost = 0;
   for (const batch of batches) {
     try {
       const out = await d.claude.structured(
         {
           purpose: 'eval',
-          model,
+          model: d.settings.models.triage,
           system: d.prompt.text,
           prompt: render(batch.map(check), d.now()),
           promptVersion: d.prompt.version,
@@ -80,32 +84,44 @@ export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecor
         SettleBatchOutput,
       );
       for (const u of out.usage) {
-        r.tokens += u.inputTokens + u.outputTokens + u.cacheTokens;
+        tokens += u.inputTokens + u.outputTokens + u.cacheTokens;
         cost += u.costEquivalent;
       }
       const byId = new Map(out.value.decisions.map((a) => [a.itemId, a]));
       for (const l of batch) {
         const a = byId.get(l.itemId);
-        if (!a) {
-          r.failed++;
-          continue;
-        }
-        const closes = judge(check(l), a).allSettled;
-        const src = (r.bySource[l.source] ??= { labelCount: 0, correct: 0 });
-        const how = (r.byOrigin[l.origin] ??= { labelCount: 0, correct: 0 });
-        src.labelCount++;
-        how.labelCount++;
-        if (closes === l.settled) {
-          r.correct++;
-          src.correct++;
-          how.correct++;
-        } else if (closes) r.falseCloses++;
-        else r.missedCloses++;
+        if (!a) failed++;
+        else rows.push({ label: l, closes: judge(check(l), a).allSettled });
       }
     } catch (err) {
       if (!(err instanceof ClaudeOutputError)) throw err;
-      r.failed += batch.length; // out of shape twice: counted, not scored
+      failed += batch.length; // out of shape twice: counted, not scored
     }
+  }
+  return { rows, failed, tokens, cost };
+}
+
+/**
+ * Re-runs each item's latest labelled check. Throws ClaudeError when Claude can't be called. The
+ * finish eval (cockpit CK-2.10) is the same over labels/finish.jsonl, with its prompt and `render`.
+ */
+export async function runSettleEval(d: SettleEvalDeps, records: SettleLabelRecord[], render: RenderChecks = renderChecks): Promise<SettleEvalReport> {
+  const labels = latestSettleLabels(records);
+  if (!labels.length) throw new Error('No settle labels yet.');
+  const model = d.settings.models.triage;
+  const { rows, failed, tokens, cost } = await predictSettle(d, labels, render);
+  const r: Pick<SettleEvalReport, 'failed' | 'falseCloses' | 'missedCloses' | 'correct' | 'bySource' | 'byOrigin' | 'tokens'> = { failed, falseCloses: 0, missedCloses: 0, correct: 0, bySource: {}, byOrigin: {}, tokens };
+  for (const { label: l, closes } of rows) {
+    const src = (r.bySource[l.source] ??= { labelCount: 0, correct: 0 });
+    const how = (r.byOrigin[l.origin] ??= { labelCount: 0, correct: 0 });
+    src.labelCount++;
+    how.labelCount++;
+    if (closes === l.settled) {
+      r.correct++;
+      src.correct++;
+      how.correct++;
+    } else if (closes) r.falseCloses++;
+    else r.missedCloses++;
   }
   const at = d.now().toISOString();
   d.logger?.info({ labels: labels.length, ...r }, 'Settle eval finished');

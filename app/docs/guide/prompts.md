@@ -13,8 +13,10 @@ can read and edit them all in [Settings › Prompts](/settings/prompts).
 |---|---|
 | Triage | triage and the eval |
 | Filing policy | triage, sent after the triage prompt: what to file, draft ahead, offer as ready to approve, and suggest as a to-do |
+| Policy tuner | **Propose a better …** in Settings › Learning: how Opus revises a prompt from your labels |
 | Topics | joining pieces into topics, and Regroup |
 | Settle check | closing an item when your reply settles it |
+| Looks finished | suggesting Done when others' messages settled what was asked of you |
 | Draft vault note | vault drafts |
 | Pick Confluence page | the first step of a Confluence draft |
 | Draft Confluence entry | the second step of a Confluence draft |
@@ -51,10 +53,29 @@ Each rule has an ID, and each decision records the rule it applied, so keep a ru
 reword it and give a new rule a new one. Triage sends the policy with every call, so an edit takes
 effect from the next triage.
 
-The policy can also improve from your feedback: **Propose a better policy** in
-[Settings › Learning](/settings/learning) asks Opus for a revision, which shows here, above the
-Filing policy, with what it changes and how it scores. **Apply** saves it; **Dismiss** keeps yours.
-How Opus revises it is the **Policy tuner** prompt. See [Learning](/guide/learning).
+## Proposed changes
+
+Four files can improve from your feedback: **Filing policy**, **Triage**, **Settle check** and
+**Looks finished**. **Propose a better …** in [Settings › Learning](/settings/learning) asks Opus
+for a revision, learned from your labels and scored on labels it never saw. When it is ready, the
+bell says **A … change is proposed**; **Review** opens this page at the file, with a
+**Proposed change** banner above it:
+
+1. Read **the changes**: each one says what it changes, the rule it touches and the misses it
+   fixes.
+2. Compare the **held-out scores, current → proposed**, against the targets. **Scores better** or
+   **Scores no better** sums them up.
+3. Open **Show the changes in the text** to see the lines added and removed.
+4. Choose **Apply** to save the proposed text as the file, or **Dismiss** to keep yours.
+
+Apply saves through the same path as **Save**, so it refuses if the file changed since the
+proposal was made; propose again from the file as it is. To go back after applying, edit the file
+or **Reset to default**.
+
+How Opus revises a prompt is the **Policy tuner** file, with a section for each of the four. Edit
+it to steer what a proposal may touch. Whatever it says, code turns down a proposal that copies a
+thread's words, drops a rule ID without saying so, is over twice as long, loses the file's first
+line, or breaks the answer format. See [Learning](learning.md) for the whole loop.
 
 ## Source changed
 

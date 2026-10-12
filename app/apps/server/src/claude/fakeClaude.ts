@@ -167,7 +167,10 @@ export function fakeClaude(): FakeClaude {
         const m = /<threads>\n([\s\S]*)\n<\/threads>/.exec(prompt);
         const convs = /<conversations>\n([\s\S]*)\n<\/conversations>/.exec(prompt);
         const checks = /<checks>\n([\s\S]*)\n<\/checks>/.exec(prompt);
-        const answer = convs
+        // A tuner request quotes a whole prompt, so it is recognised first.
+        const answer = prompt.startsWith('<policy>')
+          ? tuneFor(prompt)
+          : convs
           ? topicsFor(JSON.parse(convs[1]) as Conversation[])
           : checks
           ? settleFor(JSON.parse(checks[1]) as Check[])
@@ -177,8 +180,6 @@ export function fakeClaude(): FakeClaude {
             ? confluencePickFor(prompt)
             : prompt.includes('<confluence-pages>')
             ? confluenceEntryFor(prompt)
-            : prompt.startsWith('<policy>')
-            ? tuneFor(prompt)
             : prompt.startsWith('<entry>')
               ? { containsPeopleObservations: PEOPLE_RE.test(prompt), reason: PEOPLE_RE.test(prompt) ? 'Describes how a named person works.' : 'Facts only.' }
               : answerFor(m ? (JSON.parse(m[1]) as Thread[]) : []);
@@ -197,12 +198,17 @@ export function fakeClaude(): FakeClaude {
   return fake;
 }
 
-/** A revised filing policy: one rule added under Ready to approve, the version raised. */
+/** A revised prompt, the version raised: the filing policy gains a Ready rule; another loop's prompt a closing line. */
 export function tuneFor(prompt: string) {
   const policy = /^<policy>\n([\s\S]*?)\n<\/policy>/.exec(prompt)?.[1] ?? '';
-  const rule = '- [R9] A decision on a named product, stated as settled by its owner: its Confluence entry.';
-  const revised = policy.replace(/(<!-- prompt: [\w-]+ v)(\d+)/, (_m, a: string, v: string) => `${a}${Number(v) + 1}`).replace('## To-dos', `${rule}\n\n## To-dos`);
-  return { policy: revised, changes: [{ rule: 'R9', kind: 'added', what: 'Settled product decisions from their owner are ready to approve.' }] };
+  const loop = /<loop>(\w+)<\/loop>/.exec(prompt)?.[1] ?? 'filing';
+  const raised = policy.replace(/(<!-- prompt: [\w-]+ v)(\d+)/, (_m, a: string, v: string) => `${a}${Number(v) + 1}`);
+  if (loop === 'filing') {
+    const rule = '- [R9] A decision on a named product, stated as settled by its owner: its Confluence entry.';
+    return { policy: raised.replace('## To-dos', `${rule}\n\n## To-dos`), changes: [{ rule: 'R9', kind: 'added', what: 'Settled product decisions from their owner are ready to approve.' }] };
+  }
+  const line = 'When in doubt between two answers, take the stricter one.';
+  return { policy: `${raised}\n\n${line}`, changes: [{ kind: 'added', what: 'Prefers the stricter answer when the thread leaves it open.' }] };
 }
 
 /** For runs that must never reach Claude: any call fails loudly. */

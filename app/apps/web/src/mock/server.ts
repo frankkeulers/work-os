@@ -21,6 +21,8 @@ import {
   finishChecked,
   budgetsOf,
   buildAttention,
+  LOOP_PROMPT,
+  filingRows,
   lineDiff,
   PROPOSAL_MIN_LABELS,
   buildFiled,
@@ -82,7 +84,11 @@ import {
   type EventData,
   type EvalReport,
   type FilingEvalReport,
+  type LearningLoop,
+  type LearningLoopView,
   type LearningView,
+  type LoopScore,
+  type PolicyChange,
   type PolicyProposal,
   type EventType,
   type HealthView,
@@ -857,20 +863,27 @@ export class MockServer implements WorkOsApi, MockControls {
     };
   }
 
-  /** Settings › Learning (FR-15.10), as the server builds it. */
+  /** Settings › Learning (FR-15.10, FR-15.11), as the server builds it. */
   private learning(): LearningView {
-    const proposal = this.s.proposals?.at(-1);
-    const items = this.s.filingLabelCount ?? 0;
-    const lastEval = this.s.filingEvals?.at(-1);
-    return {
-      filing: {
-        labels: { items, explicit: Math.round(items * 0.4), implicit: items - Math.round(items * 0.4) },
-        newLabels: proposal ? (this.s.filingLabelsSinceProposal ?? 0) : items,
-        ...(lastEval && { lastEval }),
-        evalRunning: !!this.s.filingEvalRunning,
-        proposing: !!this.s.proposing,
+    const loop = (id: LearningLoop, items: number, explicit: number, since: number): LearningLoopView => {
+      const proposal = this.s.proposals?.filter((p) => p.loop === id).at(-1);
+      return {
+        labels: { items, explicit, implicit: items - explicit },
+        newLabels: proposal ? since : items,
+        proposing: !!this.s.proposing?.[id],
         ...(proposal && { proposal }),
-      },
+      };
+    };
+    const filing = this.s.filingLabelCount ?? 0;
+    const lastEval = this.s.filingEvals?.at(-1);
+    const lastTriage = this.s.evals.at(-1);
+    const settle = this.s.settleLabelCount ?? 0;
+    const finish = this.s.finishLabelCount ?? 0;
+    return {
+      filing: { ...loop('filing', filing, Math.round(filing * 0.4), this.s.filingLabelsSinceProposal ?? 0), ...(lastEval && { lastEval }), evalRunning: !!this.s.filingEvalRunning },
+      triage: { ...loop('triage', this.s.labelCount, this.s.labelCount, 0), ...(lastTriage && { lastEval: { id: lastTriage.id, at: lastTriage.at, labelCount: lastTriage.labelCount } }) },
+      settle: loop('settle', settle, 0, 0),
+      finish: loop('finish', finish, finish, 0),
     };
   }
 
@@ -1741,47 +1754,43 @@ export class MockServer implements WorkOsApi, MockControls {
     return [...(this.s.proposals ?? [])].reverse();
   }
 
-  /** Propose a better policy (FR-15.9): after a few seconds, one that adds a ready rule and scores better. */
-  async proposePolicy() {
+  /** The labelled items each loop's proposal learns from (FR-15.9, FR-15.11). */
+  private loopLabelCount(loop: LearningLoop): number {
+    return { filing: this.s.filingLabelCount ?? 0, triage: this.s.labelCount, settle: this.s.settleLabelCount ?? 0, finish: this.s.finishLabelCount ?? 0 }[loop];
+  }
+
+  /** Propose a better … (FR-15.9, FR-15.11): after a few seconds, a revision that scores better on held-out labels. */
+  async proposePolicy(loop: LearningLoop = 'filing') {
     await this.gate(COMMAND_MS);
-    if (this.s.proposing) return;
-    const n = this.s.filingLabelCount ?? 0;
+    if (this.s.proposing?.[loop]) return;
+    const n = this.loopLabelCount(loop);
     if (n < PROPOSAL_MIN_LABELS) throw new ApiError('conflict', `A proposal needs ${PROPOSAL_MIN_LABELS} labelled items to learn from and to test on; there are ${n}.`);
-    this.s.proposing = true;
+    this.s.proposing = { ...this.s.proposing, [loop]: true };
     this.emit({ topic: 'settings' });
     setTimeout(() => {
-      const current = this.promptView('filing-policy');
-      const text = current.text
-        .replace(/filing-policy v(\d+)/, (_m, v: string) => `filing-policy v${Number(v) + 1}`)
-        .replace('## To-dos', '- [R2] A settled decision on a named product, stated in one message by its owner: its Confluence entry.\n\n## To-dos')
-        .replace('ideas, learnings, partner insight, follow-ups worth keeping.', 'ideas, learnings and partner insight worth keeping; not status updates.');
-      const score = (p: number, r: number, n: number) => ({ precision: p, recall: r, support: Math.round(n * 0.6), predicted: Math.round((n * 0.6 * r) / p), n });
+      const promptId = LOOP_PROMPT[loop];
+      const current = this.promptView(promptId);
+      const { text, changes, before, after } = mockRevision(loop, current.text);
       const proposal: PolicyProposal = {
         id: `proposal-${this.iso().replace(/[:.]/g, '-')}`,
         at: this.iso(),
-        loop: 'filing',
-        promptId: 'filing-policy',
+        loop,
+        promptId,
         baseVersion: current.version,
         status: 'open',
         text,
-        changes: [
-          { rule: 'R2', kind: 'added', what: 'Settled product decisions from their owner are ready to approve: you approved six of seven unedited.' },
-          { rule: 'F2', kind: 'changed', what: 'Status updates no longer go to the vault: you closed four without filing them.' },
-        ],
+        changes,
         diff: lineDiff(current.text, text),
         train: Math.round(n * 0.7),
         heldOut: n - Math.round(n * 0.7),
-        scores: {
-          before: { toFile: score(0.78, 0.9, 12), predraft: score(0.7, 0.8, 9), ready: score(0.9, 0.5, 6), todo: score(1, 0.5, 2) },
-          after: { toFile: score(0.86, 0.88, 12), predraft: score(0.8, 0.8, 9), ready: score(0.95, 0.67, 6), todo: score(1, 0.5, 2) },
-        },
+        scores: { before, after },
         better: true,
         model: 'opus-5.5',
-        promptVersion: 'tune-policy v1',
+        promptVersion: 'tune-policy v2',
       };
       this.s.proposals = [...(this.s.proposals ?? []), proposal];
-      this.s.proposing = false;
-      this.s.filingLabelsSinceProposal = 0;
+      this.s.proposing = { ...this.s.proposing, [loop]: false };
+      if (loop === 'filing') this.s.filingLabelsSinceProposal = 0;
       this.emit({ topic: 'settings' }, { topic: 'attention' });
     }, 3000);
   }
@@ -1883,8 +1892,11 @@ export class MockServer implements WorkOsApi, MockControls {
         policyVersion: 'filing-policy v1#mock',
       };
     }
-    // Two weeks of feedback, enough to propose a change (FR-15.9).
+    // Two weeks of feedback, enough to propose a change (FR-15.9): and for the settle check, but
+    // not yet for Looks finished (FR-15.11).
     this.s.filingLabelCount = 24;
+    this.s.settleLabelCount = 14;
+    this.s.finishLabelCount = 6;
     this.emitAll();
   }
 
@@ -2069,6 +2081,46 @@ export class MockServer implements WorkOsApi, MockControls {
 }
 
 /** "<declared name>#<8 hex>", like the server's promptVersion; FNV-1a stands in for sha1. */
+const raise = (text: string) => text.replace(/(<!-- prompt: [\w-]+ v)(\d+)/, (_m, a: string, v: string) => `${a}${Number(v) + 1}`);
+const row = (key: string, label: string, precision: number, recall: number, n: number, target?: number, recallTarget?: number): LoopScore => ({ key, label, precision, recall, n, ...(target !== undefined && { target }), ...(recallTarget !== undefined && { recallTarget }) });
+
+/** What the mock's tuner proposes for each loop (FR-15.9, FR-15.11), with held-out scores that improve. */
+function mockRevision(loop: LearningLoop, current: string): { text: string; changes: PolicyChange[]; before: LoopScore[]; after: LoopScore[] } {
+  const filingScore = (p: number, r: number, n: number) => ({ precision: p, recall: r, support: Math.round(n * 0.6), predicted: Math.round((n * 0.6 * r) / p), n });
+  switch (loop) {
+    case 'filing':
+      return {
+        text: raise(current)
+          .replace('## To-dos', '- [R2] A settled decision on a named product, stated in one message by its owner: its Confluence entry.\n\n## To-dos')
+          .replace('ideas, learnings, partner insight, follow-ups worth keeping.', 'ideas, learnings and partner insight worth keeping; not status updates.'),
+        changes: [
+          { rule: 'R2', kind: 'added', what: 'Settled product decisions from their owner are ready to approve: you approved six of seven unedited.' },
+          { rule: 'F2', kind: 'changed', what: 'Status updates no longer go to the vault: you closed four without filing them.' },
+        ],
+        before: filingRows({ toFile: filingScore(0.78, 0.9, 12), predraft: filingScore(0.7, 0.8, 9), ready: filingScore(0.9, 0.5, 6), todo: filingScore(1, 0.5, 2) }),
+        after: filingRows({ toFile: filingScore(0.86, 0.88, 12), predraft: filingScore(0.8, 0.8, 9), ready: filingScore(0.95, 0.67, 6), todo: filingScore(1, 0.5, 2) }),
+      };
+    case 'triage':
+      return {
+        text: raise(current).replace(
+          '   outcome but someone else has the next move) or "none".',
+          '   outcome but someone else has the next move) or "none". A customer waiting on a decision\n   from Frank before a named date is "today" at least, even when it is asked as a question.',
+        ),
+        changes: [{ kind: 'changed', what: 'A customer waiting on Frank’s decision before a date is at least Today: you corrected nine of these up from None.' }],
+        before: [row('now', 'Now', 0.82, 0.78, 9, 0.8, 0.9), row('today', 'Today', 0.71, 0.8, 20, 0.8), row('follow', 'Follow', 0.67, 0.5, 4), row('none', 'None', 0.9, 0.93, 27)],
+        after: [row('now', 'Now', 0.82, 0.89, 9, 0.8, 0.9), row('today', 'Today', 0.81, 0.85, 20, 0.8), row('follow', 'Follow', 0.67, 0.5, 4), row('none', 'None', 0.94, 0.93, 27)],
+      };
+    case 'settle':
+    case 'finish':
+      return {
+        text: raise(current).replace('Answer with JSON only, no prose.', 'A thank-you that promises to come back to it later settles nothing.\n\nAnswer with JSON only, no prose.'),
+        changes: [{ kind: 'added', what: 'A thank-you that promises a later answer doesn’t settle the ask: you undid three closes like it.' }],
+        before: [row('closes', loop === 'settle' ? 'Closes on your reply' : 'Looks finished', 0.75, 0.86, 7, 0.98), row('stays', loop === 'settle' ? 'Stays open' : 'Not finished', 0.83, 0.71, 7)],
+        after: [row('closes', loop === 'settle' ? 'Closes on your reply' : 'Looks finished', 1, 0.86, 7, 0.98), row('stays', loop === 'settle' ? 'Stays open' : 'Not finished', 0.88, 1, 7)],
+      };
+  }
+}
+
 function promptVersion(text: string): string {
   const name = /^<!--\s*prompt:\s*(.+?)\s*-->/.exec(text)?.[1] ?? 'custom';
   let h = 0x811c9dc5;

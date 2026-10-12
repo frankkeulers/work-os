@@ -196,6 +196,19 @@ describe('buildAttention: a finished filing eval (FR-15.8)', () => {
   });
 });
 
+describe('buildAttention: a proposed change (FR-15.9, FR-15.11)', () => {
+  it('names the loop’s file and links to it in Settings › Prompts', () => {
+    const proposals = [
+      { id: 'p1', at: at(-10), loop: 'filing' as const, promptId: 'filing-policy' as const, better: true },
+      { id: 'p2', at: at(-5), loop: 'settle' as const, promptId: 'settle' as const, better: false },
+    ];
+    expect(buildAttention(input({ proposals })).entries.map((e) => [e.title, e.subject, e.detail, e.to])).toEqual([
+      ['A settle check change is proposed', 'Settle check', 'It scores no better on labels it hasn’t seen.', '/settings/prompts#settle'],
+      ['A filing policy change is proposed', 'Filing policy', 'It scores better on labels it hasn’t seen.', '/settings/prompts#filing-policy'],
+    ]);
+  });
+});
+
 describe('buildAttention: dismissing (FR-11.5)', () => {
   it('hides a dismissed entry; a new occurrence shows again', () => {
     const items = [item('a', { backFromSnooze: true, backAt: at(-3) })];

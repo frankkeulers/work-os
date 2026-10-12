@@ -4,6 +4,7 @@ import type {
   Draft,
   EvalReport,
   FilingEvalReport,
+  LearningLoop,
   PolicyProposal,
   Item,
   ItemFlags,
@@ -136,10 +137,13 @@ export interface MockState {
   /** Filing eval reports (FR-15.8), oldest first. */
   filingEvals?: FilingEvalReport[];
   filingEvalRunning?: boolean;
-  /** Proposed filing policies (FR-15.9), oldest first. */
+  /** Proposed prompt revisions (FR-15.9, FR-15.11), oldest first, and the loops proposing now. */
   proposals?: PolicyProposal[];
-  proposing?: boolean;
+  proposing?: Partial<Record<LearningLoop, boolean>>;
   filingLabelsSinceProposal?: number;
+  /** labels/settle.jsonl and labels/finish.jsonl (cockpit CK-2.6, CK-2.10): labelled items. */
+  settleLabelCount?: number;
+  finishLabelCount?: number;
   settings: Settings;
   rules: Rule[];
   ruleHits: Record<string, number>;

@@ -213,32 +213,54 @@ else owns.
  * Proposing a better filing policy (FR-15.9): Opus reads the policy and where it got Frank's labels
  * wrong, and writes a revision. Code checks the answer and scores it on labels it never saw.
  */
-export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v1 -->
-You improve Frank's filing policy. Frank is Product Innovation Lead at Pole Star Global (maritime
-data, vessel tracking and compliance products). The policy tells a triage model which Slack
-threads, emails and meetings to file to Confluence or his Obsidian vault, which to draft ahead,
-which to offer as ready to approve with one key, and which to suggest as a to-do.
+export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v2 -->
+You improve one of the prompts that run Frank's inbox. Frank is Product Innovation Lead at Pole
+Star Global (maritime data, vessel tracking and compliance products).
 
-You get the current policy in <policy>, how it scored in <scores>, and the labelled items it got
-wrong in <misses>: each with the thread, what Frank's label says and what the policy did. An
-explicit label is Frank's own word; an implicit one was read from what he did (approving a draft as
-it was, discarding one, closing an item without filing it) and is weaker.
+You get the current prompt in <policy>, which loop it belongs to in <loop>, how it scored in
+<scores>, and the labelled items it got wrong in <misses>: each with the thread or check, what
+Frank's label says and what the prompt did. A label Frank gave himself is his own word; one read
+from what he did (approving a draft as it was, undoing a close, pressing Done) is weaker. A score
+over few labels says little.
 
-Write a revised policy that would get more of these right without getting others wrong:
+Write a revised prompt that would get more of these right without getting others wrong:
 - Generalise. Describe kinds of topics, people's roles and situations, never one thread. Don't
   quote the threads: never copy a phrase of eight or more words from them, and leave out names,
   numbers and anything that identifies a customer or a person.
-- Keep the structure: the four sections (To file, Pre-draft, Ready to approve, To-dos), the
-  rule-ID style ([F1], [P1], [R1], [T1]) and the intro lines.
-- Keep every rule's ID when you reword it. Give a new rule the next free ID in its section. Remove
-  a rule only when the misses show it does harm, and list the removal.
-- Ready to approve and To-dos must stay strict: precision matters more than coverage there.
+- Keep the structure: the headings, any rule IDs such as [F1] or [R1], and the intro lines. Keep
+  every rule's ID when you reword it; give a new rule the next free ID in its section. Remove a rule
+  only when the misses show it does harm, and list the removal.
+- Leave the answer format alone: the JSON it asks for, its field names and their meanings. Code
+  reads that answer, and a prompt that breaks it is turned down.
 - Change as little as the misses call for. Keep it about as long as it is now.
 
+## When <loop> is filing
+The prompt is the filing policy: which threads, emails and meetings to file to Confluence or the
+Obsidian vault, which to draft ahead, which to offer as ready to approve with one key, and which to
+suggest as a to-do. Keep its four sections (To file, Pre-draft, Ready to approve, To-dos) and the
+rule-ID style ([F1], [P1], [R1], [T1]). Ready to approve and To-dos must stay strict: precision
+matters more than coverage there.
+
+## When <loop> is triage
+The prompt is the triage prompt. Revise only what it says about attention: when a topic is Now,
+Today, Follow or None. Leave the summary, open asks, filing and to-do parts as they are; the filing
+policy is a separate file. Missing something urgent is worse than one item too many in Now.
+
+## When <loop> is settle
+The prompt decides whether Frank's own reply settles what a thread asked of him, so the item can
+close by itself. A wrong close hides something he still owes, so closing must stay strict: when in
+doubt, the ask is not settled.
+
+## When <loop> is finish
+The prompt decides whether later messages, by anyone, settled what a topic asked of Frank, so it
+can be suggested as finished. A wrong suggestion costs him a look; a hand-on that leaves him owning
+the outcome is not settled.
+
 Answer with JSON only:
-{"policy": "<the full revised policy, starting with the same <!-- prompt: ... --> line with its
+{"policy": "<the full revised prompt, starting with the same <!-- prompt: ... --> line with its
 version number raised by one>", "changes": [{"rule": "R2", "kind": "added" | "changed" |
 "removed", "what": "<one sentence on what changed and which misses it fixes>"}]}
+Leave out "rule" when the prompt has no rule IDs.
 `;
 
 /** The triage system prompt: the base prompt, then the filing policy (FR-15.1). */

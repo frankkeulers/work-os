@@ -57,6 +57,23 @@ describe('inbox commands', () => {
     expect(err).toMatchObject({ status: 409, message: 'This item has nothing to file.' });
   });
 
+  it('proposes for each loop from its own labels: the triage prompt now, not Looks finished yet (FR-15.11)', async () => {
+    server.applyFilingPolicy();
+    const few = (await settle(server.proposePolicy('finish').catch((e) => e))) as ApiError;
+    expect(few).toMatchObject({ status: 409, message: 'A proposal needs 10 labelled items to learn from and to test on; there are 6.' });
+    await settle(server.proposePolicy('triage'));
+    expect((await settle(server.getSettings())).learning?.triage?.proposing).toBe(true);
+    await run(3000);
+    const [p] = await settle(server.getProposals());
+    expect(p).toMatchObject({ loop: 'triage', promptId: 'triage', status: 'open', better: true });
+    expect(p.scores?.after.find((r) => r.key === 'now')).toMatchObject({ recall: 0.89, recallTarget: 0.9 });
+    const learning = (await settle(server.getSettings())).learning!;
+    expect(learning.triage?.proposal?.id).toBe(p.id);
+    expect(learning.filing.proposal).toBeUndefined();
+    expect((await settle(server.getAttention())).entries.find((e) => e.kind === 'policy_proposed')).toMatchObject({ title: 'A triage prompt change is proposed', to: '/settings/prompts#triage' });
+    expect((await settle(server.applyProposal(p.id))).version).toMatch(/^triage v11#/);
+  });
+
   it('proposes a better filing policy once there are labels, and applies it as a prompt edit (FR-15.9)', async () => {
     const tooFew = (await settle(server.proposePolicy().catch((e) => e))) as ApiError;
     expect(tooFew).toMatchObject({ status: 409, message: 'A proposal needs 10 labelled items to learn from and to test on; there are 0.' });

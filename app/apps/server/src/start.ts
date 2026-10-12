@@ -45,7 +45,7 @@ import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
 import { EarlierMessages } from './sources/slack/earlier';
 import { createServer, type WorkOsServer } from './server';
-import { budgetsOf, filingSettings, sourceSchedule, type FilingEvalReport, type Item, type PolicyProposal, type SourceId } from '@work-os/shared';
+import { LOOP_PROMPT, budgetsOf, filingSettings, sourceSchedule, type FilingEvalReport, type Item, type LearningLoop, type PolicyProposal, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
 import { loadPromptFile, loadTriagePrompt, PROMPT_FILES } from './claude/promptFiles';
@@ -60,13 +60,15 @@ import { runFinish } from './pipeline/finish';
 import { runSettle, settleCheckOf, type SettleDeps } from './pipeline/settle';
 import { confirmTriage, correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
-import { LabelStore } from './store/labels';
-import { SettleLabelStore } from './store/settleLabels';
+import { LabelStore, latestLabels } from './store/labels';
+import { SettleLabelStore, latestSettleLabels } from './store/settleLabels';
 import { FilingLabelStore, mergeFilingLabels, type MergedFilingLabel } from './store/filingLabels';
 import { listFilingReports, runFilingEval, saveFilingReport } from './pipeline/evalFiling';
+import { checkLoop } from './learning/checkLoop';
 import { filingLoop } from './learning/filingLoop';
+import { triageLoop } from './learning/triageLoop';
 import { ProposalStore } from './learning/proposals';
-import { propose } from './learning/tuner';
+import { propose, type LoopAdapter, type ProposalRunner } from './learning/tuner';
 import { FilingFeedback } from './pipeline/filingFeedback';
 import { DraftStore } from './store/drafts';
 import { ActionService } from './actions/service';
@@ -122,7 +124,7 @@ export type RunResult =
       labels: LabelStore;
       evals: Evals;
       filingEvals: Evals<MergedFilingLabel, FilingEvalReport>;
-      proposing: Evals<MergedFilingLabel, PolicyProposal>;
+      proposing: Record<LearningLoop, ProposalRunner>;
       proposals: ProposalStore;
       filingLabels: FilingLabelStore;
       actions: ActionService;
@@ -371,24 +373,32 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     },
   });
   lifecycle.onStop('filing-evals', () => filingEvals.stop());
-  // Proposals (FR-15.9): Opus revises the filing policy from its misses, on Frank's request only.
+  // Proposals (FR-15.9, FR-15.11): Opus revises a loop's prompt from its misses, on Frank's request
+  // only: the filing policy, the triage prompt's attention, and the settle and finish checks.
   const proposals = new ProposalStore(paths(config.dataDir).proposals);
-  const proposing = await Evals.open<MergedFilingLabel, PolicyProposal>({
-    logsDir: proposals.dir,
-    labels: async () => mergeFilingLabels(await filingLabels.all()),
-    logger,
-    reports: { save: async (_dir, p) => (await proposals.save(p), p.id), list: () => proposals.list() },
-    run: async (merged, signal) => {
-      const loop = filingLoop({ claude, settings: () => settings.editable.settings, base: () => loadPromptFile(config.dataDir, 'triage'), now, logger });
-      try {
-        return await propose({ claude, now, policy: () => loadPromptFile(config.dataDir, 'filing-policy'), prompt: () => loadPromptFile(config.dataDir, 'tune-policy'), signal, logger }, loop, merged);
-      } catch (err) {
-        if (err instanceof ClaudeError) await runtime.reportFailure('claude', err.failure);
-        throw err;
-      }
-    },
-  });
-  lifecycle.onStop('proposing', () => proposing.stop());
+  const proposalRun = <L>(loop: LearningLoop, labelsOf: () => Promise<L[]>, adapter: () => LoopAdapter<L>) =>
+    Evals.open<L, PolicyProposal>({
+      logsDir: proposals.dir,
+      labels: labelsOf,
+      logger,
+      reports: { save: async (_dir, p) => (await proposals.save(p), p.id), list: async () => (await proposals.list()).filter((p) => p.loop === loop) },
+      run: async (ls, signal) => {
+        try {
+          return await propose({ claude, now, policy: () => loadPromptFile(config.dataDir, LOOP_PROMPT[loop]), prompt: () => loadPromptFile(config.dataDir, 'tune-policy'), signal, logger }, adapter(), ls);
+        } catch (err) {
+          if (err instanceof ClaudeError) await runtime.reportFailure('claude', err.failure);
+          throw err;
+        }
+      },
+    });
+  const loopDeps = { claude, settings: () => settings.editable.settings, now, logger };
+  const proposing: Record<LearningLoop, ProposalRunner> = {
+    filing: await proposalRun('filing', async () => mergeFilingLabels(await filingLabels.all()), () => filingLoop({ ...loopDeps, base: () => loadPromptFile(config.dataDir, 'triage') })),
+    triage: await proposalRun('triage', async () => latestLabels(await labels.all()), () => triageLoop({ ...loopDeps, filingPolicy: () => loadPromptFile(config.dataDir, 'filing-policy') })),
+    settle: await proposalRun('settle', async () => latestSettleLabels(await settleLabels.all()), () => checkLoop('settle', loopDeps)),
+    finish: await proposalRun('finish', async () => latestSettleLabels(await finishLabels.all()), () => checkLoop('finish', loopDeps)),
+  };
+  lifecycle.onStop('proposing', () => Promise.all(Object.values(proposing).map((r) => r.stop())).then(() => undefined));
   // Actions (M3): drafted when Claude may be called, written by the outbox after approval.
   let publish: (n: Notice) => void = () => undefined; // the SSE hub, once the server exists
   const drafts = new DraftStore(join(config.dataDir, 'drafts'));

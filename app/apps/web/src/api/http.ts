@@ -1,4 +1,4 @@
-import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, FilingFeedbackBody, GuideFilesView, EarlierView, EvalReport, FilingEvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PolicyProposal, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, FilingFeedbackBody, GuideFilesView, EarlierView, EvalReport, FilingEvalReport, HealthView, InboxView, ItemView, LearningLoop, Notice, OutlookStatusView, PersonOption, PolicyProposal, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -189,7 +189,7 @@ export class HttpApi implements WorkOsApi {
   runEval = () => this.post('/api/evals');
   runFilingEval = () => this.post('/api/filing-evals');
   getProposals = () => this.get<PolicyProposal[]>('/api/proposals');
-  proposePolicy = () => this.post('/api/learning/filing/propose');
+  proposePolicy = (loop: LearningLoop = 'filing') => this.post(`/api/learning/${loop}/propose`);
   applyProposal = (id: string) => this.post<PromptFileView>(`/api/proposals/${encodeURIComponent(id)}/apply`);
   dismissProposal = (id: string) => this.post(`/api/proposals/${encodeURIComponent(id)}/dismiss`);
   rebuildState = () => this.post<{ events: number }>('/api/admin/rebuild-state', undefined, SLOW_MS);

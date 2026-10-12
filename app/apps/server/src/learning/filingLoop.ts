@@ -1,4 +1,4 @@
-import { FILING_EVAL_MIN_LABELS, policyScore, type FilingScores, type Settings } from '@work-os/shared';
+import { filingRows, type Settings } from '@work-os/shared';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { triageSystem, type Prompt } from '../claude/prompts';
 import type { Logger } from '../log';
@@ -10,7 +10,6 @@ import type { LoopAdapter } from './tuner';
 // labelled item it got wrong becomes a miss: the thread, what the label says and what the policy did.
 
 const FIELD = { toFile: 'to file', predraft: 'draft ahead', ready: 'ready to approve' } as const;
-const NAME = { toFile: 'To file', predraft: 'Pre-draft', ready: 'Ready to approve', todo: 'To-do suggestion' } as const;
 
 const said = (v: LabelValue) => `${v.value ? 'yes' : 'no'} (${v.origin === 'explicit' ? 'Frank said so' : `read from: ${v.signal.replace('_', ' ')}`})`;
 
@@ -29,16 +28,6 @@ export function filingMiss(row: FilingScored): object | undefined {
   return wrong.length ? { thread: row.label.thread, wrong } : undefined;
 }
 
-export function describeFiling(s: FilingScores): string {
-  const pct = (v: number) => `${Math.round(v * 100)}%`;
-  return (Object.keys(NAME) as (keyof FilingScores)[])
-    .map((k) => {
-      const d = s[k];
-      return d.n ? `${NAME[k]}: precision ${pct(d.precision)}, recall ${pct(d.recall)} over ${d.n} labels${d.n < FILING_EVAL_MIN_LABELS ? ' (too few to count yet)' : ''}` : `${NAME[k]}: no labels`;
-    })
-    .join('\n');
-}
-
 export function filingLoop(d: { claude: ClaudeAdapter; settings: () => Settings; base: () => Promise<Prompt>; now: () => Date; logger?: Logger }): LoopAdapter<MergedFilingLabel> {
   return {
     loop: 'filing',
@@ -46,10 +35,8 @@ export function filingLoop(d: { claude: ClaudeAdapter; settings: () => Settings;
     itemId: (l) => l.itemId,
     texts: (l) => l.thread.messages.map((m) => m.text),
     evaluate: async (policy, labels, signal) => {
-      const { rows, tokens, cost } = await predictFiling({ claude: d.claude, settings: d.settings(), prompt: triageSystem(await d.base(), policy), now: d.now, signal, logger: d.logger }, labels);
-      return { scores: scoreFiling(rows), misses: rows.map(filingMiss).filter((m) => !!m), tokens, cost };
+      const { rows, failed, tokens, cost } = await predictFiling({ claude: d.claude, settings: d.settings(), prompt: triageSystem(await d.base(), policy), now: d.now, signal, logger: d.logger }, labels);
+      return { scores: filingRows(scoreFiling(rows)), misses: rows.map(filingMiss).filter((m) => !!m), failed, tokens, cost };
     },
-    summary: policyScore,
-    describe: describeFiling,
   };
 }

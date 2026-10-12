@@ -138,8 +138,10 @@ your own elsewhere in the conversation that Work OS groups into the item's topic
 channel message telling someone the fix is in.
 
 - **Settled:** the item closes by itself and goes to Done. If the check got it wrong, reopen it
-  from Done. Each reopen is kept as a label, as corrections are for triage, so a change to the
-  settle prompt can be measured (`npm run eval -- --purpose settle`, once there are 30).
+  from Done, or press **Undo** on the toast. Each reopen is kept as a label, as corrections are
+  for triage, so a change to the settle prompt can be measured (`npm run eval -- --purpose
+  settle`, once there are 30), and, from 10 labelled items, **Propose a better settle check** in
+  [Settings › Learning](/settings/learning) can suggest one (see [Learning](learning.md)).
 - **Done by you, after a reply that settled it:** when you answered an item and then pressed
   Done yourself, because no check ran (Outlook replies are unchecked by default) or the check
   said not settled, that Done is kept as a label too: a close the check should have made. Nothing
@@ -161,7 +163,9 @@ asked. If they did, the row says **Looks finished**, with why, and stays where i
 - **Not finished** in the panel keeps it in Today and keeps a label that it was wrong.
 
 Nothing closes by itself yet. Once there are 30 labels, `npm run eval -- --purpose finish`
-measures how often the suggestion is wrong. Turn it off per source in
+measures how often the suggestion is wrong, and from 10, **Propose a better Looks finished check**
+in [Settings › Learning](/settings/learning) can suggest a change to its prompt (see
+[Learning](learning.md)). Turn it off per source in
 [Settings › Triage rules](/settings/rules) › When others settle it.
 
 What you see when a reply closes an item:
@@ -372,35 +376,50 @@ It is offered for decisions by the model or a rule on the thread as it is now, n
 corrections or while new messages wait to be triaged. A later correction replaces it.
 
 The eval needs labels to run. Aim for about 30 before reading much into it, a mix of corrections
-and confirmations, from both Slack and Outlook if you use both.
+and confirmations, from both Slack and Outlook if you use both. From 10 labelled items,
+**Propose a better triage prompt** in [Settings › Learning](/settings/learning) asks Opus to revise
+what the triage prompt says about attention, from the items it got wrong; you review the change
+before it applies. See [Learning](learning.md).
 
 ### Feedback on filing
 
-Your filing policy decides what goes to To file, what is drafted ahead and what is ready to
-approve. **Filing…** beside the decision tells it where it was wrong:
+Your [filing policy](prompts.md#the-filing-policy) decides what goes to To file, what is drafted
+ahead and what is ready to approve. When it got an item wrong:
 
-- **Not for filing** takes the item out of To file, as a correction does.
-- Per filing (**Vault note** or **Confluence entry**, with the rule that applied):
-  **Don't draft items like this ahead**, and **Should** or **Shouldn't be ready to approve**.
-  These teach the policy and move the item at once: **Should be ready** puts it in Ready to
-  approve and drafts it ahead, **Shouldn't be ready** puts it back with the other filings (a draft
-  already made stays), and **Don't draft ahead** stops a draft being made until you press `f` or
-  `v`. Your word on the item holds until new messages bring a new triage.
-- **Should be filed to the vault** or **to Confluence** for a filing triage didn't suggest.
+1. Open the item.
+2. Click **Filing…** beside the decision. The menu lists each filing triage suggested (**Vault
+   note**, **Confluence entry**), with the rule that applied, such as **Vault note · R1**.
+3. Choose what was wrong. A toast confirms it, and the item moves at once.
 
-What you do counts too, as a weaker signal: approving a draft as it was says it could have been
-ready to approve; approving it after an edit says drafting ahead was right but it wasn't ready;
-discarding one (not re-drafting it) says it wasn't worth drafting ahead; **Done** on an item in To
-file with nothing filed says it didn't belong there; adding or dismissing a suggested to-do says
-whether it was right. A correction that turns a filing on or off, and **Triage was right**, count
-as your word. Where you've said something yourself, it wins over what your actions suggest.
+| Choice | Shown | What happens to the item |
+|---|---|---|
+| **Not for filing** | when triage suggested a filing | It leaves To file, as a correction does |
+| **Don't draft items like this ahead** | per filing, when it is drafted ahead | No draft starts until you press `f` or `v`; it leaves Ready to approve |
+| **Should be ready to approve** | per filing, when it isn't ready | It joins Ready to approve and is drafted ahead |
+| **Shouldn't be ready to approve** | per filing, when it is ready | It goes back with the other filings; a draft already made stays |
+| **Should be filed to the vault** / **to Confluence** | for a filing triage didn't suggest | The filing is added, as a correction does |
 
-These are kept, with the thread, as filing labels. Nothing changes the policy on its own: the
-filing eval scores the policy against them, and a proposed change waits for you to apply it (see
-[Learning](/guide/learning)).
-Run the filing eval with `npm run eval -- --purpose filing` while Work OS is stopped. It reports
-precision and recall for To file, pre-draft, ready and to-dos, from your word and from your
-actions separately; a field's score counts once it has 30 labels.
+Your word on the item holds until new messages bring a new triage, which decides afresh. The
+switches in [Settings › Learning](/settings/learning) still apply: with Ready to approve off,
+**Should be ready** labels the item but it stays with the other filings.
+
+What you do counts too, as a weaker signal, with nothing to press:
+
+- approving a draft as it was says it could have been ready to approve;
+- approving it after an edit says drafting ahead was right but it wasn't ready;
+- discarding one (not re-drafting it) says it wasn't worth drafting ahead;
+- **Done** on an item in To file with nothing filed says it didn't belong there;
+- adding or dismissing a suggested to-do says whether it was right.
+
+A correction that turns a filing on or off, and **Triage was right**, count as your word. Where
+you've said something yourself, it wins over what your actions suggest.
+
+These are kept, with the thread, as filing labels. Nothing changes the policy on its own:
+**Run filing eval** in [Settings › Learning](/settings/learning) scores the policy against them,
+and **Propose a better policy** there suggests a change that waits for you to apply it. See
+[Learning](learning.md) for both, step by step. From the command line, with Work OS stopped,
+`npm run eval -- --purpose filing` runs the same eval and reports your word and your actions
+separately.
 
 ## Keeping it open
 

@@ -1,17 +1,18 @@
 import { createHash } from 'node:crypto';
-import { PolicyChange, PolicyProposal, lineDiff, type FilingScores, type ModelId, type PromptFileId } from '@work-os/shared';
+import { PolicyChange, PolicyProposal, lineDiff, loopScore, type LoopScore, type ModelId, type PromptFileId } from '@work-os/shared';
 import { z } from 'zod';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeOutputError } from '../claude/errors';
 import { promptVersion, type Prompt } from '../claude/prompts';
 import type { Logger } from '../log';
 import { DEADLINES } from '../net/http';
+import type { Evals } from '../pipeline/eval';
 
-// The tuner (E14, FR-15.9): one loop's labels split by item, the current policy scored on the part
-// it learns from, Opus asked for a revision from the misses, code's checks on the answer, and both
-// policies scored on the part held out. The result is a proposal; nothing is applied here. Each
-// loop plugs in with an adapter: filing first (filingLoop.ts), triage attention, settle and
-// finish later (FR-15.11).
+// The tuner (E14, FR-15.9, FR-15.11): one loop's labels split by item, the current prompt scored on
+// the part it learns from, Opus asked for a revision from the misses, code's checks on the answer,
+// and both prompts scored on the part held out. The result is a proposal; nothing is applied here.
+// Each loop plugs in with an adapter: the filing policy (filingLoop.ts), triage attention
+// (triageLoop.ts), and the settle and finish checks (checkLoop.ts).
 
 export const TUNE_MODEL: ModelId = 'opus-5.5';
 /** Of every ten items, how many are held out to score on. */
@@ -22,9 +23,11 @@ export const MAX_MISSES = 40;
 export const COPY_RUN = 8;
 
 export interface Evaluation {
-  scores: FilingScores;
+  scores: LoopScore[];
   /** What the policy got wrong, one entry per item, as the tuner shows them. */
   misses: unknown[];
+  /** Items the model gave no usable answer for: the prompt broke the answer format. */
+  failed: number;
   tokens: number;
   cost: number;
 }
@@ -38,11 +41,10 @@ export interface LoopAdapter<L> {
   texts(l: L): string[];
   /** Scores a policy text on some labels. Throws ClaudeError when Claude can't be called. */
   evaluate(policy: Prompt, labels: L[], signal?: AbortSignal): Promise<Evaluation>;
-  /** One number to compare policies by. */
-  summary(s: FilingScores): number;
-  /** The scores as the tuner reads them. */
-  describe(s: FilingScores): string;
 }
+
+/** A loop's "Propose a better …" run, as routes and views see it (an `Evals` over its labels). */
+export type ProposalRunner = Pick<Evals<unknown, PolicyProposal>, 'running' | 'last' | 'start' | 'settled' | 'stop' | 'onChange'>;
 
 export interface TunerDeps {
   claude: ClaudeAdapter;
@@ -79,8 +81,12 @@ export function copiedRun(text: string, sources: readonly string[], current: str
 
 export const ruleIds = (t: string) => new Set([...t.matchAll(/\[([A-Z]{1,3}\d{1,3})\]/g)].map((m) => m[1]));
 
+const HEADER_RE = /^<!-- prompt: ([\w-]+) v\d+ -->/;
+
 /** Why code turns a proposal down, or nothing. */
 export function guard(current: string, proposed: string, changes: readonly PolicyChange[], sources: readonly string[]): string | undefined {
+  const id = HEADER_RE.exec(current.trimStart())?.[1];
+  if (id && HEADER_RE.exec(proposed.trimStart())?.[1] !== id) return `It doesn’t start with the file’s own line, <!-- prompt: ${id} vN -->.`;
   if (proposed.length > 2 * current.length) return `It is over twice the length of the current policy (${proposed.length} characters against ${current.length}).`;
   const kept = ruleIds(proposed);
   const removed = new Set(changes.filter((c) => c.kind === 'removed' && c.rule).map((c) => c.rule));
@@ -91,11 +97,22 @@ export function guard(current: string, proposed: string, changes: readonly Polic
   return undefined;
 }
 
-export function renderTune(policy: string, scores: string, misses: readonly unknown[]): string {
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+/** The scores as the tuner reads them, one row a line. */
+export function describeScores(rows: readonly LoopScore[]): string {
+  return rows
+    .map((r) => (r.n ? `${r.label}: precision ${pct(r.precision)}, recall ${pct(r.recall)} over ${r.n} labels${r.target !== undefined ? `; target precision ${pct(r.target)}` : ''}${r.recallTarget !== undefined ? `; target recall ${pct(r.recallTarget)}` : ''}` : `${r.label}: no labels`))
+    .join('\n');
+}
+
+export function renderTune(loop: PolicyProposal['loop'], policy: string, scores: string, misses: readonly unknown[]): string {
   return [
     '<policy>',
     policy,
     '</policy>',
+    '',
+    `<loop>${loop}</loop>`,
     '',
     '<scores>',
     scores,
@@ -133,7 +150,7 @@ export async function propose<L>(d: TunerDeps, a: LoopAdapter<L>, labels: readon
         purpose: 'tune',
         model: TUNE_MODEL,
         system: tune.text,
-        prompt: renderTune(current.text, a.describe(learned.scores), misses),
+        prompt: renderTune(a.loop, current.text, describeScores(learned.scores), misses),
         promptVersion: tune.version,
         timeoutMs: DEADLINES.draft,
         signal: d.signal,
@@ -154,6 +171,12 @@ export async function propose<L>(d: TunerDeps, a: LoopAdapter<L>, labels: readon
   }
   const before = await a.evaluate(current, held, d.signal);
   const after = await a.evaluate({ text, version: promptVersion(text) }, held, d.signal);
+  // Scores alone would hide it: an item with no usable answer isn't scored at all.
+  if (after.failed > before.failed) {
+    const broke = `It breaks the answer format: ${after.failed - before.failed} held-out item(s) got no usable answer that the current prompt answers.`;
+    d.logger?.info({ loop: a.loop, why: broke }, 'Policy proposal rejected');
+    return PolicyProposal.parse({ ...base, status: 'rejected', rejected: broke, changes: [] });
+  }
   return PolicyProposal.parse({
     ...base,
     status: 'open',
@@ -161,6 +184,6 @@ export async function propose<L>(d: TunerDeps, a: LoopAdapter<L>, labels: readon
     changes: answer.changes,
     diff: lineDiff(current.text, text),
     scores: { before: before.scores, after: after.scores },
-    better: a.summary(after.scores) > a.summary(before.scores),
+    better: loopScore(after.scores) > loopScore(before.scores),
   });
 }

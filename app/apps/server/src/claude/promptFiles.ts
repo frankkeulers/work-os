@@ -46,10 +46,10 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     id: 'tune-policy',
     file: 'prompts/tune-policy.md',
     label: 'Policy tuner',
-    description: 'How Opus revises the filing policy from the labels it got wrong. Its proposals wait in Settings › Prompts for you to apply.',
-    usedBy: 'Propose a better policy, in Settings › Learning',
+    description: 'How Opus revises a prompt from the labels it got wrong: the filing policy, triage attention, and the settle and Looks finished checks. Its proposals wait in Settings › Prompts for you to apply.',
+    usedBy: 'Propose a better …, in Settings › Learning',
     defaultText: DEFAULT_TUNE_POLICY,
-    previousDefaults: [],
+    previousDefaults: ['0db5452e381dcd7c632bba98044956f6bea28730'], // tune-policy v1
   },
   {
     id: 'topics',

@@ -1343,7 +1343,7 @@ describe('policy proposals (FR-15.9)', () => {
   const proposals = async () => (await call<PolicyProposal[]>('GET', '/api/proposals')).body;
   const run = async () => {
     expect((await call('POST', '/api/learning/filing/propose')).status).toBe(202);
-    await res.proposing.settled();
+    await res.proposing.filing.settled();
     return (await proposals())[0];
   };
 
@@ -1361,13 +1361,13 @@ describe('policy proposals (FR-15.9)', () => {
     expect(p.train + p.heldOut).toBe(12);
     expect(p.text).toMatch(/^<!-- prompt: filing-policy v2 -->/);
     expect(p.diff?.filter((d) => d.op === 'add').map((d) => d.text)).toContain('- [R9] A decision on a named product, stated as settled by its owner: its Confluence entry.');
-    expect(p.scores?.before.toFile).toBeDefined();
+    expect(p.scores?.before.map((r) => r.key)).toEqual(['toFile', 'predraft', 'ready', 'todo']);
     expect(claude.calls.at(-3)!.prompt).toMatch(/^<policy>\n<!-- prompt: filing-policy v1 -->/);
     // Learning shows it, and the bell offers it.
     const learning = (await call<SettingsView>('GET', '/api/settings')).body.learning!.filing;
     expect(learning).toMatchObject({ labels: { items: 12, explicit: 12, implicit: 0 }, newLabels: 0, proposing: false, proposal: { id: p.id, status: 'open' } });
     const bell = (await call<AttentionView>('GET', '/api/attention')).body.entries.find((e) => e.kind === 'policy_proposed');
-    expect(bell).toMatchObject({ key: `policy_proposed:${p.id}`, to: '/settings/prompts#filing-policy', cta: 'Review' });
+    expect(bell).toMatchObject({ key: `policy_proposed:${p.id}`, title: 'A filing policy change is proposed', subject: 'Filing policy', to: '/settings/prompts#filing-policy', cta: 'Review' });
 
     const seen: string[] = [];
     res.store.subscribe((es) => seen.push(...es.filter((e) => e.type === 'prompt.changed').map((e) => JSON.stringify(e.data))));
@@ -1396,6 +1396,66 @@ describe('policy proposals (FR-15.9)', () => {
     expect((await call('POST', `/api/proposals/${p.id}/dismiss`)).status).toBe(204);
     expect((await proposals())[0]).toMatchObject({ status: 'dismissed' });
     expect(await readFile(join(dir, 'config/prompts/filing-policy.md'), 'utf8')).toContain('[T3] Mine.');
+  });
+});
+
+describe('proposals for the triage, settle and finish prompts (FR-15.11)', () => {
+  const thread = (id: string, text: string) => ({ id, kind: 'thread' as const, title: '#synthetic', messages: [{ author: 'Sam', at: new Date(START).toISOString(), text }], omitted: 0 });
+  const proposals = async () => (await call<PolicyProposal[]>('GET', '/api/proposals')).body;
+
+  it('revises the triage prompt from the attention it got wrong, with the filing policy sent as it is', async () => {
+    // Twelve threads Frank corrected to Now that triage leaves in None.
+    for (let i = 0; i < 12; i++) {
+      const id = `slack:C09SYN:${1791000000 + i}.000100`;
+      await res.labels.append({ at: new Date(START).toISOString(), origin: 'correction', itemId: id, itemRevision: 1, source: 'slack', label: { attention: 'now', confluence: false, vault: false }, thread: thread(id, `Launch plan number ${i} for the synthetic product`) });
+    }
+    expect((await call('POST', '/api/learning/triage/propose')).status).toBe(202);
+    await res.proposing.triage.settled();
+    const [p] = await proposals();
+    expect(p).toMatchObject({ status: 'open', loop: 'triage', promptId: 'triage', better: expect.any(Boolean) });
+    expect(p.text).toMatch(/^<!-- prompt: triage v11 -->[\s\S]*When in doubt between two answers, take the stricter one\.$/);
+    expect(p.scores?.before.map((r) => [r.key, r.target, r.recallTarget])).toEqual([
+      ['now', 0.8, 0.9],
+      ['today', 0.8, undefined],
+      ['follow', undefined, undefined],
+      ['none', undefined, undefined],
+    ]);
+    const tune = claude.calls.find((c) => c.prompt.startsWith('<policy>'))!;
+    expect(tune.prompt).toContain('<loop>triage</loop>');
+    expect(tune.prompt).toContain('attention: label now (Frank corrected it); the prompt said none');
+    // The held-out scoring sends the proposed triage prompt with the filing policy as it is.
+    expect(claude.calls.at(-1)!.system).toMatch(/When in doubt between two answers[\s\S]*<filing-policy>\n<!-- prompt: filing-policy v1 -->/);
+    const learning = (await call<SettingsView>('GET', '/api/settings')).body.learning!;
+    expect(learning.triage).toMatchObject({ labels: { items: 12, explicit: 12, implicit: 0 }, newLabels: 0, proposing: false, proposal: { id: p.id } });
+    expect(learning.filing.proposal).toBeUndefined();
+    const bell = (await call<AttentionView>('GET', '/api/attention')).body.entries.find((e) => e.kind === 'policy_proposed');
+    expect(bell).toMatchObject({ title: 'A triage prompt change is proposed', subject: 'Triage', to: '/settings/prompts#triage' });
+    const applied = await call<PromptFileView>('POST', `/api/proposals/${p.id}/apply`);
+    expect(applied.body.version).toMatch(/^triage v11#/);
+  });
+
+  it('revises the settle check from closes Frank undid; the finish loop has its own labels', async () => {
+    const lines = Array.from({ length: 12 }, (_, i) => {
+      const id = `slack:C09SYN:${1791000000 + i}.000100`;
+      const check = { itemId: id, itemRevision: 2, thread: thread(id, `Can you approve plan ${i}?`), asks: [{ index: 0, need: 'decide', step: `Approve plan ${i}` }], reply: [{ at: new Date(START).toISOString(), text: 'Approved, go ahead.' }] };
+      return JSON.stringify({ at: new Date(START).toISOString(), origin: 'undo', itemId: id, itemRevision: 2, source: 'slack', settled: false, check });
+    });
+    await writeFile(join(dir, 'labels/settle.jsonl'), `${lines.join('\n')}\n`);
+    const none = await call<ApiErrorBody>('POST', '/api/learning/finish/propose');
+    expect(none.status).toBe(409);
+    expect(none.body.message).toBe('A proposal needs 10 labelled items to learn from and to test on; there are 0.');
+    expect((await call('POST', '/api/learning/nope/propose')).status).toBe(404);
+
+    expect((await call('POST', '/api/learning/settle/propose')).status).toBe(202);
+    await res.proposing.settle.settled();
+    const [p] = await proposals();
+    expect(p).toMatchObject({ loop: 'settle', promptId: 'settle', status: 'open' });
+    expect(p.scores?.before).toEqual([
+      expect.objectContaining({ key: 'closes', label: 'Closes on your reply', target: 0.98 }),
+      expect.objectContaining({ key: 'stays', label: 'Stays open', n: p.heldOut }),
+    ]);
+    expect(claude.calls.find((c) => c.prompt.startsWith('<policy>'))!.prompt).toContain('(Frank undid the close); the prompt said settled, so it closes');
+    expect((await call<SettingsView>('GET', '/api/settings')).body.learning!.settle).toMatchObject({ labels: { items: 12, explicit: 0, implicit: 12 }, proposal: { id: p.id } });
   });
 });
 

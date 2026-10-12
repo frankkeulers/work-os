@@ -60,13 +60,23 @@ Answer with JSON only, no prose.`,
   {
     id: 'tune-policy',
     label: 'Policy tuner',
-    description: 'How Opus revises the filing policy from the labels it got wrong. Its proposals wait in Settings › Prompts for you to apply.',
-    usedBy: 'Propose a better policy, in Settings › Learning',
+    description: 'How Opus revises a prompt from the labels it got wrong: the filing policy, triage attention, and the settle and Looks finished checks. Its proposals wait in Settings › Prompts for you to apply.',
+    usedBy: 'Propose a better …, in Settings › Learning',
     path: 'config/prompts/tune-policy.md',
-    defaultText: `<!-- prompt: tune-policy v1 -->
-You improve Frank's filing policy. You get the current policy, how it scored, and the labelled
-items it got wrong. Write a revised policy that would get more of these right without getting
-others wrong. Generalise; never quote the threads. Keep every rule's ID.
+    defaultText: `<!-- prompt: tune-policy v2 -->
+You improve one of the prompts that run Frank's inbox. You get the current prompt, which loop it
+belongs to, how it scored, and the labelled items it got wrong. Write a revised prompt that would
+get more of these right without getting others wrong. Generalise; never quote the threads. Keep
+every rule's ID, and leave the answer format alone.
+
+## When <loop> is filing
+Keep the four sections and the rule IDs. Ready to approve and To-dos stay strict.
+
+## When <loop> is triage
+Revise only what it says about attention.
+
+## When <loop> is settle or finish
+Closing must stay strict: when in doubt, the ask is not settled.
 
 Answer with JSON only.`,
   },

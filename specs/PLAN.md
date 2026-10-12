@@ -1083,18 +1083,27 @@ The last two also move the filing at once, without a triage correction and witho
 Code rejects a proposal that:
 - copies eight or more words in a row from a labelled thread, so message text can't move into a long-lived file;
 - drops a rule ID without saying so;
-- is over twice the current length.
+- is over twice the current length;
+- doesn't start with the file's own first line (`<!-- prompt: <id> vN -->`);
+- breaks the answer format: more held-out items get no usable answer than with the current prompt. Scores alone would hide this, as such an item isn't scored.
 
 The proposal is saved under `proposals/` with its diff, changes and scores, and the bell offers it. A proposal that scores no better is kept, marked as such. Settings › Prompts shows it on the policy file with **Apply** and **Dismiss**. Applying saves it as any prompt edit is saved (FR-1.7), refusing when the policy changed since the proposal was made, and `prompt.changed` records the proposal. Nothing is applied without Frank. The calls log as `tune` and count towards the cost budget; a run doesn't start once the day's cost budget is reached. A run needs 10 labelled items. Runs start only when Frank asks; the section says when 10 or more labels have arrived since the last run. A proposal code turns down is kept with the reason but without its text or changes, as they may hold a thread's words.
 
 **FR-15.10 Settings › Learning.** A section in the Claude group, replacing the "Learning loop" placeholder:
-- per loop, its labels (explicit and implicit) and its last eval against the targets;
-- **Run filing eval** and **Propose a better policy**, and any proposal waiting;
+- per loop (Filing policy, Triage attention, Settle on reply, Looks finished), its labels (explicit and implicit), where its eval runs, and its latest proposal;
+- **Run filing eval**; a **Propose a better …** button per loop, disabled below 10 labelled items;
 - the switches: pre-draft mode, Ready to approve, to-do suggestions.
 
-**FR-15.11 Later loops** use the same parts and are in the backlog:
-- triage attention (FT-11);
-- settle and Looks finished (FT-12);
+**FR-15.11 More loops.** *Amended 12 Oct: triage attention, settle and Looks finished are built.* Each uses the same tuner, checks and proposal flow, with its own labels, rows and targets:
+
+| Loop | Prompt revised | Labels | Rows (target) |
+|---|---|---|---|
+| Filing | `filing-policy` | `labels/filing.jsonl` | To file (85%), Pre-draft (80%), Ready (95%), To-dos (95%) |
+| Triage attention | `triage`, scored with the filing policy as it is | `labels/triage.jsonl` | Now (precision 80%, recall 90%: S1, S2), Today (80%), Follow, None |
+| Settle on reply | `settle` | `labels/settle.jsonl` | Closes on your reply (98%: C2), Stays open |
+| Looks finished | `finish` | `labels/finish.jsonl` | Looks finished (98%), Not finished |
+
+`POST /api/learning/<loop>/propose` starts a run; each loop needs 10 labelled items and runs on its own. A proposal records its loop; the bell names it ("A triage prompt change is proposed") and links to the file in Settings › Prompts. The `tune-policy` prompt (v2) has a section per loop: the triage loop revises only what the prompt says about attention, and the settle and finish loops keep closing strict. The settle and finish evals stay on the command line. Still in the backlog:
 - topic routing (FT-13);
 - draft quality, which needs the model's draft kept when Frank edits it (FT-15).
 

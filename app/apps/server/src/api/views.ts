@@ -51,8 +51,9 @@ import {
   type StartupCheck,
   type DecisionText,
   type FilingEvalReport,
+  type LearningLoop,
+  type LearningLoopView,
   type LearningView,
-  type PolicyProposal,
   type LoggedDecision,
   type TriageDecision,
   type UsagePurpose,
@@ -75,6 +76,7 @@ import type { ItemFiles } from '../store/items';
 import type { FilingFeedback } from '../pipeline/filingFeedback';
 import type { FilingLabelStore, MergedFilingLabel } from '../store/filingLabels';
 import type { ProposalStore } from '../learning/proposals';
+import type { ProposalRunner } from '../learning/tuner';
 import type { LabelStore } from '../store/labels';
 import type { SettleLabelStore } from '../store/settleLabels';
 import type { RecoveryReport, Store } from '../store/store';
@@ -119,10 +121,10 @@ export interface ViewDeps {
   evals?: Evals;
   /** The filing eval (FR-15.8), over labels/filing.jsonl. */
   filingEvals?: Evals<MergedFilingLabel, FilingEvalReport>;
-  /** Proposed filing policies (FR-15.9): the store, and the run Frank starts. */
+  /** Proposed prompt revisions (FR-15.9, FR-15.11): the store, and each loop's run Frank starts. */
   filingLabels?: FilingLabelStore;
   proposals?: ProposalStore;
-  proposing?: Evals<MergedFilingLabel, PolicyProposal>;
+  proposing?: Partial<Record<LearningLoop, ProposalRunner>>;
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
   slackTeamId?: () => string | undefined;
   /** A group DM's title from its members, when Slack has said who they are. */
@@ -713,23 +715,45 @@ export async function settingsView(d: ViewDeps): Promise<SettingsView> {
   };
 }
 
-/** Settings › Learning (FR-15.10): the filing loop's labels, last eval and latest proposal. */
+/** Each loop's label lines: when they came, for which item, and whether Frank said so himself. */
+export async function loopLabels(d: ViewDeps, loop: LearningLoop): Promise<{ at: string; itemId: string; explicit: boolean }[] | undefined> {
+  switch (loop) {
+    case 'filing':
+      return (await d.filingLabels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: l.origin === 'explicit' }));
+    case 'triage':
+      return (await d.labels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: true }));
+    case 'settle':
+      return (await d.settleLabels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: false })); // read from Undo and Done
+    case 'finish':
+      return (await d.finishLabels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: true })); // his answer to Looks finished
+  }
+}
+
+/** Settings › Learning (FR-15.10, FR-15.11): each loop's labels and latest proposal, and the filing eval. */
 async function learningView(d: ViewDeps): Promise<{ learning?: LearningView }> {
-  const labels = d.filingLabels;
-  if (!labels) return {};
-  const proposal = (await d.proposals?.list())?.[0];
-  const lines = await labels.all();
+  if (!d.filingLabels) return {};
+  const all = (await d.proposals?.list()) ?? [];
+  const loop = async (id: LearningLoop): Promise<LearningLoopView | undefined> => {
+    const lines = await loopLabels(d, id);
+    if (!lines) return undefined;
+    const proposal = all.find((p) => p.loop === id);
+    return {
+      labels: { items: new Set(lines.map((l) => l.itemId)).size, explicit: lines.filter((l) => l.explicit).length, implicit: lines.filter((l) => !l.explicit).length },
+      newLabels: proposal ? lines.filter((l) => l.at > proposal.at).length : lines.length,
+      proposing: d.proposing?.[id]?.running ?? false,
+      ...(proposal && { proposal }),
+    };
+  };
+  const filing = (await loop('filing'))!;
+  const [triage, settle, finish] = await Promise.all([loop('triage'), loop('settle'), loop('finish')]);
   const last = d.filingEvals?.last;
+  const lastTriage = d.evals?.last;
   return {
     learning: {
-      filing: {
-        labels: { items: labels.counts.labels, explicit: labels.counts.explicit, implicit: labels.counts.implicit },
-        newLabels: proposal ? lines.filter((l) => l.at > proposal.at).length : lines.length,
-        ...(last && { lastEval: last }),
-        evalRunning: d.filingEvals?.running ?? false,
-        proposing: d.proposing?.running ?? false,
-        ...(proposal && { proposal }),
-      },
+      filing: { ...filing, ...(last && { lastEval: last }), evalRunning: d.filingEvals?.running ?? false },
+      ...(triage && { triage: { ...triage, ...(lastTriage && { lastEval: { id: lastTriage.id, at: lastTriage.at, labelCount: lastTriage.labelCount } }) } }),
+      ...(settle && { settle }),
+      ...(finish && { finish }),
     },
   };
 }

@@ -3,7 +3,7 @@ title: Troubleshooting
 group: Help
 order: 80
 summary: What the health pill and banner mean, storing tokens, and what to do when something stops.
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 ## Health
@@ -139,6 +139,17 @@ edits, and uses no draft from the day's budget; **Re-draft** starts over from th
 - **The "ANTHROPIC_API_KEY not set" check shows a warning**: Settings › Models use the API key or
   Bedrock fallback instead of your subscription, so calls are billed separately. Switch back to
   the subscription there unless you meant it.
+
+## Learning
+
+- **Propose a better … is greyed out**: that loop has fewer than 10 labelled items, or a proposal is
+  already being worked on. The row says how many items it has.
+- **A proposal was turned down**: Settings › Learning says which of code's checks it failed. Its
+  text isn't kept. Run again after more labels; see [Learning](learning.md#what-code-checks).
+- **Apply says the file changed**: you edited the prompt since the proposal was made. Propose again
+  from the file as it is now.
+- **An applied proposal made things worse**: edit the file back in Settings › Prompts, or
+  **Reset to default**. The next eval shows whether that helped.
 
 ## Connection to Work OS
 

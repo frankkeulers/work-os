@@ -1,6 +1,6 @@
 import type { AttentionEntry, AttentionView, AttentionWork, BudgetState, DraftProgress, HealthView, ItemSummary } from './api';
 import type { DepId } from './events';
-import type { PolicyProposal } from './learning';
+import { LOOP_FILE_LABEL, LOOP_NOUN, type PolicyProposal } from './learning';
 import type { ActionState } from './projection/state';
 import { currentAction } from './projection/views';
 import { FILING_EVAL_MIN_LABELS, FILING_TARGETS, type ActionType, type EvalReport, type FailureReason, type FilingDimension, type FilingEvalReport, type PromptFileId } from './schemas';
@@ -39,7 +39,7 @@ export interface AttentionInput {
   lastFilingEval?: Pick<FilingEvalReport, 'id' | 'at' | 'labelCount' | 'scores'>;
   guidance: readonly GuidanceChange[];
   /** Proposed policies waiting for Frank (FR-15.9). */
-  proposals?: readonly Pick<PolicyProposal, 'id' | 'at' | 'promptId' | 'better'>[];
+  proposals?: readonly Pick<PolicyProposal, 'id' | 'at' | 'loop' | 'promptId' | 'better'>[];
   dismissed: Record<string, string>;
 }
 
@@ -254,8 +254,8 @@ export function buildAttention(input: AttentionInput): AttentionView {
       key: `policy_proposed:${p.id}`,
       kind: 'policy_proposed',
       at: p.at,
-      title: 'A filing policy change is proposed',
-      subject: 'Filing policy',
+      title: `A ${LOOP_NOUN[p.loop]} change is proposed`,
+      subject: LOOP_FILE_LABEL[p.loop],
       detail: p.better ? 'It scores better on labels it hasn’t seen.' : 'It scores no better on labels it hasn’t seen.',
       to: `/settings/prompts#${p.promptId}`,
       cta: 'Review',

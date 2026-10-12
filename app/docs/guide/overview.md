@@ -3,7 +3,7 @@ title: What Work OS does
 group: Start here
 order: 10
 summary: A local inbox that reads Slack, decides what needs you, and files what is worth keeping.
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 Work OS runs on your Mac and reads the Slack conversations you are in, and, once you connect them,
@@ -35,6 +35,10 @@ read-only; Outlook through the Microsoft 365 connector on claude.ai), Claude, an
 6. **File it.** From an item, draft a [Confluence entry](confluence.md) or a
    [vault note](vault.md). You see the draft, edit it if you like, and approve. Code, not the
    model, makes the write, and checks the target again first.
+7. **Learn.** Your corrections, confirmations and what you approve, discard and close are kept
+   as labels. Evals score the prompts against them, and on request Opus proposes a better filing
+   policy, triage prompt, settle check or Looks finished check, which applies only when you say
+   so. See [Learning](learning.md).
 
 ## Dry-run
 

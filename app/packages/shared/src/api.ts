@@ -2,7 +2,7 @@ import type { CategoryTag } from './categories';
 import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type { FilingPlans } from './policy';
-import type { LearningView, PolicyProposal } from './learning';
+import type { LearningLoop, LearningView, PolicyProposal } from './learning';
 import type { FilingFeedbackBody } from './requests';
 import type { DoneBy } from './projection/state';
 import type {
@@ -642,9 +642,9 @@ export interface WorkOsApi {
   runEval(): Promise<void>;
   /** E14 (FR-15.8): runs the filing eval in the background; Settings › Learning says when it is done. */
   runFilingEval(): Promise<void>;
-  /** E14 (FR-15.9): proposals, newest first; starting a run; applying or dismissing one. */
+  /** E14 (FR-15.9, FR-15.11): proposals, newest first; starting a loop's run (the filing policy unless named); applying or dismissing one. */
   getProposals(): Promise<PolicyProposal[]>;
-  proposePolicy(): Promise<void>;
+  proposePolicy(loop?: LearningLoop): Promise<void>;
   /** Saves the proposed text as the policy file; refuses when the file changed since the proposal. */
   applyProposal(id: string): Promise<PromptFileView>;
   dismissProposal(id: string): Promise<void>;
