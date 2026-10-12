@@ -18,18 +18,20 @@ export interface Batch {
   approved: ActionType[];
   /** Past the last item: the panel shows the tally until Esc. */
   done: boolean;
+  /** Approve ready (FR-15.5): only the filings in Ready to approve. */
+  readyOnly?: boolean;
 }
 
-/** The suggested filings still to approve, Confluence first. */
-export function openFilings(item: ItemSummary): ActionType[] {
-  return suggestedTypes(item).filter((t) => draftState(item, t) !== 'done' && draftState(item, t) !== 'writing');
+/** The suggested filings still to approve, Confluence first; `readyOnly`, those in Ready to approve (FR-15.5). */
+export function openFilings(item: ItemSummary, readyOnly = false): ActionType[] {
+  return suggestedTypes(item).filter((t) => draftState(item, t) !== 'done' && draftState(item, t) !== 'writing' && (!readyOnly || (t !== 'todo' && !!item.filing?.[t]?.ready)));
 }
 
 /** An item the batch can take: open, in To file, with a filing still to approve. */
-export const batchable = (item: ItemSummary | undefined): item is ItemSummary => !!item && item.status === 'open' && item.lane === 'file' && openFilings(item).length > 0;
+export const batchable = (item: ItemSummary | undefined, readyOnly = false): item is ItemSummary => !!item && item.status === 'open' && item.lane === 'file' && openFilings(item, readyOnly).length > 0;
 
 /** The filing a batch opens an item on, or moves to after those `approved`. */
-export const filingFor = (item: ItemSummary, approved: readonly ActionType[] = []): ActionType | undefined => openFilings(item).find((t) => !approved.includes(t));
+export const filingFor = (item: ItemSummary, approved: readonly ActionType[] = [], readyOnly = false): ActionType | undefined => openFilings(item, readyOnly).find((t) => !approved.includes(t));
 
 /** Whether to start this filing's draft now: nothing drafted yet, and the budget allows it. */
 export const needsDraft = (item: ItemSummary, type: ActionType, budgetHit: boolean) => !budgetHit && draftState(item, type) === 'none';

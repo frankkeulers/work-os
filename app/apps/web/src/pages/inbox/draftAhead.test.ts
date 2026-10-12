@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { BudgetState } from '@work-os/shared';
 import type { ItemSummary } from '../../api';
-import { aheadQueue, isReady, pickDraftAhead } from './draftAhead';
+import { isReady } from '../../lib/lanes';
+import { aheadQueue, pickDraftAhead } from './draftAhead';
 
 vi.mock('../../store/quietDrafts', () => ({ requestQuietDraft: vi.fn() }));
 

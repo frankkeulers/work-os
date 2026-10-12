@@ -95,6 +95,9 @@ function Controls() {
         <Ctl onClick={() => mockControls.wakeFromSleep()}>Wake from 3 h sleep</Ctl>
         <Ctl onClick={() => mockControls.cockpitAfternoon()}>13:48 with Outlook and the calendar on (cockpit)</Ctl>
       </Group>
+      <Group title="Filing policy" hint="the cockpit's afternoon, as triage under the policy would have decided the To file seeds (E14)">
+        <Ctl onClick={() => mockControls.applyFilingPolicy()}>13:48 with the filing policy (cockpit)</Ctl>
+      </Group>
       <Group title="Poll outcome" hint={`${s.timelinePending} scripted arrivals left`}>
         {POLLS.map(([o, l]) => (
           <Ctl key={o} onClick={() => mockControls.simulatePoll(o)}>

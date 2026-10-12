@@ -88,6 +88,7 @@ import {
   type PromptFileView,
   type Rule,
   type Settings,
+  type TodoSuggestion,
   type SettingsSaved,
   type SettingsView,
   type SourceHealth,
@@ -1682,6 +1683,35 @@ export class MockServer implements WorkOsApi, MockControls {
     this.s.settings = { ...this.s.settings, sources: { ...src, outlook: { ...src?.outlook, enabled: true }, calendar: { ...src?.calendar, enabled: true } } };
     void this.runPoll('manual', { threads: OUTLOOK_THREADS });
     this.readCalendarOnce();
+    this.emitAll();
+  }
+
+  applyFilingPolicy() {
+    // As triage would have decided under the filing policy (FR-15.2): f1's and f4's vault notes are
+    // routine (R1), f2's Confluence entry is worth drafting ahead (P2), and the rest wait for f or v.
+    // In the same step as the afternoon's reset, so drafts ahead never see the seeds without it.
+    this.cockpitAfternoon();
+    type Flags = { predraft: boolean; ready: boolean; rule: string };
+    const plans: Record<string, { confluence?: Flags; vault?: Flags; todo?: TodoSuggestion }> = {
+      f1: { confluence: { predraft: false, ready: false, rule: 'F1' }, vault: { predraft: true, ready: true, rule: 'R1' } },
+      f2: { confluence: { predraft: true, ready: false, rule: 'P2' }, vault: { predraft: false, ready: false, rule: 'F2' } },
+      f3: { confluence: { predraft: false, ready: false, rule: 'F1' }, vault: { predraft: false, ready: false, rule: 'F2' } },
+      f4: { vault: { predraft: true, ready: true, rule: 'R1' } },
+      m2: { confluence: { predraft: false, ready: false, rule: 'F1' } },
+      t1: { todo: { step: 'Send Meridia IQ beta feedback summary to the team', rule: 'T2' } },
+    };
+    for (const r of Object.values(this.s.items)) {
+      const p = plans[r.key];
+      const d = r.decision;
+      if (!p || !d) continue;
+      r.decision = {
+        ...d,
+        confluence: d.confluence.suggested && p.confluence ? { ...d.confluence, ...p.confluence } : d.confluence,
+        vault: d.vault.suggested && p.vault ? { ...d.vault, ...p.vault } : d.vault,
+        ...(p.todo && { todo: p.todo }),
+        policyVersion: 'filing-policy v1#mock',
+      };
+    }
     this.emitAll();
   }
 

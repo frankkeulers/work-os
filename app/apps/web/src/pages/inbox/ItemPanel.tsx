@@ -590,7 +590,7 @@ export function ItemPanel({
   pos: number;
   total: number;
   /** Filing in a batch (cockpit CK-4.1–4.3): where it is, Skip (→), and what an approval does. */
-  batch?: { pos: number; total: number; onSkip: () => void; onApproved: (t: ActionType) => void };
+  batch?: { pos: number; total: number; ready?: boolean; onSkip: () => void; onApproved: (t: ActionType) => void };
   /** The end-of-day sweep (UX-10): where it is, Skip (→), and what a reply or an approval does. Done and Snooze move it on by themselves. */
   sweep?: { pos: number; total: number; onSkip: () => void; onReplied: () => void; onApproved: (t: ActionType) => void };
   filing?: ActionType;
@@ -693,7 +693,7 @@ export function ItemPanel({
         {batch ? (
           <>
             <span className="pl-2 text-[13px] font-semibold text-teal-ink" data-testid="batch-pos">
-              Filing {batch.pos} of {batch.total}
+              {batch.ready ? 'Ready' : 'Filing'} {batch.pos} of {batch.total}
             </span>
             <span className="flex-1" />
             <Button size="sm" icon="forward" title="Skip: leave it in To file (→)" onClick={batch.onSkip}>

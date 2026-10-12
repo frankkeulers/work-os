@@ -263,6 +263,15 @@ those stay yours. A draft you discard isn't drafted ahead again. What was alread
 you opened Work OS waits until you land on it. Where triage suggested filing it goes to the drafter
 as a hint.
 
+### Ready to approve
+
+Some filings are routine: a meeting's vault note, say. When your filing policy marks a filing
+**ready to approve**, To file shows it first, under **Ready to approve**, with the rule that said
+so (**Ready · R1**) and where it goes. Its draft has started ahead, so **Approve ready** opens each
+one in turn, on that filing only: press `⌘↵` to approve it and move on, or `→` to skip. Nothing is
+written until you approve it. The rest of To file follows under **Other filings**. You can turn the
+group off in Settings › Learning.
+
 An item in To file is done once everything triage suggested for it is written: approve its last
 filing and it closes by itself, with **Undo** in the toast. An item with something left to do, such
 as a reply, stays open after filing.

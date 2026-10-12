@@ -8,7 +8,7 @@ import { useNow } from '../../../hooks/useNow';
 import { fmtAgo, fmtAgoLong, plural } from '../../../lib/format';
 import { targetChip } from '../../../lib/lanes';
 import { dueInfo, needLabel, topicAsks } from '../../../lib/next';
-import { DoneByChip, DueChip, NeedTag, StatusChip } from '../chips';
+import { DoneByChip, DueChip, NeedTag, ReadyChip, StatusChip } from '../chips';
 
 // The cockpit's rows (CK-3.8, CK-3.11). Needs you: two lines, where and the chips, then the summary
 // large enough to read from across the desk. Later: the summary first, then where and its one chip.
@@ -198,6 +198,7 @@ export function LaterRow({ item, selected, isNew, leaving, meta, onPick }: RowPr
           <span className="flex-1" />
           {item.lane === 'week' && item.next && <NeedTag>{needLabel(item.next)}</NeedTag>}
           {due && <DueChip due={due} />}
+          <ReadyChip item={item} />
           {target && <StatusChip tone="file">{target}</StatusChip>}
           {item.lane === 'done' && <DoneByChip item={item} />}
           {meta && <span className="shrink-0 font-mono text-[11px]">{meta}</span>}

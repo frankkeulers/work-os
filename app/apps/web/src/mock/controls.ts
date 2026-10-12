@@ -46,6 +46,8 @@ export interface MockControls {
   wakeFromSleep(): void;
   /** The cockpit's afternoon (CK-3): Outlook connected with its calendar on, at 13:48, twelve minutes before the renewal call. */
   cockpitAfternoon(): void;
+  /** The cockpit's afternoon, with the filing policy's say on the To file seeds (E14): what is pre-drafted and ready to approve, and a to-do on offer. */
+  applyFilingPolicy(): void;
   simulatePoll(outcome: PollOutcome): void;
   /** Frank answers the top item in Needs you, or `itemId`; a moment later the settle check settles it, leaves it open, or fails. */
   frankReplies(outcome: SettleOutcome, itemId?: string): void;

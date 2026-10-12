@@ -155,6 +155,7 @@ export function LaterZone({
   open,
   onOpen,
   renderFile,
+  renderFileRow = renderFile,
   renderLower,
   pill,
   fileAction,
@@ -169,6 +170,8 @@ export function LaterZone({
   open: Lower | null;
   onOpen: (g: Lower | null) => void;
   renderFile: RenderRow;
+  /** To file's rows, when they render apart from Waiting on others' (FR-15.5: Ready to approve first). */
+  renderFileRow?: RenderRow;
   renderLower: (i: ItemSummary, n: number, list: ItemSummary[]) => ReactNode;
   pill: ReactNode;
   /** File in a batch (CK-4.1), in the To file header. */
@@ -221,7 +224,7 @@ export function LaterZone({
               <SubHead dot="bg-teal-solid" title="To file" count={files}>
                 {fileAction}
               </SubHead>
-              {fileRows.length ? fileRows.flatMap(renderFile) : <p className="m-0 border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing to file.</p>}
+              {fileRows.length ? fileRows.flatMap(renderFileRow) : <p className="m-0 border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing to file.</p>}
             </section>
             <section aria-label="This week" data-group="week" className="mt-2 flex flex-col">
               <SubHead dot="bg-gray-mid" title="This week" count={by.week.length} />

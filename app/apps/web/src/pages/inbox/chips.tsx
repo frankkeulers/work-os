@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Lane } from '@work-os/shared';
 import { cx } from '../../components/ui';
 import type { ItemSummary } from '../../api';
-import { LANE_META } from '../../lib/lanes';
+import { LANE_META, readyFiling } from '../../lib/lanes';
 import { SOURCE_NAME, type DueTone } from '../../lib/next';
 
 // Small inline labels for Inbox rows and the item panel. Colour only where it means something:
@@ -20,10 +20,21 @@ export function DueChip({ due }: { due: { text: string; tone: DueTone } }) {
   return <span className={cx(base, 'font-medium', DUE[due.tone])}>{due.text}</span>;
 }
 
-const STATUS = { block: 'bg-amber-wash text-amber-fg', file: 'bg-teal-wash text-teal-ink', bad: 'bg-red-line/40 text-red-fg' } as const;
+const STATUS = { block: 'bg-amber-wash text-amber-fg', file: 'bg-teal-wash text-teal-ink', ready: 'bg-green-wash text-green-fg', bad: 'bg-red-line/40 text-red-fg' } as const;
 
 export function StatusChip({ tone, children }: { tone: keyof typeof STATUS; children: ReactNode }) {
   return <span className={cx(base, 'font-medium', STATUS[tone])}>{children}</span>;
+}
+
+/** Ready to approve (FR-15.5): drafted ahead by the filing policy, waiting for one key. */
+export function ReadyChip({ item }: { item: ItemSummary }) {
+  const ready = item.lane === 'file' ? readyFiling(item) : undefined;
+  if (!ready) return null;
+  return (
+    <span className={cx(base, 'font-medium', STATUS.ready)} title={`Ready to approve${ready.rule ? `, by filing policy rule ${ready.rule}` : ''}`}>
+      Ready{ready.rule && ` · ${ready.rule}`}
+    </span>
+  );
 }
 
 const DONE_BY = { reply: 'bg-green-wash text-green-fg', source: 'bg-accent-wash text-accent-ink', you: 'bg-bg text-ink-2' } as const;

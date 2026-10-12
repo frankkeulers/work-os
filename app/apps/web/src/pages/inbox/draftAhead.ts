@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ActionType, BudgetState } from '@work-os/shared';
 import type { ItemSummary } from '../../api';
-import { draftState } from '../../lib/lanes';
+import { draftState, isReady } from '../../lib/lanes';
 import { requestQuietDraft } from '../../store/quietDrafts';
 import { batchable, openFilings } from './batch';
 
@@ -23,9 +23,6 @@ const drafting = (items: readonly ItemSummary[]) => items.some((i) => Object.val
 
 /** Whether the policy pre-drafts this filing. A row without a plan is from before the policy, which pre-drafted every one. */
 export const predrafted = (item: ItemSummary, type: ActionType) => (item.filing ? !!(type !== 'todo' && item.filing[type]?.predraft) : true);
-
-/** Whether the item has a filing in Ready to approve (FR-15.5). */
-export const isReady = (item: ItemSummary | undefined) => !!item && Object.values(item.filing ?? {}).some((p) => p?.ready);
 
 /** The order to look in: the item Frank landed on, then those that entered To file, ready ones first. */
 export function aheadQueue(items: readonly ItemSummary[], selected: string | null, entered: readonly string[]): string[] {

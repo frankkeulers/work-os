@@ -110,6 +110,8 @@ export const JOURNEYS: Journey[] = [
   { id: 'J86', group: 'Inbox basics', title: 'Keys for where you are', start: (c) => (fresh(c), `/?item=${encodeURIComponent(c.itemIdForKey('f4') ?? '')}`) },
   // The end-of-day sweep (UX-10).
   { id: 'J87', group: 'Cockpit', title: 'Sweep Needs you', start: (c) => (fresh(c), '/') },
+  // The filing policy (E14): Ready to approve, and what isn't drafted ahead.
+  { id: 'J88', group: 'Cockpit', title: 'Ready to approve', start: (c) => (c.applyFilingPolicy(), '/') },
   // Write failures (FR-14.5).
   { id: 'J73', group: 'Vault', title: 'Not written: Retry write', start: (c) => (fresh(c), c.setNextDraftOutcome('write_unreachable'), item(c, 'f4', '?tab=vault')) },
   { id: 'J74', group: 'Confluence', title: 'Conflict, drafts budget used up', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), c.setFlag('drafts_budget'), item(c, 'f1')) },

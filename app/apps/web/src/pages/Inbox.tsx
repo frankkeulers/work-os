@@ -20,13 +20,13 @@ import type { OpenItemState } from '../hooks/useOpenItem';
 import { closedByReply, useRepliedHold } from '../hooks/useRepliedHold';
 import type { AgendaDay } from '../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
-import { targetChip } from '../lib/lanes';
+import { isReady, targetChip } from '../lib/lanes';
 import { INBOX_SORT_LABEL, SOURCE_NAME, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
 import { NEW_FOR_MS, usePrefs } from '../store/prefs';
 import { useUserMoves } from '../store/userMoves';
 import { requestQuietDraft } from '../store/quietDrafts';
 import { errorToast, toast } from '../store/toasts';
-import { DoneByChip, DueChip, NeedTag, StatusChip } from './inbox/chips';
+import { DoneByChip, DueChip, NeedTag, ReadyChip, StatusChip } from './inbox/chips';
 import { CockpitRow, LaterRow, RepliedRow, ReplyNote } from './inbox/cockpit/rows';
 import { TimeColumn } from './inbox/cockpit/TimeColumn';
 import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox/cockpit/zones';
@@ -499,6 +499,7 @@ function QueueRow({ item, selected, isNew, leaving, divide, onPick }: { item: It
             {top && !failed && <NeedTag>{item.next ? needLabel(item.next) : item.lane === 'file' ? 'File' : 'Reply'}</NeedTag>}
             {top && moreAsks > 0 && <span className="self-center font-mono text-[11px] text-muted">+{plural(moreAsks, 'ask')}</span>}
             {due && <DueChip due={due} />}
+            <ReadyChip item={item} />
             {target && <StatusChip tone="file">{target}</StatusChip>}
             {item.lane === 'failed' && <StatusChip tone="bad">Triage failed</StatusChip>}
             {item.lane === 'done' && <DoneByChip item={item} />}
@@ -608,6 +609,17 @@ function NewPill({ items, above, group, onGo }: { items: ItemSummary[]; above: b
         <Icon name="arrow" size={13} className="-rotate-90" />
         {label}
       </button>
+    </div>
+  );
+}
+
+/** A heading inside a group: To file's Ready to approve and Other filings (FR-15.5). */
+function SubHead({ title, count, tone, action }: { title: string; count: number; tone?: 'ready'; action?: ReactNode }) {
+  return (
+    <div role="heading" aria-level={3} data-subhead={tone ?? 'other'} className={cx('flex min-h-9 items-center gap-2 border-t border-line-soft px-6 py-1 text-xs font-semibold', tone === 'ready' ? 'bg-green-wash text-green-fg' : 'text-muted')}>
+      <span>{title}</span>
+      <span className="font-mono font-normal">{count}</span>
+      {action && <span className="ml-auto">{action}</span>}
     </div>
   );
 }
@@ -755,7 +767,8 @@ export function InboxPage() {
   // j/k walk the rows on screen: Needs you, To file, then the footer's list if one is open. On the
   // cockpit (CK-3.3): Now, Today, then Later as it shows, To file and This week or the list open there.
   const needsRows = stableTop.rows.needs;
-  const fileRows = fileStable.rows.file;
+  // Ready to approve leads To file (FR-15.5); rows keep their place within it and within the rest.
+  const fileRows = useMemo(() => [...fileStable.rows.file.filter((r) => isReady(r.item)), ...fileStable.rows.file.filter((r) => !isReady(r.item))], [fileStable.rows.file]);
   const followRows = fileStable.rows.follow;
   const { order, firstNeeds, firstLater } = useMemo(() => cockpitOrder(needsRows, followRows, fileRows, by, open, wide), [needsRows, followRows, fileRows, by, open, wide]);
   // The New dot (CK-1.3): items that entered a group since Frank last looked.
@@ -800,6 +813,7 @@ export function InboxPage() {
   const budgetHit = !!inbox?.budgets.drafts.hit;
   useDraftAhead(all, sel, inbox?.budgets);
   const batchIds = useMemo(() => fileRows.filter((r) => !r.leaving && batchable(r.item)).map((r) => r.item.id), [fileRows]);
+  const readyIds = useMemo(() => fileRows.filter((r) => !r.leaving && batchable(r.item, true)).map((r) => r.item.id), [fileRows]);
   const fileOn = useCallback(
     (item: ItemSummary, type: ActionType) => {
       if (needsDraft(item, type, budgetHit)) void requestQuietDraft(item.id, type).catch(errorToast);
@@ -812,7 +826,7 @@ export function InboxPage() {
   );
   const batchFrom = useCallback(
     (b: Batch, from: number) => {
-      const [cur, ahead] = b.ids.slice(from).flatMap((id) => all.filter((i) => i.id === id && batchable(i)));
+      const [cur, ahead] = b.ids.slice(from).flatMap((id) => all.filter((i) => i.id === id && batchable(i, b.readyOnly)));
       if (!cur) {
         // Past the last one: the tally, until Esc.
         setBatch({ ...b, done: true });
@@ -821,8 +835,8 @@ export function InboxPage() {
         return;
       }
       setBatch({ ...b, approved: [] });
-      fileOn(cur, filingFor(cur)!);
-      const next = ahead && filingFor(ahead);
+      fileOn(cur, filingFor(cur, [], b.readyOnly)!);
+      const next = ahead && filingFor(ahead, [], b.readyOnly);
       if (ahead && next && needsDraft(ahead, next, budgetHit)) void requestQuietDraft(ahead.id, next).catch(errorToast);
     },
     [all, fileOn, budgetHit, setPanelOpen, setSearch, setBatch],
@@ -977,6 +991,24 @@ export function InboxPage() {
       File in a batch
     </Button>
   );
+  // Ready to approve (FR-15.5): its own batch, over the ready filings only.
+  const approveReady = readyIds.length > 0 && (
+    <Button size="sm" icon="check" data-row-action title="Each ready draft in turn: ⌘↵ approves and moves on, → skips" onClick={() => batchFrom({ ids: readyIds, filed: 0, skipped: 0, approved: [], done: false, readyOnly: true }, 0)}>
+      Approve ready
+    </Button>
+  );
+  // To file's rows, with Ready to approve first under its own heading, then the rest.
+  const fileRow = (r: ShownRow, n: number, list: ShownRow[], variant?: 'later') => {
+    const ready = isReady(r.item);
+    const prev = n > 0 && isReady(list[n - 1].item);
+    const head =
+      ready && !prev ? (
+        <SubHead key="ready-head" tone="ready" title="Ready to approve" count={list.filter((x) => !x.leaving && isReady(x.item)).length} action={approveReady} />
+      ) : !ready && prev ? (
+        <SubHead key="other-head" title="Other filings" count={list.filter((x) => !x.leaving && !isReady(x.item)).length} />
+      ) : null;
+    return [head, ...row(r, n, list, variant)];
+  };
   // In the Needs you header (UX-10). Not a click outside the panel: it opens the sweep there.
   const sweepButton = sweepIds.length > 0 && (
     <Button size="sm" icon="forward" data-row-action title="Go through Needs you one item at a time: e done, s snooze, r reply, f or v file, → skip" onClick={() => sweepFrom(newSweep(sweepIds), 0)}>
@@ -998,12 +1030,13 @@ export function InboxPage() {
       ? {
           pos: batchPos + 1,
           total: batch.ids.length,
+          ...(batch.readyOnly && { ready: true }),
           onSkip: () => batchFrom({ ...batch, skipped: batch.skipped + 1 }, batchPos + 1),
           // Its other suggested filing next, if any; then the next item.
           onApproved: (t: ActionType) => {
             const cur = all.find((i) => i.id === batch.ids[batchPos]);
             const approved = [...batch.approved, t];
-            const other = cur && filingFor(cur, approved);
+            const other = cur && filingFor(cur, approved, batch.readyOnly);
             if (cur && other) {
               setBatch({ ...batch, approved });
               fileOn(cur, other);
@@ -1075,6 +1108,7 @@ export function InboxPage() {
               open={open}
               onOpen={setOpen}
               renderFile={(r, n, list) => row(r, n, list, 'later')}
+              renderFileRow={(r, n, list) => fileRow(r, n, list, 'later')}
               renderLower={lowerRow}
               pill={<NewPill group="file" items={pillItems('file')} above={stable.pending.file.every((p) => p.above)} onGo={() => goNew('file')} />}
               fileAction={batchButton}
@@ -1101,7 +1135,7 @@ export function InboxPage() {
                       {g.id === 'needs' && <span className="ml-auto self-center">{sweepButton}</span>}
                     </div>
                     <div className="border-b border-line-soft">
-                      {groupRows[g.id].length ? groupRows[g.id].flatMap((r, n, list) => row(r, n, list)) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
+                      {groupRows[g.id].length ? groupRows[g.id].flatMap((r, n, list) => (g.id === 'file' ? fileRow(r, n, list) : row(r, n, list))) : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing here.</div>}
                     </div>
                     {g.id === 'needs' && <RepliesLine closed={inbox.closedByReply} onReview={() => setOpen('replied')} className="border-t-0 py-2.5" />}
                   </section>

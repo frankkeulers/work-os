@@ -93,8 +93,26 @@ export function cardActions(item: ItemSummary, draftsBudgetHit: boolean): CardAc
 }
 
 /** "Insights APIs › Decisions" for Confluence, "Vault · Resources" for the vault. */
+/**
+ * The filing in Ready to approve (FR-15.5), if the item has one still to approve: the vault's before
+ * Confluence's, as it is the more routine.
+ */
+export function readyFiling(i: ItemSummary | undefined): { type: 'vault_note' | 'confluence_entry'; rule?: string } | undefined {
+  for (const type of ['vault_note', 'confluence_entry'] as const) {
+    const p = i?.filing?.[type];
+    const state = i && draftState(i, type);
+    if (p?.ready && state !== 'done' && state !== 'writing') return { type, ...(p.rule && { rule: p.rule }) };
+  }
+  return undefined;
+}
+
+/** Whether the item is in Ready to approve (FR-15.5). */
+export const isReady = (i: ItemSummary | undefined) => !!readyFiling(i);
+
 export function targetChip(i: ItemSummary): string | undefined {
   if (i.lane !== 'file') return undefined;
+  const ready = readyFiling(i)?.type;
+  if (ready === 'vault_note' && i.targetHints.vault) return `Vault · ${i.targetHints.vault.split('/')[0]}`;
   if (i.triage?.confluence && i.targetHints.confluence) return i.targetHints.confluence;
   const v = i.targetHints.vault;
   return v ? `Vault · ${v.split('/')[0]}` : undefined;

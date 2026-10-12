@@ -65,3 +65,16 @@ describe('file in a batch (CK-4.1–4.4)', () => {
     expect(tally({ filed: 3, skipped: 0 })).toBe('3 filed');
   });
 });
+
+describe('approve ready (FR-15.5)', () => {
+  const ready = item({ filing: { confluence_entry: { predraft: false, ready: false }, vault_note: { predraft: true, ready: true, rule: 'R1' } } });
+
+  it('takes only the filings in Ready to approve', () => {
+    expect(openFilings(ready, true)).toEqual(['vault_note']);
+    expect(filingFor(ready, [], true)).toBe('vault_note');
+    expect(filingFor(ready, ['vault_note'], true)).toBeUndefined();
+    expect(batchable(ready, true)).toBe(true);
+    expect(batchable(item({}), true)).toBe(false);
+    expect(batchable(ready, true) && openFilings(ready)).toEqual(['confluence_entry', 'vault_note']); // a plain batch still takes both
+  });
+});
