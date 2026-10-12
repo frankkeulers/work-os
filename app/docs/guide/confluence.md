@@ -3,7 +3,7 @@ title: Filing to Confluence
 group: Filing
 order: 50
 summary: How a thread becomes an entry on the right page of the PSG context corpus.
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 The Confluence PRD pages are Pole Star Global's context corpus: the PSPD pipeline and the Product
@@ -30,15 +30,18 @@ root, with index pages marked. Use it after changing the rules, or to check the 
 
 ## Drafting
 
-Choose **Draft Confluence entry** on an item. It takes a few seconds and runs in steps you can
-watch:
+Choose **Draft Confluence entry** on an item, or press `f`. When the filing policy says an entry is
+worth drafting ahead, it has already started by the time you look. It takes a few seconds and runs
+in steps you can watch:
 
 1. **Reading the Confluence catalogue.** Work OS searches Confluence for every page in scope.
 2. **Picking the page.** Claude reads the thread, the routing guidance and the catalogue, and picks
-   up to three likely pages, preferring a specific page over an index.
+   up to three likely pages, preferring a specific page over an index. Where your
+   [filing policy](prompts.md#the-filing-policy) said the entry should go is its first candidate,
+   never an instruction.
 3. **Drafting the entry.** Claude reads only those pages' outlines and writes a short entry under
    an existing section: the fact, why, what follows, its provenance tier, the date and a link back
-   to Slack. Each outline shows the start and the end of every section, where the latest entries
+   to the source (the Slack thread, the email or the meeting). Each outline shows the start and the end of every section, where the latest entries
    are, so the draft can see what was filed lately (see [Already on the page](#already-on-the-page)).
 4. **People check.** A second, cheap check (Haiku) reads the entry as it would be written and
    blocks it if it still identifies anyone, by name or by a description that points to one person.

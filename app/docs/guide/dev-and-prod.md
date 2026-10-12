@@ -3,7 +3,7 @@ title: Dev and prod
 group: Start here
 order: 20
 summary: The two instances of Work OS, which one writes for real, and how a change reaches the one you use every day.
-updated: 2026-10-07
+updated: 2026-10-12
 ---
 
 Work OS can run as two separate instances on the same Mac. They never share data.
@@ -19,8 +19,9 @@ Work OS can run as two separate instances on the same Mac. They never share data
 Dev is where the code changes, so it can never write to Confluence or your vault. Prod runs a
 frozen release, and only prod writes for real.
 
-The Slack and Confluence tokens in the Keychain are shared by both. Each instance has its own
-token for the web app, created on first start.
+The Slack and Confluence tokens and the Wispr Flow sign-in, in the Keychain, are shared by both.
+Each instance has its own token for the web app, created on first start. Outlook goes through the
+connector on claude.ai, which both use, but each instance needs **Connect** in its own Settings.
 
 ## Installing prod
 
@@ -36,8 +37,11 @@ npm run agent:status
 `agent:install` installs the launchd agent and starts it. `agent:status` should show every line
 ticked: the plist, launchd running, no `ANTHROPIC_API_KEY`, and health normal.
 
-Prod starts with default settings. Bring your VIPs, channels, rules, vault path and Confluence
-scope across, or set them again in prod's Settings. The inbox fills from Slack on the first poll.
+Prod starts with default settings. Bring your VIPs, channels, rules, vault path, Tasks note and
+Confluence scope across, or set them again in prod's Settings. Prompt edits, such as your filing
+policy, and the labels [Learning](learning.md) works from live in each instance's data folder too,
+so copy `config/prompts/`, and the guidance files beside it in `config/`, across if you want
+prod to start from your edits. The inbox fills from Slack on the first poll.
 
 ## Shipping a change
 
@@ -54,4 +58,4 @@ build" under the page list.
 
 Keep it on in prod for the first day and check the drafts. Then turn it off in
 [Settings › Write targets](/settings/writing). From then on, approved vault notes go to the real
-vault and approved Confluence entries to the real pages.
+vault, approved to-dos to your real Tasks note and approved Confluence entries to the real pages.

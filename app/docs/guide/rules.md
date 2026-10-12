@@ -18,18 +18,19 @@ A rule matches when all its conditions do.
 |---|---|
 | Sender in | the message is from someone in a list: your VIPs (set in [Settings › People](/settings/people)), or names you type |
 | Channel in | the thread is in one of the listed channels (or a named list from [Settings › Slack](/settings/slack): included, excluded, customer channels) |
-| Mentions me | you are @-mentioned |
+| Mentions you | you are @-mentioned |
 | Is a DM | it is a direct message or group DM |
-| Keyword | the text matches a regular expression, e.g. `/blocked\|go\/no-go/i` |
+| Keyword (regex) | the text matches a regular expression, e.g. `/blocked\|go\/no-go/i` |
 
 ## Sources
 
 Rules are checked for Slack and [Outlook](outlook.md) items. The same rules apply to both, so a
 VIP or keyword rule works on email too. Wispr Flow meetings go straight to triage.
 
-- **Conditions** that only make sense in chat, such as Channel in, Mentions me and Is a DM, only
-  match Slack items (and Teams, in Full scope). A rule that uses one is labelled "Slack only".
-- **Applies to** in the rule editor limits a rule to the sources you pick: Slack, Outlook or both.
+- **Conditions** that only make sense in chat, such as Channel in, Mentions you and Is a DM, only
+  match Slack items. A rule that uses one is labelled "Slack only".
+- **Applies to** in the rule editor is **Any source** or **Only these**, then the sources you pick:
+  Slack, Outlook or both.
   If none of them can check one of the rule's conditions, the rule can't be saved until you change
   one or the other.
 
@@ -44,7 +45,7 @@ source.
 | Today | Straight to Today. Claude is not called. |
 | Drop | Ignored, and not stored. |
 | Ask the model | Claude decides; with a minimum, it can raise the level but never go below it. The minimum holds only while something after your last message matches the rule: once you have answered the mention, Claude's None stands. When a minimum changes Claude's answer, **Triage details** says so, e.g. "model said None · rule mention-me set Today". |
-| To file | Claude still reads it (for the summary and where to file it), but it needs nothing from you, so it lands in To file. Tick **Pre-draft** to have its draft start ahead, whatever the [filing policy](prompts.md#the-filing-policy) says. |
+| File | Claude still reads it (for the summary and where to file it), but it needs nothing from you, so it lands in To file. Tick **Pre-draft** to have its draft start ahead, whatever the [filing policy](prompts.md#the-filing-policy) says. |
 
 ## When you reply
 
@@ -70,7 +71,7 @@ Under the rules, **When you reply** sets what happens after you answer an item i
 ## Tips
 
 - Put narrow rules above broad ones: the first match wins.
-- Use **To file** for channels that are mostly reference material, such as release notes. For
+- Use **File** for channels that are mostly reference material, such as release notes. For
   what is worth filing in general, edit the [filing policy](prompts.md#the-filing-policy) instead:
   it is read by Claude, so it can say things a condition can't.
 - Use **Drop** sparingly. A dropped thread is never stored, so it cannot be found later.

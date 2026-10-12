@@ -3,7 +3,7 @@ title: Filing to the vault
 group: Filing
 order: 60
 summary: Notes for your Obsidian vault, drafted to follow its conventions, and to-dos for your Tasks note.
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 Choose **Draft vault note** on an item. Claude reads your vault, read-only, to find where the
@@ -14,6 +14,11 @@ thread belongs, then drafts:
   Decision Log, a customer signals note;
 - **a new note**, with front matter, tags from your tag taxonomy and a summary, only for what no
   existing note covers.
+
+You often won't need to choose it. When your [filing policy](prompts.md#the-filing-policy) says a
+vault note is worth drafting ahead, the draft starts as the item arrives in To file, and where the
+policy says it should go reaches Claude as a hint. A routine one, such as a meeting's note, shows
+under [Ready to approve](inbox.md#ready-to-approve) for one key press each.
 
 ## Meetings
 
@@ -80,13 +85,17 @@ note as Obsidian Tasks lines:
 - [ ] Confirm the data-licensing wording in the doc 📅 2026-10-05 [#mvi-launch](https://…)
 ```
 
-Each step gets its due date, when it has one, and a link back to the thread. The steps are a
+Each step gets its due date, when it has one, and a link back to the source. The steps are a
 topic's open asks, a meeting's action items, or the next step. Work OS builds the to-do itself,
 with no model call, so it is ready at once and doesn't count against the drafts budget.
 
 Review the lines, edit them if you like (a line without a checkbox becomes a task), and choose
 **Approve and add to Tasks**. The lines go at the end of the note, and the note is created if it
 isn't there. A task that is already in the note, ticked or not, isn't added again.
+
+When your filing policy suggests a to-do, the panel shows **Add to-do:** with the step and its
+date: `a` adds that one for review, × dismisses it. Both teach the policy; see
+[Feedback on filing](inbox.md#feedback-on-filing).
 
 On a meeting, **Action items for you** lists what was assigned to you, all ticked. Untick the
 ones you won't track, then choose **Add to Tasks**: the to-do opens for review. Tick them off in

@@ -2,7 +2,7 @@
 title: The inbox
 group: Inbox
 order: 30
-summary: The three zones on a wide screen, Needs you, Waiting on others and To file, the bell, what the chips mean, topics, and how to correct a decision.
+summary: The three zones on a wide screen, Needs you, Waiting on others, To file and Ready to approve, closing on reply, the bell, the item panel, batches and the sweep, topics, and how to correct a decision or give feedback on filing.
 updated: 2026-10-12
 ---
 
@@ -18,7 +18,7 @@ while something is in Now, briefly teal after a filing is written.
   timeline. See [The time column](#the-time-column).
 - **Needs you**, in the middle: **NOW** then **TODAY**, each under its own header. Each row is two
   lines: where it happened, what it needs and when it's due, then the summary in large type.
-- **Later**, on the right, for once a day: **Waiting on others** when something is, **To file** with where each should go, **This week**
+- **Later**, on the right, for once a day: **Waiting on others** when something is, **To file** with where each should go (its **Ready to approve** group first), **This week**
   soonest first, a **Snoozed** line, and at the foot **N low priority · check triage** and
   **N done today**. Snoozed, Low priority and Done open in place of the lists; `Esc` or the back
   arrow returns. Drag its left edge to make it wider or narrower (360 to 600 px); double-click the
@@ -70,7 +70,8 @@ The inbox has two groups of equal weight. On a wide screen they sit in Needs you
   "next week") waits under **This week** instead, and moves into Needs you on the day it falls due.
   If you correct it to Now, it stays in Needs you.
 - **To file** holds threads that need nothing from you but hold something worth keeping, in
-  Confluence, your vault or both.
+  Confluence, your vault or both. Your [filing policy](prompts.md#the-filing-policy) decides what
+  lands here, and the routine ones lead it under [Ready to approve](#ready-to-approve).
 
 ### Waiting on others
 
@@ -222,7 +223,9 @@ draft, get on with something else, and come back when it's ready.
   don't load, and drafts held back by the drafts budget.
 - **Nudges:** an item back from snooze, a topic that looks finished, and a reply of yours that
   left asks open.
-- **Housekeeping:** a finished triage eval, and a guidance file whose sources have changed.
+- **Housekeeping:** a finished triage eval or filing eval, a proposed change to a prompt (**A
+  filing policy change is proposed**, and the same for triage, the settle check and Looks finished;
+  see [Learning](learning.md)), and a guidance file whose sources have changed.
 - **Working on** lists drafts in progress, with the step each is on, or why one is waiting.
 
 Each entry's button takes you where you act on it: **Review**, **Open** or **Fix**. Entries go by
@@ -236,7 +239,7 @@ OS. Quiet hours apply, as for new Now items. See
 
 Notifications, toasts and the bell open an item in the inbox panel, on its draft if there is one,
 so the list stays beside it and the panel's keys work. `Esc` closes it and leaves you on the
-inbox. An item the inbox doesn't show, such as a Teams meeting in the Focus scope, opens as a full
+inbox. An item the inbox doesn't show, such as an invite while the scope is MVP (see [MVP and Full scope](overview.md#mvp-and-full-scope)), opens as a full
 page instead.
 
 ## The item panel
@@ -251,13 +254,18 @@ time. It stays open or closed as you left it, in this browser.
 - **Done** (`e`) and **Done and next** (`E`) sit in the footer, with **Snooze** (`s`): an hour,
   tomorrow at 09:00, or a time you pick. With the menu open, a number picks that row, and `s` the
   suggested time, so `s s` snoozes for the suggestion.
-- **Open in Slack** (`r`) goes to the thread, in the browser or the desktop app as set in Settings.
+- **Reply in Slack** or **Open thread in Slack**, **Reply in Outlook**, or **Respond in Outlook** for
+  an invite (`r`), goes to it in the source; Slack opens in the browser or the desktop app as set in
+  Settings.
 - `f` files to Confluence, `v` to the vault and `a` adds a to-do: each opens its draft, starting it
   if there isn't one.
 - When your [filing policy](prompts.md#the-filing-policy) suggests a to-do, the panel shows
   **Add to-do:** with the step, its date and the rule. `a` adds that one, for you to review and
   approve as any to-do; × dismisses it until new messages are triaged. Suggestions are strict: when
   in doubt, there is none.
+- **Triage was right** (`y`), **Correct triage** (`c`) and **Filing…** beside the decision tell
+  Work OS where triage and the filing policy were right or wrong. See
+  [Correcting triage](#correcting-triage) and [Feedback on filing](#feedback-on-filing).
 - `o` opens the item as a full page; `Esc` or a click outside closes the panel.
 
 ### Reviewing a draft
@@ -323,7 +331,8 @@ still shows its health; **Health ›** in the page's top bar opens
 
 **File in a batch**, in the To file header, files the day's items in one sitting. The panel opens
 on the first item, on the filing triage suggests (Confluence first), with its draft started, and
-reads **Filing 1 of 4**.
+reads **Filing 1 of 4**. **Approve ready** works the same way over the
+[Ready to approve](#ready-to-approve) group only, on each item's ready filing.
 
 - **Approve and next** (`⌘↵`) writes it (to the sandbox while dry-run is on) and moves on. An item that suggests
   both Confluence and the vault stays open for the second one first.

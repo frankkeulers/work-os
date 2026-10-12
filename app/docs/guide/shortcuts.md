@@ -21,7 +21,7 @@ where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` c
 
 | Key | Does |
 |---|---|
-| `j` / `k` | Next / previous item: Now, Today, To file, then This week |
+| `j` / `k` | Next / previous item: Now, Today, Waiting on others, To file, then This week |
 | `g` then `n` | The first item in Needs you |
 | `g` then `l` | The first item in Later (To file, or This week) |
 | `t` | Today or tomorrow in the time column (on a wide screen) |
@@ -41,7 +41,30 @@ where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` c
 | `f` | File to Confluence: open the draft, starting it if needed |
 | `v` | File to the vault: open the draft, starting it if needed |
 | `a` | Add to-do: the suggested to-do when there is one, otherwise your open steps, as tasks in your Tasks note |
-| `→` | Skip, while filing in a batch or sweeping Needs you: the item stays where it is |
+
+## File in a batch
+
+From **File in a batch** or **Approve ready**, in the To file header. See
+[File in a batch](inbox.md#file-in-a-batch).
+
+| Key | Does |
+|---|---|
+| `⌘↵` | Approve and go to the next item |
+| `→` | Skip: the item stays in To file |
+| `Esc` | Stop the batch |
+
+## Sweep Needs you
+
+From **Sweep**, in the Needs you header. See [Sweep Needs you](inbox.md#sweep-needs-you).
+
+| Key | Does |
+|---|---|
+| `e` | Done, and on to the next |
+| `s` | Snooze, and on to the next |
+| `r` | Reply in the source, and on to the next |
+| `f` / `v` | File it; approving goes on to the next |
+| `→` | Skip: the item stays in Needs you |
+| `Esc` | Stop, and see the tally |
 
 ## Draft
 

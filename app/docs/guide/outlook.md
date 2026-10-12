@@ -37,7 +37,7 @@ connector stays on claude.ai, so **Connect** turns Outlook mail back on at once.
   only copied on usually needs nothing from you.
 - **Skipped:** read receipts, bounces, meeting responses and automatic replies.
 - **Your own sent email** is never a task for you. A conversation you started shows under
-  Everything else, decided "You sent this and nobody has answered yet". When someone replies, it
+  Low priority, decided "You sent this and nobody has answered yet". When someone replies, it
   is triaged again.
 - **Your replies don't close items yet.** In Slack, a reply that settles what was asked closes the
   item by itself; for Outlook that is off until you turn on **Check replies in Outlook** in
@@ -140,7 +140,8 @@ it.
 - **Invite emails stay out of mail.** While the calendar is on, the invitation, update and
   cancellation emails for a meeting on your calendar aren't read as mail, so a meeting doesn't
   arrive twice. With the calendar off, they come in as email, as before.
-- Until the calendar has had a trial week, invites show in Full scope only.
+- Until the calendar has had a trial week, invites show in the inbox only in Full scope: switch
+  **Scope** to **Full** in the account menu. See [MVP and Full scope](overview.md#mvp-and-full-scope).
 
 ## Rules
 

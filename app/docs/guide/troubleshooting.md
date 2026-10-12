@@ -2,7 +2,7 @@
 title: Troubleshooting
 group: Help
 order: 80
-summary: What the health pill and banner mean, storing tokens, and what to do when something stops.
+summary: What the health pill and banner mean, storing tokens, and what to do when a source, Claude, a write or a learning run stops or looks wrong.
 updated: 2026-10-12
 ---
 
@@ -50,6 +50,7 @@ Tokens live in the macOS Keychain under the service `com.polestar.workos`:
 |---|---|
 | `slack-user-token` | the Slack user token (`xoxp-…`) |
 | `confluence-api-token` | your Atlassian email and API token, as `email:token` |
+| `wispr-oauth` | the Wispr Flow sign-in; set by **Connect** in Settings, not by hand |
 
 The `security` command's password prompt keeps only the first 128 characters, and an Atlassian
 token with your email is longer than that. So pass the value as an argument instead. Copy the full
@@ -142,6 +143,11 @@ edits, and uses no draft from the day's budget; **Re-draft** starts over from th
 
 ## Learning
 
+- **Nothing shows under Ready to approve, or nothing is drafted ahead**: check the switches in
+  [Settings › Learning](/settings/learning), then the Ready to approve and Pre-draft sections of
+  your filing policy. A word from you on an item (**Filing…**) lasts until its next triage.
+- **Too much lands in To file**: say **Not for filing** on the ones that don't belong, then run the
+  filing eval and propose a better policy once there are 10 labelled items.
 - **Propose a better … is greyed out**: that loop has fewer than 10 labelled items, or a proposal is
   already being worked on. The row says how many items it has.
 - **A proposal was turned down**: Settings › Learning says which of code's checks it failed. Its

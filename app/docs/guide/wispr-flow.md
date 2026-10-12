@@ -3,13 +3,14 @@ title: Wispr Flow meetings
 group: Inbox
 order: 45
 summary: Meeting notes from Wispr Flow's Notetaker in the inbox, triaged on their summary, and filed from there.
-updated: 2026-10-09
+updated: 2026-10-12
 ---
 
 Wispr Flow's Notetaker records your meetings on the Mac and writes a summary, a transcript and
 action items. Work OS reads finished meetings through Wispr Flow's own connector, read-only. Each
 one shows in the inbox like a Slack thread: triaged, with the action items that fall to you picked
-out, and ready to file as a vault note or a Confluence entry.
+out, and ready to file as a vault note or a Confluence entry, or to add its action items to your
+[Tasks note](vault.md#to-dos).
 
 ## Connect
 
@@ -50,7 +51,8 @@ events overlap and neither is clearly it, the meeting is left unmatched rather t
 - The item panel says **On your calendar** with the event's title (it opens in Outlook), who
   organised it and how many were invited.
 - Triage reads the event too, so it knows who was asked to the meeting, not only who spoke.
-- On the inbox's agenda, the meeting shows **Notes**, which opens this item.
+- On the inbox's agenda and the calendar's week, the meeting shows **Notes**, which opens this
+  item.
 
 A meeting recorded before the calendar had read its event is matched after the next calendar
 poll; that doesn't triage it again.
