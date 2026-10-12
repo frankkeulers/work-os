@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { PromptFileId, PromptFileView, PromptSourceView } from '@work-os/shared';
 import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
-import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, type Prompt } from './prompts';
+import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_FILING_POLICY, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, triageSystem, type Prompt } from './prompts';
 
 // Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the eight prompts and the two
 // filing guidance files. Each is written on first run, read on every call (empty or missing → the
@@ -31,7 +31,16 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Decides attention, filing suggestions, the summary and the open asks for each topic.',
     usedBy: 'Triage and the eval',
     defaultText: DEFAULT_TRIAGE_PROMPT,
-    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550', 'd4b00d127a3dd9605964c0b44ac43c7967894f3f', '149c84e01c7eadef74a9eda6cfbf1994536706bc', '92c1953b699525b35e2b3e63ac1a4558852ea085', '74c0880ee869f2ab4326c4f48cffc45a2b46a514', '1778d2e9ea4326a39e614e4427150f69bccb23c3', '5bc2915dca8210f1dc53de0709d9e87920cedfae'], // triage v2, v3, v4, v5, v6, v7, v8
+    previousDefaults: ['a41e4946bcba81f2eb1f14d307bf3625e34eb550', 'd4b00d127a3dd9605964c0b44ac43c7967894f3f', '149c84e01c7eadef74a9eda6cfbf1994536706bc', '92c1953b699525b35e2b3e63ac1a4558852ea085', '74c0880ee869f2ab4326c4f48cffc45a2b46a514', '1778d2e9ea4326a39e614e4427150f69bccb23c3', '5bc2915dca8210f1dc53de0709d9e87920cedfae', 'd0d1898d8f28bc1836040ee6ac99fe131ab606bb'], // triage v2, v3, v4, v5, v6, v7, v8, v9
+  },
+  {
+    id: 'filing-policy',
+    file: 'prompts/filing-policy.md',
+    label: 'Filing policy',
+    description: 'Your rules for what triage files, drafts ahead, offers as ready to approve and suggests as a to-do. Sent with the triage prompt.',
+    usedBy: 'Triage, drafts ahead and the filing eval',
+    defaultText: DEFAULT_FILING_POLICY,
+    previousDefaults: [],
   },
   {
     id: 'topics',
@@ -132,6 +141,12 @@ export function loadPromptFile(dataDir: string, id: PromptFileId): Promise<Promp
   const f = promptFile(id);
   if (!f) throw new Error(`Unknown prompt file ${id}`);
   return readPromptFile(dataDir, f);
+}
+
+/** What triage sends as its system prompt: the triage prompt and the filing policy, both read fresh (FR-15.1). */
+export async function loadTriagePrompt(dataDir: string): Promise<Prompt> {
+  const [base, policy] = await Promise.all([loadPromptFile(dataDir, 'triage'), loadPromptFile(dataDir, 'filing-policy')]);
+  return triageSystem(base, policy);
 }
 
 // ---------------------------------------------------------------- sources (FR-1.7)

@@ -133,7 +133,7 @@ export function buildDecision(
     ruleId: by.ruleId,
     ...(attention !== script.attention && { modelAttention: script.attention }),
     model: by.model,
-    promptVersion: 'triage v9',
+    promptVersion: 'triage v10',
     batchId: by.batchId,
   };
 }

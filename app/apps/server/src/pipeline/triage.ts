@@ -277,6 +277,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         ...(attention !== a.attention && { modelAttention: a.attention }),
         model: settings.models.triage,
         promptVersion: prompt.version,
+        ...(prompt.policyVersion && { policyVersion: prompt.policyVersion }),
         batchId,
         decidedAt: d.now().toISOString(),
       };

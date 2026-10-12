@@ -121,6 +121,7 @@ export const TriageDecision = z.object({
   modelAttention: Attention.optional(), // the model's own answer, when a rule's floor or To file changed it
   model: z.string().optional(),
   promptVersion: z.string().optional(),
+  policyVersion: z.string().optional(), // E14 (FR-15.1): the filing policy sent with the prompt
   batchId: z.string().optional(),
   decidedAt: isoDate,
 });
@@ -150,7 +151,7 @@ export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', '
 export type FailureReason = z.infer<typeof FailureReason>;
 
 /** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
-export const PromptFileId = z.enum(['triage', 'topics', 'settle', 'finish', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export const PromptFileId = z.enum(['triage', 'filing-policy', 'topics', 'settle', 'finish', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
 export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
@@ -584,6 +585,7 @@ export const EvalReport = z.object({
   at: isoDate,
   labelCount: z.number().int().positive(),
   promptVersion: z.string(),
+  policyVersion: z.string().optional(), // E14 (FR-15.1): the filing policy sent with the prompt
   model: ModelId,
   categories: EvalCategories,
   confusion: Confusion,

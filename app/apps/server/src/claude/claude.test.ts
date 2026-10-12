@@ -10,7 +10,7 @@ import { ClaudeAdapter, type QueryFn } from './adapter';
 import { API_KEY_ACCOUNT, backendEnv } from './backends';
 import { ClaudeError, ClaudeOutputError } from './errors';
 import { extractJson } from './outputs';
-import { loadPromptFile, PROMPT_FILES, sha1, sourceStates, withCurrentSourceHashes } from './promptFiles';
+import { loadPromptFile, loadTriagePrompt, PROMPT_FILES, sha1, sourceStates, withCurrentSourceHashes } from './promptFiles';
 import { argKey, relayBatch, relayToolCall, RELAY_MAX_CALLS, type Connector } from './relay';
 import { UsageLog } from './usage';
 
@@ -467,6 +467,26 @@ describe('prompt and guidance files (FR-1.1, FR-1.7)', () => {
       expect(p.version).toMatch(/^confluence-routing v3#[0-9a-f]{8}$/);
       await writeFile(join(dir, 'config/psg-context-builder.md'), '<!-- prompt: confluence-routing v9 -->\nMine');
       expect(await loadPromptFile(dir, 'confluence-routing')).toMatchObject({ text: '<!-- prompt: confluence-routing v9 -->\nMine', version: expect.stringMatching(/^confluence-routing v9#/) });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('the filing policy (FR-15.1)', () => {
+  it('goes after the triage prompt in <filing-policy>, both read fresh, with its own version', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'workos-policy-'));
+    try {
+      const fallback = await loadTriagePrompt(dir);
+      expect(fallback.version).toMatch(/^triage v10#/);
+      expect(fallback.policyVersion).toMatch(/^filing-policy v1#/);
+      expect(fallback.text).toMatch(/^<!-- prompt: triage v10 -->[\s\S]*\n\n<filing-policy>\n<!-- prompt: filing-policy v1 -->[\s\S]*\[R1\][\s\S]*\n<\/filing-policy>$/);
+      await mkdir(join(dir, 'config/prompts'), { recursive: true });
+      await writeFile(join(dir, 'config/prompts/filing-policy.md'), '<!-- prompt: filing-policy v2 -->\n## To file\n- [F1] Only customer decisions.');
+      const mine = await loadTriagePrompt(dir);
+      expect(mine.version).toBe(fallback.version);
+      expect(mine.policyVersion).toMatch(/^filing-policy v2#/);
+      expect(mine.text).toContain('<filing-policy>\n<!-- prompt: filing-policy v2 -->\n## To file\n- [F1] Only customer decisions.\n</filing-policy>');
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

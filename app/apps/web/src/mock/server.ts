@@ -1477,7 +1477,7 @@ export class MockServer implements WorkOsApi, MockControls {
         id: `eval-${this.iso()}`,
         at: this.iso(),
         labelCount: labels,
-        promptVersion: 'triage v9',
+        promptVersion: 'triage v10',
         model: this.s.settings.models.triage,
         categories: {
           now: pr(0),

@@ -1,6 +1,6 @@
 import type { PromptFileId, PromptSourceView } from '@work-os/shared';
 
-// The ten prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
+// The eleven prompt and guidance files, as the mock serves them in Settings › Prompts (FR-1.7).
 // Shortened stand-ins for the server's built-in defaults: the shape matters here, not the wording.
 
 export interface SeedPromptFile {
@@ -21,7 +21,7 @@ export const SEED_PROMPT_FILES: SeedPromptFile[] = [
     description: 'Decides attention, filing suggestions and the summary for each thread.',
     usedBy: 'Triage and the eval',
     path: 'config/prompts/triage.md',
-    defaultText: `<!-- prompt: triage v9 -->
+    defaultText: `<!-- prompt: triage v10 -->
 You triage Slack topics for Frank, Product Innovation Lead at Pole Star Global. A topic may gather
 several reply threads and stretches of chat on one subject.
 
@@ -29,10 +29,33 @@ For each thread, decide three things.
 
 1. attention: does Frank need to act, or keep track of it? "now", "today", "follow" (he owns the
    outcome but someone else has the next move) or "none".
-2. confluence: does the thread hold product context worth adding to the Confluence PRD pages?
+2. confluence: is it worth filing in the Confluence PRD pages?
 3. vault: is it worth a note in Frank's own vault?
+   Decide both by the rules in <filing-policy>, and say which rule applied.
 
 Answer with JSON only, no prose.`,
+  },
+  {
+    id: 'filing-policy',
+    label: 'Filing policy',
+    description: 'Your rules for what triage files, drafts ahead, offers as ready to approve and suggests as a to-do. Sent with the triage prompt.',
+    usedBy: 'Triage, drafts ahead and the filing eval',
+    path: 'config/prompts/filing-policy.md',
+    defaultText: `<!-- prompt: filing-policy v1 -->
+# Filing policy
+
+## To file
+- [F1] Confluence: decisions, requirements, customer needs, scope changes, launch facts.
+- [F2] Vault: ideas, learnings, partner insight, follow-ups worth keeping.
+
+## Pre-draft
+- [P1] A meeting with outcomes or decisions: its vault meeting note.
+
+## Ready to approve
+- [R1] A meeting Frank took part in, with outcomes worth keeping: its vault meeting note.
+
+## To-dos
+- [T1] A meeting action item that falls to Frank.`,
   },
   {
     id: 'topics',

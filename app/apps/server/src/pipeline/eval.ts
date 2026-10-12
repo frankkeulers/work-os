@@ -110,6 +110,7 @@ export async function runEval(d: EvalDeps, records: LabelRecord[], o: { source?:
     at,
     labelCount: labels.length,
     promptVersion: d.prompt.version,
+    ...(d.prompt.policyVersion && { policyVersion: d.prompt.policyVersion }),
     model,
     ...score(rows),
     tokens,

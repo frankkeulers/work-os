@@ -48,7 +48,7 @@ import { createServer, type WorkOsServer } from './server';
 import { budgetsOf, sourceSchedule, type Item, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
-import { loadPromptFile, PROMPT_FILES } from './claude/promptFiles';
+import { loadPromptFile, loadTriagePrompt, PROMPT_FILES } from './claude/promptFiles';
 import { ConfluenceApi } from './actions/confluenceApi';
 import { buildCatalogue } from './actions/confluenceCatalogue';
 import { noConfluence } from './actions/fakeConfluence';
@@ -306,7 +306,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
     config: () => ({ settings: settings.editable.settings, rules: settings.rules }),
     me: (source: SourceId = 'slack') => meFrom(runtime.whoAmI(source)),
-    prompt: () => loadPromptFile(config.dataDir, 'triage'),
+    prompt: () => loadTriagePrompt(config.dataDir),
     topicsPrompt: () => loadPromptFile(config.dataDir, 'topics'),
     // Today's meetings, for deadlines such as "before the exec sync" (cockpit CK-3.9).
     meetings: (at) => (calendarMe() ? meetingsToday(calendar.snapshot?.events ?? [], at) : []),
