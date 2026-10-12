@@ -11,6 +11,7 @@ import { watchCloseOnFile } from '../store/closeOnFile';
 import { forgetEdit, keepEdit, keptEdit } from '../store/draftEdits';
 import { errorToast, toast } from '../store/toasts';
 import { BrandIcon } from './BrandIcon';
+import { DraftSplit, DraftedWithInfo } from './DraftWithInfo';
 import { GuideLink } from './GuideLink';
 import { Icon } from './icons';
 import { itemPath } from './item';
@@ -546,8 +547,12 @@ export function ActionPanel({
   const version = action ? entryVersion(view.actions, action) : 1;
   const draft = action ? view.drafts[action.id] : undefined;
   const prev = action?.supersedes ? view.actions.find((a) => a.id === action.supersedes) : undefined;
-  // A to-do is built by code: it spends no draft, so the budget never holds it up.
-  const budgetHit = view.budgets.drafts.hit && type !== 'todo';
+  // What Frank added when he asked for this draft (FR-9.12); a re-draft keeps it.
+  const info = action ? view.additionalInfo?.[action.id] : undefined;
+  // A to-do is built by code: it spends no draft, so the budget never holds it up. One with Frank's
+  // information is drafted by Haiku, and so is its re-draft (FR-9.12).
+  const budgetHit = view.budgets.drafts.hit && (type !== 'todo' || !!info);
+  const infoDisabledReason = view.budgets.drafts.hit ? 'Drafts budget reached' : undefined;
   // Picked from the live catalogue, so in scope when drafted; excluded since if it or a page above
   // it is now on the exclude list. The executor checks the full scope again at write time.
   const inScope = draft?.kind === 'confluence' ? ![draft.pageId, ...(draft.ancestorIds ?? [])].some((id) => view.excludedPageIds.includes(id)) : true;
@@ -585,6 +590,16 @@ export function ActionPanel({
     }
   };
   const request = (t: ActionType) => run(() => api.requestDraft(item.id, t));
+  // From the additional-information box, which shows the error and stays open when it fails.
+  const withBusy = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const requestWith = (t: ActionType) => (text: string | null) => withBusy(() => api.requestDraft(item.id, t, text ? { additionalInfo: text } : undefined));
   const guard = (c: NonNullable<Confirm>) => (dirty || draft?.edited ? setConfirm(c) : c.run());
   const redraft = () =>
     action &&
@@ -594,6 +609,32 @@ export function ActionPanel({
       label: 'Re-draft',
       run: () => (stopEditing(), void run(() => api.redraft(action.id))),
     });
+  // The box is the confirmation: it says when the new draft replaces Frank's edits.
+  const redraftWith = (text: string | null) =>
+    withBusy(async () => {
+      if (!action) return;
+      stopEditing();
+      await api.redraft(action.id, { additionalInfo: text });
+    });
+  // `compact`: the icon alone, so the narrow panel's action bar stays on one line.
+  const redraftSplit = ({ variant = 'secondary', title, compact }: { variant?: 'secondary' | 'solid'; title?: string; compact?: boolean } = {}) => (
+    <DraftSplit
+      type={type}
+      redraft
+      initial={info}
+      warning={dirty || draft?.edited ? 'The new draft replaces this one, including the changes you made to its text.' : undefined}
+      variant={variant}
+      icon="redraft"
+      disabled={budgetHit || busy}
+      infoDisabledReason={infoDisabledReason}
+      title={title}
+      label={compact ? 'Re-draft' : undefined}
+      onDraft={redraft}
+      onInfo={redraftWith}
+    >
+      {!compact && 'Re-draft'}
+    </DraftSplit>
+  );
   const discard = () =>
     action &&
     guard({
@@ -679,12 +720,12 @@ export function ActionPanel({
     body = (
       <div className="flex flex-col gap-3">
         <p className="m-0 text-sm leading-relaxed text-ink-2">
-          Adds your open steps on this item to <strong className="text-ink">{view.targets.tasksNote}</strong> as tasks, each with its due date and a link back here. Built by code from the triage, with no model call. Nothing is written until you approve.
+          Adds your open steps on this item to <strong className="text-ink">{view.targets.tasksNote}</strong> as tasks, each with its due date and a link back here. Built by code from the triage, with no model call, unless you add information: then Haiku writes it from your steps and what you add. Nothing is written until you approve.
         </p>
         <div>
-          <Button variant="solid" icon="commitments" disabled={busy} onClick={() => void request(type)}>
+          <DraftSplit type={type} variant="solid" icon="commitments" disabled={busy} infoDisabledReason={infoDisabledReason} onDraft={() => void request(type)} onInfo={requestWith(type)}>
             {TYPE_LABEL[type].draft}
-          </Button>
+          </DraftSplit>
         </div>
       </div>
     );
@@ -703,15 +744,30 @@ export function ActionPanel({
           )}
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="solid" icon={type === 'vault_note' ? 'vault' : 'confluence'} disabled={budgetHit || busy} onClick={() => void request(type)}>
+          <DraftSplit
+            type={type}
+            variant="solid"
+            icon={type === 'vault_note' ? 'vault' : 'confluence'}
+            disabled={budgetHit || busy}
+            infoDisabledReason={infoDisabledReason}
+            onDraft={() => void request(type)}
+            onInfo={requestWith(type)}
+          >
             {TYPE_LABEL[type].draft}
-          </Button>
+          </DraftSplit>
           {budgetHit && <span className="text-xs text-amber-fg">Drafts budget reached for today ({view.budgets.drafts.used}/{view.budgets.drafts.limit}).</span>}
         </div>
       </div>
     );
   } else if (action.status === 'drafting') {
-    body = <DraftingProgress action={action} view={view} />;
+    body = info ? (
+      <div className="flex flex-col gap-3">
+        <DraftedWithInfo text={info} drafting />
+        <DraftingProgress action={action} view={view} />
+      </div>
+    ) : (
+      <DraftingProgress action={action} view={view} />
+    );
   } else if (action.status === 'failed') {
     const msg = view.results[action.id] ?? action.error;
     body =
@@ -721,9 +777,7 @@ export function ActionPanel({
             <strong>People check blocked this entry.</strong> {msg}
           </Banner>
           <div className="flex flex-wrap gap-2">
-            <Button variant="solid" icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
-              Re-draft
-            </Button>
+            {redraftSplit({ variant: 'solid' })}
             <Button icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
               Draft vault note instead
             </Button>
@@ -750,9 +804,7 @@ export function ActionPanel({
             <Button variant="solid" icon="vault" disabled={budgetHit || busy} onClick={() => (setType('vault_note'), void request('vault_note'))}>
               Draft vault note instead
             </Button>
-            <Button icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
-              Re-draft
-            </Button>
+            {redraftSplit()}
             <Button icon="x" onClick={discard}>
               Dismiss
             </Button>
@@ -778,9 +830,7 @@ export function ActionPanel({
                 Retry write
               </Button>
             )}
-            <Button icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
-              Re-draft
-            </Button>
+            {redraftSplit()}
             <Button variant="danger" icon="trash" onClick={discard}>
               Discard
             </Button>
@@ -798,9 +848,7 @@ export function ActionPanel({
               <strong>Changed since draft.</strong> {msg?.replace(/ Re-drafting instead of (writing|overwriting it)\.$/, '')} Nothing was written{budgetHit ? ', and it can’t be re-drafted until the drafts budget resets' : ''}.
             </Banner>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="solid" icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
-                Re-draft
-              </Button>
+              {redraftSplit({ variant: 'solid' })}
               <Button variant="danger" icon="trash" onClick={discard}>
                 Discard
               </Button>
@@ -819,9 +867,7 @@ export function ActionPanel({
                 Retry write
               </Button>
             )}
-            <Button variant={canRetryWrite ? 'secondary' : 'solid'} icon="redraft" disabled={budgetHit || busy} onClick={redraft}>
-              Re-draft
-            </Button>
+            {redraftSplit({ variant: canRetryWrite ? 'secondary' : 'solid' })}
             <Button variant="danger" icon="trash" onClick={discard}>
               Discard
             </Button>
@@ -900,6 +946,7 @@ export function ActionPanel({
     body = (
       <div className="flex flex-col gap-3">
         <TargetLine d={draft} inScope={inScope} links={links} />
+        {info && <DraftedWithInfo text={info} />}
         {prev?.failureReason === 'conflict' && action.status === 'ready' && (
           <Banner tone="info" icon="info">
             <strong>Re-drafted after a conflict.</strong> {(view.results[prev.id] ?? prev.error ?? '').replace(/ Re-drafting instead of writing\.$/, '')} Review this new draft before approving.
@@ -1058,9 +1105,7 @@ export function ActionPanel({
           </Button>
         )}
         {ready && (
-          <Button icon="redraft" disabled={budgetHit || busy} onClick={redraft} title={budgetHit ? 'Drafts budget reached for today' : todo ? 'Build the to-do again from the triage' : 'Ask for a fresh draft'}>
-            Re-draft
-          </Button>
+          redraftSplit({ compact: embedded, title: budgetHit ? 'Drafts budget reached for today' : todo && !info ? 'Build the to-do again from the triage' : 'Ask for a fresh draft' })
         )}
         <span className="flex-1" />
         {/* In the narrow panel, an icon keeps the bar on one line. */}

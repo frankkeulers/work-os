@@ -1,4 +1,4 @@
-import { ApproveRequest, TodoActual, TodoEdit, FollowupAnswerBody, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, TodoActual, TodoEdit, FollowupAnswerBody, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, RedraftBody, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -234,7 +234,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const f = d.filingFeedback;
     if (!f) throw new HttpError('unavailable', 'Filing feedback is not available.');
     const body = FilingFeedbackBody.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { signal: "not_for_filing" | "no_predraft" | "should_be_ready" | "not_ready" }, and { type } for one filing.');
+    if (!body.success) throw new HttpError('validation', 'Send { signal: "not_for_filing" | "no_predraft" | "should_be_ready" | "not_ready" }, { type } for one filing, and { reason } of up to 200 characters if you like.');
     const it = d.store.projection.items[id];
     const eff = effectiveTriage(it.decision, it.correction);
     const off = (t: 'confluence_entry' | 'vault_note') => !body.data.type || body.data.type === t;
@@ -249,7 +249,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     }
     if (!d.correct) throw new HttpError('unavailable', 'Corrections are not available.');
     if (!eff || (!eff.confluence && !eff.vault)) throw new HttpError('conflict', 'This item has nothing to file.');
-    await d.correct(id, { attention: eff.attention, confluence: eff.confluence && !off('confluence_entry'), vault: eff.vault && !off('vault_note') });
+    await d.correct(id, { attention: eff.attention, confluence: eff.confluence && !off('confluence_entry'), vault: eff.vault && !off('vault_note') }, body.data.reason);
     return reply.headers(noStore).send({ labelCount: f.counts.labels });
   });
 
@@ -261,11 +261,16 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   app.post<{ Params: { id: string } }>('/api/items/:id/actions', async (req, reply) => {
     const id = item(req.params.id);
     const body = DraftRequest.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" | "todo" }, { quiet } for a draft made ahead in a batch, and { steps } for a to-do’s lines or { suggested: true } for the to-do triage suggested.');
+    if (!body.success)
+      throw new HttpError(
+        'validation',
+        'Send { type: "vault_note" | "confluence_entry" | "todo" }, { quiet } for a draft made ahead in a batch, { additionalInfo } (up to 2000 characters) for what the drafter should take into account, and { steps } for a to-do’s lines or { suggested: true } for the to-do triage suggested.',
+      );
+    const { type, quiet, steps, suggested, additionalInfo } = body.data;
     return reply
       .code(201)
       .headers(noStore)
-      .send(await actions().request(id, body.data.type, { quiet: body.data.quiet, steps: body.data.steps, suggested: body.data.suggested }));
+      .send(await actions().request(id, type, { quiet, steps, suggested, additionalInfo }));
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/cancel', async (req, reply) => {
     await actions().cancel(req.params.id);
@@ -277,12 +282,14 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     await actions().edit(req.params.id, body.data.content, body.data.part);
     return reply.code(204).send();
   });
-  app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) =>
-    reply
+  app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) => {
+    const body = RedraftBody.safeParse(req.body ?? {});
+    if (!body.success) throw new HttpError('validation', 'Send nothing to keep the draft’s additional information, { additionalInfo } (up to 2000 characters) to replace it, or { additionalInfo: null } to drop it.');
+    return reply
       .code(201)
       .headers(noStore)
-      .send(await actions().redraft(req.params.id)),
-  );
+      .send(await actions().redraft(req.params.id, body.data));
+  });
   app.post<{ Params: { id: string } }>('/api/actions/:id/discard', async (req, reply) => {
     await actions().discard(req.params.id);
     return reply.code(204).send();

@@ -274,6 +274,33 @@ describe('draft and approval outcomes', () => {
     expect(v.summary).toMatchObject({ status: 'done', lane: 'done' });
   });
 
+  it('drafts with additional information, keeps it on a re-draft and drops it on null, as the server (FR-9.12)', async () => {
+    const INFO = 'Speaker 1 is Anna from Ops.';
+    const a = await settle(server.requestDraft(id('f4'), 'vault_note', { additionalInfo: `  ${INFO} ` }));
+    await run(8000);
+    let v = await view('f4');
+    expect(v.additionalInfo?.[a.id]).toBe(INFO);
+    expect(v.drafts[a.id]).toMatchObject({ additionalInfo: INFO });
+
+    const kept = await settle(server.redraft(a.id));
+    await run(8000);
+    expect((await view('f4')).drafts[kept.id]).toMatchObject({ additionalInfo: INFO });
+    const dropped = await settle(server.redraft(kept.id, { additionalInfo: null }));
+    await run(8000);
+    v = await view('f4');
+    expect(v.additionalInfo?.[dropped.id]).toBeUndefined();
+    expect(v.drafts[dropped.id]).not.toHaveProperty('additionalInfo');
+
+    // A to-do with information is drafted by Haiku, not built at once.
+    const todo = await settle(server.requestDraft(id('f4'), 'todo', { additionalInfo: 'Anna owns the spec.' }));
+    expect(todo.status).toBe('drafting');
+    await run(8000);
+    expect((await view('f4')).drafts[todo.id]).toMatchObject({ kind: 'todo', model: 'haiku-5.5', additionalInfo: 'Anna owns the spec.', content: expect.stringContaining('- [ ] From Frank: Anna owns the spec.') });
+
+    const bad = server.requestDraft(id('f4'), 'todo', { steps: ['Call Sam'], additionalInfo: INFO }).catch((e: unknown) => e);
+    expect(await settle(bad)).toMatchObject({ code: 'validation' });
+  });
+
   it('re-drafts instead of writing when the page changed (FR-10.5)', async () => {
     server.setNextDraftOutcome('confluence_conflict');
     const f1 = await view('f1');

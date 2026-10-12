@@ -387,6 +387,24 @@ those stay yours. A draft you discard isn't drafted ahead again. What was alread
 you opened Work OS waits until you land on it. Where triage suggested filing it goes to the drafter
 as a hint.
 
+### Drafting with additional information
+
+Every draft button has a menu beside it (the arrow). **Draft with additional information…** (for a
+to-do, **Add with additional information…**) opens a box for what you know that the thread doesn't:
+
+- who spoke, when a Wispr Flow note says "Speaker 1" and "Speaker 2";
+- more on the suggested approach or timeline, or a correction to the thread.
+
+Up to 2,000 characters. The drafter takes it into account and, where it disagrees with the thread,
+goes with you. It never changes the drafter's own rules: a [Confluence entry](confluence.md#drafting)
+still names no one, so names there only help it tell who said what.
+
+The draft shows **Drafted with your information**; open it to see the text. **Re-draft** keeps the
+text, and **Re-draft with additional information…** in the menu beside it opens the box with it, to
+change or clear. Asking again with information replaces a draft that is waiting for review; one still
+being drafted has to finish, or be cancelled, first. The text stays with the draft and is removed
+with it; it is never in the event log.
+
 ### Ready to approve
 
 Some filings are routine: a meeting's vault note, say. When your filing policy marks a filing
@@ -509,14 +527,20 @@ ahead and what is ready to approve. When it got an item wrong:
 2. Click **Filing…** beside the decision. The menu lists each filing triage suggested (**Vault
    note**, **Confluence entry**), with the rule that applied, such as **Vault note · R1**.
 3. Choose what was wrong. A toast confirms it, and the item moves at once.
+   **Not for filing…** first asks why: pick a reason, type your own, or choose **Skip, no reason**.
 
 | Choice | Shown | What happens to the item |
 |---|---|---|
-| **Not for filing** | when triage suggested a filing | It leaves To file, as a correction does |
+| **Not for filing…** | when triage suggested a filing | It leaves To file, as a correction does |
 | **Don't draft items like this ahead** | per filing, when it is drafted ahead | No draft starts until you press `f` or `v`; it leaves Ready to approve |
 | **Should be ready to approve** | per filing, when it isn't ready | It joins Ready to approve and is drafted ahead |
 | **Shouldn't be ready to approve** | per filing, when it is ready | It goes back with the other filings; a draft already made stays |
 | **Should be filed to the vault** / **to Confluence** | for a filing triage didn't suggest | The filing is added, as a correction does |
+
+The reason matters because of how the policy learns. Without one, Opus sees only the thread, and
+the channel is the most visible thing the threads you turned down share: a few
+**Not for filing** answers on #product-signals could read as "don't file #product-signals". **Not
+my product area** tells it the real reason. See [Learning](learning.md#on-filing).
 
 Your word on the item holds until new messages bring a new triage, which decides afresh. The
 switches in [Settings › Learning](/settings/learning) still apply: with Ready to approve off,

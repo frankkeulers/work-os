@@ -267,6 +267,8 @@ export interface ItemView {
   drafts: Record<string, Draft>; // by action id
   progress: Record<string, DraftProgress>; // by action id, while drafting
   results: Record<string, string>; // by action id, outcome message after execution or failure
+  /** By action id: what Frank added when he asked for it (FR-9.12), whether it is drafting, ready or failed. */
+  additionalInfo?: Record<string, string>;
   /** Pages excluded from the Confluence scope: a draft for one of them, or below one, will be refused. */
   excludedPageIds: string[];
   /** Frank's reply closes this item once it settles the asks (cockpit CK-2.5): closing on reply is on for its source. */
@@ -638,8 +640,8 @@ export interface WorkOsApi {
   regroup(conversation: string): Promise<{ merged: number }>;
 
   /** `quiet`: drafted ahead while filing in a batch, so no macOS notification when it's ready (FR-11.6). */
-  /** steps: a to-do's lines to start from (UX-5). */
-  requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean }): Promise<Action>;
+  /** steps: a to-do's lines to start from (UX-5). additionalInfo: what Frank adds for the drafter (FR-9.12). */
+  requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean; additionalInfo?: string }): Promise<Action>;
   /** E14 (FR-15.6): Frank doesn't want the to-do the filing policy suggested. */
   dismissTodo(itemId: string): Promise<void>;
   /** E14 (FR-15.7): Frank's word on the filing policy's call. Answers with the items in the filing labels. */
@@ -647,7 +649,8 @@ export interface WorkOsApi {
   cancelDraft(actionId: string): Promise<void>;
   /** `part`: which note of a draft that files into several (FR-9.7). */
   saveDraftEdit(actionId: string, content: string, part?: number): Promise<void>;
-  redraft(actionId: string): Promise<Action>;
+  /** Keeps the old draft's additional information unless `additionalInfo` replaces it, or null drops it (FR-9.12). */
+  redraft(actionId: string, opts?: { additionalInfo?: string | null }): Promise<Action>;
   discardAction(actionId: string): Promise<void>;
   /** `markDoneWhenFiled`: approved while filing in a batch; the item is done once all its filings are written (cockpit CK-4.4). */
   approveAction(actionId: string, opts?: { markDoneWhenFiled?: boolean }): Promise<void>;

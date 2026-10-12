@@ -715,11 +715,18 @@ As built (FR-9.7, 2026-10-11):
 
 **FR-9.8** **Add to-do** turns an item's open steps into Obsidian Tasks lines, one per step: `- [ ] {step} 📅 YYYY-MM-DD [{source title}]({permalink})`. The date is the step's deadline in London and is left out when there is none. The steps are a topic's open asks, or a meeting's action items, or the next step, or "Follow up: {summary}" when there is nothing else.
 
-**FR-9.9** Code builds the to-do from the triage, with no model call and no draft spent, so the drafts budget never holds it up. It is ready to review at once (`action.requested` and `action.drafted` in one append). Frank reviews, may edit the lines, and approves. Code then appends the lines to the end of one Tasks note, set in Settings › Write targets (`tasksNote`, default `Work/Tasks.md`), creating the note if it is missing. The path is checked against the vault as for vault notes, and in dry-run the sandbox copy stands in for the note.
+**FR-9.9** Code builds the to-do from the triage, with no model call and no draft spent, so the drafts budget never holds it up. *Amended 12 Oct 2026 (FR-9.12):* unless Frank adds information to it. It is ready to review at once (`action.requested` and `action.drafted` in one append). Frank reviews, may edit the lines, and approves. Code then appends the lines to the end of one Tasks note, set in Settings › Write targets (`tasksNote`, default `Work/Tasks.md`), creating the note if it is missing. The path is checked against the vault as for vault notes, and in dry-run the sandbox copy stands in for the note.
 
 **FR-9.10** An append adds only lines that aren't already in the note. A line counts as there when its task matches, ticked or not, and with or without the ✅ date the Tasks plugin adds when ticked. So an attempt cut short is finished and never repeated. An append can't clash with what Frank changed in the note since, so there is no conflict check; if the note changes between the plan and the write, the attempt starts again.
 
 **FR-9.11** In the item panel, **Add to-do** sits under File it, with the key `a`. A meeting's **Action items for you** are a picker: all ticked at first, then **Add to Tasks** makes a to-do of the ticked ones, replacing a to-do still waiting for review. Triage never suggests a to-do, so it stays out of the card actions and batches. *Amended 12 Oct 2026 (FR-15.6):* triage may suggest one, which the panel offers as **Add to-do: {step}**; it still stays out of card actions and batches. The vault drafter keeps its rule that action items stay out of the vault (FR-9.7), and the "already filed" search (FR-9.6) skips the Tasks note.
+
+**FR-9.12** *Added 12 Oct 2026 (UX-14).* **Draft with additional information.** Every draft button (Draft vault note, Draft Confluence entry, Add to-do) keeps its one click and gets a menu beside it with **Draft with additional information…** (**Add with …** for a to-do). It opens a box for what Frank knows that the thread doesn't, such as who the speakers in a Wispr Flow note are, or more on the approach or timeline. The text goes in `POST /api/items/:id/actions` as `additionalInfo` (trimmed, 1–2000 characters, not with `steps` or `suggested`).
+- **Storage.** It is saved in `drafts/<id>.json` before `action.requested` is logged, so a draft still queued at a restart keeps it, and is never in an event. The draft records it (`additionalInfo` in its meta), and the item view lists it by action, so the panel shows **Drafted with your information** while drafting, when ready and after a failure.
+- **Prompt.** It reaches the vault drafter and both Confluence calls (pick and draft) as an `<additional-information>` block after the thread. The block says it comes from Frank and outranks the thread, but doesn't change the drafter's rules. For Confluence it adds that names are only for telling who said what, and the entry still names no one (FR-10.1); the people check reads the entry alone, as before (FR-10.4).
+- **To-do.** Plain **Add to-do** stays code-built (FR-9.9). With information, the to-do is drafted in the queue by Haiku with no tools (`draft-todo`, an editable prompt file), from the thread, Frank's open steps and the text. Haiku answers with steps and dates only; code makes the lines (FR-9.8). It counts against the drafts budget (`draft_todo` usage).
+- **Re-draft.** `POST /api/actions/:id/redraft` keeps the old draft's text; `{ additionalInfo }` replaces it and `{ additionalInfo: null }` drops it. A conflict re-draft carries it on. The re-draft button has the same menu, which opens the box with the text, and warns when the new draft would replace Frank's edits.
+- **Again.** Asking for a draft with information replaces one that is ready (`supersedes`), and is refused (409) while one is still drafting.
 
 ### 7.10 E9 Confluence entry action
 
@@ -1056,7 +1063,7 @@ The triage prompt (v10) keeps the fundamentals: what Confluence and the vault ar
 **FR-15.7 Filing labels.** `labels/filing.jsonl` holds one line per signal: the item, revision and source; `origin` (`explicit` or `implicit`); `signal`; `label`, which sets some of `toFile`, `predraft` and `ready` per filing (`confluence`, `vault`), and `todo`; what a field implies is filled in (`ready` implies `predraft` implies `toFile`, and the reverse for false); `was` (the decision's filing fields, `policyVersion` and rules); and the thread as the model saw it, as in `labels/triage.jsonl` (FR-6.2). For each item and field, the latest explicit line wins, else the latest implicit one. Labels follow the retention rule for `labels/triage.jsonl`.
 
 Explicit signals come from the item panel's **Filing…** menu beside the decision, per filing where it has two:
-- **Not for filing:** `toFile` false. It also corrects the item out of To file (FR-6.2).
+- **Not for filing:** `toFile` false. It also corrects the item out of To file (FR-6.2). It asks why first: a quick reason (**Not my product area**, **Not worth keeping**, **Already written up elsewhere**), Frank's own (up to 200 characters), or **Skip**. The line keeps it as `reason`; any explicit signal may carry one, and an item's merged label keeps the latest.
 - **Should be filed to the vault / to Confluence:** `toFile` true, as a correction. Any correction that turns a filing on or off labels it the same way.
 - **Don't draft items like this ahead:** `predraft` false.
 - **Should be ready to approve** and **Shouldn't be ready:** `ready` true or false.
@@ -1085,7 +1092,7 @@ The last two also move the filing at once, without a triage correction and witho
 **FR-15.9 Policy proposals.** **Propose a better policy** in Settings › Learning:
 1. Splits the labels by a hash of the item ID: 70% to learn from, 30% held out.
 2. Scores the current policy and collects its misses on the 70%.
-3. Asks Opus, with an editable prompt file (`tune-policy`), for a revised policy and a list of changes.
+3. Asks Opus, with an editable prompt file (`tune-policy`), for a revised policy and a list of changes. Each miss carries Frank's reason when he gave one, and `tune-policy` tells Opus to generalise along it rather than the channel or the sender.
 4. Scores the current and proposed policies on the held-out 30%.
 
 Code rejects a proposal that:
@@ -1113,7 +1120,7 @@ The proposal is saved under `proposals/` with its diff, changes and scores, and 
 | To Do estimates (FR-16.14) | `schedule` | `labels/schedule.jsonl` | Estimate (not far too short 80%, not far too long 70%), Ideal deadline |
 | Follow-ups on Done (FR-16.14) | `followup` | `labels/followup.jsonl` | Reply (70%), Mark the item done (90%), Add a To Do, File a vault note |
 
-`POST /api/learning/<loop>/propose` starts a run; each loop needs 10 labelled items and runs on its own. A proposal records its loop; the bell names it ("A triage prompt change is proposed") and links to the file in Settings › Prompts. The `tune-policy` prompt (v3) has a section per loop: the triage loop revises only what the prompt says about attention, the settle and finish loops keep closing strict, the schedule loop revises only its Calibration and deadline rules, and the followup loop never copies a thread's or a reply's wording. The settle, finish, schedule and followup evals stay on the command line. Still in the backlog:
+`POST /api/learning/<loop>/propose` starts a run; each loop needs 10 labelled items and runs on its own. A proposal records its loop; the bell names it ("A triage prompt change is proposed") and links to the file in Settings › Prompts. The `tune-policy` prompt (v4) has a section per loop: the triage loop revises only what the prompt says about attention, the settle and finish loops keep closing strict, the schedule loop revises only its Calibration and deadline rules, and the followup loop never copies a thread's or a reply's wording. The settle, finish, schedule and followup evals stay on the command line. Still in the backlog:
 - topic routing (FT-13);
 - draft quality, which needs the model's draft kept when Frank edits it (FT-15).
 

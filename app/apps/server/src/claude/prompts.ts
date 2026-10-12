@@ -154,7 +154,7 @@ Answer with JSON only, no prose, in exactly this shape, one entry per thread, us
 
 // The filing policy (FR-15.1): Frank's rules for what triage files, drafts ahead, offers as ready
 // to approve and suggests as a to-do. Triage sends it after its own prompt, in <filing-policy>.
-export const DEFAULT_FILING_POLICY = `<!-- prompt: filing-policy v1 -->
+export const DEFAULT_FILING_POLICY = `<!-- prompt: filing-policy v2 -->
 # Filing policy
 
 What triage suggests filing, what it drafts ahead, what it offers as ready to approve, and what it
@@ -179,6 +179,12 @@ file.
 - [F4] An email: customer requirements, commitments and decisions suit Confluence, as in chat.
   Newsletters, notifications, automated mail and mailing lists are never filed.
 - [F5] A meeting invitation is never filed.
+- [F6] Not Frank's to file: product context for business units he isn't PM for. Their PMs keep
+  those PRD pages. Neither Confluence nor the vault, whichever channel or person it comes from.
+  They are Shipping & Offshore (Podium, FleetWeather, SSAS, FleetTrak), Maritime Risk & Compliance
+  (PurpleTRAC), Global Government Solutions (MDA, LRIT, AMVER and the other flag-state and
+  government programmes), Insurance (Coral, Risk Intelligence, Clearwater Dynamics) and Defense.
+  Data Products is his (Meridia, MTI, the Insights Data API, Veritas, MVI): file it as F1 says.
 
 ## Pre-draft
 
@@ -213,7 +219,7 @@ else owns.
  * Proposing a better filing policy (FR-15.9): Opus reads the policy and where it got Frank's labels
  * wrong, and writes a revision. Code checks the answer and scores it on labels it never saw.
  */
-export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v3 -->
+export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v4 -->
 You improve one of the prompts that run Frank's inbox. Frank is Product Innovation Lead at Pole
 Star Global (maritime data, vessel tracking and compliance products).
 
@@ -227,6 +233,10 @@ Write a revised prompt that would get more of these right without getting others
 - Generalise. Describe kinds of topics, people's roles and situations, never one thread. Don't
   quote the threads: never copy a phrase of eight or more words from them, and leave out names,
   numbers and anything that identifies a customer or a person.
+- Some misses carry Frank's reason, in his own words. Generalise along that reason, not along the
+  channel, the sender or anything else the thread happens to share with others. A channel is where
+  something was said, not why: never write a rule about a channel or a person unless a reason says
+  so. Product names already in the prompt stay.
 - Keep the structure: the headings, any rule IDs such as [F1] or [R1], and the intro lines. Keep
   every rule's ID when you reword it; give a new rule the next free ID in its section. Remove a rule
   only when the misses show it does harm, and list the removal.
@@ -611,6 +621,27 @@ Answer with JSON only, no prose, in one of these shapes:
 Use the second shape when none of these pages is the right home, nothing fileable survives the
 exclusion screen, or the thread is not context. Use the third when the page already holds
 everything worth filing from this thread or meeting.
+`;
+
+export const DEFAULT_TODO_PROMPT = `<!-- prompt: draft-todo v1 -->
+You write Frank's to-do for one Slack thread, email or meeting: the tasks he will tick off in his
+Obsidian Tasks note. Code adds the checkbox, the date and the link back to the source, so each step
+is plain text.
+
+You get the thread, Frank's open steps on it as triage found them, and what Frank added when he
+asked for the to-do. What he added comes from him and outranks the thread and the open steps: who
+does what, which steps to drop or merge, the approach, and the dates.
+
+- Start from the open steps. Keep each one unless Frank's information changes, merges or drops it.
+- Add a step only when Frank's information asks for it or plainly implies it.
+- One action per step, starting with a verb, under 120 characters. Name the person it waits on when
+  Frank names them.
+- A date only when Frank's information or the thread gives one. Resolve "Friday" or "end of next
+  week" against Today; never invent a date.
+- Never invent work, owners or facts that neither the thread nor Frank gave.
+
+Answer with JSON only: {"steps":[{"step":"<what to do>","due":"YYYY-MM-DD"}]}. Leave out "due" for
+a step with no date. At most 20 steps.
 `;
 
 export const DEFAULT_PEOPLE_CHECK_PROMPT = `<!-- prompt: people-check v3 -->

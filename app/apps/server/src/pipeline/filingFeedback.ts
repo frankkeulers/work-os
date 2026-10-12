@@ -50,10 +50,11 @@ export class FilingFeedback {
   }
 
   /**
-   * One line for the item, with the decision as it stood and the thread as triage sees it. False
-   * when there is nothing to label: no item, or its content has gone to retention.
+   * One line for the item, with the decision as it stood, the thread as triage sees it and Frank's
+   * reason if he gave one. False when there is nothing to label: no item, or its content has gone
+   * to retention.
    */
-  async label(itemId: string, signal: FilingSignal, label: FilingLabel, thread?: { anchor: { item: { revision: number } }; view: TriageThread }): Promise<boolean> {
+  async label(itemId: string, signal: FilingSignal, label: FilingLabel, thread?: { anchor: { item: { revision: number } }; view: TriageThread }, reason?: string): Promise<boolean> {
     const it = this.d.store.projection.items[itemId];
     if (!it) return false;
     const topic = thread ?? (await topicForTriage(this.d.store.projection, this.d.items, itemId, this.d.me(it.source), this.d.keepLastMessages()));
@@ -71,6 +72,7 @@ export class FilingFeedback {
         ...(label.vault && { vault: impliedFlags(label.vault) }),
         ...(label.todo !== undefined && { todo: label.todo }),
       },
+      ...(reason && { reason }),
       ...(d && {
         was: {
           confluence: d.confluence,
@@ -96,18 +98,18 @@ export class FilingFeedback {
     if (!targets.length) throw new HttpError('conflict', body.type ? 'This item isn’t suggested for that filing.' : 'This item has nothing to file.');
     const flags: FilingFlags = body.signal === 'no_predraft' ? { predraft: false } : body.signal === 'should_be_ready' ? { ready: true } : body.signal === 'not_ready' ? { ready: false } : { toFile: false };
     const label: FilingLabel = Object.fromEntries(targets.map((t) => [t, flags]));
-    if (!(await this.label(itemId, body.signal, label))) throw new HttpError('conflict', 'Its content has gone to retention, so there is nothing to label.');
+    if (!(await this.label(itemId, body.signal, label, undefined, body.reason))) throw new HttpError('conflict', 'Its content has gone to retention, so there is nothing to label.');
     return { labelCount: this.counts.labels };
   }
 
   /** A triage correction that turns a filing on or off says whether it belonged in To file. */
-  async corrected(itemId: string, input: CorrectionInput, thread: Parameters<FilingFeedback['label']>[3]): Promise<boolean> {
+  async corrected(itemId: string, input: CorrectionInput, thread: Parameters<FilingFeedback['label']>[3], reason?: string): Promise<boolean> {
     const it = this.d.store.projection.items[itemId];
     const eff = it && effectiveTriage(it.decision, it.correction);
     const label: FilingLabel = {};
     for (const t of ['confluence', 'vault'] as const) if (!eff || eff[t] !== input[t]) label[t] = { toFile: input[t] };
     if (!label.confluence && !label.vault) return false;
-    return this.label(itemId, 'corrected', label, thread);
+    return this.label(itemId, 'corrected', label, thread, reason);
   }
 
   /** "Triage was right": To file was right for both, and so was Ready to approve where it showed. */

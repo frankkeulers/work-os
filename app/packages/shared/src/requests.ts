@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ActionType, Attention, Ms365Connector } from './schemas';
+import { ActionType, AdditionalInfo, Attention, Ms365Connector } from './schemas';
 import { TODO_MAX_LINES, TODO_MAX_STEP } from './todo';
 import { FollowupAnswered } from './followup';
 
@@ -54,20 +54,36 @@ export const CorrectionBody = z.object({ attention: Attention, confluence: z.boo
 /** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
 // quiet: drafted ahead in a batch (FR-11.6). steps: for a to-do, the lines to start from (UX-5), else Frank's open steps.
 // suggested: for a to-do, the one the filing policy suggested (FR-15.6), with its date.
+// additionalInfo: what Frank knows that the thread doesn't, for the drafter to take into account (FR-9.12).
 export const DraftRequest = z
-  .object({ type: ActionType, quiet: z.boolean().optional(), steps: z.array(z.string().trim().min(1).max(TODO_MAX_STEP)).min(1).max(TODO_MAX_LINES).optional(), suggested: z.literal(true).optional() })
+  .object({
+    type: ActionType,
+    quiet: z.boolean().optional(),
+    steps: z.array(z.string().trim().min(1).max(TODO_MAX_STEP)).min(1).max(TODO_MAX_LINES).optional(),
+    suggested: z.literal(true).optional(),
+    additionalInfo: AdditionalInfo.optional(),
+  })
   .strict()
   .refine((r) => !r.steps || r.type === 'todo', 'Only a to-do takes steps.')
-  .refine((r) => !r.suggested || (r.type === 'todo' && !r.steps), 'Only a to-do can be the suggested one, and it takes no steps.');
+  .refine((r) => !r.suggested || (r.type === 'todo' && !r.steps), 'Only a to-do can be the suggested one, and it takes no steps.')
+  .refine((r) => !r.additionalInfo || (!r.steps && !r.suggested), 'Additional information goes with a draft from the thread, not with given steps.');
+
+/**
+ * POST /api/actions/:id/redraft (FR-9.12): without `additionalInfo` the new draft keeps the old
+ * one's; a text replaces it, and null drops it.
+ */
+export const RedraftBody = z.object({ additionalInfo: AdditionalInfo.nullable().optional() }).strict();
+export type RedraftBody = z.infer<typeof RedraftBody>;
 
 /**
  * POST /api/items/:id/filing-feedback (E14, FR-15.7): Frank's word on the filing policy's call.
  * "Not for filing" also takes the item out of To file; the others only teach the policy. Without
- * `type`, it is about every filing the item has.
+ * `type`, it is about every filing the item has. `reason` is Frank's why, in his words, so the
+ * tuner learns from the reason rather than from the channel or the sender.
  */
 export const FilingFeedbackSignal = z.enum(['not_for_filing', 'no_predraft', 'should_be_ready', 'not_ready']);
 export type FilingFeedbackSignal = z.infer<typeof FilingFeedbackSignal>;
-export const FilingFeedbackBody = z.object({ signal: FilingFeedbackSignal, type: z.enum(['confluence_entry', 'vault_note']).optional() }).strict();
+export const FilingFeedbackBody = z.object({ signal: FilingFeedbackSignal, type: z.enum(['confluence_entry', 'vault_note']).optional(), reason: z.string().trim().min(1).max(200).optional() }).strict();
 export type FilingFeedbackBody = z.infer<typeof FilingFeedbackBody>;
 
 /** POST /api/attention/dismiss (FR-11.5): an entry in the bell, by its key. */

@@ -23,6 +23,7 @@ can read and edit them all in [Settings › Prompts](/settings/prompts).
 | Pick Confluence page | the first step of a Confluence draft |
 | Draft Confluence entry | the second step of a Confluence draft |
 | People check | the check before a Confluence draft is shown |
+| Draft to-do | a to-do you add with additional information; plain **Add to-do** needs no model |
 | Vault conventions | vault drafts (guidance) |
 | Confluence routing | Confluence drafts (guidance) |
 
@@ -46,7 +47,8 @@ ones are left alone.
 The triage prompt holds the fundamentals: what Confluence and the vault are for, the people rule
 and the shape of the answer. The **Filing policy** holds your rules for filing, in four sections:
 
-- **To file** (`F1`, `F2`, …): what is worth filing at all, and where.
+- **To file** (`F1`, `F2`, …): what is worth filing at all, and where. `F6` keeps out product
+  context for the business units you aren't PM for: every one but Data Products.
 - **Pre-draft** (`P1`, …): what is worth drafting ahead, which spends a draft before you've looked.
 - **Ready to approve** (`R1`, …): what you can approve after a glance, with where it goes.
 - **To-dos** (`T1`, …): when a step should be suggested as a to-do.

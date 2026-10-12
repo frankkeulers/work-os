@@ -52,11 +52,17 @@ offers what fits the item:
 
 | Choice | What happens to the item | What the policy learns |
 |---|---|---|
-| **Not for filing** | It leaves To file, as a correction does | It didn't belong in To file |
+| **Not for filing…** | It leaves To file, as a correction does | It didn't belong in To file, and why if you say |
 | **Don't draft items like this ahead** (per filing) | No draft starts until you press `f` or `v`; it leaves Ready to approve | Not worth drafting ahead |
 | **Should be ready to approve** (per filing) | It joins **Ready to approve** at once and is drafted ahead | It should have been ready |
 | **Shouldn't be ready to approve** (per filing) | It goes back with the other filings; a draft already made stays | It wasn't ready |
 | **Should be filed to the vault / to Confluence** | The filing is added, as a correction does | It belonged in To file |
+
+**Not for filing…** asks why before it sends: **Not my product area**, **Not worth keeping**,
+**Already written up elsewhere**, a reason of your own, or **Skip, no reason**. The reason goes
+with the label to Opus when it proposes a better policy, and the policy tuner tells it to
+generalise along your reason, not along the channel or who posted. Without a reason it has only the
+thread to go on, and a channel several of your answers share can look like the cause.
 
 Your word on an item holds until new messages bring a new triage, and the
 [switches](#switches) still apply: with Ready to approve off, nothing shows as ready.
@@ -220,6 +226,7 @@ the file, with the **Proposed change** above it:
 What to look for:
 
 - Does each change describe a kind of situation, not one thread?
+- Does a change name a channel or a person? It should only when your reasons said so.
 - Does a strict row (Ready to approve, to-dos, closing) get looser? That is worth more caution than
   a gain in recall.
 - With few items held back, a change of one item moves a score a lot. Read the changes as much as

@@ -180,13 +180,19 @@ export class HttpApi implements WorkOsApi {
   splitPiece = (pieceId: string) => this.post(`${this.item(pieceId)}/split`);
   regroup = (conversation: string) => this.post<{ merged: number }>('/api/topics/regroup', { conversation });
 
-  requestDraft = (itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean }) =>
-    this.post<Action>(`${this.item(itemId)}/actions`, { type, ...(opts?.quiet && { quiet: true }), ...(opts?.steps && { steps: opts.steps }), ...(opts?.suggested && { suggested: true }) });
+  requestDraft = (itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean; additionalInfo?: string }) =>
+    this.post<Action>(`${this.item(itemId)}/actions`, {
+      type,
+      ...(opts?.quiet && { quiet: true }),
+      ...(opts?.steps && { steps: opts.steps }),
+      ...(opts?.suggested && { suggested: true }),
+      ...(opts?.additionalInfo && { additionalInfo: opts.additionalInfo }),
+    });
   dismissTodo = (id: string) => this.post<void>(`${this.item(id)}/todo/dismiss`);
   filingFeedback = (id: string, body: FilingFeedbackBody) => this.post<{ labelCount: number }>(`${this.item(id)}/filing-feedback`, body);
   cancelDraft = (id: string) => this.post(`${this.action(id)}/cancel`);
   saveDraftEdit = (id: string, content: string, part?: number) => this.request<void>('PUT', `${this.action(id)}/draft`, part === undefined ? { content } : { content, part });
-  redraft = (id: string) => this.post<Action>(`${this.action(id)}/redraft`);
+  redraft = (id: string, opts?: { additionalInfo?: string | null }) => this.post<Action>(`${this.action(id)}/redraft`, opts?.additionalInfo !== undefined ? { additionalInfo: opts.additionalInfo } : undefined);
   discardAction = (id: string) => this.post(`${this.action(id)}/discard`);
   retryWrite = (id: string) => this.post(`${this.action(id)}/retry-write`);
   approveAction = (id: string, opts?: { markDoneWhenFiled?: boolean }) => this.post(`${this.action(id)}/approve`, opts?.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined);

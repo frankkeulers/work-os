@@ -133,6 +133,8 @@ export interface MockState {
   items: Record<string, ItemRec>;
   actions: Record<string, Action>;
   drafts: Record<string, Draft>;
+  /** What Frank added when he asked for a draft, by action (FR-9.12): the server's draft file, never an event. */
+  additionalInfo?: Record<string, string>;
   results: Record<string, string>;
   events: WorkEvent[];
   usage: UsageRecord[];

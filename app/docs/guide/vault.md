@@ -20,6 +20,10 @@ vault note is worth drafting ahead, the draft starts as the item arrives in To f
 policy says it should go reaches Claude as a hint. A routine one, such as a meeting's note, shows
 under [Ready to approve](inbox.md#ready-to-approve) for one key press each.
 
+When you know something the thread doesn't, such as who the speakers in a Wispr Flow note are,
+use **Draft with additional information…** in the menu beside the button. See
+[Drafting with additional information](inbox.md#drafting-with-additional-information).
+
 ## Meetings
 
 A meeting is filed by topic, like a thread. Each decision, fact or finding goes under the note
@@ -88,6 +92,12 @@ note as Obsidian Tasks lines:
 Each step gets its due date, when it has one, and a link back to the source. The steps are a
 topic's open asks, a meeting's action items, or the next step. Work OS builds the to-do itself,
 with no model call, so it is ready at once and doesn't count against the drafts budget.
+
+To change the steps as they are made, choose **Add with additional information…** in the menu
+beside **Add to-do**: who does what, which steps to drop, or the dates. Haiku then writes the to-do
+from your open steps and what you added (the [Draft to-do](prompts.md) prompt), and Work OS still
+makes the lines, so the checkbox, the date and the link are always right. This one is a model call:
+it takes a few seconds and counts against the drafts budget, and so does its re-draft.
 
 Review the lines, edit them if you like (a line without a checkbox becomes a task), and choose
 **Approve and add to Tasks**. The lines go at the end of the note, and the note is created if it

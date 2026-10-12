@@ -339,7 +339,9 @@ test('the Next step card holds the filing: its options, the draft’s progress a
   const step = itemPanel(page).getByRole('region', { name: 'Next step' });
   const options = step.getByRole('region', { name: 'File it' });
   // A to-do is a third target (UX-5): Frank's call, never a triage suggestion.
-  await expect(options.getByRole('button')).toHaveText(['Draft Confluence entry', 'Draft vault note', /^Add to-do/]);
+  // Each with a menu beside it to draft with additional information (FR-9.12).
+  await expect(options.getByRole('button')).toHaveText(['Draft Confluence entry', '', 'Draft vault note', '', /^Add to-do/, '']);
+  await expect(options.getByRole('button', { name: /with additional information$/ })).toHaveCount(3);
   await options.getByRole('button', { name: 'Draft Confluence entry' }).click();
   // The progress shows in the card, under the step, in place of the options.
   const action = step.getByRole('region', { name: 'Action' });
@@ -365,6 +367,84 @@ test('the Next step card holds the filing: its options, the draft’s progress a
   await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
   await page.screenshot({ path: join(APP, 'screenshots/inbox-filing-dark.png'), animations: 'disabled' }); // fast-forward the colour transitions
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+});
+
+test('a menu beside a button at the right edge opens towards the left, inside the panel and the window', async ({ page }) => {
+  await sortBy(page, 'Newest first');
+  await group(page, 'Needs you').locator('[data-row]').first().click();
+  const options = itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('region', { name: 'File it' });
+  // The to-do's split button sits at the right of its row; its menu would run off to the right.
+  await options.getByRole('button', { name: 'Add with additional information' }).click();
+  const menu = page.getByRole('menu', { name: 'Draft options' });
+  await expect(menu).toBeVisible();
+  const m = (await menu.boundingBox())!;
+  const p = (await itemPanel(page).boundingBox())!;
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(m.x).toBeGreaterThanOrEqual(p.x);
+  expect(m.x + m.width).toBeLessThanOrEqual(Math.min(p.x + p.width, width));
+  await page.screenshot({ path: join(APP, 'screenshots/popover-edge-light.png') });
+  // A menu with room to its right still opens that way: the Confluence one, further left.
+  await page.keyboard.press('Escape');
+  await options.getByRole('button', { name: 'Draft with additional information' }).first().click();
+  const l = (await page.getByRole('menu', { name: 'Draft options' }).boundingBox())!;
+  const b = (await options.getByRole('button', { name: 'Draft Confluence entry' }).boundingBox())!;
+  expect(Math.abs(l.x - b.x)).toBeLessThan(1);
+  expect(l.x + l.width).toBeLessThanOrEqual(Math.min(p.x + p.width, width));
+});
+
+test('drafts with additional information from the menu beside a draft button, and re-drafts with it (FR-9.12)', async ({ page }) => {
+  await sortBy(page, 'Newest first');
+  await group(page, 'Needs you').locator('[data-row]').first().click();
+  const step = itemPanel(page).getByRole('region', { name: 'Next step' });
+  const options = step.getByRole('region', { name: 'File it' });
+  // Confluence first, then the vault: the second menu is the vault note's.
+  await options.getByRole('button', { name: 'Draft with additional information' }).nth(1).click();
+  await page.getByRole('menu', { name: 'Draft options' }).getByRole('menuitem', { name: 'Draft with additional information…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Draft vault note with additional information' });
+  const box = dialog.getByRole('textbox', { name: 'Additional information' });
+  await expect(box).toBeFocused();
+  await expect(dialog.getByRole('button', { name: 'Draft vault note' })).toBeDisabled();
+  await box.fill('Speaker 1 is Anna from Ops. The rollout is planned for Q1, not Q4.');
+  await expect(dialog.getByText('/2000')).toHaveText('66/2000');
+  await page.screenshot({ path: join(APP, 'screenshots/draft-with-info-dialog-light.png') });
+  await dialog.getByRole('button', { name: 'Draft vault note' }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const action = step.getByRole('region', { name: 'Action' });
+  await expect(action.getByText('Drafting with your information')).toBeVisible();
+  const used = action.getByText('Drafted with your information');
+  await expect(used).toBeVisible({ timeout: 20_000 });
+  await used.click();
+  await expect(action.getByText('Speaker 1 is Anna from Ops. The rollout is planned for Q1, not Q4.')).toBeVisible();
+  await page.screenshot({ path: join(APP, 'screenshots/draft-with-info-review-light.png') });
+
+  // Re-draft with it: the box starts from the text the draft used.
+  await action.getByRole('button', { name: 'Draft again with additional information' }).click();
+  await page.getByRole('menu', { name: 'Re-draft options' }).getByRole('menuitem', { name: 'Re-draft with additional information…' }).click();
+  const again = page.getByRole('dialog', { name: 'Re-draft with additional information' });
+  await expect(again.getByRole('textbox', { name: 'Additional information' })).toHaveValue('Speaker 1 is Anna from Ops. The rollout is planned for Q1, not Q4.');
+  await again.getByRole('textbox', { name: 'Additional information' }).fill('Speaker 2 is me.');
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(again).toHaveCount(0);
+  await expect(action.getByText('Drafting with your information')).toBeVisible();
+  await expect(action.getByText('Drafted with your information')).toBeVisible({ timeout: 20_000 });
+  await action.getByText('Drafted with your information').click();
+  await expect(action.getByText('Speaker 2 is me.')).toBeVisible();
+});
+
+test('adds a to-do with additional information, drafted by Haiku (FR-9.12)', async ({ page }) => {
+  await sortBy(page, 'Newest first');
+  await group(page, 'Needs you').locator('[data-row]').first().click();
+  const step = itemPanel(page).getByRole('region', { name: 'Next step' });
+  await step.getByRole('region', { name: 'File it' }).getByRole('button', { name: 'Add with additional information' }).click();
+  await page.getByRole('menu', { name: 'Draft options' }).getByRole('menuitem', { name: 'Add with additional information…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add to-do with additional information' });
+  await expect(dialog.getByText(/Haiku writes the to-do/)).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Additional information' }).fill('Anna owns the export spec.');
+  await dialog.getByRole('button', { name: 'Add to-do' }).click();
+  const action = step.getByRole('region', { name: 'Action' });
+  await expect(action.getByText('Writing the to-do (Haiku)')).toBeVisible();
+  await expect(action.getByRole('list', { name: 'Tasks' })).toContainText('From Frank: Anna owns the export spec.', { timeout: 20_000 });
 });
 
 test('a filed entry with new replies offers a v2 draft, and discarding it goes back to the filed entry', async ({ page }) => {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { PromptFileId, PromptFileView, PromptSourceView } from '@work-os/shared';
 import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
-import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_FILING_POLICY, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SCHEDULE_PROMPT, DEFAULT_FOLLOWUP_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_TUNE_POLICY, DEFAULT_VAULT_PROMPT, promptVersion, triageSystem, type Prompt } from './prompts';
+import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_FILING_POLICY, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SCHEDULE_PROMPT, DEFAULT_FOLLOWUP_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TODO_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_TUNE_POLICY, DEFAULT_VAULT_PROMPT, promptVersion, triageSystem, type Prompt } from './prompts';
 
 // Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the eight prompts and the two
 // filing guidance files. Each is written on first run, read on every call (empty or missing → the
@@ -40,7 +40,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Your rules for what triage files, drafts ahead, offers as ready to approve and suggests as a to-do. Sent with the triage prompt.',
     usedBy: 'Triage, drafts ahead and the filing eval',
     defaultText: DEFAULT_FILING_POLICY,
-    previousDefaults: [],
+    previousDefaults: ['a01b31f8971dee32860e05abb16e02a363e091ef'], // filing-policy v1
   },
   {
     id: 'tune-policy',
@@ -49,7 +49,7 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'How Opus revises a prompt from the labels it got wrong: the filing policy, triage attention, the settle and Looks finished checks, and the To Do estimates and follow-ups. Its proposals wait in Settings › Prompts for you to apply.',
     usedBy: 'Propose a better …, in Settings › Learning',
     defaultText: DEFAULT_TUNE_POLICY,
-    previousDefaults: ['0db5452e381dcd7c632bba98044956f6bea28730', '5c63b88b9ddbe1e9750dd10da422f0bc86b9088d'], // tune-policy v1, v2
+    previousDefaults: ['0db5452e381dcd7c632bba98044956f6bea28730', '5c63b88b9ddbe1e9750dd10da422f0bc86b9088d', 'd8fb17a3300953f55124dd7caabff074bb59c614', '809372580c07380c6dacaf22d53fff79ef598bad'], // tune-policy v1, v2, v3 (with reasons), v3 (with the To Do loops)
   },
   {
     id: 'topics',
@@ -131,6 +131,15 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     usedBy: 'Draft Confluence entry',
     defaultText: DEFAULT_PEOPLE_CHECK_PROMPT,
     previousDefaults: ['852f66caf3c91f7c15086c4bb7057fc5fea51e13', 'ec4c692e2f60e81de1bbbdb807ff8cb81cb6df4e'], // people-check v1, v2
+  },
+  {
+    id: 'draft-todo',
+    file: 'prompts/draft-todo.md',
+    label: 'Draft to-do',
+    description: 'Writes the to-do from your open steps when you add information to it: who does what, which steps to keep, and the dates you give. Plain Add to-do needs no model.',
+    usedBy: 'Add to-do',
+    defaultText: DEFAULT_TODO_PROMPT,
+    previousDefaults: [],
   },
   {
     id: 'vault-conventions',

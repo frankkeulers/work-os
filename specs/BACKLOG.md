@@ -59,6 +59,7 @@ Ranked by friction removed. Here is the core funnel on the wide cockpit as it st
 | UX-11 | **A `?` overlay** that shows the keys for the current context (list, panel, draft, batch). | Today `?` leaves the inbox for the guide. | UX-1 | built (PLAN FR-1.8 amended) |
 | UX-12 | **Done today shows filings**: what was written where, with Open note or Open page, and Undo. | Lets you trust the funnel without checking Obsidian or Confluence. | — | built (PLAN FR-8.3 amended): Undo is **Reopen**, which reopens the item; what was written stays |
 | UX-13 | **Don't open the panel on load** on the cockpit. | It covers Later until you close it once. | — | built (cockpit SPEC CK-3.2 amended): today's list below 1600 px still opens on its first item |
+| UX-14 | **Draft with additional information.** A menu beside each draft button opens a box for what the thread lacks: who the speakers are, the approach, the timeline. | Wispr Flow notes often don't name speakers, and Frank often knows more about the plan than the thread says. Re-draft was the only lever. | — | built (PLAN FR-9.12): a to-do with information is drafted by Haiku; plain Add to-do stays code |
 
 ---
 

@@ -11,7 +11,8 @@ import type { QueryFn } from './adapter';
 // person he @-mentions (topicsFor).
 // A vault draft request gets a new note under Inbox/, named after the thread. The Confluence page
 // picker takes the first page in the catalogue that isn't a hub, and the draft goes to that page's
-// first section; the people check flags words about how someone works.
+// first section; the people check flags words about how someone works. A to-do with Frank's
+// information keeps the open steps and adds one from the information (todoFor).
 // A settle check settles every ask unless Frank's reply only holds it ("later", "on it", a question)
 // or hands it on ("over to you", "can you take this"), which leaves it open and handed on; a finish
 // check (CK-2.10) likewise, judged on the latest message since. The policy tuner (FR-15.9) adds a
@@ -130,6 +131,20 @@ export function confluenceEntryFor(prompt: string) {
   return { pageId: page?.pageId ?? 'none', section: section?.heading ?? 'none', title: `${t.title ?? 'Thread'} update`, content: `${t.messages?.[0]?.text ?? ''}\n\n[Slack thread](${t.permalink ?? ''})` };
 }
 
+/**
+ * A to-do with Frank's information (FR-9.12): the open steps as they are, and one more step taken
+ * from the information's first line, due on the date in it when there is one.
+ */
+export function todoFor(prompt: string) {
+  const steps = (/<open-steps>\n([\s\S]*?)\n<\/open-steps>/.exec(prompt)?.[1] ?? '')
+    .split('\n')
+    .filter((l) => l.startsWith('{'))
+    .map((l) => JSON.parse(l) as { step: string; due?: string });
+  const info = /<additional-information>\n([^\n]*)/.exec(prompt)?.[1];
+  const due = info && /\b(\d{4}-\d{2}-\d{2})\b/.exec(info)?.[1];
+  return { steps: [...steps, ...(info ? [{ step: `From Frank: ${info}`, ...(due && { due }) }] : [])] };
+}
+
 type Check = { itemId: string; itemRevision: number; asks: { index: number }[]; reply?: { text: string }[]; since?: { text: string }[] };
 
 const HANDED_ON = /\b(over to you|handing (it|this) (on|over)|can you (take|pick up|handle) (this|it))\b/i;
@@ -224,6 +239,8 @@ export function fakeClaude(): FakeClaude {
           ? followupFor(JSON.parse(done[1]) as DoneTodo[])
           : todos
           ? scheduleFor(JSON.parse(todos[1]) as PlanTodo[], new Date(now ?? Date.now()))
+          : prompt.includes('<open-steps>')
+          ? todoFor(prompt)
           : prompt.includes('<vault-conventions>')
           ? vaultNoteFor(prompt)
           : prompt.includes('<confluence-catalogue>')

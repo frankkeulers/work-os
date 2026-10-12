@@ -7,7 +7,8 @@ import type { FilingField, LabelValue, MergedFilingLabel } from '../store/filing
 import type { LoopAdapter } from './tuner';
 
 // The filing loop's adapter for the tuner (FR-15.9): the filing eval scores a policy text, and each
-// labelled item it got wrong becomes a miss: the thread, what the label says and what the policy did.
+// labelled item it got wrong becomes a miss: the thread, what the label says and what the policy did,
+// and Frank's reason when he gave one.
 
 const FIELD = { toFile: 'to file', predraft: 'draft ahead', ready: 'ready to approve' } as const;
 
@@ -25,7 +26,7 @@ export function filingMiss(row: FilingScored): object | undefined {
   }
   const todo = row.label.todo;
   if (todo && todo.value !== row.predicted.todo) wrong.push(`to-do suggestion: label ${said(todo)}; the policy said ${row.predicted.todo ? 'yes' : 'no'}`);
-  return wrong.length ? { thread: row.label.thread, wrong } : undefined;
+  return wrong.length ? { thread: row.label.thread, wrong, ...(row.label.reason && { reason: row.label.reason }) } : undefined;
 }
 
 export function filingLoop(d: { claude: ClaudeAdapter; settings: () => Settings; base: () => Promise<Prompt>; now: () => Date; logger?: Logger }): LoopAdapter<MergedFilingLabel> {

@@ -34,6 +34,8 @@ export const FilingLabelRecord = z.object({
   itemRevision: z.number().int().positive(),
   source: SourceId,
   label: FilingLabel,
+  /** Frank's reason, in his words, when he gave one: the tuner generalises along it. */
+  reason: z.string().max(200).optional(),
   /** The decision's filing fields as they stood, for reading the label back. */
   was: z
     .object({
@@ -84,6 +86,8 @@ export interface MergedFilingLabel {
   confluence: Partial<Record<FilingField, LabelValue>>;
   vault: Partial<Record<FilingField, LabelValue>>;
   todo?: LabelValue;
+  /** The latest reason Frank gave for the item. */
+  reason?: string;
 }
 
 type Thread = z.infer<typeof LabelThread>;
@@ -98,7 +102,7 @@ export function mergeFilingLabels(records: readonly FilingLabelRecord[]): Merged
   const by = new Map<string, MergedFilingLabel>();
   for (const r of records) {
     const m = by.get(r.itemId) ?? { itemId: r.itemId, source: r.source, itemRevision: r.itemRevision, thread: r.thread, confluence: {}, vault: {} };
-    Object.assign(m, { itemRevision: r.itemRevision, thread: r.thread, ...(r.was && { was: r.was }) });
+    Object.assign(m, { itemRevision: r.itemRevision, thread: r.thread, ...(r.was && { was: r.was }), ...(r.reason && { reason: r.reason }) });
     for (const target of ['confluence', 'vault'] as const) {
       for (const [field, value] of Object.entries(impliedFlags(r.label[target] ?? {})) as [FilingField, boolean][]) {
         const next: LabelValue = { value, origin: r.origin, signal: r.signal };

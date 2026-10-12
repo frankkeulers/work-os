@@ -112,7 +112,7 @@ test('J89 dismissing the suggested to-do keeps it gone (FR-15.6)', async ({ page
   await expect(chip).toHaveCount(0);
 });
 
-test('J90 the Filing… menu: feedback for the policy that moves the item too, and Not for filing takes it out of To file (FR-15.7)', async ({ page }) => {
+test('J90 the Filing… menu: feedback for the policy that moves the item too, and Not for filing asks why and takes it out of To file (FR-15.7)', async ({ page }) => {
   await withPolicy(page);
   await row(page, F1).click();
   await expect(panel(page).getByTestId('panel-pos')).toBeVisible();
@@ -120,7 +120,7 @@ test('J90 the Filing… menu: feedback for the policy that moves the item too, a
   await trigger.click();
   const menu = page.getByRole('menu', { name: 'Filing feedback' });
   // f1 files to both: the vault note is ready (R1), the Confluence entry isn't drafted ahead (F1).
-  await expect(menu.getByRole('menuitem')).toHaveText(['Not for filing', 'Don’t draft items like this ahead', 'Shouldn’t be ready to approve', 'Should be ready to approve']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Not for filing…', 'Don’t draft items like this ahead', 'Shouldn’t be ready to approve', 'Should be ready to approve']);
   await expect(menu.getByRole('group', { name: 'Vault note' }).getByRole('menuitem')).toHaveCount(2);
   await expect(menu.getByRole('group', { name: 'Confluence entry' }).getByRole('menuitem')).toHaveText(['Should be ready to approve']);
   await page.addStyleTag({ content: HIDE });
@@ -143,8 +143,24 @@ test('J90 the Filing… menu: feedback for the policy that moves the item too, a
   await expect(row(page, F1)).toContainText('Ready · F1');
   await expect(ready).toContainText('Ready to approve2');
 
+  // Not for filing asks why first, so the policy learns the reason rather than the channel.
   await trigger.click();
-  await page.getByRole('menu', { name: 'Filing feedback' }).getByRole('menuitem', { name: 'Not for filing' }).click();
+  await page.getByRole('menu', { name: 'Filing feedback' }).getByRole('menuitem', { name: 'Not for filing…' }).click();
+  const why = page.getByRole('dialog', { name: 'Why not for filing?' });
+  await expect(why.getByRole('menuitem')).toHaveText(['Not my product area', 'Not worth keeping', 'Already written up elsewhere', 'Skip, no reason']);
+  await expect(why.getByRole('menuitem', { name: 'Not my product area' })).toBeFocused();
+  await expect(why.getByRole('button', { name: 'Send' })).toBeDisabled();
+  await why.screenshot({ path: join(APP, 'screenshots/panel-filing-why-light.png'), animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await why.screenshot({ path: join(APP, 'screenshots/panel-filing-why-dark.png'), animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+  // Esc closes it without sending; the item stays in To file.
+  await page.keyboard.press('Escape');
+  await expect(why).toHaveCount(0);
+  await expect(row(page, F1)).toHaveCount(1);
+  await trigger.click();
+  await page.getByRole('menu', { name: 'Filing feedback' }).getByRole('menuitem', { name: 'Not for filing…' }).click();
+  await page.getByRole('dialog', { name: 'Why not for filing?' }).getByRole('menuitem', { name: 'Not my product area' }).click();
   await expect(page.getByText(/Taken out of To file · filing labels now 27/)).toBeVisible();
   await expect(row(page, F1)).toHaveCount(0, { timeout: 10_000 });
 });

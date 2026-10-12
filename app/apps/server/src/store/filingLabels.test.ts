@@ -48,6 +48,16 @@ describe('mergeFilingLabels', () => {
     expect(m[0].confluence).toEqual({});
     expect(m[1]).toMatchObject({ confluence: { toFile: { value: true, origin: 'explicit' } } });
   });
+
+  it('keeps the latest reason Frank gave, past later lines without one', () => {
+    const [m] = mergeFilingLabels([
+      line({ origin: 'explicit', signal: 'no_predraft', label: { vault: { predraft: false } }, reason: 'Only after the call' }),
+      line({ origin: 'explicit', signal: 'corrected', label: { vault: { toFile: false } }, reason: 'Not my product area' }),
+      line({ signal: 'done_unfiled', label: { vault: { toFile: false } } }),
+    ]);
+    expect(m.reason).toBe('Not my product area');
+    expect(mergeFilingLabels([line({})])[0]).not.toHaveProperty('reason');
+  });
 });
 
 describe('FilingLabelStore', () => {

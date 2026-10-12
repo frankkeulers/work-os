@@ -21,7 +21,7 @@ export interface CorrectionDeps {
   filing?: Pick<FilingFeedback, 'corrected' | 'confirmed'>;
 }
 
-export async function correctTriage(d: CorrectionDeps, itemId: string, input: CorrectionInput): Promise<{ labelCount: number }> {
+export async function correctTriage(d: CorrectionDeps, itemId: string, input: CorrectionInput, reason?: string): Promise<{ labelCount: number }> {
   const it = d.store.projection.items[itemId];
   if (!it) throw new Error(`No item ${itemId}`);
   const at = d.now().toISOString();
@@ -41,7 +41,7 @@ export async function correctTriage(d: CorrectionDeps, itemId: string, input: Co
       ...(was && { was: { attention: was.attention, confluence: was.confluence, vault: was.vault, by: was.by } }),
       thread: topic.view, // a topic's label holds all its pieces
     });
-    await d.filing?.corrected(itemId, input, topic).catch(() => false);
+    await d.filing?.corrected(itemId, input, topic, reason).catch(() => false);
   }
   await d.store.append({ type: 'triage.corrected', itemId, data: { correction: { itemId, itemRevision: it.revision, ...input, correctedAt: at } } });
   return { labelCount: d.labels.counts.labels };
