@@ -612,6 +612,12 @@ export interface WorkOsApi {
   /** Undo for markDoneMany. */
   reopenMany(itemIds: string[]): Promise<{ count: number }>;
   snooze(itemId: string, untilIso: string): Promise<void>;
+  /** E15 (FR-16.4): Done on a To Do, which ticks its line in the Tasks note. Answers with the To Do as it is then. */
+  markTodoDone(todoId: string): Promise<TodoSummary | null>;
+  /** Undo for markTodoDone: open again, and its line unticked. */
+  reopenTodo(todoId: string): Promise<TodoSummary | null>;
+  /** FR-16.5: how long a done To Do took, in minutes; null takes the answer back. */
+  setTodoActual(todoId: string, minutes: number | null): Promise<void>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
   /** "Not finished" on a topic that looks finished (cockpit CK-2.10): back to Today, and a label for the finish eval. */
   notFinished(itemId: string): Promise<{ labelCount: number }>;

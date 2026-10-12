@@ -142,6 +142,24 @@ Every to-do you add (`a`) and approve becomes a **To Do** here, one per line it 
 
 The item panel's **Add to-do** row says how many of the item's To Dos are open.
 
+### Done
+
+Press the ✓ on a To Do's row when it's done. Or press `g` then `d` to go to the first To Do, then
+`e` on it (`j` and `k` still move between items, and `↵` opens the To Do's item).
+
+- **Its line is ticked** in your Tasks note, as the Tasks plugin would tick it: `[x]` and a ✅ date.
+  Only that line changes. Pressing Done is your approval for that one change. With dry-run on, the
+  sandbox copy of the note is ticked instead.
+- **The toast** says "Ticked in the Tasks note". If the line couldn't be ticked, it says "Not
+  ticked" and why, for example because the line is no longer in the note. The To Do is done
+  either way, its row says "not ticked in the Tasks note", and Work OS tries again every 10 minutes.
+- **Took:** the toast asks how long the To Do took, with one tap: 15m, 30m, 1h, 2h or Half day.
+  Tap the same chip again to take it back, or close the toast to skip it. Your answer shows on the
+  row ("took 30m"). Work OS keeps your answers so it can learn how long your To Dos really take.
+  Its estimates come in a later version.
+- **Undo** on the toast, or `z`, opens the To Do again and unticks its line. A To Do done today
+  also has **Open again** (↶) on its row under **N done today**.
+
 ## This week, low priority, snoozed and done
 
 On a wide screen these live in Later. In a narrower window, below the groups, **Low priority** opens everything that needs nothing and holds nothing worth

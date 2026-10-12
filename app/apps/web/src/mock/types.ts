@@ -192,4 +192,6 @@ export interface MockTodoText {
   line: string;
   source: SourceId;
   sourceTitle: string;
+  /** Its line isn't in the Tasks note: shown so, and Done can't tick it. */
+  missing?: true;
 }

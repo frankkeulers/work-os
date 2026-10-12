@@ -14,6 +14,9 @@ const DeadlineFrom = z.enum(['triage', 'line', 'none']);
 /** Who closed or reopened a To Do: Frank in Work OS, or the line in the Tasks note. */
 export const TodoBy = z.enum(['you', 'tasks_note']);
 export type TodoBy = z.infer<typeof TodoBy>;
+/** Why a To Do's tick couldn't be mirrored to its line in the Tasks note (FR-16.4). */
+export const MirrorFailure = z.enum(['path_refused', 'no_note', 'no_line', 'write_failed']);
+export type MirrorFailure = z.infer<typeof MirrorFailure>;
 
 export const PollReason = z.enum(['manual', 'scheduled', 'wake', 'reconnect', 'first']);
 export type PollReason = z.infer<typeof PollReason>;
@@ -95,6 +98,12 @@ export const EventPayloads = {
   'todo.created': z.object({ todoId, lineId: z.string().min(1).optional(), deadline: isoDate.optional(), deadlineFrom: DeadlineFrom, backfilled: z.literal(true).optional() }),
   'todo.done': z.object({ todoId, by: TodoBy, on: dateKey.optional() }),
   'todo.reopened': z.object({ todoId, by: TodoBy }),
+  // FR-16.4: Frank's Done or reopen in Work OS, mirrored to the line in the Tasks note (ticked or
+  // open again), or why it couldn't be. FR-16.5: how long it took, as Frank said on Done (null: the
+  // answer taken back).
+  'todo.mirrored': z.object({ todoId, state: z.enum(['ticked', 'open']), dryRun: z.boolean() }),
+  'todo.mirrorFailed': z.object({ todoId, reason: MirrorFailure }),
+  'todo.timed': z.object({ todoId, minutes: z.number().int().min(1).max(960).nullable() }),
   // E14 (FR-15.7): Frank's word on one filing's stage from the Filing… menu, for this revision.
   // ready implies predraft; predraft false implies ready false (see filingPlan()).
   'filing.staged': z.object({ revision, type: z.enum(['confluence_entry', 'vault_note']), predraft: z.boolean().optional(), ready: z.boolean().optional() }),

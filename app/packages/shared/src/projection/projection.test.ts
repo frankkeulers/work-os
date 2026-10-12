@@ -265,6 +265,41 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     l.add('todo.created', 1, created, { itemId: ITEM });
     expect(replay(l.events).todos).toEqual({});
   });
+
+  it('leaves Frank’s Done and reopen to mirror to the line until it matches; the note’s own changes need none (FR-16.4)', () => {
+    const l = log();
+    const todoId = created.todoId;
+    l.add('item.upserted', 0, upserted(1)).add('todo.created', 1, created, ids);
+    l.add('todo.done', 2, { todoId, by: 'you' }, ids);
+    expect(replay(l.events).todos?.[todoId].mirror).toEqual({ want: 'ticked' });
+    l.add('todo.mirrorFailed', 3, { todoId, reason: 'no_line' }, ids);
+    expect(replay(l.events).todos?.[todoId].mirror).toEqual({ want: 'ticked', failed: 'no_line', failedAt: at(3) });
+    l.add('todo.mirrored', 4, { todoId, state: 'open', dryRun: true }, ids); // not what is wanted
+    expect(replay(l.events).todos?.[todoId].mirror?.want).toBe('ticked');
+    l.add('todo.mirrored', 5, { todoId, state: 'ticked', dryRun: true }, ids);
+    expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('mirror');
+    // Undo before the tick was mirrored: the line is to stay open.
+    l.add('todo.reopened', 6, { todoId, by: 'you' }, ids);
+    expect(replay(l.events).todos?.[todoId].mirror).toEqual({ want: 'open' });
+    // Ticked in Obsidian meanwhile: nothing left to mirror.
+    l.add('todo.done', 7, { todoId, by: 'tasks_note' }, ids);
+    expect(replay(l.events).todos?.[todoId]).toMatchObject({ status: 'done', doneBy: 'tasks_note' });
+    expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('mirror');
+  });
+
+  it('keeps how long a done To Do took, until taken back or reopened (FR-16.5)', () => {
+    const l = log();
+    const todoId = created.todoId;
+    l.add('item.upserted', 0, upserted(1)).add('todo.created', 1, created, ids);
+    l.add('todo.timed', 2, { todoId, minutes: 30 }, ids); // still open
+    expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('actualMinutes');
+    l.add('todo.done', 3, { todoId, by: 'you' }, ids).add('todo.timed', 4, { todoId, minutes: 60 }, ids);
+    expect(replay(l.events).todos?.[todoId].actualMinutes).toBe(60);
+    l.add('todo.timed', 5, { todoId, minutes: null }, ids);
+    expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('actualMinutes');
+    l.add('todo.timed', 6, { todoId, minutes: 15 }, ids).add('todo.reopened', 7, { todoId, by: 'you' }, ids);
+    expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('actualMinutes');
+  });
 });
 
 describe('events that arrive too late', () => {

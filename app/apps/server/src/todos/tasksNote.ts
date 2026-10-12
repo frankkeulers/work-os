@@ -7,11 +7,12 @@ import type { Logger } from '../log';
 import type { Store } from '../store/store';
 import type { TodoTextStore } from '../store/todos';
 
-// The Tasks note read back (E15, FR-16.3). Read only: a line Frank ticks in Obsidian closes its To
-// Do, and one he unticks reopens a To Do the note closed. Lines are found by their id, else by
-// their task (lines written before To Dos had ids). A To Do whose line isn't in the note is shown
-// as such and otherwise left alone: Frank may have moved it to another note. In dry-run the
-// sandbox copy, when there is one, stands in for the note, as for writes.
+// The Tasks note read back (E15, FR-16.3). Read only: a line ticked in Obsidian closes its To Do,
+// and a line unticked there reopens it, however it was closed. A To Do whose Done or reopen in Work
+// OS is still to be mirrored to its line (FR-16.4) is left alone until it is. Lines are found by
+// their id, else by their task (lines written before To Dos had ids). A To Do whose line isn't in
+// the note is shown as such and otherwise left alone: Frank may have moved it to another note. In
+// dry-run the sandbox copy, when there is one, stands in for the note, as for writes.
 
 /** How often the note is looked at: its modified time first, the text only when that changed. */
 export const TASKS_NOTE_EVERY_MS = 30_000;
@@ -67,13 +68,24 @@ export class TasksNoteWatcher {
     }
     const sandbox = join(t.sandboxRoot, path);
     const real = join(t.vaultRoot, path);
-    const file = t.dryRun && (await stat(sandbox).catch(() => undefined)) ? sandbox : real;
-    const st = await stat(file).catch(() => undefined);
+    const look = async () => {
+      const file = t.dryRun && (await stat(sandbox).catch(() => undefined)) ? sandbox : real;
+      const st = await stat(file).catch(() => undefined);
+      return { file, st, at: `${file}|${st?.mtimeMs ?? 'none'}|${st?.size ?? 0}` };
+    };
+    const { file, st, at: seen } = await look();
     // Unchanged note and the same To Dos: nothing new to see.
-    const stamp = `${file}|${st?.mtimeMs ?? 'none'}|${st?.size ?? 0}|${todos.length}|${todos.filter((x) => x.status === 'open').length}`;
+    const stamp = `${seen}|${todos.length}|${todos.filter((x) => x.status === 'open').length}`;
     if (!force && stamp === this.lastStamp) return 0;
     this.lastStamp = stamp;
     const text = st ? await readOrNull(file) : null;
+    // Written meanwhile (by the mirror, say, after a Done): what was read may be stale against
+    // the To Dos now, so look again on the next tick.
+    if ((await look()).at !== seen) {
+      this.lastStamp = undefined;
+      return 0;
+    }
+    // From here to the append, nothing waits: the note as read and the To Dos as they are now.
     const byId = new Map<string, TaskLine>();
     const byKey = new Map<string, TaskLine>();
     for (const l of (text ?? '').split(/\r?\n/)) {
@@ -92,8 +104,10 @@ export class TasksNoteWatcher {
         this.missingIds.add(todo.id);
         continue;
       }
+      // Done or reopened in Work OS and not yet mirrored: the line is still as it was (FR-16.4).
+      if (todo.mirror) continue;
       if (line.ticked && todo.status === 'open') events.push({ type: 'todo.done', itemId: todo.itemId, actionId: todo.actionId, data: { todoId: todo.id, by: 'tasks_note', ...(line.doneOn && { on: line.doneOn }) } });
-      if (!line.ticked && todo.status === 'done' && todo.doneBy === 'tasks_note') events.push({ type: 'todo.reopened', itemId: todo.itemId, actionId: todo.actionId, data: { todoId: todo.id, by: 'tasks_note' } });
+      if (!line.ticked && todo.status === 'done') events.push({ type: 'todo.reopened', itemId: todo.itemId, actionId: todo.actionId, data: { todoId: todo.id, by: 'tasks_note' } });
     }
     this.readOnce = true;
     if (events.length) await this.d.store.append(...events);

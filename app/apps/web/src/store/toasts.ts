@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { create } from 'zustand';
 
 export interface Toast {
@@ -7,6 +8,8 @@ export interface Toast {
   description?: string;
   tone?: 'default' | 'success' | 'error';
   action?: { label: string; run: () => void };
+  /** Anything more under the message: the time chips on a To Do's Done (FR-16.5). */
+  body?: ReactNode;
   ttl?: number;
   /** A toast with the same key replaces the visible one instead of stacking. */
   key?: string;

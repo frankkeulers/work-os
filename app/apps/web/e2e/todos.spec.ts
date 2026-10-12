@@ -51,6 +51,42 @@ test.describe('wide window (cockpit)', () => {
     await needs.locator('[data-todo]').nth(1).getByRole('button', { name: '#pole-star-labs' }).click();
     await expect(page.locator('.item-panel')).toContainText('graduation gate checklist');
   });
+
+  test('J93 Done on a To Do ticks it in the Tasks note, asks how long it took, and Undo opens it again (FR-16.4, FR-16.5)', async ({ page }) => {
+    await withTodos(page);
+    const needs = page.getByRole('region', { name: 'To do today' });
+    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
+    await share.getByRole('button', { name: 'Done: Share the graduation gate checklist' }).click();
+    const toast = page.getByRole('status').filter({ hasText: 'Done · Share the graduation gate checklist' });
+    await expect(toast).toContainText('Ticked in the Tasks note');
+    await expect(needs.locator('[data-todo]')).toHaveCount(2);
+    await toast.getByRole('button', { name: '30m' }).click();
+    await expect(toast.getByRole('button', { name: '30m' })).toHaveAttribute('aria-pressed', 'true');
+    await shoot(page, toast, 'todos-done-toast');
+    const later = page.getByRole('region', { name: 'Later' }).getByRole('region', { name: 'To do' });
+    await later.getByRole('button', { name: '2 done today' }).click();
+    await expect(later.locator('[data-todo-status="done"]', { hasText: 'Share the graduation' })).toContainText('took 30m');
+
+    // z undoes it, as any toast's Undo.
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press('z');
+    await expect(needs.locator('[data-todo]')).toHaveCount(3);
+
+    // g then d: the first To Do, and e on it is its Done, not the open item's.
+    await page.keyboard.press('g');
+    await page.keyboard.press('d');
+    await expect(needs.locator('[data-todo]').first()).toBeFocused();
+    const item = page.locator('.item-panel');
+    const hadPanel = await item.count();
+    await page.keyboard.press('e');
+    await expect(page.getByRole('status').filter({ hasText: 'Done · Send Matt the one-line MVI V2 go/no-go reason' })).toBeVisible();
+    await expect(item).toHaveCount(hadPanel);
+
+    // A line not in the Tasks note: done all the same, and it says it couldn't be ticked.
+    await later.locator('[data-todo]', { hasText: 'Book a kick-off' }).getByRole('button', { name: /^Done:/ }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Done · Book a kick-off' })).toContainText('Not ticked: its line isn’t in the Tasks note');
+    await expect(later.locator('[data-todo]', { hasText: 'Book a kick-off' })).toContainText('not ticked in the Tasks note');
+  });
 });
 
 test.describe('list layout', () => {

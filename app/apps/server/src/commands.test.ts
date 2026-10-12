@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Action, ApiErrorBody, AttentionView, EvalReport, FiledView, FilingEvalReport, PolicyProposal, PromptFileView, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
-import { withLineId } from '@work-os/shared';
+import { londonParts, withLineId, withTick, type TodoSummary } from '@work-os/shared';
 import { DraftStore } from './store/drafts';
 import { backfillTodos } from './todos/backfill';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -1166,7 +1166,7 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     expect(JSON.stringify(res.store.projection.todos)).not.toContain('tier comparison');
   });
 
-  it('closes a To Do whose line Frank ticks in Obsidian, reopens it when he unticks it, and says when its line has gone', async () => {
+  it('closes a To Do whose line is ticked in Obsidian, reopens it when it is unticked, and says when its line has gone', async () => {
     await write(['Send the tier comparison']);
     const [todo] = await inboxTodos();
     const note = await readFile(tasks, 'utf8');
@@ -1202,6 +1202,90 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     const back = Object.values(res.store.projection.todos ?? {}).find((t) => t.actionId === old);
     expect(back).toMatchObject({ backfilled: true, status: 'open' });
     expect(back?.lineId).toBeUndefined();
+  });
+
+  describe('Done from the inbox (FR-16.4, FR-16.5)', () => {
+    const done = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/done`);
+    const reopen = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/reopen`);
+    const actual = (id: string, minutes: number | null) => call<ApiErrorBody>('POST', `/api/todos/${id}/actual`, { minutes });
+    const today = () => londonParts(new Date(wall)).dateKey;
+    const todoEvents = async () => {
+      const log = (await readdir(join(dir, 'events'))).filter((f) => f.endsWith('.jsonl')).sort();
+      const lines = (await Promise.all(log.map((f) => readFile(join(dir, 'events', f), 'utf8')))).join('').trim().split('\n');
+      return lines.map((l) => (JSON.parse(l) as { type: string }).type).filter((t) => t.startsWith('todo.'));
+    };
+
+    it('ticks only its line in the Tasks note, in the sandbox, and Undo unticks it; neither echoes back', async () => {
+      await write(['Send the tier comparison', 'Book the trial kick-off']);
+      const [todo] = await inboxTodos();
+      const before = await readFile(tasks, 'utf8');
+      const r = await done(todo.id);
+      expect(r.status).toBe(200);
+      expect(r.body).toMatchObject({ id: todo.id, status: 'done', doneBy: 'you' });
+      expect(r.body.mirror).toBeUndefined(); // mirrored before the answer
+      const after = await readFile(tasks, 'utf8');
+      const changed = after.split('\n').filter((l, i) => l !== before.split('\n')[i]);
+      expect(changed).toEqual([withTick(before.split('\n').find((l) => l.includes('tier comparison'))!, today())]);
+      expect(changed[0]).toMatch(/^- \[x\] Send the tier comparison .* ✅ \d{4}-\d{2}-\d{2}$/);
+      await expect(readFile(join(dir, '..', 'vault/Work/Tasks.md'), 'utf8')).rejects.toThrow(); // dry-run: the vault untouched
+      expect(await res.tasksNote.check(true)).toBe(0);
+
+      const back = await reopen(todo.id);
+      expect(back.body).toMatchObject({ status: 'open' });
+      expect(await readFile(tasks, 'utf8')).toBe(before);
+      expect(await res.tasksNote.check(true)).toBe(0);
+      expect((await todoEvents()).slice(-4)).toEqual(['todo.done', 'todo.mirrored', 'todo.reopened', 'todo.mirrored']);
+    });
+
+    it('is one Done however often it is pressed', async () => {
+      await write(['Send the tier comparison']);
+      const [todo] = await inboxTodos();
+      await Promise.all([done(todo.id), done(todo.id)]);
+      await done(todo.id);
+      expect((await todoEvents()).filter((t) => t === 'todo.done')).toHaveLength(1);
+    });
+
+    it('leaves a line already ticked in Obsidian as it is', async () => {
+      await write(['Send the tier comparison']);
+      const [todo] = await inboxTodos();
+      const ticked = (await readFile(tasks, 'utf8')).replace('- [ ] Send the tier comparison', '- [x] Send the tier comparison').replace(/\n$/, ' ✅ 2026-10-01\n');
+      await writeFile(tasks, ticked);
+      expect((await done(todo.id)).body).toMatchObject({ status: 'done', doneBy: 'you' });
+      expect(await readFile(tasks, 'utf8')).toBe(ticked);
+      expect(res.store.projection.todos?.[todo.id].mirror).toBeUndefined();
+    });
+
+    it('says why a line could not be ticked, leaves the To Do done, and tries again later', async () => {
+      await write(['Send the tier comparison']);
+      const [todo] = await inboxTodos();
+      const note = await readFile(tasks, 'utf8');
+      await writeFile(tasks, '# Tasks\n');
+      const r = await done(todo.id);
+      expect(r.body).toMatchObject({ status: 'done', mirror: { want: 'ticked', failed: 'no_line' } });
+      // The note read back doesn't take the missing line for an untick.
+      await writeFile(tasks, note);
+      expect(await res.tasksNote.check(true)).toBe(0);
+      expect(await res.todoMirror.pump()).toBe(0); // not yet: once every 10 minutes
+      wall += 10 * MIN;
+      expect(await res.todoMirror.pump()).toBe(1);
+      expect(await readFile(tasks, 'utf8')).toMatch(/- \[x\] Send the tier comparison .* ✅/);
+      expect(res.store.projection.todos?.[todo.id].mirror).toBeUndefined();
+    });
+
+    it('labels how long it took, and says so on the To Do; only once done', async () => {
+      await write(['Send the tier comparison']);
+      const [todo] = await inboxTodos();
+      expect((await actual(todo.id, 30)).status).toBe(409);
+      await done(todo.id);
+      expect((await actual(todo.id, 30)).status).toBe(204);
+      expect((await inboxTodos())[0]).toMatchObject({ actualMinutes: 30 });
+      expect((await actual(todo.id, 0)).status).toBe(422);
+      expect((await call<ApiErrorBody>('POST', '/api/todos/todo-0000/done')).status).toBe(404);
+      await res.scheduleLabels.close();
+      const labels = (await readFile(join(dir, 'labels/schedule.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(labels.map((l) => l.origin)).toEqual(['done', 'actual']);
+      expect(labels[1]).toMatchObject({ schemaVersion: 1, todoId: todo.id, itemId: PROD, source: 'slack', actualMinutes: 30, input: { step: 'Send the tier comparison', sourceTitle: '#product' } });
+    });
   });
 });
 

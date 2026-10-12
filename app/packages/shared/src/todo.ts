@@ -87,7 +87,7 @@ const TRAILING_LINK = /\s*\[((?:\\.|[^\]\\])*)\]\(([^)\s]*)\)\s*$/;
 
 /**
  * A task as Frank may have left it: ticked or not, with or without the ✅ date the Tasks plugin
- * adds when he ticks it (✅ 2026-10-06), and with or without its id, it is the same task.
+ * adds when it is ticked (✅ 2026-10-06), and with or without its id, it is the same task.
  */
 export const taskKey = (line: string) => line.trim().replace(/^[-*+] \[.\]\s*/, '').replace(DONE_FIELD, '').replace(ID_FIELD, '').trim();
 
@@ -136,6 +136,18 @@ export function parseTaskLine(line: string): TaskLine | undefined {
     step: body.replace(DONE_FIELD, '').replace(ID_FIELD, '').replace(TRAILING_LINK, '').replace(DUE_FIELD, '').trim(),
     key: taskKey(line),
   };
+}
+
+/**
+ * The line ticked on `on` (YYYY-MM-DD), as the Tasks plugin ticks it: [x] and a ✅ date at the
+ * end; or, without `on`, unticked, the ✅ date gone (FR-16.4). Anything else on the line stays.
+ */
+export function withTick(line: string, on?: string): string {
+  const m = /^(\s*[-*+] )\[(.)\](.*)$/.exec(line);
+  if (!m) return line;
+  if (on === undefined) return `${m[1]}[ ]${m[3].replace(DONE_FIELD, '')}`;
+  const rest = m[3].replace(/\s+$/, '');
+  return `${m[1]}[x]${DONE_FIELD.test(rest) ? rest : `${rest} ✅ ${on}`}`;
 }
 
 /** Where a To Do's deadline came from: triage's deadline for the step, the line's 📅 date, or none. */

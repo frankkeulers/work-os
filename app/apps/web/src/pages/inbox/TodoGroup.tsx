@@ -1,8 +1,10 @@
-import { useState, type ReactNode } from 'react';
-import { todoGroups, type TodoGroup as Group, type TodoSummary } from '@work-os/shared';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { MIRROR_FAILURE, todoGroups, type TodoGroup as Group, type TodoSummary } from '@work-os/shared';
+import { api } from '../../api';
+import { errorToast, toast } from '../../store/toasts';
 import { SourceMark } from '../../components/BrandIcon';
 import { Icon } from '../../components/icons';
-import { cx } from '../../components/ui';
+import { IconButton, cx } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
 import { fmtTime } from '../../lib/format';
 import { dueInfo } from '../../lib/next';
@@ -10,15 +12,97 @@ import { DueChip } from './chips';
 
 // To Dos on the inbox (E15, FR-16.2): every line Frank wrote to the Tasks note, with where it came
 // from and when it is due. The list layout has a To do group after Needs you; the cockpit puts
-// what is overdue or due today in Needs you and the rest in Later. A row opens its source item.
+// what is overdue or due today in Needs you and the rest in Later. A row opens its source item;
+// its ✓, or `e` on it, marks it done and ticks its line in the Tasks note (FR-16.4).
 
 const HEAD: Record<Exclude<Group, 'done'>, string> = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming' };
+
+/** How long it took (FR-16.5): one tap, a second tap on the same chip takes it back. */
+const TOOK: readonly (readonly [number, string])[] = [
+  [15, '15m'],
+  [30, '30m'],
+  [60, '1h'],
+  [120, '2h'],
+  [240, 'Half day'],
+];
+
+const tookLabel = (m: number) => TOOK.find(([n]) => n === m)?.[1] ?? (m < 60 ? `${m}m` : `${Math.round(m / 6) / 10}h`);
+
+function TookChips({ todoId, initial }: { todoId: string; initial?: number }) {
+  const [picked, setPicked] = useState(initial);
+  const pick = (m: number) => {
+    const next = picked === m ? undefined : m;
+    setPicked(next);
+    void api.setTodoActual(todoId, next ?? null).catch(errorToast);
+  };
+  return (
+    <div role="group" aria-label="How long it took" className="mt-1.5 flex flex-wrap items-center gap-1">
+      <span className="mr-0.5 text-xs text-muted">Took</span>
+      {TOOK.map(([m, label]) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={picked === m}
+          onClick={() => pick(m)}
+          className={cx('rounded-full border px-2 py-0.5 text-xs cursor-pointer', picked === m ? 'border-violet-line bg-violet-wash font-semibold text-violet-fg' : 'border-line-soft text-ink-2 hover:bg-surface-2')}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Done on a To Do (FR-16.4): its line ticked in the Tasks note, a toast that says so, with how
+ * long it took to pick (FR-16.5) and Undo, which unticks it.
+ */
+export async function markTodoDone(todo: TodoSummary) {
+  try {
+    const now = await api.markTodoDone(todo.id);
+    const failed = now?.mirror?.failed;
+    toast(`Done · ${todo.step}`, {
+      description: failed ? `Not ticked: ${MIRROR_FAILURE[failed]}` : now?.mirror ? 'Ticking it in the Tasks note…' : 'Ticked in the Tasks note',
+      ttl: 12_000,
+      body: <TookChips todoId={todo.id} initial={now?.actualMinutes} />,
+      action: { label: 'Undo', run: () => void api.reopenTodo(todo.id).catch(errorToast) },
+    });
+  } catch (e) {
+    errorToast(e);
+  }
+}
+
+async function reopenTodo(todo: TodoSummary) {
+  try {
+    const now = await api.reopenTodo(todo.id);
+    const failed = now?.mirror?.failed;
+    toast(`Open again · ${todo.step}`, { description: failed ? `Not unticked: ${MIRROR_FAILURE[failed]}` : 'Unticked in the Tasks note' });
+  } catch (e) {
+    errorToast(e);
+  }
+}
 
 function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: (itemId: string) => void }) {
   const done = todo.status === 'done';
   const due = !done && todo.deadline ? dueInfo({ dueAt: todo.deadline }, now) : undefined;
+  // Keys on a focused row are its own (`g d` focuses the first): the item panel's don't see them.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || e.metaKey || e.ctrlKey || e.altKey) return;
+    if ((e.key === 'e' || e.key === 'E') && !done) void markTodoDone(todo);
+    else if (e.key === 'Enter') onOpen(todo.itemId);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
   return (
-    <div data-todo={todo.id} data-todo-status={todo.status} className="flex items-center gap-3 border-t border-line-soft px-6 py-2.5">
+    <div
+      data-todo={todo.id}
+      data-todo-status={todo.status}
+      tabIndex={0}
+      aria-label={`To do: ${todo.step}`}
+      onKeyDown={onKeyDown}
+      className="group/todo flex items-center gap-3 border-t border-line-soft px-6 py-2.5 outline-none focus-visible:bg-surface-2 focus-visible:shadow-[inset_3px_0_0_var(--violet-dot)]"
+    >
       <Icon name="commit" size={16} aria-hidden className={cx('shrink-0', done ? 'text-green-fg' : 'text-violet-fg')} />
       <div className="min-w-0 flex-1">
         <div className={cx('truncate text-[13px]', done ? 'text-muted line-through' : 'font-medium text-ink')} title={todo.step}>
@@ -30,14 +114,27 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
             <span className="truncate">{todo.sourceTitle}</span>
           </button>
           {done && todo.doneAt && <span className="shrink-0">· {todo.doneBy === 'tasks_note' ? 'ticked in Obsidian' : 'done'} {fmtTime(todo.doneAt)}</span>}
-          {todo.inNote === false && (
-            <span className="shrink-0 text-amber-fg" title="Its line isn't in the Tasks note any more. It may have been moved or deleted in Obsidian.">
-              · not in the Tasks note
+          {done && todo.actualMinutes && <span className="shrink-0">· took {tookLabel(todo.actualMinutes)}</span>}
+          {todo.mirror?.failed ? (
+            <span data-todo-mirror="failed" className="shrink-0 text-amber-fg" title={`Work OS tries again every 10 minutes: ${MIRROR_FAILURE[todo.mirror.failed]}.`}>
+              · not {todo.mirror.want === 'ticked' ? 'ticked' : 'unticked'} in the Tasks note
             </span>
+          ) : (
+            todo.inNote === false && (
+              <span className="shrink-0 text-amber-fg" title="Its line isn't in the Tasks note any more. It may have been moved or deleted in Obsidian.">
+                · not in the Tasks note
+              </span>
+            )
           )}
         </div>
       </div>
       {due && <DueChip due={due} />}
+      {/* As an item row's Done: faint until the row is hovered or focused. */}
+      {done ? (
+        <IconButton label={`Open again: ${todo.step}`} title="Open again, and untick it in the Tasks note" icon="undo" size={32} className="-mr-2 text-muted opacity-60 hover:text-ink hover:opacity-100 focus-visible:opacity-100 group-hover/todo:opacity-100" onClick={() => void reopenTodo(todo)} />
+      ) : (
+        <IconButton label={`Done: ${todo.step}`} title="Done, and tick it in the Tasks note (e)" icon="check" size={32} className="-mr-2 text-muted opacity-60 hover:text-ink hover:opacity-100 focus-visible:opacity-100 group-hover/todo:opacity-100 group-focus-visible/todo:opacity-100" onClick={() => void markTodoDone(todo)} />
+      )}
     </div>
   );
 }

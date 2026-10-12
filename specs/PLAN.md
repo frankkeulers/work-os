@@ -290,6 +290,7 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
   labels/
     triage.jsonl              labelled set + corrections from the UI
     settle.jsonl              settle checks Frank showed wrong: an Undo, or a Done soon after "not settled" (cockpit CK-2.6)
+    schedule.jsonl            a To Do's Done and how long it took, later edits to its plan (E15, FR-16.5)
   logs/
     app-2026-10-20.log
     usage-2026-10-20.jsonl    one line per Claude call
@@ -1143,7 +1144,7 @@ Decisions (Frank, 12 Oct 2026):
 
 The stages:
 - **1a:** the entity, the inbox and the read-back (FR-16.1–16.3).
-- **1b:** Done from the inbox, which ticks the line, and the time chips.
+- **1b:** Done from the inbox, which ticks the line, and the time chips (FR-16.4–16.5).
 - **2:** the estimate and deadline.
 - **3:** the slot finder and the time column.
 - **4:** follow-ups.
@@ -1171,14 +1172,26 @@ The stages:
 **FR-16.3 Read back from the Tasks note.** The server looks at the Tasks note every 30 seconds, and reads it only when its modified time, its size or the To Dos changed. In dry-run it reads the sandbox copy when there is one.
 - **Matching.** Lines are matched by id, else by task.
 - **A line ticked in Obsidian** closes its To Do (`todo.done`, `by: tasks_note`, with the ✅ date).
-- **A line unticked** reopens a To Do the note had closed.
+- **A line unticked** reopens its To Do, however it was closed.
 - **A missing line** is shown as such and changes nothing else: Frank may have moved it.
 - **Reads only.** Nothing is written to the vault by the read-back.
+- **Mirrors pending.** A To Do whose Done or reopen in Work OS is not yet mirrored to its line (FR-16.4) is left alone. If the note changed while it was being read, it is read again on the next tick, so the mirror's own write never comes back as a change in Obsidian.
+
+**FR-16.4 Done from the inbox, ticked in the Tasks note.** A To Do row has a Done button. `e` on a focused row does the same, and `g` then `d` focuses the first open To Do.
+- **The approval.** Done is Frank's approval for one write: the To Do's own line in the Tasks note is ticked (`[x]` and a ✅ date, as the Tasks plugin does). Undo (or **Open again** on a row done today) unticks it and removes the date. Nothing else in the note changes. *This amends non-negotiable 4 and NF-5 for this write only:* the press is the explicit approval, because the row shows exactly which line changes.
+- **Logging.** `todo.done` and `todo.reopened` (`by: you`) leave the line to mirror (`mirror.want`). The mirror logs `todo.mirrored` once the line matches, or `todo.mirrorFailed` with why: `path_refused`, `no_note`, `no_line` or `write_failed`.
+- **The write.** It goes through the executor's checks: the path is checked against the vault, the note is re-read just before writing (Obsidian may have saved it meanwhile, in which case it plans again), the write is atomic, and in dry-run it goes to the sandbox copy. A line already as wanted is left alone, so a write cut short is finished, never repeated.
+- **Timing.** It runs at once on Done, then on every tick. A failed mirror is tried again every 10 minutes. The To Do stays done either way.
+- **What Frank sees.** A toast says "Done · {step}", then "Ticked in the Tasks note" or "Not ticked: {why}". It has Undo, and `z` works too. A row whose line couldn't be ticked says so.
+
+**FR-16.5 How long it took.** The Done toast asks **Took** with one-tap chips: 15m · 30m · 1h · 2h · Half day. A second tap takes the answer back, and closing the toast skips it. The answer is logged as `todo.timed` and shown on the row ("took 30m").
+- **Labels.** Each Done and each answer is a line in `labels/schedule.jsonl` (`done`, `actual`), written before its event. A line holds the To Do as the schedule prompt will see it (its step, source and deadline), so Stage 5 has labels to learn from. Edits to the estimate, deadline and slot join it in Stages 2 and 3.
 
 > **Story 16.1** As Frank, I want the to-dos I filed to stay in front of me until they are done.
 >
 > - Given I approved a to-do with two lines, when the write lands, then the inbox's To do group shows both, each with its source and deadline.
 > - Given I tick one in Obsidian, when I look at the inbox within a minute, then it shows as done today, ticked in Obsidian.
+> - Given a To Do on the inbox, when I press its Done, then its line in the Tasks note is ticked and the toast asks how long it took; when I press Undo, then the line is unticked again.
 
 ---
 

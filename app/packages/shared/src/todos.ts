@@ -1,4 +1,4 @@
-import type { TodoBy } from './events';
+import type { MirrorFailure, TodoBy } from './events';
 import type { SourceId } from './schemas';
 import { londonParts } from './time';
 import type { DeadlineFrom } from './todo';
@@ -21,7 +21,19 @@ export interface TodoSummary {
   doneBy?: TodoBy;
   /** False once the Tasks note was read and its line wasn't there; absent while unknown. */
   inNote?: boolean;
+  /** FR-16.4: Done or reopen not yet mirrored to the line; `failed` once a try didn't. */
+  mirror?: { want: 'ticked' | 'open'; failed?: MirrorFailure };
+  /** FR-16.5: minutes it took, as Frank said on Done. */
+  actualMinutes?: number;
 }
+
+/** A tick that couldn't be mirrored, in words (FR-16.4). */
+export const MIRROR_FAILURE: Record<MirrorFailure, string> = {
+  path_refused: 'the Tasks note path is refused; check Settings › Write targets',
+  no_note: 'the Tasks note isn’t there',
+  no_line: 'its line isn’t in the Tasks note',
+  write_failed: 'writing the Tasks note failed; trying again',
+};
 
 export type TodoGroup = 'overdue' | 'today' | 'upcoming' | 'done';
 export const TODO_GROUPS: readonly TodoGroup[] = ['overdue', 'today', 'upcoming', 'done'];

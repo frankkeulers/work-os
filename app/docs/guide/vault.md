@@ -100,8 +100,9 @@ Each line is written with an id, the Tasks plugin's `🆔` field, after its date
 ```
 
 The id lets Work OS find the line again, even after you move it or edit its words. Each line
-becomes a To Do on the inbox (see [To do](inbox.md#to-do)), and ticking it in Obsidian marks
-that To Do done.
+becomes a To Do on the inbox (see [To do](inbox.md#to-do)). Ticking it in Obsidian marks that
+To Do done, and pressing Done on the inbox ticks its line (see [Done](inbox.md#done)): the only
+change Work OS makes to a line it wrote.
 
 When your filing policy suggests a to-do, the panel shows **Add to-do:** with the step and its
 date: `a` adds that one for review, × dismisses it. Both teach the policy; see

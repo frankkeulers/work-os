@@ -1,4 +1,4 @@
-import type { EventType, WorkEvent } from '../events';
+import type { EventType, TodoBy, WorkEvent } from '../events';
 import { stageFiling } from '../policy';
 import type { ActionStatus } from '../schemas';
 import { DISMISSED_DAYS, emptyProjection, type ActionState, type Projection, type TodoState } from './state';
@@ -110,13 +110,17 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
 }
 
 /** The To Do events (E15). todo.dismissed is the item's suggestion, not a To Do. */
-export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' }> =>
-  e.type === 'todo.created' || e.type === 'todo.done' || e.type === 'todo.reopened';
+const TODO_EVENTS = new Set(['todo.created', 'todo.done', 'todo.reopened', 'todo.mirrored', 'todo.mirrorFailed', 'todo.timed']);
+export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' | 'todo.mirrored' | 'todo.mirrorFailed' | 'todo.timed' }> =>
+  TODO_EVENTS.has(e.type);
 
 /**
  * Applies one To Do event, in place (FR-16.1–16.3). A To Do is created once: a replay of its
  * creation changes nothing. Done and reopened only move it from the other state, so a tick read
  * back from the note after Frank pressed Done changes nothing either.
+ *
+ * Done or reopened by Frank in Work OS leaves the line to mirror (FR-16.4) until todo.mirrored
+ * says the line matches; by the note itself, there is nothing to mirror.
  */
 export function applyTodoEvent(todos: Record<string, TodoState>, e: WorkEvent): void {
   if (!isTodoEvent(e)) return;
@@ -129,12 +133,37 @@ export function applyTodoEvent(todos: Record<string, TodoState>, e: WorkEvent): 
   }
   const t = todos[id];
   if (!t) return;
-  if (e.type === 'todo.done' && t.status === 'open') Object.assign(t, { status: 'done', doneAt: e.at, doneBy: e.data.by });
-  if (e.type === 'todo.reopened' && t.status === 'done') {
-    t.status = 'open';
-    delete t.doneAt;
-    delete t.doneBy;
+  switch (e.type) {
+    case 'todo.done':
+      if (t.status !== 'open') return;
+      Object.assign(t, { status: 'done', doneAt: e.at, doneBy: e.data.by });
+      mirror(t, e.data.by, 'ticked');
+      return;
+    case 'todo.reopened':
+      if (t.status !== 'done') return;
+      t.status = 'open';
+      delete t.doneAt;
+      delete t.doneBy;
+      delete t.actualMinutes;
+      mirror(t, e.data.by, 'open');
+      return;
+    case 'todo.mirrored':
+      if (t.mirror?.want === e.data.state) delete t.mirror;
+      return;
+    case 'todo.mirrorFailed':
+      if (t.mirror) Object.assign(t.mirror, { failed: e.data.reason, failedAt: e.at });
+      return;
+    case 'todo.timed':
+      if (t.status !== 'done') return;
+      if (e.data.minutes === null) delete t.actualMinutes;
+      else t.actualMinutes = e.data.minutes;
+      return;
   }
+}
+
+function mirror(t: TodoState, by: TodoBy, want: 'ticked' | 'open') {
+  if (by === 'you') t.mirror = { want };
+  else delete t.mirror;
 }
 
 /** Records a dismissal and forgets those older than DISMISSED_DAYS, so the set stays small. */

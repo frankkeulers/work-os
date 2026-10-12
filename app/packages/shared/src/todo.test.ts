@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { askId } from './projection/topics';
-import { lineIdFor, newTodos, parseTaskLine, taskKey, todoContent, todoDeadline, todoDues, todoIdFor, todoLine, todoLines, todoSteps, todoWriteLines, withLineId } from './todo';
+import { lineIdFor, newTodos, parseTaskLine, taskKey, todoContent, todoDeadline, todoDues, todoIdFor, todoLine, todoLines, todoSteps, todoWriteLines, withLineId, withTick } from './todo';
 import { todoGroups, type TodoSummary } from './todos';
 
 const SRC = { title: '#mvi-launch', permalink: 'https://polestar.slack.com/archives/C06/p1791' };
@@ -55,6 +55,17 @@ describe('To Dos’ lines (E15, FR-16.1)', () => {
     expect(parseTaskLine('Some prose')).toBeUndefined();
     // Ticked or not, done date or not, id or not: the same task.
     expect(taskKey(line)).toBe(taskKey('- [ ] Send the notes 📅 2026-10-09 [#mvi-launch](https://x.test/p)'));
+  });
+
+  it('ticks a line as the Tasks plugin does, and unticks it, leaving the rest of it alone (FR-16.4)', () => {
+    const open = `- [ ] Send the notes 📅 2026-10-09 🆔 a1b2c3 [#mvi-launch](https://x.test/p)`;
+    const ticked = withTick(open, '2026-10-08');
+    expect(ticked).toBe(`- [x] Send the notes 📅 2026-10-09 🆔 a1b2c3 [#mvi-launch](https://x.test/p) ✅ 2026-10-08`);
+    expect(parseTaskLine(ticked)).toMatchObject({ ticked: true, doneOn: '2026-10-08', lineId: 'a1b2c3', step: 'Send the notes' });
+    expect(withTick(ticked, '2026-10-10')).toBe(ticked); // already ticked: its date stays
+    expect(withTick(ticked)).toBe(open);
+    expect(withTick('  * [ ] Indented ', '2026-10-08')).toBe('  * [x] Indented ✅ 2026-10-08');
+    expect(withTick('# Tasks', '2026-10-08')).toBe('# Tasks');
   });
 
   it('keeps triage’s deadline while the line keeps its date; else 17:30 on the line’s date; else none', () => {

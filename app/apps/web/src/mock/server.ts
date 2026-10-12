@@ -283,13 +283,44 @@ export class MockServer implements WorkOsApi, MockControls {
 
   /** E15 (FR-16.2): the To Dos the inbox shows, as the server's todoSummaries. */
   private todoSummaries(): TodoSummary[] {
-    const out: TodoSummary[] = [];
-    for (const t of shownTodos(Object.values(this.s.todos ?? {}), this.now())) {
-      const words = this.s.todoTexts?.[t.id];
-      if (!words) continue;
-      out.push({ id: t.id, itemId: t.itemId, step: words.step, source: words.source, sourceTitle: words.sourceTitle, status: t.status, ...(t.deadline && { deadline: t.deadline }), deadlineFrom: t.deadlineFrom, createdAt: t.createdAt, ...(t.doneAt && { doneAt: t.doneAt }), ...(t.doneBy && { doneBy: t.doneBy }), inNote: true });
-    }
-    return out;
+    return shownTodos(Object.values(this.s.todos ?? {}), this.now()).flatMap((t) => this.todoSummary(t.id) ?? []);
+  }
+
+  private todoSummary(id: string): TodoSummary | undefined {
+    const t = this.s.todos?.[id];
+    const words = this.s.todoTexts?.[id];
+    if (!t || !words) return undefined;
+    return {
+      id: t.id,
+      itemId: t.itemId,
+      step: words.step,
+      source: words.source,
+      sourceTitle: words.sourceTitle,
+      status: t.status,
+      ...(t.deadline && { deadline: t.deadline }),
+      deadlineFrom: t.deadlineFrom,
+      createdAt: t.createdAt,
+      ...(t.doneAt && { doneAt: t.doneAt }),
+      ...(t.doneBy && { doneBy: t.doneBy }),
+      inNote: !words.missing,
+      ...(t.mirror && { mirror: { want: t.mirror.want, ...(t.mirror.failed && { failed: t.mirror.failed }) } }),
+      ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
+    };
+  }
+
+  private todo(id: string) {
+    const t = this.s.todos?.[id];
+    if (!t) throw new ApiError('not_found', 'To Do not found. It may have been removed by retention.');
+    return t;
+  }
+
+  /** As the server's mirror (FR-16.4): the sandbox line ticked or unticked at once, unless it isn't in the note. */
+  private mirrorTodo(id: string) {
+    const t = this.todo(id);
+    if (!t.mirror) return;
+    const ids = { itemId: t.itemId, actionId: t.actionId };
+    if (this.s.todoTexts?.[id]?.missing) this.event('todo.mirrorFailed', { todoId: id, reason: 'no_line' }, ids);
+    else this.event('todo.mirrored', { todoId: id, state: t.mirror.want, dryRun: true }, ids);
   }
 
   private async gate(ms: number) {
@@ -1108,6 +1139,37 @@ export class MockServer implements WorkOsApi, MockControls {
     followAnchor(this.s.items, itemId);
     this.event('item.reopened', undefined, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+  }
+
+  async markTodoDone(todoId: string) {
+    await this.gate(COMMAND_MS);
+    const t = this.todo(todoId);
+    if (t.status === 'open') {
+      this.event('todo.done', { todoId, by: 'you' }, { itemId: t.itemId, actionId: t.actionId });
+      this.mirrorTodo(todoId);
+      this.emit({ topic: 'inbox' }, { topic: 'item', id: t.itemId });
+    }
+    return this.todoSummary(todoId) ?? null;
+  }
+
+  async reopenTodo(todoId: string) {
+    await this.gate(COMMAND_MS);
+    const t = this.todo(todoId);
+    if (t.status === 'done') {
+      this.event('todo.reopened', { todoId, by: 'you' }, { itemId: t.itemId, actionId: t.actionId });
+      this.mirrorTodo(todoId);
+      this.emit({ topic: 'inbox' }, { topic: 'item', id: t.itemId });
+    }
+    return this.todoSummary(todoId) ?? null;
+  }
+
+  async setTodoActual(todoId: string, minutes: number | null) {
+    await this.gate(COMMAND_MS);
+    const t = this.todo(todoId);
+    if (t.status !== 'done') throw new ApiError('conflict', 'Only a To Do that is done has a time taken.');
+    if ((t.actualMinutes ?? null) === minutes) return;
+    this.event('todo.timed', { todoId, minutes }, { itemId: t.itemId, actionId: t.actionId });
+    this.emit({ topic: 'inbox' });
   }
 
   async snooze(itemId: string, untilIso: string) {
@@ -1938,12 +2000,12 @@ export class MockServer implements WorkOsApi, MockControls {
     // now a To Do: one overdue, two due today, one later this week, one with no date, one done.
     this.cockpitAfternoon();
     const now = this.now();
-    const todos: { key: string; step: string; dueAt?: string; ago: number; done?: boolean }[] = [
+    const todos: { key: string; step: string; dueAt?: string; ago: number; done?: boolean; missing?: true }[] = [
       { key: 't2', step: 'Share the graduation gate checklist', dueAt: londonAt(now, '16:00'), ago: 90 },
       { key: 'n1', step: 'Send Matt the one-line MVI V2 go/no-go reason', dueAt: londonAt(now, '17:30', -3), ago: 4 * 24 * 60 },
       { key: 'f1', step: 'Add the imo_str deprecation to the developer portal changelog', dueAt: londonAt(now, '17:30'), ago: 26 * 60 },
       { key: 'f3', step: 'Confirm the IMO STR wording with Legal', dueAt: londonAt(now, '12:00', 3), ago: 3 * 60 },
-      { key: 't4', step: 'Book a kick-off with the Data team', ago: 2 * 24 * 60 },
+      { key: 't4', step: 'Book a kick-off with the Data team', ago: 2 * 24 * 60, missing: true },
       { key: 't1', step: 'Send Meridia IQ beta feedback summary to the team', ago: 5 * 60, done: true },
     ];
     for (const t of todos) {
@@ -1967,6 +2029,7 @@ export class MockServer implements WorkOsApi, MockControls {
       const made = Object.values(this.s.todos ?? {}).filter((x) => x.actionId === id);
       for (const m of made) {
         m.createdAt = addMins(now.toISOString(), -t.ago);
+        if (t.missing) this.s.todoTexts![m.id].missing = true;
         if (t.done) this.event('todo.done', { todoId: m.id, by: 'tasks_note', on: londonParts(now).dateKey }, ids);
       }
     }

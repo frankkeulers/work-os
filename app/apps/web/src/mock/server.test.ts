@@ -174,6 +174,19 @@ describe('To Dos (E15, FR-16.1, FR-16.2)', () => {
     expect([g.overdue.length, g.today.length, g.upcoming.length, g.done.length]).toEqual([1, 2, 2, 1]);
     expect(g.done[0]).toMatchObject({ doneBy: 'tasks_note' });
   });
+
+  it('marks a To Do done and ticks its line, or says why not; Undo reopens it; how long it took only once done (FR-16.4, FR-16.5)', async () => {
+    server.seedTodos();
+    const todos = (await settle(server.getInbox())).todos;
+    const share = todos.find((t) => t.step.startsWith('Share the graduation'))!;
+    expect(await settle(server.setTodoActual(share.id, 30).catch((e: unknown) => e))).toMatchObject({ status: 409 });
+    expect(await settle(server.markTodoDone(share.id))).toMatchObject({ status: 'done', doneBy: 'you', inNote: true });
+    await settle(server.setTodoActual(share.id, 30));
+    expect((await settle(server.getInbox())).todos.find((t) => t.id === share.id)).toMatchObject({ actualMinutes: 30 });
+    expect(await settle(server.reopenTodo(share.id))).toMatchObject({ status: 'open' });
+    const kickoff = todos.find((t) => t.step.startsWith('Book a kick-off'))!;
+    expect(await settle(server.markTodoDone(kickoff.id))).toMatchObject({ status: 'done', inNote: false, mirror: { want: 'ticked', failed: 'no_line' } });
+  });
 });
 
 describe('draft and approval outcomes', () => {

@@ -24,6 +24,7 @@ function ToastRow({ t }: { t: Toast }) {
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1">
         <span className="text-sm font-medium leading-snug">{t.message}</span>
         {t.description && <span className="text-[13px] leading-snug text-muted">{t.description}</span>}
+        {t.body}
         {t.action && (
           <button
             type="button"

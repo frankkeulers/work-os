@@ -25,6 +25,9 @@ export const SnoozeInput = z.object({ until: z.iso.datetime() }).strict();
 export type SnoozeInput = z.infer<typeof SnoozeInput>;
 
 /** POST /api/items/done and /api/items/reopen: many items at once, e.g. a channel or Low priority. */
+/** E15 (FR-16.5): how long a To Do took, in minutes; null takes the answer back. */
+export const TodoActual = z.object({ minutes: z.number().int().min(1).max(960).nullable() }).strict();
+
 export const ItemIds = z.object({ ids: z.array(z.string().min(1)).min(1).max(1000) }).strict();
 
 /** POST /api/items/:id/correction (FR-6.2): the triage Frank says it should have been. */

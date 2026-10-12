@@ -900,7 +900,7 @@ export function InboxPage() {
     else if (opening && !sel && open && first) setSearch({ item: first }, { replace: true });
   }, [inbox, missing, orPage, sel, first, filing, wide, navigate, setSearch]);
 
-  // g then n or l, within a second (CK-3.3).
+  // g then n or l, within a second (CK-3.3); g then d, the first To Do (FR-16.4).
   const gAt = useRef(0);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -910,6 +910,13 @@ export function InboxPage() {
       if (afterG && (e.key === 'n' || e.key === 'l')) {
         e.preventDefault();
         pick(e.key === 'n' ? firstNeeds : firstLater);
+      } else if (afterG && e.key === 'd') {
+        // The first open To Do (FR-16.4): its keys are its own, e for Done.
+        const row = document.querySelector<HTMLElement>('[data-todo][data-todo-status="open"]');
+        if (!row) return;
+        e.preventDefault();
+        row.focus();
+        row.scrollIntoView({ block: 'nearest' });
       } else if (e.key === 'g') {
         gAt.current = Date.now();
       } else if (e.key === 'j') {

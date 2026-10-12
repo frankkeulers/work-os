@@ -24,9 +24,19 @@ where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` c
 | `j` / `k` | Next / previous item: Now, Today, Waiting on others, To file, then This week |
 | `g` then `n` | The first item in Needs you |
 | `g` then `l` | The first item in Later (To file, or This week) |
+| `g` then `d` | The first To Do |
 | `t` | Today or tomorrow in the time column (on a wide screen) |
 | `o` | Open the item as a full page |
 | `Esc` | Close the item panel; with it closed, go back from a list opened in Later |
+
+## A To Do
+
+On a To Do's row, after `g` then `d` or a Tab to it:
+
+| Key | Does |
+|---|---|
+| `e` | Done: ticks its line in your Tasks note ([Done](inbox.md#done)) |
+| `↵` | Open the item it came from |
 
 ## Item
 

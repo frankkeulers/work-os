@@ -1,4 +1,4 @@
-import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, TodoActual, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -10,7 +10,8 @@ import { RebuildError } from '../store/store';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { agendaView, attentionView, budgets, filedView, healthView, inboxView, itemView, knownCategories, loopLabels, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
+import { TodoNotDoneError, TodoNotFoundError } from '../todos/service';
+import { agendaView, attentionView, budgets, filedView, healthView, inboxView, itemView, knownCategories, loopLabels, settingsView, sourceView, todoSummary, usageView, weekView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
 
@@ -94,6 +95,39 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const until = new Date(body.data.until).toISOString();
     if (until <= d.now().toISOString()) throw new HttpError('validation', 'Pick a time in the future.', [{ path: 'until', message: 'Pick a time in the future' }]);
     await d.store.append({ type: 'item.snoozed', itemId: id, data: { until } });
+    return reply.code(204).send();
+  });
+
+  // To Dos (E15, FR-16.4–16.5): Done, its Undo, and how long it took. Local only, like an item's.
+  const todos = () => {
+    if (!d.todos?.service) throw new HttpError('unavailable', 'To Dos are not running.');
+    return d.todos.service;
+  };
+  const todoCall = async (run: () => Promise<void>) => {
+    try {
+      await run();
+    } catch (e) {
+      if (e instanceof TodoNotFoundError) throw new HttpError('not_found', e.message);
+      if (e instanceof TodoNotDoneError) throw new HttpError('conflict', e.message);
+      throw e;
+    }
+  };
+  const todoNow = (id: string) => {
+    const t = d.store.projection.todos?.[id];
+    return (t && todoSummary(d, t)) ?? null;
+  };
+  app.post<{ Params: { id: string } }>('/api/todos/:id/done', async (req) => {
+    await todoCall(() => todos().markDone(req.params.id));
+    return todoNow(req.params.id);
+  });
+  app.post<{ Params: { id: string } }>('/api/todos/:id/reopen', async (req) => {
+    await todoCall(() => todos().reopen(req.params.id));
+    return todoNow(req.params.id);
+  });
+  app.post<{ Params: { id: string } }>('/api/todos/:id/actual', async (req, reply) => {
+    const body = TodoActual.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { minutes }: whole minutes, or null.', [{ path: 'minutes', message: 'Pick a time' }]);
+    await todoCall(() => todos().setActual(req.params.id, body.data.minutes));
     return reply.code(204).send();
   });
 

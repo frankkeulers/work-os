@@ -116,6 +116,7 @@ export const JOURNEYS: Journey[] = [
   { id: 'J92', group: 'Cockpit', title: 'Proposals for the other loops', start: (c) => (c.applyFilingPolicy(), '/settings/learning') },
   // To Dos on the inbox (E15).
   { id: 'J93', group: 'Cockpit', title: 'To Dos on the inbox', start: (c) => (c.seedTodos(), '/') },
+  { id: 'J94', group: 'Cockpit', title: 'Done on a To Do', start: (c) => (c.seedTodos(), '/') },
   // Write failures (FR-14.5).
   { id: 'J73', group: 'Vault', title: 'Not written: Retry write', start: (c) => (fresh(c), c.setNextDraftOutcome('write_unreachable'), item(c, 'f4', '?tab=vault')) },
   { id: 'J74', group: 'Confluence', title: 'Conflict, drafts budget used up', start: (c) => (fresh(c), c.setNextDraftOutcome('confluence_conflict'), c.setFlag('drafts_budget'), item(c, 'f1')) },

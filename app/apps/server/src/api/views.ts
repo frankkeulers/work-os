@@ -19,6 +19,7 @@ import {
   pollIntervalMinutes, sourceSchedule,
   shownTodos,
   summaryOf,
+  type TodoState,
   type TodoSummary,
   topicItem,
   topicPiecesView,
@@ -82,6 +83,7 @@ import type { ProposalRunner } from '../learning/tuner';
 import type { LabelStore } from '../store/labels';
 import type { SettleLabelStore } from '../store/settleLabels';
 import type { TodoTextStore } from '../store/todos';
+import type { TodoService } from '../todos/service';
 import type { RecoveryReport, Store } from '../store/store';
 import { mpdmTitle } from '../sources/slack/directory';
 import { channelListed, webClientUrl } from '../sources/slack/normalise';
@@ -129,7 +131,7 @@ export interface ViewDeps {
   proposals?: ProposalStore;
   proposing?: Partial<Record<LearningLoop, ProposalRunner>>;
   /** E15 (FR-16.1–16.3): To Dos' words, and whether each one's line is in the Tasks note. */
-  todos?: { texts: TodoTextStore; inNote: (todoId: string) => boolean | undefined };
+  todos?: { texts: TodoTextStore; inNote: (todoId: string) => boolean | undefined; service?: TodoService };
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
   slackTeamId?: () => string | undefined;
   /** A group DM's title from its members, when Slack has said who they are. */
@@ -415,28 +417,30 @@ export function inboxView(d: ViewDeps): InboxView {
 
 /** E15 (FR-16.2): the To Dos the inbox shows, with their words. One whose words are gone isn't shown. */
 export function todoSummaries(d: Pick<ViewDeps, 'store' | 'todos'>, now: Date): TodoSummary[] {
-  if (!d.todos) return [];
-  const out: TodoSummary[] = [];
-  for (const t of shownTodos(Object.values(d.store.projection.todos ?? {}), now)) {
-    const words = d.todos.texts.get(t.id);
-    if (!words) continue;
-    const inNote = d.todos.inNote(t.id);
-    out.push({
-      id: t.id,
-      itemId: t.itemId,
-      step: words.step,
-      source: words.source.source,
-      sourceTitle: words.source.title,
-      status: t.status,
-      ...(t.deadline && { deadline: t.deadline }),
-      deadlineFrom: t.deadlineFrom,
-      createdAt: t.createdAt,
-      ...(t.doneAt && { doneAt: t.doneAt }),
-      ...(t.doneBy && { doneBy: t.doneBy }),
-      ...(inNote !== undefined && { inNote }),
-    });
-  }
-  return out;
+  return shownTodos(Object.values(d.store.projection.todos ?? {}), now).flatMap((t) => todoSummary(d, t) ?? []);
+}
+
+/** One To Do as a row shows it, or undefined once its words are gone. */
+export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState): TodoSummary | undefined {
+  const words = d.todos?.texts.get(t.id);
+  if (!words) return undefined;
+  const inNote = d.todos!.inNote(t.id);
+  return {
+    id: t.id,
+    itemId: t.itemId,
+    step: words.step,
+    source: words.source.source,
+    sourceTitle: words.source.title,
+    status: t.status,
+    ...(t.deadline && { deadline: t.deadline }),
+    deadlineFrom: t.deadlineFrom,
+    createdAt: t.createdAt,
+    ...(t.doneAt && { doneAt: t.doneAt }),
+    ...(t.doneBy && { doneBy: t.doneBy }),
+    ...(inNote !== undefined && { inNote }),
+    ...(t.mirror && { mirror: { want: t.mirror.want, ...(t.mirror.failed && { failed: t.mirror.failed }) } }),
+    ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
+  };
 }
 
 /**
