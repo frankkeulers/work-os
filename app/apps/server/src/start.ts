@@ -67,6 +67,10 @@ import { SettleLabelStore, latestSettleLabels } from './store/settleLabels';
 import { FilingLabelStore, mergeFilingLabels, type MergedFilingLabel } from './store/filingLabels';
 import { listFilingReports, runFilingEval, saveFilingReport } from './pipeline/evalFiling';
 import { checkLoop } from './learning/checkLoop';
+import { followupLoop } from './learning/followupLoop';
+import { scheduleLoop } from './learning/scheduleLoop';
+import { followupCases } from './pipeline/evalFollowup';
+import { scheduleCases } from './pipeline/evalSchedule';
 import { filingLoop } from './learning/filingLoop';
 import { triageLoop } from './learning/triageLoop';
 import { ProposalStore } from './learning/proposals';
@@ -356,6 +360,11 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   lifecycle.onStop('finish-labels', () => finishLabels.close());
   const filingLabels = await FilingLabelStore.open(paths(config.dataDir).filingLabels);
   lifecycle.onStop('filing-labels', () => filingLabels.close());
+  // A To Do's plan and follow-ups (E15, FR-16.5, FR-16.12–16.13).
+  const scheduleLabels = await ScheduleLabelStore.open(paths(config.dataDir).scheduleLabels);
+  lifecycle.onStop('schedule-labels', () => scheduleLabels.close());
+  const followupLabels = await FollowupLabelStore.open(paths(config.dataDir).followupLabels);
+  lifecycle.onStop('followup-labels', () => followupLabels.close());
   const keepLastMessages = () => settings.editable.settings.triage.keepLastMessages;
   const filingFeedback = new FilingFeedback({ store, items, labels: filingLabels, now, me: triageDeps.me, keepLastMessages, filing: () => filingSettings(settings.editable.settings) });
   const correctionDeps = { store, items, labels, now, me: triageDeps.me, keepLastMessages, filing: filingFeedback };
@@ -392,7 +401,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   });
   lifecycle.onStop('filing-evals', () => filingEvals.stop());
   // Proposals (FR-15.9, FR-15.11): Opus revises a loop's prompt from its misses, on Frank's request
-  // only: the filing policy, the triage prompt's attention, and the settle and finish checks.
+  // only: the filing policy, the triage prompt's attention, the settle and finish checks, and a
+  // To Do's plan and follow-ups (FR-16.14).
   const proposals = new ProposalStore(paths(config.dataDir).proposals);
   const proposalRun = <L>(loop: LearningLoop, labelsOf: () => Promise<L[]>, adapter: () => LoopAdapter<L>) =>
     Evals.open<L, PolicyProposal>({
@@ -415,6 +425,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     triage: await proposalRun('triage', async () => latestLabels(await labels.all()), () => triageLoop({ ...loopDeps, filingPolicy: () => loadPromptFile(config.dataDir, 'filing-policy') })),
     settle: await proposalRun('settle', async () => latestSettleLabels(await settleLabels.all()), () => checkLoop('settle', loopDeps)),
     finish: await proposalRun('finish', async () => latestSettleLabels(await finishLabels.all()), () => checkLoop('finish', loopDeps)),
+    schedule: await proposalRun('schedule', async () => scheduleCases(await scheduleLabels.all()), () => scheduleLoop(loopDeps)),
+    followup: await proposalRun('followup', async () => followupCases(await followupLabels.all()), () => followupLoop(loopDeps)),
   };
   lifecycle.onStop('proposing', () => Promise.all(Object.values(proposing).map((r) => r.stop())).then(() => undefined));
   // Actions (M3): drafted when Claude may be called, written by the outbox after approval.
@@ -470,10 +482,6 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   await backfillTodos({ store, drafts, todos: todoTexts, logger }).catch((err: unknown) => logger.warn({ err }, 'Backfilling To Dos failed; it runs again at the next start'));
   const tasksNote = new TasksNoteWatcher({ store, todos: todoTexts, targets: () => actions.targets(), path: () => settings.editable.settings.tasksNote, now, logger });
   // Done from the inbox (FR-16.4–16.5): its line ticked in the Tasks note, and how long it took labelled.
-  const scheduleLabels = await ScheduleLabelStore.open(paths(config.dataDir).scheduleLabels);
-  lifecycle.onStop('schedule-labels', () => scheduleLabels.close());
-  const followupLabels = await FollowupLabelStore.open(paths(config.dataDir).followupLabels);
-  lifecycle.onStop('followup-labels', () => followupLabels.close());
   const followupWatch = new FollowupWatch({ store, texts: todoTexts, labels: followupLabels, now, logger });
   const todoMirror = new TodoMirror({ store, todos: todoTexts, targets: () => actions.targets(), path: () => settings.editable.settings.tasksNote, canWrite: () => runtime.canUseClaude(), now, logger });
   // When Frank will do each To Do (FR-16.8): placed in free time on every tick, after each calendar poll and after a To Do changes.
@@ -586,6 +594,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     labels,
     settleLabels,
     finishLabels,
+    scheduleLabels,
+    followupLabels,
     filingFeedback,
     settleCheck: async (it) => {
       const c = await settleCheckOf(settleDeps, it, settleDeps.me(it.source), settleDeps.config().settings.triage.keepLastMessages);

@@ -163,7 +163,8 @@ only). It never gives an ideal date later than the deadline the To Do already ha
 **Set your own:** click the estimate chip, or press `p` on a To Do. Pick a length or type minutes,
 set a deadline or choose **None**, then **Save**. Work OS never overrides what you set, and your
 deadline replaces the ideal one. Each change is kept as a label, so Work OS can learn how long your
-To Dos really take. The prompt is **To Do estimates** in [Settings › Prompts](/settings/prompts).
+To Dos really take ([Learning](learning.md)). The prompt is **To Do estimates** in
+[Settings › Prompts](/settings/prompts).
 
 ### Time to do it
 
@@ -223,7 +224,8 @@ your pointer is on it.
 
 Press `1`, `2` or `3` while the toast shows, or click. **×** dismisses one. Work OS keeps your
 answers, and notices when you do one of these yourself soon after (reply on the item within two
-hours, or close it or add a to-do within half an hour), so the suggestions can get better. The
+hours, or close it or add a to-do within half an hour), so the suggestions can get better
+([Learning](learning.md)). The
 prompt is **Follow-ups on Done** in [Settings › Prompts](/settings/prompts).
 
 ## This week, low priority, snoozed and done

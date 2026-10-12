@@ -12,18 +12,24 @@ import { runEval, saveReport } from '../pipeline/eval';
 import { runFilingEval, saveFilingReport } from '../pipeline/evalFiling';
 import { SETTLE_EVAL_MIN_LABELS, runSettleEval, saveSettleReport, type SettleEvalReport } from '../pipeline/evalSettle';
 import { renderFinishChecks, type FinishCheck } from '../pipeline/finish';
+import { followupCases, runFollowupEval } from '../pipeline/evalFollowup';
+import { runScheduleEval, saveLoopReport, scheduleCases, type LoopEvalReport } from '../pipeline/evalSchedule';
 import { acquireLock } from '../runtime/lock';
 import { API_KEY_FIX, apiKeySet } from '../runtime/refuse';
 import { mergeFilingLabels, readFilingLabels } from '../store/filingLabels';
 import { readLabels } from '../store/labels';
 import { latestSettleLabels, readSettleLabels } from '../store/settleLabels';
+import { readScheduleLabels } from '../store/scheduleLabels';
+import { readFollowupLabels } from '../store/followupLabels';
 
 // npm run eval (FR-6.1, FR-6.3): the triage prompt and model over labels/triage.jsonl, scored and
 // saved to logs/eval-<timestamp>.json. `-- --source outlook` scores one source's labels alone (R2.2).
 // `-- --purpose settle` runs the settle prompt over labels/settle.jsonl instead (cockpit CK-2.6),
 // and `-- --purpose finish` the finish prompt over labels/finish.jsonl (CK-2.10), once the file
 // holds 30 labelled checks. `-- --purpose filing` runs triage with the filing policy over
-// labels/filing.jsonl (FR-15.8). It calls Claude on the subscription login, like the server.
+// labels/filing.jsonl (FR-15.8). `-- --purpose schedule` re-plans the To Dos in
+// labels/schedule.jsonl, and `-- --purpose followup` asks again for the follow-ups in
+// labels/followup.jsonl (FR-16.15). It calls Claude on the subscription login, like the server.
 // It takes the lock, so it never shares the usage log with a running server; while the server
 // runs, use Usage › Run eval instead. Prints scores and counts only, never thread text.
 
@@ -60,6 +66,22 @@ function printSettle(r: SettleEvalReport, file: string, title = 'Settle') {
   console.log(`Saved ${file}`);
 }
 
+/** A To Do loop's rows, each against its target where it has one. */
+function printLoop(r: LoopEvalReport, file: string) {
+  console.log(`${r.loop === 'schedule' ? 'Schedule' : 'Follow-up'} eval of ${r.labelCount} labelled To Dos · ${r.model} · prompt ${r.promptVersion}`);
+  if (r.failed) console.log(`${r.failed} To Do(s) got no usable answer and are not scored.`);
+  console.log('');
+  console.log('                       precision  recall   labels');
+  for (const row of r.scores) {
+    const target = [row.target !== undefined && `precision ≥ ${pct(row.target).trim()}`, row.recallTarget !== undefined && `recall ≥ ${pct(row.recallTarget).trim()}`].filter(Boolean).join(', ');
+    console.log(`  ${row.label.padEnd(20)} ${pct(row.precision).padStart(9)} ${pct(row.recall).padStart(7)} ${String(row.n).padStart(8)}${target ? `   target ${target}` : ''}`);
+  }
+  if (r.loop === 'schedule') console.log('\n  Estimate: precision is the share not far too short (took over 1.5×), recall the share not far too long (under half).');
+  console.log('');
+  console.log(`Tokens ${r.tokens.toLocaleString('en-GB')} · cost-equivalent $${r.costEquivalent.toFixed(4)}`);
+  console.log(`Saved ${file}`);
+}
+
 const FIELD_NAME = { toFile: 'To file', predraft: 'Pre-draft', ready: 'Ready', todo: 'To-do' } as const;
 
 function printFilingScores(s: FilingScores) {
@@ -86,12 +108,14 @@ function printFiling(r: FilingEvalReport, file: string) {
   console.log(`Saved ${file}`);
 }
 
-/** `--purpose triage|settle|finish|filing`: which prompt to score. */
-function purposeArg(argv: string[]): 'triage' | 'settle' | 'finish' | 'filing' | Error {
+const PURPOSES = ['triage', 'settle', 'finish', 'filing', 'schedule', 'followup'] as const;
+
+/** `--purpose triage|settle|finish|filing|schedule|followup`: which prompt to score. */
+function purposeArg(argv: string[]): (typeof PURPOSES)[number] | Error {
   const i = argv.indexOf('--purpose');
   if (i < 0) return 'triage';
-  const v = argv[i + 1];
-  return v === 'triage' || v === 'settle' || v === 'finish' || v === 'filing' ? v : new Error('--purpose takes triage, settle, finish or filing');
+  const v = PURPOSES.find((p) => p === argv[i + 1]);
+  return v ?? new Error('--purpose takes triage, settle, finish, filing, schedule or followup');
 }
 
 /** `--source <id>`: one source's labels only. */
@@ -146,6 +170,24 @@ async function main(): Promise<number> {
       const deps = { claude, settings, prompt: await loadPromptFile(config.dataDir, purpose), now: () => new Date() };
       const report = purpose === 'settle' ? await runSettleEval(deps, settle) : await runSettleEval(deps, settle, (checks, now) => renderFinishChecks(checks as unknown as FinishCheck[], now));
       printSettle(report, await saveSettleReport(p.logs, report), purpose === 'settle' ? 'Settle' : 'Finish');
+      return EXIT.ok;
+    }
+    if (purpose === 'schedule' || purpose === 'followup') {
+      const file = purpose === 'schedule' ? p.scheduleLabels : p.followupLabels;
+      const schedule = purpose === 'schedule' ? await readScheduleLabels(file) : [];
+      const followup = purpose === 'followup' ? await readFollowupLabels(file) : [];
+      const n = scheduleCases(schedule).length + followupCases(followup).length;
+      if (!n) {
+        const how = purpose === 'schedule' ? 'Pick how long a To Do took on its Done, or change its estimate or deadline, to add one.' : 'Answer a follow-up on a To Do’s Done to add one.';
+        console.error(`No labelled To Dos in ${file} yet. ${how}`);
+        return EXIT.config;
+      }
+      const settings = (await SettingsState.create(config.dataDir, await loadSettings(config.dataDir), config.forceDryRun)).editable.settings;
+      usage = await UsageLog.open(p.logs);
+      const claude = new ClaudeAdapter({ usage, settings: () => settings, secrets: macKeychain(), now: () => new Date(), cwd: join(config.dataDir, 'sandbox'), client: `work-os-eval/${config.version}` });
+      const deps = { claude, settings, prompt: await loadPromptFile(config.dataDir, purpose), now: () => new Date() };
+      const report = purpose === 'schedule' ? await runScheduleEval(deps, schedule) : await runFollowupEval(deps, followup);
+      printLoop(report, await saveLoopReport(p.logs, report));
       return EXIT.ok;
     }
     if (purpose === 'filing') {

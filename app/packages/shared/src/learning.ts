@@ -23,17 +23,17 @@ export type DiffLine = z.infer<typeof DiffLine>;
 
 /**
  * The loops a proposal can revise (FR-15.9, FR-15.11), each with the prompt file it revises: the
- * filing policy over the filing labels, the triage prompt's attention over the triage labels, and
- * the settle and finish checks over theirs.
+ * filing policy over the filing labels, the triage prompt's attention over the triage labels, the
+ * settle and finish checks over theirs, and a To Do's plan and follow-ups over theirs (FR-16.14).
  */
-export const LearningLoop = z.enum(['filing', 'triage', 'settle', 'finish']);
+export const LearningLoop = z.enum(['filing', 'triage', 'settle', 'finish', 'schedule', 'followup']);
 export type LearningLoop = z.infer<typeof LearningLoop>;
 export const LEARNING_LOOPS = LearningLoop.options;
-export const LOOP_PROMPT: Record<LearningLoop, PromptFileId> = { filing: 'filing-policy', triage: 'triage', settle: 'settle', finish: 'finish' };
+export const LOOP_PROMPT: Record<LearningLoop, PromptFileId> = { filing: 'filing-policy', triage: 'triage', settle: 'settle', finish: 'finish', schedule: 'schedule', followup: 'followup' };
 /** As the bell and toasts name the file: "A filing policy change is proposed". */
-export const LOOP_NOUN: Record<LearningLoop, string> = { filing: 'filing policy', triage: 'triage prompt', settle: 'settle check', finish: 'Looks finished check' };
+export const LOOP_NOUN: Record<LearningLoop, string> = { filing: 'filing policy', triage: 'triage prompt', settle: 'settle check', finish: 'Looks finished check', schedule: 'To Do estimates prompt', followup: 'follow-ups prompt' };
 /** As Settings › Prompts names the file. */
-export const LOOP_FILE_LABEL: Record<LearningLoop, string> = { filing: 'Filing policy', triage: 'Triage', settle: 'Settle check', finish: 'Looks finished' };
+export const LOOP_FILE_LABEL: Record<LearningLoop, string> = { filing: 'Filing policy', triage: 'Triage', settle: 'Settle check', finish: 'Looks finished', schedule: 'To Do estimates', followup: 'Follow-ups on Done' };
 
 /**
  * One row of a loop's scores: how often the prompt was right when it said this (precision), how
@@ -96,12 +96,28 @@ export interface FilingLoopView extends LearningLoopView {
   evalRunning: boolean;
 }
 
+/** A share of To Dos, measured by code and never tuned. */
+export interface Rate {
+  rate: number;
+  n: number;
+}
+
+/**
+ * The plan's loop also shows what code decides from it (FR-16.14): planned times Frank kept until
+ * Done, and To Dos done by their deadline.
+ */
+export interface ScheduleLoopView extends LearningLoopView {
+  measures: { slotsKept: Rate; doneByDeadline: Rate };
+}
+
 export interface LearningView {
   filing: FilingLoopView;
   /** The triage eval's latest report, which Usage shows in full (FR-6.1). */
   triage?: LearningLoopView & { lastEval?: Pick<EvalReport, 'id' | 'at' | 'labelCount'> };
   settle?: LearningLoopView;
   finish?: LearningLoopView;
+  schedule?: ScheduleLoopView;
+  followup?: LearningLoopView;
 }
 
 const FILING_ROW: Record<keyof FilingScores, string> = { toFile: 'To file', predraft: 'Pre-draft', ready: 'Ready to approve', todo: 'To-do suggestions' };

@@ -969,11 +969,17 @@ export class MockServer implements WorkOsApi, MockControls {
     const lastTriage = this.s.evals.at(-1);
     const settle = this.s.settleLabelCount ?? 0;
     const finish = this.s.finishLabelCount ?? 0;
+    const schedule = this.s.scheduleLabelCount ?? 0;
+    const followup = this.s.followupLabelCount ?? 0;
+    // What code measures from the plan: mock figures once there are labels.
+    const measures = schedule ? { slotsKept: { rate: 0.75, n: 12 }, doneByDeadline: { rate: 0.8, n: 15 } } : { slotsKept: { rate: 0, n: 0 }, doneByDeadline: { rate: 0, n: 0 } };
     return {
       filing: { ...loop('filing', filing, Math.round(filing * 0.4), this.s.filingLabelsSinceProposal ?? 0), ...(lastEval && { lastEval }), evalRunning: !!this.s.filingEvalRunning },
       triage: { ...loop('triage', this.s.labelCount, this.s.labelCount, 0), ...(lastTriage && { lastEval: { id: lastTriage.id, at: lastTriage.at, labelCount: lastTriage.labelCount } }) },
       settle: loop('settle', settle, 0, 0),
       finish: loop('finish', finish, finish, 0),
+      schedule: { ...loop('schedule', schedule, Math.round(schedule * 0.6), 0), measures },
+      followup: loop('followup', followup, Math.round(followup * 0.7), 0),
     };
   }
 
@@ -1928,7 +1934,7 @@ export class MockServer implements WorkOsApi, MockControls {
 
   /** The labelled items each loop's proposal learns from (FR-15.9, FR-15.11). */
   private loopLabelCount(loop: LearningLoop): number {
-    return { filing: this.s.filingLabelCount ?? 0, triage: this.s.labelCount, settle: this.s.settleLabelCount ?? 0, finish: this.s.finishLabelCount ?? 0 }[loop];
+    return { filing: this.s.filingLabelCount ?? 0, triage: this.s.labelCount, settle: this.s.settleLabelCount ?? 0, finish: this.s.finishLabelCount ?? 0, schedule: this.s.scheduleLabelCount ?? 0, followup: this.s.followupLabelCount ?? 0 }[loop];
   }
 
   /** Propose a better … (FR-15.9, FR-15.11): after a few seconds, a revision that scores better on held-out labels. */
@@ -1958,7 +1964,7 @@ export class MockServer implements WorkOsApi, MockControls {
         scores: { before, after },
         better: true,
         model: 'opus-5.5',
-        promptVersion: 'tune-policy v2',
+        promptVersion: 'tune-policy v3',
       };
       this.s.proposals = [...(this.s.proposals ?? []), proposal];
       this.s.proposing = { ...this.s.proposing, [loop]: false };
@@ -2069,6 +2075,9 @@ export class MockServer implements WorkOsApi, MockControls {
     this.s.filingLabelCount = 24;
     this.s.settleLabelCount = 14;
     this.s.finishLabelCount = 6;
+    // And for To Dos (FR-16.14): enough to propose better estimates, not yet better follow-ups.
+    this.s.scheduleLabelCount = 16;
+    this.s.followupLabelCount = 7;
     this.emitAll();
   }
 
@@ -2330,6 +2339,20 @@ function mockRevision(loop: LearningLoop, current: string): { text: string; chan
         changes: [{ kind: 'added', what: 'A thank-you that promises a later answer doesn’t settle the ask: you undid three closes like it.' }],
         before: [row('closes', loop === 'settle' ? 'Closes on your reply' : 'Looks finished', 0.75, 0.86, 7, 0.98), row('stays', loop === 'settle' ? 'Stays open' : 'Not finished', 0.83, 0.71, 7)],
         after: [row('closes', loop === 'settle' ? 'Closes on your reply' : 'Looks finished', 1, 0.86, 7, 0.98), row('stays', loop === 'settle' ? 'Stays open' : 'Not finished', 0.88, 1, 7)],
+      };
+    case 'schedule':
+      return {
+        text: raise(current).replace('- Writing something new: 60 to 120 minutes.', '- Writing something new: 60 to 120 minutes.\n- Preparing slides or figures for others: 90 to 120 minutes, medium confidence.'),
+        changes: [{ kind: 'added', what: 'Slides and figures for others take about two hours: five of six took you over 90 minutes against an estimate of 30.' }],
+        before: [row('estimate', 'Estimate', 0.68, 0.9, 16, 0.8, 0.7), row('deadline', 'Ideal deadline', 0.7, 0.6, 10)],
+        after: [row('estimate', 'Estimate', 0.82, 0.88, 16, 0.8, 0.7), row('deadline', 'Ideal deadline', 0.7, 0.6, 10)],
+      };
+    case 'followup':
+      return {
+        text: raise(current).replace('write [link] where one must go.', 'write [link] where one must go. Offer a reply only when someone asked for the step or is waiting on it.'),
+        changes: [{ kind: 'changed', what: 'A reply only when someone asked or is waiting: you dismissed four offered after steps nobody asked for.' }],
+        before: [row('reply', 'Reply', 0.6, 0.9, 10, 0.7), row('mark_source_done', 'Mark the item done', 0.9, 0.8, 8, 0.9), row('add_todo', 'Add a To Do', 0.5, 0.5, 4), row('file_note', 'File a vault note', 1, 1, 0)],
+        after: [row('reply', 'Reply', 0.78, 0.9, 10, 0.7), row('mark_source_done', 'Mark the item done', 0.9, 0.8, 8, 0.9), row('add_todo', 'Add a To Do', 0.5, 0.5, 4), row('file_note', 'File a vault note', 1, 1, 0)],
       };
   }
 }

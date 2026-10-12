@@ -2,7 +2,7 @@
 title: Learning
 group: Settings
 order: 72
-summary: How your feedback improves the filing policy, triage, the settle check and Looks finished: labels, evals, and proposed changes you apply.
+summary: How your feedback improves the filing policy, triage, the settle check, Looks finished, and your To Dos' estimates and follow-ups: labels, evals, and proposed changes you apply.
 updated: 2026-10-12
 ---
 
@@ -22,7 +22,7 @@ Three things never happen:
 
 Everything on this page lives in [Settings › Learning](/settings/learning).
 
-## The four loops
+## The six loops
 
 | Loop | What its prompt decides | Its labels come from | Its eval |
 |---|---|---|---|
@@ -30,6 +30,8 @@ Everything on this page lives in [Settings › Learning](/settings/learning).
 | **Triage attention** | whether a topic is Now, Today, Follow or nothing for you | **Correct triage** (`c`) and **Triage was right** (`y`) | **Run eval** in [Usage](/usage) |
 | **Settle on reply** | whether your reply settles what was asked, so the item closes by itself | **Undo**, or reopening from Done, on an item that closed on your reply; Done on an item your reply settled that the check left open | `npm run eval`, with `--purpose settle` ([how](#the-other-evals)) |
 | **Looks finished** | whether others' messages settled what was asked of you | **Done** or **Not finished** on a Looks finished item | `npm run eval`, with `--purpose finish` ([how](#the-other-evals)) |
+| **To Do estimates** | how long a To Do takes, and when it would ideally be done | how long it took, picked on **Done**; your own estimate, deadline or time; Done itself | `npm run eval`, with `--purpose schedule` ([how](#the-other-evals)) |
+| **Follow-ups on Done** | what to suggest once a To Do is done | each follow-up you use, change or dismiss; a reply, Done or to-do of your own on its item soon after | `npm run eval`, with `--purpose followup` ([how](#the-other-evals)) |
 
 Each loop works the same way:
 
@@ -89,6 +91,14 @@ See [Correcting triage](inbox.md#correcting-triage).
 - **Looks finished:** answer the suggestion. **Done** says it was right; **Not finished** says it
   wasn't. See [When others settle it](inbox.md#when-others-settle-it).
 
+### On To Dos
+
+- **Estimates:** pick how long it took on the Done toast (**15m** to **half day**). Changing a
+  To Do's estimate, deadline or time is a label too. See [Estimates](inbox.md#estimates).
+- **Follow-ups:** use, change or dismiss them. When you do something yourself that none offered (a
+  reply on the item within two hours, or closing it or adding a to-do within half an hour), that
+  counts as missed. See [After Done](inbox.md#after-done).
+
 ## Settings › Learning
 
 The page has a group for each loop, then the switches.
@@ -97,7 +107,10 @@ The page has a group for each loop, then the switches.
   your actions. An item labelled twice counts once; its latest label stands.
 - **The eval:** the filing eval runs from here and shows its last scores. Triage attention links to
   its latest report in Usage. Settle on reply and Looks finished say how to run theirs from the
-  command line.
+  command line, as do the To Do loops.
+- **Measured** (To Do estimates only): what code decides from the plan, measured and never tuned.
+  **Planned times kept** is the share of To Dos done in the time Work OS found, without you moving
+  it; **Done by the deadline** the share done by their deadline, or their ideal one.
 - **Proposals:** what became of the latest proposal, a nudge once 10 or more labels have arrived
   since then, and the **Propose a better …** button. The button stays off until the loop has 10
   labelled items, and says how many there are.
@@ -145,13 +158,23 @@ it measures the policy alone. From the command line, with Work OS stopped:
 - **Settle and Looks finished:** `npm run eval -- --purpose settle` or `--purpose finish`, with Work
   OS stopped, once there are 30 labels. They report false closes (closed, but you still owed
   something) and missed closes (left open after it was settled).
+- **To Do estimates and follow-ups:** `npm run eval -- --purpose schedule` or `--purpose followup`,
+  with Work OS stopped. Each re-runs the prompt for every labelled To Do and prints its rows:
+  - **Estimate:** precision is the share not far too short (it took over 1.5 times as long),
+    recall the share not far too long (under half). Targets: 80% and 70%.
+  - **Ideal deadline:** right within a working day of your deadline, or of the ideal you kept.
+  - **Follow-ups**, per kind: precision is the share of suggestions you wanted, recall the share
+    of what you wanted that it suggests. Targets: a reply 70%, Mark the item done 90%.
+
+  Your calendar isn't kept with the labels, so the estimates eval plans without it.
 
 ## Proposing a change
 
 ### Start a run
 
 1. In Settings › Learning, click **Propose a better policy** (or **triage prompt**, **settle
-   check**, **Looks finished check**) in that loop's group.
+   check**, **Looks finished check**, **Propose better estimates**, **Propose better follow-ups**)
+   in that loop's group.
 2. It works in the background for a few minutes. The bell says when the proposal is ready.
 
 A run:
@@ -213,7 +236,8 @@ To go back after applying, edit the file in Settings › Prompts, or **Reset to 
 
 How Opus writes proposals is itself a prompt, **Policy tuner**, in Settings › Prompts, with a
 section for each loop. Edit it to change what it may touch: for example, the triage section limits
-it to what the prompt says about attention.
+it to what the prompt says about attention, and the estimates section to its Calibration and
+deadline rules. A follow-ups proposal may never copy a reply's words, yours or Claude's.
 
 ## Switches
 

@@ -147,6 +147,9 @@ export interface MockState {
   /** labels/settle.jsonl and labels/finish.jsonl (cockpit CK-2.6, CK-2.10): labelled items. */
   settleLabelCount?: number;
   finishLabelCount?: number;
+  /** labels/schedule.jsonl and labels/followup.jsonl (FR-16.14): labelled items. */
+  scheduleLabelCount?: number;
+  followupLabelCount?: number;
   settings: Settings;
   rules: Rule[];
   ruleHits: Record<string, number>;

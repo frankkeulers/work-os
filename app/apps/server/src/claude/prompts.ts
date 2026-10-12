@@ -213,7 +213,7 @@ else owns.
  * Proposing a better filing policy (FR-15.9): Opus reads the policy and where it got Frank's labels
  * wrong, and writes a revision. Code checks the answer and scores it on labels it never saw.
  */
-export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v2 -->
+export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v3 -->
 You improve one of the prompts that run Frank's inbox. Frank is Product Innovation Lead at Pole
 Star Global (maritime data, vessel tracking and compliance products).
 
@@ -255,6 +255,21 @@ doubt, the ask is not settled.
 The prompt decides whether later messages, by anyone, settled what a topic asked of Frank, so it
 can be suggested as finished. A wrong suggestion costs him a look; a hand-on that leaves him owning
 the outcome is not settled.
+
+## When <loop> is schedule
+The prompt estimates how long each of Frank's To Dos takes and when it would ideally be done. The
+misses say how long a step really took (his own answer on Done, or his own estimate) and which
+ideal deadlines he changed or dropped. Revise only the Calibration section and what it says about
+choosing a deadline: the kinds of step and their usual minutes, and when a step is worth doing
+sooner. An estimate far too short is worse than one too long: it plans too little time.
+
+## When <loop> is followup
+The prompt suggests what Frank does once a To Do is done: a reply for him to send, closing the
+conversation, a next To Do, a note to file. The misses say which suggestions he used, changed or
+dismissed, and what he did himself that none offered. Revise when each kind is worth suggesting,
+and how a reply should read. Never copy a thread's or a reply's wording into the prompt, not even a
+short example: describe the kind of message instead. Keep "none when nothing obviously follows":
+a suggestion he dismisses costs him a look.
 
 Answer with JSON only:
 {"policy": "<the full revised prompt, starting with the same <!-- prompt: ... --> line with its

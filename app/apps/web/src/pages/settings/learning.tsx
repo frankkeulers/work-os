@@ -12,6 +12,7 @@ import {
   type LoopScore,
   type PolicyProposal,
   type PromptFileView,
+  type Rate,
 } from '@work-os/shared';
 import { api } from '../../api';
 import { GuideLink } from '../../components/GuideLink';
@@ -98,6 +99,8 @@ const PROPOSE: Record<LearningLoop, string> = {
   triage: 'Propose a better triage prompt',
   settle: 'Propose a better settle check',
   finish: 'Propose a better Looks finished check',
+  schedule: 'Propose better estimates',
+  followup: 'Propose better follow-ups',
 };
 
 const PROPOSE_HELP: Record<LearningLoop, string> = {
@@ -106,6 +109,8 @@ const PROPOSE_HELP: Record<LearningLoop, string> = {
   triage: 'Opus reads where triage put a topic in the wrong lane and proposes a revision of what the triage prompt says about attention. The same checks apply, and both prompts are scored on labels held back from it.',
   settle: 'Opus reads where the settle check closed an item you undid, or left one you had to close, and proposes a revision. Closing must stay strict: a wrong close hides something you still owe.',
   finish: 'Opus reads where Looks finished was wrong by your answers and proposes a revision of the finish check. The same checks apply.',
+  schedule: 'Opus reads where an estimate was far off how long a To Do took, or an ideal deadline far from yours, and proposes a revision of the prompt’s calibration. The same checks apply.',
+  followup: 'Opus reads which follow-ups you used, changed, dismissed or did yourself, and proposes a revision. The same checks apply, and it may never copy a reply’s words, yours or Claude’s.',
 };
 
 /** A loop's proposal: what became of the latest, the nudge, and the button. */
@@ -166,6 +171,9 @@ function LabelsRow({ testId, l, help, only }: { testId: string; l?: LearningLoop
   );
 }
 
+/** "Planned times kept: 80% of 10", or "none yet" until there are some. */
+const rate = (r: Rate, what: string) => `${what}: ${r.n ? `${fmtPct(r.rate)} of ${r.n}` : 'none yet'}`;
+
 const cli = (purpose: string) => <code className="rounded bg-surface-2 px-1 py-0.5 font-mono text-xs">npm run eval -- --purpose {purpose}</code>;
 
 export function LearningSection({ s, view, set }: Ctx) {
@@ -177,7 +185,7 @@ export function LearningSection({ s, view, set }: Ctx) {
     <>
       <SectionHeader
         title="Learning"
-        description="How Work OS learns from your feedback. Each loop has a prompt it can revise: the filing policy, triage’s attention, the settle check and Looks finished. Nothing changes on its own: a proposed change waits for you."
+        description="How Work OS learns from your feedback. Each loop has a prompt it can revise: the filing policy, triage’s attention, the settle check, Looks finished, and a To Do’s estimates and follow-ups. Nothing changes on its own: a proposed change waits for you."
         action={<GuideLink topic="learning" />}
       />
       <Group title="Filing policy">
@@ -257,6 +265,29 @@ export function LearningSection({ s, view, set }: Ctx) {
             <span className="text-[13px] text-ink-2">From 30 labels, with Work OS stopped: {cli('finish')}</span>
           </Row>
           <ProposalsRow loop="finish" l={learning.finish} />
+        </Group>
+      )}
+      {learning?.schedule && (
+        <Group title="To Do estimates">
+          <LabelsRow testId="schedule-labels" l={learning.schedule} help="Your word: how long a To Do took, picked on its Done, and your changes to its estimate, deadline or time. Your actions: Done itself, against its deadline." />
+          <Row label="Measured" help="Decided by code from the plan, measured and never tuned: planned times you kept until Done, and To Dos done by their deadline, or their ideal one.">
+            <span className="text-[13px] text-ink-2" data-testid="schedule-measures">
+              {rate(learning.schedule.measures.slotsKept, 'Planned times kept')} · {rate(learning.schedule.measures.doneByDeadline, 'Done by the deadline')}
+            </span>
+          </Row>
+          <Row label="Schedule eval" help="Re-plans each labelled To Do. Estimates should be far too short (took over 1.5 times as long) under 20% of the time, and far too long (under half) under 30%. Ideal deadlines count within a working day of yours.">
+            <span className="text-[13px] text-ink-2">With Work OS stopped: {cli('schedule')}</span>
+          </Row>
+          <ProposalsRow loop="schedule" l={learning.schedule} />
+        </Group>
+      )}
+      {learning?.followup && (
+        <Group title="Follow-ups on Done">
+          <LabelsRow testId="followup-labels" l={learning.followup} help="Your word: each follow-up you used, changed first or dismissed. Your actions: a reply, Done or to-do of your own on the item soon after, that no follow-up offered." />
+          <Row label="Follow-up eval" help="Asks again for each labelled To Do and scores each kind. Replies should be ones you use 70% of the time, and Mark the item done 90%.">
+            <span className="text-[13px] text-ink-2">With Work OS stopped: {cli('followup')}</span>
+          </Row>
+          <ProposalsRow loop="followup" l={learning.followup} />
         </Group>
       )}
       <Group title="Switches">

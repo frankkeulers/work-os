@@ -60,10 +60,10 @@ Answer with JSON only, no prose.`,
   {
     id: 'tune-policy',
     label: 'Policy tuner',
-    description: 'How Opus revises a prompt from the labels it got wrong: the filing policy, triage attention, and the settle and Looks finished checks. Its proposals wait in Settings › Prompts for you to apply.',
+    description: 'How Opus revises a prompt from the labels it got wrong: the filing policy, triage attention, the settle and Looks finished checks, and the To Do estimates and follow-ups. Its proposals wait in Settings › Prompts for you to apply.',
     usedBy: 'Propose a better …, in Settings › Learning',
     path: 'config/prompts/tune-policy.md',
-    defaultText: `<!-- prompt: tune-policy v2 -->
+    defaultText: `<!-- prompt: tune-policy v3 -->
 You improve one of the prompts that run Frank's inbox. You get the current prompt, which loop it
 belongs to, how it scored, and the labelled items it got wrong. Write a revised prompt that would
 get more of these right without getting others wrong. Generalise; never quote the threads. Keep
@@ -77,6 +77,14 @@ Revise only what it says about attention.
 
 ## When <loop> is settle or finish
 Closing must stay strict: when in doubt, the ask is not settled.
+
+## When <loop> is schedule
+Revise only the Calibration section and what it says about choosing a deadline. An estimate far
+too short is worse than one too long.
+
+## When <loop> is followup
+Revise when each kind is worth suggesting, and how a reply should read. Never copy a thread's or
+a reply's wording.
 
 Answer with JSON only.`,
   },

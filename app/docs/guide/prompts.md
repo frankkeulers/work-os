@@ -57,8 +57,8 @@ effect from the next triage.
 
 ## Proposed changes
 
-Four files can improve from your feedback: **Filing policy**, **Triage**, **Settle check** and
-**Looks finished**. **Propose a better …** in [Settings › Learning](/settings/learning) asks Opus
+Six files can improve from your feedback: **Filing policy**, **Triage**, **Settle check**,
+**Looks finished**, **To Do estimates** and **Follow-ups on Done**. **Propose a better …** in [Settings › Learning](/settings/learning) asks Opus
 for a revision, learned from your labels and scored on labels it never saw. When it is ready, the
 bell says **A … change is proposed**; **Review** opens this page at the file, with a
 **Proposed change** banner above it:
@@ -74,7 +74,7 @@ Apply saves through the same path as **Save**, so it refuses if the file changed
 proposal was made; propose again from the file as it is. To go back after applying, edit the file
 or **Reset to default**.
 
-How Opus revises a prompt is the **Policy tuner** file, with a section for each of the four. Edit
+How Opus revises a prompt is the **Policy tuner** file, with a section for each of the six. Edit
 it to steer what a proposal may touch. Whatever it says, code turns down a proposal that copies a
 thread's words, drops a rule ID without saying so, is over twice as long, loses the file's first
 line, or breaks the answer format. See [Learning](learning.md) for the whole loop.

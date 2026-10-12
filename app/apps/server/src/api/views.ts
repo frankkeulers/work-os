@@ -86,6 +86,9 @@ import type { ProposalStore } from '../learning/proposals';
 import type { ProposalRunner } from '../learning/tuner';
 import type { LabelStore } from '../store/labels';
 import type { SettleLabelStore } from '../store/settleLabels';
+import type { ScheduleLabelStore } from '../store/scheduleLabels';
+import type { FollowupLabelStore } from '../store/followupLabels';
+import { scheduleMeasures } from '../pipeline/evalSchedule';
 import type { TodoTextStore } from '../store/todos';
 import type { TodoPlanner } from '../todos/planner';
 import type { TodoService } from '../todos/service';
@@ -123,6 +126,9 @@ export interface ViewDeps {
   settleLabels?: SettleLabelStore;
   /** Frank's answers to "Looks finished" (cockpit CK-2.10), for the finish eval. */
   finishLabels?: SettleLabelStore;
+  /** A To Do's Done, time taken and edits to its plan (FR-16.5), and answers to its follow-ups (FR-16.12–16.13). */
+  scheduleLabels?: ScheduleLabelStore;
+  followupLabels?: FollowupLabelStore;
   /** E14 (FR-15.7): feedback on the filing policy, labels/filing.jsonl. */
   filingFeedback?: FilingFeedback;
   /** The settle check on an item's reply as it stands, for a Done no check saw (CK-2.6). */
@@ -777,6 +783,10 @@ export async function loopLabels(d: ViewDeps, loop: LearningLoop): Promise<{ at:
       return (await d.settleLabels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: false })); // read from Undo and Done
     case 'finish':
       return (await d.finishLabels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: true })); // his answer to Looks finished
+    case 'schedule':
+      return (await d.scheduleLabels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: l.origin !== 'done' })); // Done alone says only when
+    case 'followup':
+      return (await d.followupLabels?.all())?.map((l) => ({ at: l.at, itemId: l.itemId, explicit: l.origin === 'answered' })); // missed: read from what he did
   }
 }
 
@@ -796,7 +806,8 @@ async function learningView(d: ViewDeps): Promise<{ learning?: LearningView }> {
     };
   };
   const filing = (await loop('filing'))!;
-  const [triage, settle, finish] = await Promise.all([loop('triage'), loop('settle'), loop('finish')]);
+  const [triage, settle, finish, schedule, followup] = await Promise.all([loop('triage'), loop('settle'), loop('finish'), loop('schedule'), loop('followup')]);
+  const measures = schedule && d.scheduleLabels ? scheduleMeasures(await d.scheduleLabels.all()) : undefined;
   const last = d.filingEvals?.last;
   const lastTriage = d.evals?.last;
   return {
@@ -805,6 +816,8 @@ async function learningView(d: ViewDeps): Promise<{ learning?: LearningView }> {
       ...(triage && { triage: { ...triage, ...(lastTriage && { lastEval: { id: lastTriage.id, at: lastTriage.at, labelCount: lastTriage.labelCount } }) } }),
       ...(settle && { settle }),
       ...(finish && { finish }),
+      ...(schedule && measures && { schedule: { ...schedule, measures } }),
+      ...(followup && { followup }),
     },
   };
 }

@@ -132,3 +132,31 @@ test('J92 the other loops: propose a better triage prompt and apply it; Looks fi
   await expect(banner).toHaveCount(0);
   await expect(page.locator('[data-prompt="triage"]')).toContainText('triage v11#');
 });
+
+test('J98 the To Do loops: labels, what code measures, and better estimates proposed and applied (FR-16.14)', async ({ page }) => {
+  await withLabels(page);
+  const main = page.getByRole('main', { name: 'Learning' });
+  await expect(page.getByTestId('schedule-labels')).toContainText('16 items · 10 from you · 6 from your actions');
+  await expect(page.getByTestId('schedule-measures')).toHaveText('Planned times kept: 75% of 12 · Done by the deadline: 80% of 15');
+  await expect(page.getByTestId('followup-labels')).toContainText('7 items · 5 from you · 2 from your actions');
+  await expect(main.getByText('Needs 10 labelled items; there are 7.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Propose better follow-ups' })).toBeDisabled();
+  await expect(main.getByText('npm run eval -- --purpose schedule')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Propose better estimates' }).click();
+  await expect(page.getByTestId('proposal-status-schedule')).toContainText('is waiting, and scores better', { timeout: 10_000 });
+  await page.getByRole('heading', { name: 'To Do estimates' }).scrollIntoViewIfNeeded();
+  await shoot(page, main, 'settings-learning-todos', false);
+
+  await bell(page).click();
+  await entry(page, 'A To Do estimates prompt change is proposed').getByRole('button', { name: 'Review' }).click();
+  await expect(page).toHaveURL(/\/settings\/prompts#schedule$/);
+  const banner = page.getByRole('region', { name: 'Proposed change' });
+  await expect(banner).toContainText('Added: Slides and figures for others take about two hours');
+  const estimate = banner.getByRole('table', { name: 'Held-out scores, current → proposed' }).locator('[data-field="estimate"]');
+  await expect(estimate).toContainText('68% → 82%');
+  await expect(estimate).toContainText('≥ 80%, recall ≥ 70%');
+  await banner.getByRole('button', { name: 'Apply' }).click();
+  await expect(page.getByText('To Do estimates updated')).toBeVisible();
+  await expect(page.locator('[data-prompt="schedule"]')).toContainText('schedule v2#');
+});

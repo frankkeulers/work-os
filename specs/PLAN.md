@@ -1098,7 +1098,7 @@ Code rejects a proposal that:
 The proposal is saved under `proposals/` with its diff, changes and scores, and the bell offers it. A proposal that scores no better is kept, marked as such. Settings › Prompts shows it on the policy file with **Apply** and **Dismiss**. Applying saves it as any prompt edit is saved (FR-1.7), refusing when the policy changed since the proposal was made, and `prompt.changed` records the proposal. Nothing is applied without Frank. The calls log as `tune` and count towards the cost budget; a run doesn't start once the day's cost budget is reached. A run needs 10 labelled items. Runs start only when Frank asks; the section says when 10 or more labels have arrived since the last run. A proposal code turns down is kept with the reason but without its text or changes, as they may hold a thread's words.
 
 **FR-15.10 Settings › Learning.** A section in the Claude group, replacing the "Learning loop" placeholder:
-- per loop (Filing policy, Triage attention, Settle on reply, Looks finished), its labels (explicit and implicit), where its eval runs, and its latest proposal;
+- per loop (Filing policy, Triage attention, Settle on reply, Looks finished, To Do estimates, Follow-ups on Done), its labels (explicit and implicit), where its eval runs, and its latest proposal;
 - **Run filing eval**; a **Propose a better …** button per loop, disabled below 10 labelled items;
 - the switches: pre-draft mode, Ready to approve, to-do suggestions.
 
@@ -1110,8 +1110,10 @@ The proposal is saved under `proposals/` with its diff, changes and scores, and 
 | Triage attention | `triage`, scored with the filing policy as it is | `labels/triage.jsonl` | Now (precision 80%, recall 90%: S1, S2), Today (80%), Follow, None |
 | Settle on reply | `settle` | `labels/settle.jsonl` | Closes on your reply (98%: C2), Stays open |
 | Looks finished | `finish` | `labels/finish.jsonl` | Looks finished (98%), Not finished |
+| To Do estimates (FR-16.14) | `schedule` | `labels/schedule.jsonl` | Estimate (not far too short 80%, not far too long 70%), Ideal deadline |
+| Follow-ups on Done (FR-16.14) | `followup` | `labels/followup.jsonl` | Reply (70%), Mark the item done (90%), Add a To Do, File a vault note |
 
-`POST /api/learning/<loop>/propose` starts a run; each loop needs 10 labelled items and runs on its own. A proposal records its loop; the bell names it ("A triage prompt change is proposed") and links to the file in Settings › Prompts. The `tune-policy` prompt (v2) has a section per loop: the triage loop revises only what the prompt says about attention, and the settle and finish loops keep closing strict. The settle and finish evals stay on the command line. Still in the backlog:
+`POST /api/learning/<loop>/propose` starts a run; each loop needs 10 labelled items and runs on its own. A proposal records its loop; the bell names it ("A triage prompt change is proposed") and links to the file in Settings › Prompts. The `tune-policy` prompt (v3) has a section per loop: the triage loop revises only what the prompt says about attention, the settle and finish loops keep closing strict, the schedule loop revises only its Calibration and deadline rules, and the followup loop never copies a thread's or a reply's wording. The settle, finish, schedule and followup evals stay on the command line. Still in the backlog:
 - topic routing (FT-13);
 - draft quality, which needs the model's draft kept when Frank edits it (FT-15).
 
@@ -1153,7 +1155,7 @@ The stages:
 - **2:** the estimate and deadline (FR-16.6–16.7).
 - **3:** the slot finder and the time column (FR-16.8–16.10).
 - **4:** follow-ups (FR-16.11–16.13).
-- **5:** the learning loops and evals.
+- **5:** the learning loops and evals (FR-16.14–16.15).
 
 **FR-16.1 To Dos.**
 - **One per line.** Each line an approved to-do writes to the Tasks note becomes a To Do.
@@ -1235,6 +1237,15 @@ The stages:
 - **Logging.** Frank's answer is logged first (`todo.followupAnswered`: accepted, edited or dismissed), once each, then the follow-up is done. Each answer is a line in `labels/followup.jsonl` (`answered`), written before its event, with the suggestion, Frank's words when he edited it, and the input.
 
 **FR-16.13 Follow-ups missed.** What Frank does himself soon after a To Do is done, that a follow-up would have offered, is a `missed` label in `labels/followup.jsonl`, once per To Do and kind: Done on its item within 30 minutes (`mark_source_done`), a to-do added on its item within 30 minutes (`add_todo`), or his own message on it within two hours (`reply`). A suggestion of that kind he used means nothing was missed.
+
+**FR-16.14 Learning from To Dos.** Two loops on FR-15.11's pattern, each over one case per labelled To Do (its labels merged, the item held out or learned from as one), with a `LoopAdapter` and a **Propose better …** button in Settings › Learning:
+- **To Do estimates** (`schedule`, over `labels/schedule.jsonl`). The truth for an estimate is how long it took (the Took chip), else Frank's own estimate. The truth for a deadline is the deadline he set (or none), else the ideal he kept until Done.
+  - **Estimate row.** Precision is the share not far too short (took over 1.5 times the estimate), target 80%; recall the share not far too long (under half), target 70%.
+  - **Ideal deadline row.** Precision is the share of the ideals given that land within one working day (London) of his date; recall is the share of his dates the plan gets, its ideal or else the deadline the To Do had.
+  - **Measured by code, never tuned:** planned times kept (done in a slot the plan found, none moved by Frank) and To Dos done by their deadline, or their ideal one. Settings › Learning shows both.
+- **Follow-ups on Done** (`followup`, over `labels/followup.jsonl`). Per kind, a kind Frank used (as it was or edited) or did himself (a `missed` label) was wanted; one he dismissed, or that wasn't offered and that he didn't do, was not; one offered and never answered says nothing. Precision is the share of suggestions he wanted, recall the share of what he wanted that it suggests; targets Reply 70%, Mark the item done 90%. The copy check covers the conversation, the replies suggested and Frank's own words.
+
+**FR-16.15 To Do evals.** `npm run eval -- --purpose schedule` and `--purpose followup` re-run each prompt over its cases, with the triage model and purpose `eval`, and print the rows. The calendar isn't kept in the labels, so the schedule eval plans without it, at the time each To Do was made. Reports go to `logs/schedule-eval-<timestamp>.json` and `logs/followup-eval-<timestamp>.json`.
 
 > **Story 16.1** As Frank, I want the to-dos I filed to stay in front of me until they are done.
 >
