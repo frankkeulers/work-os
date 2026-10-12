@@ -57,16 +57,27 @@ export function inTimeRange(d: Date | string, range: string): boolean {
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+export interface WorkHours {
+  /** The working weekdays, as 'Mon'…'Sun'. */
+  days: string[];
+  /** "HH:MM–HH:MM"; may wrap midnight. */
+  range: string;
+  from: string;
+  to: string;
+}
+
 /** Parses "Mon–Fri 08:00–18:30". Falls back to weekdays 08:00–18:30. */
-export function isWorkHours(d: Date | string, spec: string): boolean {
-  const m = /^(\w{3})\s*[–-]\s*(\w{3})\s+(\d\d:\d\d\s*[–-]\s*\d\d:\d\d)$/.exec(spec.trim());
-  const [fromDay, toDay, range] = m ? [m[1], m[2], m[3]] : ['Mon', 'Fri', '08:00–18:30'];
-  const day = DAYS.indexOf(londonParts(d).weekday);
+export function parseWorkHours(spec: string): WorkHours {
+  const m = /^(\w{3})\s*[–-]\s*(\w{3})\s+((\d\d:\d\d)\s*[–-]\s*(\d\d:\d\d))$/.exec(spec.trim());
+  const [fromDay, toDay, range, from, to] = m && DAYS.includes(m[1]) && DAYS.includes(m[2]) ? [m[1], m[2], m[3], m[4], m[5]] : ['Mon', 'Fri', '08:00–18:30', '08:00', '18:30'];
   const a = DAYS.indexOf(fromDay);
   const b = DAYS.indexOf(toDay);
-  if (day < 0 || a < 0 || b < 0) return false;
-  const inDays = a <= b ? day >= a && day <= b : day >= a || day <= b;
-  return inDays && inTimeRange(d, range);
+  return { days: DAYS.filter((_, i) => (a <= b ? i >= a && i <= b : i >= a || i <= b)), range, from, to };
+}
+
+export function isWorkHours(d: Date | string, spec: string): boolean {
+  const w = parseWorkHours(spec);
+  return w.days.includes(londonParts(d).weekday) && inTimeRange(d, w.range);
 }
 
 /** London 09:00 on the London day after d, as ISO. */

@@ -11,6 +11,7 @@ export * from './requests';
 export * from './todo';
 export * from './todos';
 export * from './schedule';
+export * from './slots';
 export * from './merge';
 export * from './attention';
 export * from './filed';
