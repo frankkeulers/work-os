@@ -711,7 +711,7 @@ As built (FR-9.7, 2026-10-11):
 
 **FR-9.10** An append adds only lines that aren't already in the note. A line counts as there when its task matches, ticked or not, and with or without the ✅ date the Tasks plugin adds when ticked. So an attempt cut short is finished and never repeated. An append can't clash with what Frank changed in the note since, so there is no conflict check; if the note changes between the plan and the write, the attempt starts again.
 
-**FR-9.11** In the item panel, **Add to-do** sits under File it, with the key `a`. A meeting's **Action items for you** are a picker: all ticked at first, then **Add to Tasks** makes a to-do of the ticked ones, replacing a to-do still waiting for review. Triage never suggests a to-do, so it stays out of the card actions and batches. The vault drafter keeps its rule that action items stay out of the vault (FR-9.7), and the "already filed" search (FR-9.6) skips the Tasks note.
+**FR-9.11** In the item panel, **Add to-do** sits under File it, with the key `a`. A meeting's **Action items for you** are a picker: all ticked at first, then **Add to Tasks** makes a to-do of the ticked ones, replacing a to-do still waiting for review. Triage never suggests a to-do, so it stays out of the card actions and batches. *Amended 12 Oct 2026 (FR-15.6):* triage may suggest one, which the panel offers as **Add to-do: {step}**; it still stays out of card actions and batches. The vault drafter keeps its rule that action items stay out of the vault (FR-9.7), and the "already filed" search (FR-9.6) skips the Tasks note.
 
 ### 7.10 E9 Confluence entry action
 
@@ -1017,6 +1017,102 @@ The server runs unattended on a laptop that sleeps, travels and loses its networ
 > - Given the target note changed while I was offline, when the outbox runs, then the app re-drafts instead of writing.
 > - Given the laptop sleeps during a Confluence write, when it wakes, then the executor re-reads the page and does not write the entry twice.
 
+### 7.15 E14 Filing policy and learning loop
+
+*Added 12 Oct 2026, from BACKLOG FT-9.* Too many items reached To file, and drafts ahead (FR-8.4, UX-3) spent a Sonnet draft on each one. The filing criteria were a few lines inside the triage prompt, and nothing learned from Frank's feedback. E14 gives filing its own editable policy, drafts ahead only what the policy says, offers a **Ready to approve** queue, suggests to-dos carefully, and closes the loop: Frank's feedback becomes labels, the labels score the policy, and a tuner proposes a better policy for Frank to approve.
+
+**Non-negotiable 4 and NF-5 are unchanged.** Models draft; code writes only after Frank approves each write. "Ready to approve" means drafted ahead and waiting for one key press, never written. A later stage that files without a key press needs an amendment first (BACKLOG FT-14).
+
+The pattern, which later loops reuse (FR-15.11): a **policy** (an editable prompt file), the **decision fields** it produces (clamped by code), **labels** (explicit feedback and implicit signals), an **eval** with targets, and a **tuner** that proposes a revised policy. Trust grows in stages, each gated by measured precision: suggest, then pre-draft, then ready to approve.
+
+**FR-15.1 Filing policy.** A prompt file, `config/prompts/filing-policy.md` ("Filing policy" in Settings › Prompts), holds the topical rules. Its rules have short IDs so decisions can cite them, in four sections:
+- **To file (`F1`, `F2`, …):** which topics are worth filing at all, and where (Confluence or vault).
+- **Pre-draft (`P1`, …):** the narrower set worth drafting ahead.
+- **Ready to approve (`R1`, …):** the narrowest set, each rule naming its destination (a vault note type or folder, or a Confluence product or page area).
+- **To-dos (`T1`, …):** when a topic's step should be suggested as a to-do. When in doubt, no.
+
+The triage prompt (v10) keeps the fundamentals: what Confluence and the vault are for, the people rule and the answer's shape. Triage reads both files fresh on every call and sends the policy inside `<filing-policy>` after the base prompt. Each decision records `policyVersion` beside `promptVersion` (FR-5.2), so the eval and usage can tell policy changes apart. A policy that is empty or missing falls back to the built-in default.
+
+**FR-15.2 Decision fields.** Per filing (`confluence`, `vault`), the answer may add `predraft`, `ready` and `rule` (the policy rule ID it applied); `targetHint` names the destination. Per thread it may add `todo` (`step`, and `dueAt` when there is one). Code clamps what the model says: `ready` needs `predraft`, `predraft` needs `suggested`, and a `todo` needs `next` or attention other than none. A `file` rule (FR-4.3) can tick **pre-draft**, which sets `predraft` on the filing it suggests. A correction that turns a filing on means pre-draft but not ready. The flags and rule IDs go in the log; the to-do's wording is free text, so it lives with the decision's text in `items/` and expires with it (§4.3). The new fields are optional, so earlier decisions stay valid and mean "pre-draft every suggested filing, none ready", as before.
+
+**FR-15.3 Pre-draft.** Drafts ahead (FR-8.4, UX-3) start only a filing marked `predraft`, on both triggers: an item entering To file, and `j`/`k` or a click landing on one. Ready filings go first. The budget rules are unchanged. A filing without `predraft` shows Draft with its key (`f`, `v`) as before. Settings › Learning sets the mode: **by policy** (the default), **every suggested filing** (as before E14) or **off**.
+
+**FR-15.4 Target.** The filing's `targetHint` reaches the drafter as a hint, never as an instruction: in `<filing-target>` for the vault drafter, and as the preferred area for the Confluence page pick. The drafters still check the vault and the catalogue, and may decline.
+
+**FR-15.5 Ready to approve.** To file shows a **Ready to approve** group first: the items with a `ready` filing, each row showing its destination and rule. **Approve ready**, in the group's header, files the group in a batch (FR-8.4): each draft is already there, so review is instant; `⌘↵` approves and moves on, `→` skips. Each write still takes its own key press. Settings › Learning can turn the group off; the items then show in To file as usual.
+
+**FR-15.6 To-do suggestions.** *Amends FR-9.11 ("Triage never suggests a to-do").* When a decision has a `todo`, the item panel shows **Add to-do: {step}** with `a`, which builds the to-do from that step as FR-9.9 does and opens it for review. A × dismisses the suggestion for this revision. Nothing is added to Tasks without Frank's approval, as before. Both answers are labels (FR-15.7). Settings › Learning can turn suggestions off. The **Add to-do** button stays as it is.
+
+**FR-15.7 Filing labels.** `labels/filing.jsonl` holds one line per signal: the item, revision and source; `origin` (`explicit` or `implicit`); `signal`; `label`, which sets some of `toFile`, `predraft`, `ready` and `todo`; `was` (the decision's filing fields, `policyVersion` and rules); and the thread as the model saw it, as in `labels/triage.jsonl` (FR-6.2). For each item and field, the latest line wins. Labels follow the retention rule for `labels/triage.jsonl`.
+
+Explicit signals come from the item panel's **Filing** menu, next to Correct triage:
+- **Not for filing:** `toFile` false. It also corrects the item out of To file (FR-6.2).
+- **Should have been filed:** `toFile` true, as the existing correction does.
+- **Don't pre-draft this kind:** `predraft` false.
+- **Should be ready to approve** and **Shouldn't be ready:** `ready` true or false.
+
+**Triage was right** (`y`) also labels the filing fields shown. Implicit signals are written after the event that causes them and never fail the click:
+
+| Event | Label |
+|---|---|
+| A drafted-ahead filing approved unedited | `predraft` true, `ready` true |
+| A drafted-ahead filing approved after an edit | `predraft` true, `ready` false |
+| A drafted-ahead filing discarded (not re-drafted) | `predraft` false |
+| A To file item marked done with nothing filed | `toFile` false |
+| A suggested to-do added, or dismissed | `todo` true, or false |
+
+**FR-15.8 Filing eval.** `npm run eval -- --purpose filing`, and **Run filing eval** in Settings › Learning, run triage with the current prompt and policy over the filing labels, with no rules. The eval scores precision and recall for each field, split by explicit and implicit labels and by source. A field's score counts from 30 labels. The report goes to `logs/filing-eval-<ts>.json` and shows on the eval page. Targets:
+
+| Field | Precision |
+|---|---|
+| To file | ≥ 85% |
+| Pre-draft | ≥ 80% |
+| Ready to approve | ≥ 95% |
+| To-do suggestion | ≥ 95% |
+
+**FR-15.9 Policy proposals.** **Propose a better policy** in Settings › Learning:
+1. Splits the labels by a hash of the item ID: 70% to learn from, 30% held out.
+2. Scores the current policy and collects its misses on the 70%.
+3. Asks Opus, with an editable prompt file (`tune-policy`), for a revised policy and a list of changes.
+4. Scores the current and proposed policies on the held-out 30%.
+
+Code rejects a proposal that:
+- copies eight or more words in a row from a labelled thread, so message text can't move into a long-lived file;
+- drops a rule ID without saying so;
+- is over twice the current length.
+
+The proposal is saved under `proposals/` with its diff, changes and scores, and the bell offers it. A proposal that scores no better is kept, marked as such. Settings › Prompts shows it on the policy file with **Apply** and **Dismiss**. Applying saves it as any prompt edit is saved (FR-1.7), refusing when the policy changed since the proposal was made, and `prompt.changed` records the proposal. Nothing is applied without Frank. The calls log as `tune` and count towards the cost budget. Runs start only when Frank asks; the section says when 10 or more labels have arrived since the last run.
+
+**FR-15.10 Settings › Learning.** A section in the Claude group, replacing the "Learning loop" placeholder:
+- per loop, its labels (explicit and implicit) and its last eval against the targets;
+- **Run filing eval** and **Propose a better policy**, and any proposal waiting;
+- the switches: pre-draft mode, Ready to approve, to-do suggestions.
+
+**FR-15.11 Later loops** use the same parts and are in the backlog:
+- triage attention (FT-11);
+- settle and Looks finished (FT-12);
+- topic routing (FT-13);
+- draft quality, which needs the model's draft kept when Frank edits it (FT-15).
+
+> **Story 15.1** As Frank, I want only the filings I care about drafted ahead, so drafts aren't wasted.
+>
+> - Given the policy says a topic is worth filing but not pre-drafting, when it enters To file, then no draft starts, and `v` or `f` drafts it.
+> - Given the policy marks it pre-draft, when it enters To file, then its draft starts quietly, within the budget.
+
+> **Story 15.2** As Frank, I want the routine filings waiting for one key, so filing takes seconds.
+>
+> - Given three items are ready to approve, when I press Approve ready, then each opens with its draft, and `⌘↵` files it and moves on.
+> - Given I press `→`, then that item stays in To file and nothing is written.
+
+> **Story 15.3** As Frank, I want my feedback to make the policy better, without the app changing it behind my back.
+>
+> - Given 30 filing labels, when I run Propose a better policy, then I see the diff, the changes and the before and after scores, and the policy is unchanged until I apply it.
+> - Given I edited the policy after the proposal was made, when I apply it, then it is refused and I can run a new proposal.
+
+> **Story 15.4** As Frank, I want a to-do suggested only when it's clearly mine, and never added without me.
+>
+> - Given a decision suggests a to-do, when I press `a`, then the to-do opens for review; when I press ×, then the suggestion goes and a label records it.
+
 ---
 
 ## 8. Non-functional requirements
@@ -1127,7 +1223,7 @@ Requirements:
 | Pre-meeting account brief | **To do (logged 8 Oct 2026, at Frank's request).** Builds on the calendar source (R2.8): before a customer meeting on the agenda, pulls related items, vault notes and CRM context into a brief. Shown as a P4 placeholder on the agenda and in Settings › Outlook until built. The first new build recommended in the October setup review. |
 | CRM and call sources | Salesforce, HubSpot and Gong as read-only sources, for the revenue focus. Needs the matching approvals and data-rights checks. |
 | Unified search | Across items, decisions and the vault, from the local files. Add a local search index (still file-based, e.g. MiniSearch persisted to JSON) when linear scans get slow. |
-| Learning loop | Corrections become few-shot examples in the triage prompt, chosen by similarity. The eval gates every prompt change. |
+| Learning loop | Corrections become few-shot examples in the triage prompt, chosen by similarity. The eval gates every prompt change. *12 Oct 2026:* the filing loop is specced as E14 (§7.15): policy, labels, eval, and a tuner that proposes policy changes for Frank to apply. Few-shot choice by similarity stays here, after IN-5. |
 | Plugin model | Sources and actions as folders with a manifest, so adding one needs no core changes. |
 | Remote access or hosting | Out of scope while on the subscription. Moving off the laptop means an API key or Bedrock, PSG vendor and security review, and a re-check of Slack and Graph terms. |
 

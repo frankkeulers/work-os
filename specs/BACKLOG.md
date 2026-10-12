@@ -74,8 +74,13 @@ Ranked by friction removed. Here is the core funnel on the wide cockpit as it st
 | FT-6 | **A people map across sources.** Slack IDs, email addresses and Wispr Flow names, maintained in Settings. | Needed by FT-5, rules and VIPs, the people check, IN-3 and FT-7. | cockpit Stage 6 open question 1 | idea |
 | FT-7 | **Pre-meeting brief.** Related items, vault notes and open asks for the people in the next meeting, on the time column's card. | Walk into a meeting knowing what's open. | PLAN §9 Phase 4 | idea |
 | FT-8 | **Teams chats as a source**, joining auto-close. | A channel that isn't read yet. | PLAN §9 Phase 2, cockpit B4 | idea |
-| FT-9 | **A learning loop.** Corrections become few-shot examples, chosen by similarity. Usage shows precision per source. | Triage gets better from the corrections you already make. | PLAN §9 Phase 4 | idea |
+| FT-9 | **A learning loop.** Corrections become few-shot examples, chosen by similarity. Usage shows precision per source. | Triage gets better from the corrections you already make. | PLAN §9 Phase 4 | specced (PLAN E14, FR-15.1–15.11) for filing; few-shot choice by similarity still an idea |
 | FT-10 | **Daily and weekly briefs** generated from the event log and inbox state. | Replaces the weekly focus brief task. | PLAN §9 Phase 4 | idea |
+| FT-11 | **Learning loop for triage attention.** A tuner adapter for the triage prompt: its labels and eval exist (FR-6.1–6.3), so the tuner of FR-15.9 proposes changes to the base prompt. | Fewer corrections in Now and Today. | PLAN FR-15.11 | idea |
+| FT-12 | **Learning loop for settle and Looks finished.** Tuner adapters for the `settle` and `finish` prompts, over `labels/settle.jsonl` and `labels/finish.jsonl` and their CLI evals. | Lower false-close and missed-close rates (C2). | PLAN FR-15.11, cockpit CK-2.10 | idea |
+| FT-13 | **Learning loop for topic routing.** Merge and split become labels for the `topics` prompt, with an eval. | Fewer wrongly grouped topics. | PLAN FR-15.11 | idea |
+| FT-14 | **Filing soon.** A standing approval per Ready rule: matching drafts wait in a cancellable "Filing soon" queue and are written at its end, vault first, Confluence only after Ready precision ≥ 98% on 30+ labels. | Routine filing with no key press. | PLAN FR-15.5. **Needs an amendment to non-negotiable 4 and NF-5 first: Frank's decision** | idea |
+| FT-15 | **Keep the model's draft when Frank edits it**, so the edit is a label for the draft prompts (vault, Confluence). | Draft quality can learn from edits. | PLAN FR-15.11 | idea |
 
 ---
 
