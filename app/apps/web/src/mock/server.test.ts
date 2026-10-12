@@ -41,12 +41,17 @@ describe('inbox commands', () => {
     expect(server.getEvents()[0].type).toBe('triage.corrected');
   });
 
-  it('takes filing feedback: Not for filing corrects the item out of To file, the rest only count (FR-15.7)', async () => {
+  it('takes filing feedback: the stage moves without a correction, Not for filing corrects the item out of To file (FR-15.7)', async () => {
     server.applyFilingPolicy(); // with 24 labelled items already
+    const filing = async () => (await settle(server.getItem(id('f1')))).summary.filing;
     expect(await lane('f1')).toBe('file');
+    expect(await filing()).toMatchObject({ vault_note: { ready: true }, confluence_entry: { predraft: false, ready: false } });
     expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_ready', type: 'vault_note' }))).toEqual({ labelCount: 25 });
+    expect(await settle(server.filingFeedback(id('f1'), { signal: 'should_be_ready', type: 'confluence_entry' }))).toEqual({ labelCount: 26 });
+    expect(await filing()).toMatchObject({ vault_note: { predraft: true, ready: false }, confluence_entry: { predraft: true, ready: true } });
     expect(await lane('f1')).toBe('file');
-    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_for_filing' }))).toEqual({ labelCount: 26 });
+    expect(server.getEvents().find((e) => e.type === 'filing.staged')).toMatchObject({ data: { type: 'confluence_entry', predraft: true, ready: true } });
+    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_for_filing' }))).toEqual({ labelCount: 27 });
     expect(await lane('f1')).not.toBe('file');
     const err = (await settle(server.filingFeedback(id('f1'), { signal: 'no_predraft' }).catch((e) => e))) as ApiError;
     expect(err).toMatchObject({ status: 409, message: 'This item has nothing to file.' });

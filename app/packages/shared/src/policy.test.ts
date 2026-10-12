@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DecisionLike } from './lanes';
-import { filingPlan, todoOffer } from './policy';
+import { STAGE_OF, filingPlan, stageFiling, todoOffer } from './policy';
 import { DEFAULT_FILING, type TriageCorrection } from './schemas';
 
 const decision = (over: Partial<DecisionLike> = {}): DecisionLike => ({
@@ -39,6 +39,38 @@ describe('filingPlan (FR-15.2, FR-15.3, FR-15.5)', () => {
     expect(filingPlan(d, correction({ confluence: true, vault: true }), DEFAULT_FILING)).toEqual({ confluence_entry: { predraft: true, ready: false }, vault_note: { predraft: true, ready: true, rule: 'R1' } });
     expect(filingPlan(d, correction({ attention: 'today' }), DEFAULT_FILING)).toEqual({});
     expect(filingPlan(undefined, undefined, DEFAULT_FILING)).toEqual({});
+  });
+});
+
+describe('Frank’s word on a filing’s stage (FR-15.7)', () => {
+  const d = decision({ itemRevision: 3, confluence: { suggested: true, predraft: false, ready: false, rule: 'F1' }, vault: { suggested: true, predraft: true, ready: true, rule: 'R1' } });
+
+  it('moves a filing into Ready, which drafts it ahead, and out again', () => {
+    const ready = stageFiling(undefined, 'confluence_entry', 3, STAGE_OF.should_be_ready);
+    expect(filingPlan(d, undefined, DEFAULT_FILING, ready).confluence_entry).toEqual({ predraft: true, ready: true, rule: 'F1' });
+    // Not ready after all: it stays drafted ahead, as Frank said before.
+    const notReady = stageFiling(ready, 'confluence_entry', 3, STAGE_OF.not_ready);
+    expect(filingPlan(d, undefined, DEFAULT_FILING, notReady).confluence_entry).toEqual({ predraft: true, ready: false, rule: 'F1' });
+    expect(filingPlan(d, undefined, DEFAULT_FILING, stageFiling(undefined, 'vault_note', 3, STAGE_OF.not_ready)).vault_note).toEqual({ predraft: true, ready: false, rule: 'R1' });
+  });
+
+  it('stops drafting ahead, which takes it out of Ready too', () => {
+    expect(filingPlan(d, undefined, DEFAULT_FILING, stageFiling(undefined, 'vault_note', 3, STAGE_OF.no_predraft)).vault_note).toEqual({ predraft: false, ready: false, rule: 'R1' });
+  });
+
+  it('lets the later choice win on the same revision, and starts afresh on a newer one', () => {
+    const ready = stageFiling(stageFiling(undefined, 'vault_note', 3, STAGE_OF.no_predraft), 'vault_note', 3, STAGE_OF.should_be_ready);
+    expect(ready.vault_note).toEqual({ revision: 3, predraft: true, ready: true });
+    expect(stageFiling(ready, 'vault_note', 3, STAGE_OF.no_predraft).vault_note).toEqual({ revision: 3, predraft: false, ready: false });
+    expect(stageFiling(ready, 'vault_note', 4, STAGE_OF.not_ready).vault_note).toEqual({ revision: 4, ready: false });
+  });
+
+  it('lapses once the item is triaged again, and the switches still apply', () => {
+    const ready = stageFiling(undefined, 'confluence_entry', 2, STAGE_OF.should_be_ready);
+    expect(filingPlan(d, undefined, DEFAULT_FILING, ready).confluence_entry).toEqual({ predraft: false, ready: false, rule: 'F1' });
+    const now = stageFiling(undefined, 'confluence_entry', 3, STAGE_OF.should_be_ready);
+    expect(filingPlan(d, undefined, { ...DEFAULT_FILING, ready: false }, now).confluence_entry).toEqual({ predraft: true, ready: false, rule: 'F1' });
+    expect(filingPlan(d, undefined, { ...DEFAULT_FILING, predraft: 'off' }, now).confluence_entry).toEqual({ predraft: false, ready: false, rule: 'F1' });
   });
 });
 

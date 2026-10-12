@@ -8,6 +8,8 @@ import {
   todoSteps,
   awaitsReply,
   effectiveTriage,
+  STAGE_OF,
+  stageFiling,
   draftTarget,
   filedAll,
   isFiledDraft,
@@ -1123,7 +1125,16 @@ export class MockServer implements WorkOsApi, MockControls {
     const on = (t: 'confluence_entry' | 'vault_note') => (!body.type || body.type === t) && !!eff?.[t === 'confluence_entry' ? 'confluence' : 'vault'];
     if (!eff || (!on('confluence_entry') && !on('vault_note'))) throw new ApiError('conflict', body.type ? 'This item isn’t suggested for that filing.' : 'This item has nothing to file.');
     if (body.signal === 'not_for_filing') await this.correctTriage(itemId, { attention: eff.attention, confluence: eff.confluence && !on('confluence_entry'), vault: eff.vault && !on('vault_note') });
-    else await this.gate(COMMAND_MS);
+    else {
+      await this.gate(COMMAND_MS);
+      // The item moves too: in or out of Ready, drafted ahead or not (FR-15.7).
+      const revision = rec.decision?.itemRevision ?? rec.item.revision;
+      for (const type of (['confluence_entry', 'vault_note'] as const).filter(on)) {
+        rec.staged = stageFiling(rec.staged, type, revision, STAGE_OF[body.signal]);
+        this.event('filing.staged', { revision, type, ...STAGE_OF[body.signal] }, { itemId });
+      }
+      this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+    }
     this.s.filingLabelCount = (this.s.filingLabelCount ?? 0) + 1;
     this.s.filingLabelsSinceProposal = (this.s.filingLabelsSinceProposal ?? 0) + 1;
     this.emit({ topic: 'settings' });

@@ -1,4 +1,4 @@
-import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, PROPOSAL_MIN_LABELS, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -186,11 +186,19 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     if (!f) throw new HttpError('unavailable', 'Filing feedback is not available.');
     const body = FilingFeedbackBody.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { signal: "not_for_filing" | "no_predraft" | "should_be_ready" | "not_ready" }, and { type } for one filing.');
-    if (body.data.signal !== 'not_for_filing') return reply.headers(noStore).send(await f.feedback(id, body.data));
-    if (!d.correct) throw new HttpError('unavailable', 'Corrections are not available.');
     const it = d.store.projection.items[id];
     const eff = effectiveTriage(it.decision, it.correction);
     const off = (t: 'confluence_entry' | 'vault_note') => !body.data.type || body.data.type === t;
+    const signal = body.data.signal;
+    if (signal !== 'not_for_filing') {
+      // Label first, as for a correction; then the item moves (in or out of Ready, drafted ahead or not).
+      const res = await f.feedback(id, body.data);
+      const revision = it.decision?.itemRevision ?? it.revision;
+      const types = (['confluence_entry', 'vault_note'] as const).filter((t) => off(t) && eff?.[t === 'confluence_entry' ? 'confluence' : 'vault']);
+      if (types.length) await d.store.append(...types.map((type) => ({ type: 'filing.staged' as const, itemId: id, data: { revision, type, ...STAGE_OF[signal] } })));
+      return reply.headers(noStore).send(res);
+    }
+    if (!d.correct) throw new HttpError('unavailable', 'Corrections are not available.');
     if (!eff || (!eff.confluence && !eff.vault)) throw new HttpError('conflict', 'This item has nothing to file.');
     await d.correct(id, { attention: eff.attention, confluence: eff.confluence && !off('confluence_entry'), vault: eff.vault && !off('vault_note') });
     return reply.headers(noStore).send({ labelCount: f.counts.labels });

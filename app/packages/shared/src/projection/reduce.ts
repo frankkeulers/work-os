@@ -1,4 +1,5 @@
 import type { EventType, WorkEvent } from '../events';
+import { stageFiling } from '../policy';
 import type { ActionStatus } from '../schemas';
 import { DISMISSED_DAYS, emptyProjection, type ActionState, type Projection } from './state';
 import {
@@ -198,6 +199,11 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
     case 'todo.dismissed':
       item.todoDismissed = e.data.revision;
       break;
+    case 'filing.staged': {
+      const { revision: rev, type, predraft, ready } = e.data;
+      item.staged = stageFiling(item.staged, type, rev, { ...(predraft !== undefined && { predraft }), ...(ready !== undefined && { ready }) });
+      break;
+    }
     // Failures and checks for older messages than the item now has are stale, like decisions: the
     // newer messages get their own triage and checks.
     case 'triage.failed':

@@ -382,7 +382,10 @@ approve. **Filing…** beside the decision tells it where it was wrong:
 - **Not for filing** takes the item out of To file, as a correction does.
 - Per filing (**Vault note** or **Confluence entry**, with the rule that applied):
   **Don't draft items like this ahead**, and **Should** or **Shouldn't be ready to approve**.
-  These leave the item where it is; they only teach the policy.
+  These teach the policy and move the item at once: **Should be ready** puts it in Ready to
+  approve and drafts it ahead, **Shouldn't be ready** puts it back with the other filings (a draft
+  already made stays), and **Don't draft ahead** stops a draft being made until you press `f` or
+  `v`. Your word on the item holds until new messages bring a new triage.
 - **Should be filed to the vault** or **to Confluence** for a filing triage didn't suggest.
 
 What you do counts too, as a weaker signal: approving a draft as it was says it could have been

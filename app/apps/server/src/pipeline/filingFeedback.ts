@@ -115,7 +115,7 @@ export class FilingFeedback {
     const it = this.d.store.projection.items[itemId];
     const eff = it && effectiveTriage(it.decision, it.correction);
     if (!eff) return false;
-    const plan = filingPlan(it.decision, it.correction, this.d.filing());
+    const plan = filingPlan(it.decision, it.correction, this.d.filing(), it.staged);
     const label: FilingLabel = {
       confluence: { toFile: eff.confluence, ...(plan.confluence_entry?.ready && { ready: true }) },
       vault: { toFile: eff.vault, ...(plan.vault_note?.ready && { ready: true }) },

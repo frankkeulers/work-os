@@ -112,6 +112,7 @@ export function noticesFor(events: WorkEvent[]): Notice[] {
       for (const id of new Set([e.itemId, e.data.into, e.data.from])) if (id) out.push({ topic: 'item', id });
       out.push({ topic: 'inbox' });
     } else if (e.type === 'topic.askDone' && e.itemId) out.push({ topic: 'item', id: e.itemId }, { topic: 'inbox' });
+    else if ((e.type === 'todo.dismissed' || e.type === 'filing.staged') && e.itemId) out.push({ topic: 'item', id: e.itemId }, { topic: 'inbox' });
     else if (area === 'source') out.push({ topic: 'inbox' }, { topic: 'usage' });
     else if (area === 'settings' || area === 'rules') out.push({ topic: 'settings' }, { topic: 'inbox' }, { topic: 'usage' });
     else if (area === 'prompt') out.push({ topic: 'settings' });

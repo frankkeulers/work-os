@@ -1199,7 +1199,7 @@ describe('filing feedback (FR-15.7)', () => {
     expect((await call('PUT', '/api/settings', { settings: { ...view.settings, vaultPath: vault }, rules: view.rules })).status).toBe(200);
   });
 
-  it('labels what the Filing… menu says, with the decision and the thread, and leaves the item where it is', async () => {
+  it('labels what the Filing… menu says, with the decision and the thread, and moves the filing without a correction', async () => {
     const r = await feedback({ signal: 'no_predraft' });
     expect(r).toMatchObject({ status: 200, body: { labelCount: 1 } });
     expect(await feedback({ signal: 'should_be_ready', type: 'vault_note' })).toMatchObject({ status: 200, body: { labelCount: 1 } });
@@ -1209,6 +1209,17 @@ describe('filing feedback (FR-15.7)', () => {
     expect(a.thread).toMatchObject({ id: PROD });
     expect(b).toMatchObject({ signal: 'should_be_ready', label: { vault: { toFile: true, predraft: true, ready: true } } });
     expect(res.store.projection.items[PROD].correction).toBeUndefined();
+    // The item moves at once: into Ready to approve, which drafts it ahead (FR-15.7).
+    const revision = res.store.projection.items[PROD].decision!.itemRevision;
+    expect(res.store.projection.items[PROD].staged).toEqual({ vault_note: { revision, predraft: true, ready: true } });
+    const row = async () => (await inbox()).items.find((i) => i.id === PROD)!;
+    expect((await row()).filing?.vault_note).toEqual({ predraft: true, ready: true });
+    expect((await feedback({ signal: 'not_ready', type: 'vault_note' })).status).toBe(200);
+    expect((await row()).filing?.vault_note).toEqual({ predraft: true, ready: false });
+    expect((await feedback({ signal: 'no_predraft', type: 'vault_note' })).status).toBe(200);
+    expect((await row()).filing?.vault_note).toEqual({ predraft: false, ready: false });
+    // Not a triage correction: the triage labels are untouched.
+    expect(res.labels.counts.labels).toBe(0);
   });
 
   it('“Not for filing” corrects the item out of To file, and labels it explicitly', async () => {

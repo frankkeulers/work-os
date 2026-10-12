@@ -500,6 +500,9 @@ describe('NoticeHub', () => {
     const e = (type: string, itemId?: string) => ({ type, itemId }) as unknown as WorkEvent;
     expect(noticesFor([e('triage.corrected', 'x')])).toEqual([{ topic: 'item', id: 'x' }, { topic: 'inbox' }, { topic: 'settings' }]);
     expect(noticesFor([e('health.changed')])).toEqual([{ topic: 'health' }]);
+    // A dismissed to-do suggestion and a filing moved in or out of Ready (E14) show at once.
+    expect(noticesFor([e('todo.dismissed', 'x')])).toEqual([{ topic: 'item', id: 'x' }, { topic: 'inbox' }]);
+    expect(noticesFor([e('filing.staged', 'x')])).toEqual([{ topic: 'item', id: 'x' }, { topic: 'inbox' }]);
   });
 
   it('refreshes the inbox and every topic a routed piece touches, so Regroup and a split show at once', () => {

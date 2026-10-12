@@ -81,6 +81,9 @@ export const EventPayloads = {
   'triage.confirmed': z.object({ revision }),
   // E14 (FR-15.6): Frank dismissed the to-do the policy suggested for this revision.
   'todo.dismissed': z.object({ revision }),
+  // E14 (FR-15.7): Frank's word on one filing's stage from the Filing… menu, for this revision.
+  // ready implies predraft; predraft false implies ready false (see filingPlan()).
+  'filing.staged': z.object({ revision, type: z.enum(['confluence_entry', 'vault_note']), predraft: z.boolean().optional(), ready: z.boolean().optional() }),
   'triage.failed': z.object({ revision, attempts: z.number().int().positive(), reason: z.string().min(1) }),
   // Cockpit (CK-2.2): a settle check ran on Frank's reply. `through` is the latest activity it saw;
   // `settled` the asks it found settled, by askId. The reasons stay with the item's content.

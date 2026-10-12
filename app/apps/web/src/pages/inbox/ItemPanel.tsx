@@ -654,11 +654,11 @@ function FilingFeedback({ item }: { item: ItemSummary }) {
                   {TYPE_LABEL[f].short}
                   {plan?.rule && ` · ${plan.rule}`}
                 </span>
-                {plan?.predraft && <MenuItem onClick={() => send({ signal: 'no_predraft', type: f }, 'Noted: don’t draft it ahead')}>Don’t draft items like this ahead</MenuItem>}
+                {plan?.predraft && <MenuItem onClick={() => send({ signal: 'no_predraft', type: f }, 'Won’t be drafted ahead')}>Don’t draft items like this ahead</MenuItem>}
                 {plan?.ready ? (
-                  <MenuItem onClick={() => send({ signal: 'not_ready', type: f }, 'Noted: not ready to approve')}>Shouldn’t be ready to approve</MenuItem>
+                  <MenuItem onClick={() => send({ signal: 'not_ready', type: f }, 'Marked not ready to approve')}>Shouldn’t be ready to approve</MenuItem>
                 ) : (
-                  <MenuItem onClick={() => send({ signal: 'should_be_ready', type: f }, 'Noted: ready to approve')}>Should be ready to approve</MenuItem>
+                  <MenuItem onClick={() => send({ signal: 'should_be_ready', type: f }, 'Marked ready to approve')}>Should be ready to approve</MenuItem>
                 )}
               </div>
             );

@@ -1053,6 +1053,8 @@ Explicit signals come from the item panel's **Filing…** menu beside the decisi
 - **Don't draft items like this ahead:** `predraft` false.
 - **Should be ready to approve** and **Shouldn't be ready:** `ready` true or false.
 
+The last two also move the filing at once, without a triage correction and without a triage label: `filing.staged {revision, type, predraft?, ready?}` records Frank's word for the decision's revision. **Should be ready** sets `predraft` and `ready`, so the filing joins Ready to approve and is drafted ahead; **Shouldn't be ready** sets `ready` false and leaves it drafted ahead; **Don't draft ahead** sets both false. A later choice overrides an earlier one. The word beats the policy until the item is triaged again; the switches in Settings › Learning still apply.
+
 **Triage was right** (`y`) also labels the filing fields shown. Implicit signals are written after the event that causes them and never fail the click:
 
 | Event | Label |

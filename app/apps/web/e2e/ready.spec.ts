@@ -112,7 +112,7 @@ test('J89 dismissing the suggested to-do keeps it gone (FR-15.6)', async ({ page
   await expect(chip).toHaveCount(0);
 });
 
-test('J90 the Filing… menu: feedback for the policy, and Not for filing takes it out of To file (FR-15.7)', async ({ page }) => {
+test('J90 the Filing… menu: feedback for the policy that moves the item too, and Not for filing takes it out of To file (FR-15.7)', async ({ page }) => {
   await withPolicy(page);
   await row(page, F1).click();
   await expect(panel(page).getByTestId('panel-pos')).toBeVisible();
@@ -130,11 +130,21 @@ test('J90 the Filing… menu: feedback for the policy, and Not for filing takes 
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 
   await menu.getByRole('group', { name: 'Vault note' }).getByRole('menuitem', { name: 'Shouldn’t be ready to approve' }).click();
-  await expect(page.getByText(/Noted: not ready to approve · filing labels now 25/)).toBeVisible();
-  await expect(row(page, F1)).toContainText('Ready · R1'); // feedback teaches the policy; the item stays put
+  await expect(page.getByText(/Marked not ready to approve · filing labels now 25/)).toBeVisible();
+  // It leaves Ready to approve at once, and waits with the other filings.
+  const ready = toFile(page).locator('[data-subhead="ready"]');
+  await expect(row(page, F1)).not.toContainText('Ready ·');
+  await expect(ready).toContainText('Ready to approve1');
+
+  // And back in, for its Confluence entry: drafted ahead, ready with one key.
+  await trigger.click();
+  await page.getByRole('menu', { name: 'Filing feedback' }).getByRole('group', { name: 'Confluence entry' }).getByRole('menuitem', { name: 'Should be ready to approve' }).click();
+  await expect(page.getByText(/Marked ready to approve · filing labels now 26/)).toBeVisible();
+  await expect(row(page, F1)).toContainText('Ready · F1');
+  await expect(ready).toContainText('Ready to approve2');
 
   await trigger.click();
   await page.getByRole('menu', { name: 'Filing feedback' }).getByRole('menuitem', { name: 'Not for filing' }).click();
-  await expect(page.getByText(/Taken out of To file · filing labels now 26/)).toBeVisible();
+  await expect(page.getByText(/Taken out of To file · filing labels now 27/)).toBeVisible();
   await expect(row(page, F1)).toHaveCount(0, { timeout: 10_000 });
 });
