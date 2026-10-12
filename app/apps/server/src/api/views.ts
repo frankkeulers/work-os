@@ -462,6 +462,7 @@ export async function attentionView(d: ViewDeps, guidance: GuidanceChange[] = []
     if (r) results[a.id] = r;
   }
   const last = d.evals?.last;
+  const lastFiling = d.filingEvals?.last;
   return buildAttention({
     now: now.toISOString(),
     items,
@@ -471,6 +472,7 @@ export async function attentionView(d: ViewDeps, guidance: GuidanceChange[] = []
     health: healthView(d, false),
     budgets: b,
     ...(last && { lastEval: last }),
+    ...(lastFiling && { lastFilingEval: lastFiling }),
     guidance,
     proposals: ((await d.proposals?.list()) ?? []).filter((x) => x.status === 'open'),
     dismissed: p.dismissed ?? {},

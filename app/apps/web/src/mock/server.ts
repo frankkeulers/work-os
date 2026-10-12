@@ -1665,6 +1665,7 @@ export class MockServer implements WorkOsApi, MockControls {
       health: await this.getHealth(),
       budgets,
       ...(last && { lastEval: last }),
+      ...(this.s.filingEvals?.length && { lastFilingEval: this.s.filingEvals.at(-1) }),
       guidance,
       proposals: (this.s.proposals ?? []).filter((p) => p.status === 'open'),
       dismissed: this.s.dismissed ?? {},

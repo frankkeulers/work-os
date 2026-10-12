@@ -16,6 +16,7 @@ import { confluencePageUrl } from '../../lib/links';
 import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { GuideLink } from '../../components/GuideLink';
+import { useHashScroll } from '../../hooks/useHashScroll';
 import { FutureRow, Group, Meter, NumInput, Row, SectionHeader } from './parts';
 import { LearningSection, ProposalBanner } from './learning';
 import { CategoryDot } from '../../components/item';
@@ -1276,6 +1277,8 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
   const files = q.data;
   const open = files?.find((f) => f.id === edit?.id);
   const dirty = !!edit && !!open && edit.text !== open.text && !edit.conflict;
+  // The bell links to a file here (#filing-policy): scroll to it once the files are in.
+  useHashScroll(!!files && !!proposals.data);
 
   const setEdit = (e: PromptEdit | null) => {
     setEditState(e);
@@ -1339,7 +1342,7 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
     const p = proposalFor(f.id);
     if (!p) return fileRow(f);
     return (
-      <div key={f.id} className="flex flex-col gap-3 pt-5">
+      <div key={f.id} id={f.id} className="flex scroll-mt-24 flex-col gap-3 pt-5">
         <ProposalBanner
           proposal={p}
           onDone={() => {
@@ -1354,7 +1357,7 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
   };
   const fileRow = (f: PromptFileView) =>
     edit?.id === f.id ? (
-      <div key={f.id} className="flex flex-col gap-3 border-b border-line-soft py-5 last:border-b-0" data-prompt={f.id}>
+      <div key={f.id} id={proposalFor(f.id) ? undefined : f.id} className="flex scroll-mt-24 flex-col gap-3 border-b border-line-soft py-5 last:border-b-0" data-prompt={f.id}>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="text-sm font-medium text-ink">{f.label}</span>
           <span className="font-mono text-xs text-muted">{f.path}</span>
@@ -1432,6 +1435,7 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
     ) : (
       <Row
         key={f.id}
+        id={proposalFor(f.id) ? undefined : f.id}
         label={
           <span className="inline-flex items-center gap-2">
             {f.label}

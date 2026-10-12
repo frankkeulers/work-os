@@ -836,6 +836,8 @@ As built (M3 step 19):
 | Looks finished | others' messages settled what a topic asked of Frank (CK-2.10) | Done or Not finished | yes |
 | Your reply left asks open | the settle check found asks his reply didn't settle (CK-2.3) | done, or a later check | yes |
 | Triage eval finished | an eval finished in the last 24 hours | the report is opened | yes |
+| Filing eval finished | a filing eval finished in the last 24 hours (FR-15.8). Says which fields with 30 labels meet their target and which are below. Opens Settings › Learning. | Settings › Learning is opened from it | yes |
+| A filing policy change is proposed | a proposal is open (FR-15.9). Opens Settings › Prompts scrolled to it. | applied or dismissed | yes |
 | Guidance sources changed | a guidance file's sources changed since it was distilled (FR-1.7). Checked at most every 10 minutes. | marked reviewed | yes |
 
 - **Only the current action per type counts** (`currentAction`), so a failure replaced by a re-draft goes.
@@ -1061,7 +1063,7 @@ Explicit signals come from the item panel's **Filing…** menu beside the decisi
 | A To file item marked done with nothing filed | `toFile` false |
 | A suggested to-do added, or dismissed | `todo` true, or false |
 
-**FR-15.8 Filing eval.** `npm run eval -- --purpose filing`, and **Run filing eval** in Settings › Learning, run triage with the current prompt and policy over the filing labels, with no rules. The eval scores precision and recall for each field, split by explicit and implicit labels and by source. A field's score counts from 30 labels. The report goes to `logs/filing-eval-<ts>.json`; Settings › Learning shows the latest against the targets. Targets:
+**FR-15.8 Filing eval.** `npm run eval -- --purpose filing`, and **Run filing eval** in Settings › Learning, run triage with the current prompt and policy over the filing labels, with no rules. The eval scores precision and recall for each field, split by explicit and implicit labels and by source. A field's score counts from 30 labels. The report goes to `logs/filing-eval-<ts>.json`; Settings › Learning shows the latest against the targets, and the bell says it finished (FR-11.4). Targets:
 
 | Field | Precision |
 |---|---|

@@ -178,6 +178,24 @@ describe('buildAttention: nudges and housekeeping', () => {
   });
 });
 
+describe('buildAttention: a finished filing eval (FR-15.8)', () => {
+  const score = (precision: number, n: number) => ({ precision, recall: 1, support: n, predicted: n, n });
+  const scores = { toFile: score(0.9, 40), predraft: score(0.7, 35), ready: score(1, 12), todo: score(0, 0) };
+
+  it('shows for a day, linked to Settings › Learning, with the fields that meet their target', () => {
+    const lastFilingEval = { id: 'filing-eval-1', at: at(-60), labelCount: 41, scores };
+    const [e] = buildAttention(input({ lastFilingEval })).entries;
+    expect(e).toMatchObject({ key: 'eval_done:filing-eval-1', kind: 'eval_done', title: 'Filing eval finished', subject: '41 labelled items', to: '/settings/learning', detail: 'Meets its target: To file. Below: Pre-draft.' });
+    expect(buildAttention(input({ lastFilingEval: { ...lastFilingEval, at: at(-25 * 60) } })).entries).toEqual([]);
+    expect(buildAttention(input({ lastFilingEval, dismissed: { 'eval_done:filing-eval-1': at(-1) } })).entries).toEqual([]);
+  });
+
+  it('says when no field has enough labels to count', () => {
+    const few = { toFile: score(1, 10), predraft: score(1, 10), ready: score(1, 10), todo: score(1, 10) };
+    expect(buildAttention(input({ lastFilingEval: { id: 'f', at: at(-1), labelCount: 10, scores: few } })).entries[0]?.detail).toBe('No field has 30 labels yet.');
+  });
+});
+
 describe('buildAttention: dismissing (FR-11.5)', () => {
   it('hides a dismissed entry; a new occurrence shows again', () => {
     const items = [item('a', { backFromSnooze: true, backAt: at(-3) })];

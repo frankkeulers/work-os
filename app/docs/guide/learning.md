@@ -36,6 +36,9 @@ found. A field's score counts once it has 30 labels; before that it shows **coun
 | Ready to approve | 95% |
 | To-do suggestions | 95% |
 
+When it finishes, the bell says so for a day, with the fields that meet their target and those
+below it. **View scores** brings you back here.
+
 Ready and to-dos have the strictest targets: a wrong one costs you more than a missed one. From
 the command line, with Work OS stopped: `npm run eval -- --purpose filing`.
 
@@ -51,7 +54,7 @@ then checks the answer and turns it down if it:
 - is over twice as long as the current policy.
 
 A proposal that passes is scored, with the current policy, on the items set aside, which it never
-saw. The bell tells you when it is ready. In [Settings › Prompts](/settings/prompts) it shows above
+saw. The bell tells you when it is ready; **Review** opens Settings › Prompts at the proposal. In [Settings › Prompts](/settings/prompts) it shows above
 the Filing policy: the changes, the scores before and after, and the text's changes. **Apply**
 saves it as the policy file, as an edit would, so the next triage uses it; it refuses if you edited
 the policy since the proposal was made. **Dismiss** keeps the policy as it is. A proposal that

@@ -9,6 +9,9 @@ const HIDE = '[data-testid="os-notification"], [data-scenarios], [aria-label="No
 
 test.use({ viewport: { width: 1440, height: 1700 } });
 
+const bell = (page: Page) => page.getByTestId('bell');
+const entry = (page: Page, text: string) => page.getByRole('dialog', { name: 'Follow-ups' }).getByRole('list', { name: 'Needs you' }).getByRole('listitem').filter({ hasText: text });
+
 async function withLabels(page: Page) {
   await page.goto('/');
   await expect(page.locator('[data-row]').first()).toBeVisible();
@@ -39,14 +42,28 @@ test('J91 Learning: run the filing eval, propose a better policy, apply it from 
   const table = page.getByRole('table', { name: 'Filing eval scores' });
   await expect(table).toBeVisible({ timeout: 10_000 });
   await expect(table.locator('[data-field="ready"]')).toContainText('counts from 30');
+  // The bell says it finished, which fields meet their target, and leads back here.
+  await bell(page).click();
+  const done = entry(page, 'Filing eval finished');
+  await expect(done).toContainText('24 labelled items');
+  await expect(done).toContainText('Below: To file, Pre-draft.'); // the fields with 30 labels
+  await done.getByRole('button', { name: 'View scores' }).click();
+  await expect(page).toHaveURL(/\/settings\/learning$/);
+  await bell(page).click();
+  await expect(entry(page, 'Filing eval finished')).toHaveCount(0); // done its job once opened
+  await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Propose a better policy' }).click();
   await expect(page.getByTestId('proposal-status')).toContainText('is waiting, and scores better', { timeout: 10_000 });
   await shoot(page, page.getByRole('main', { name: 'Learning' }), 'settings-learning');
 
-  await page.getByTestId('proposal-status').getByRole('link', { name: 'Review it' }).click();
-  await expect(page).toHaveURL(/\/settings\/prompts/);
+  await expect(page.getByTestId('proposal-status').getByRole('link', { name: 'Review it' })).toHaveAttribute('href', '/settings/prompts#filing-policy');
+  // The bell's entry opens Settings › Prompts scrolled to the proposal.
+  await bell(page).click();
+  await entry(page, 'A filing policy change is proposed').getByRole('button', { name: 'Review' }).click();
+  await expect(page).toHaveURL(/\/settings\/prompts#filing-policy$/);
   const banner = page.getByRole('region', { name: 'Proposed change' });
+  await expect(banner).toBeInViewport();
   await expect(banner).toContainText('Added R2:');
   await expect(banner).toContainText('Scores better');
   await banner.getByText('Show the changes in the text').click();

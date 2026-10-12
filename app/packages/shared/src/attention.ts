@@ -3,7 +3,7 @@ import type { DepId } from './events';
 import type { PolicyProposal } from './learning';
 import type { ActionState } from './projection/state';
 import { currentAction } from './projection/views';
-import type { ActionType, EvalReport, FailureReason, PromptFileId } from './schemas';
+import { FILING_EVAL_MIN_LABELS, FILING_TARGETS, type ActionType, type EvalReport, type FailureReason, type FilingDimension, type FilingEvalReport, type PromptFileId } from './schemas';
 
 // The bell (FR-11.3, FR-11.4): what needs Frank's follow-up, derived from state as it stands. Nothing
 // is stored but dismissals, so an entry goes as soon as Frank deals with it. The server and the mock
@@ -35,6 +35,8 @@ export interface AttentionInput {
   health: Pick<HealthView, 'mode' | 'deps' | 'checks' | 'checkedAt' | 'startedAt'>;
   budgets: Pick<BudgetState, 'drafts'>;
   lastEval?: Pick<EvalReport, 'id' | 'at' | 'labelCount'>;
+  /** The latest filing eval (FR-15.8). */
+  lastFilingEval?: Pick<FilingEvalReport, 'id' | 'at' | 'labelCount' | 'scores'>;
   guidance: readonly GuidanceChange[];
   /** Proposed policies waiting for Frank (FR-15.9). */
   proposals?: readonly Pick<PolicyProposal, 'id' | 'at' | 'promptId' | 'better'>[];
@@ -70,6 +72,17 @@ const DEP: Record<DepId, string> = {
 
 /** A failed startup check that a dependency's entry already covers. */
 const CHECK_DEP: Partial<Record<string, DepId>> = { slack_token: 'slack', claude_login: 'claude', keychain: 'keychain' };
+
+const FILING_FIELD: Record<FilingDimension, string> = { toFile: 'To file', predraft: 'Pre-draft', ready: 'Ready to approve', todo: 'To-do suggestions' };
+
+/** Which fields of a filing eval meet their target, of those with enough labels to count. */
+export function filingEvalSummary(scores: FilingEvalReport['scores']): string {
+  const counted = (Object.keys(FILING_TARGETS) as FilingDimension[]).filter((k) => scores[k].n >= FILING_EVAL_MIN_LABELS);
+  if (!counted.length) return `No field has ${FILING_EVAL_MIN_LABELS} labels yet.`;
+  const below = counted.filter((k) => scores[k].precision < FILING_TARGETS[k]).map((k) => FILING_FIELD[k]);
+  const meets = counted.filter((k) => scores[k].precision >= FILING_TARGETS[k]).map((k) => FILING_FIELD[k]);
+  return [meets.length && `Meets its target: ${meets.join(', ')}.`, below.length && `Below: ${below.join(', ')}.`].filter(Boolean).join(' ');
+}
 
 const HEALTH = '/usage#health';
 const CONNECTORS = 'https://claude.ai/settings/connectors';
@@ -206,6 +219,20 @@ export function buildAttention(input: AttentionInput): AttentionView {
   const ev = input.lastEval;
   if (ev && now - Date.parse(ev.at) <= EVAL_SHOWN_MS) {
     entries.push({ key: `eval_done:${ev.id}`, kind: 'eval_done', at: ev.at, title: 'Triage eval finished', subject: `${ev.labelCount} labelled threads`, to: `/usage/eval/${encodeURIComponent(ev.id)}`, cta: 'View report', dismissible: true });
+  }
+  const fe = input.lastFilingEval;
+  if (fe && now - Date.parse(fe.at) <= EVAL_SHOWN_MS) {
+    entries.push({
+      key: `eval_done:${fe.id}`,
+      kind: 'eval_done',
+      at: fe.at,
+      title: 'Filing eval finished',
+      subject: `${fe.labelCount} labelled items`,
+      detail: filingEvalSummary(fe.scores),
+      to: '/settings/learning',
+      cta: 'View scores',
+      dismissible: true,
+    });
   }
   for (const g of input.guidance) {
     if (!g.changed.length) continue;
