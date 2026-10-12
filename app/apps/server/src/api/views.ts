@@ -20,6 +20,8 @@ import {
   shownTodos,
   summaryOf,
   planOf,
+  slotOf,
+  type SlotResult,
   type TodoState,
   type TodoSummary,
   topicItem,
@@ -84,6 +86,7 @@ import type { ProposalRunner } from '../learning/tuner';
 import type { LabelStore } from '../store/labels';
 import type { SettleLabelStore } from '../store/settleLabels';
 import type { TodoTextStore } from '../store/todos';
+import type { TodoPlanner } from '../todos/planner';
 import type { TodoService } from '../todos/service';
 import type { RecoveryReport, Store } from '../store/store';
 import { mpdmTitle } from '../sources/slack/directory';
@@ -132,7 +135,7 @@ export interface ViewDeps {
   proposals?: ProposalStore;
   proposing?: Partial<Record<LearningLoop, ProposalRunner>>;
   /** E15 (FR-16.1–16.3): To Dos' words, and whether each one's line is in the Tasks note. */
-  todos?: { texts: TodoTextStore; inNote: (todoId: string) => boolean | undefined; service?: TodoService };
+  todos?: { texts: TodoTextStore; inNote: (todoId: string) => boolean | undefined; service?: TodoService; planner?: TodoPlanner };
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
   slackTeamId?: () => string | undefined;
   /** A group DM's title from its members, when Slack has said who they are. */
@@ -418,11 +421,15 @@ export function inboxView(d: ViewDeps): InboxView {
 
 /** E15 (FR-16.2): the To Dos the inbox shows, with their words. One whose words are gone isn't shown. */
 export function todoSummaries(d: Pick<ViewDeps, 'store' | 'todos'>, now: Date): TodoSummary[] {
-  return shownTodos(Object.values(d.store.projection.todos ?? {}), now).flatMap((t) => todoSummary(d, t) ?? []);
+  const slots = d.todos?.planner?.slots();
+  return shownTodos(Object.values(d.store.projection.todos ?? {}), now).flatMap((t) => todoSummary(d, t, slots?.[t.id]) ?? []);
 }
 
-/** One To Do as a row shows it, or undefined once its words are gone. */
-export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState): TodoSummary | undefined {
+/**
+ * One To Do as a row shows it, or undefined once its words are gone. `slot`: the planner's place
+ * for it (FR-16.8), as slots() gives it.
+ */
+export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState, slot?: SlotResult): TodoSummary | undefined {
   const words = d.todos?.texts.get(t.id);
   if (!words) return undefined;
   const inNote = d.todos!.inNote(t.id);
@@ -442,6 +449,7 @@ export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState): TodoSumma
     ...(t.mirror && { mirror: { want: t.mirror.want, ...(t.mirror.failed && { failed: t.mirror.failed }) } }),
     ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
     ...planOf(t, words.plan),
+    ...(t.status === 'open' && slotOf(slot)),
   };
 }
 

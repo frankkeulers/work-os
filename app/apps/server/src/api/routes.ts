@@ -114,7 +114,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   };
   const todoNow = (id: string) => {
     const t = d.store.projection.todos?.[id];
-    return (t && todoSummary(d, t)) ?? null;
+    return (t && todoSummary(d, t, d.todos?.planner?.slots()?.[id])) ?? null;
   };
   app.post<{ Params: { id: string } }>('/api/todos/:id/done', async (req) => {
     await todoCall(() => todos().markDone(req.params.id));
@@ -132,7 +132,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   });
   app.post<{ Params: { id: string } }>('/api/todos/:id/edit', async (req) => {
     const body = TodoEdit.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { effortMinutes } in minutes, { deadline } as an ISO time or null, or both.', body.error.issues.map((i) => ({ path: i.path.join('.') || 'edit', message: i.message })));
+    if (!body.success) throw new HttpError('validation', 'Send { effortMinutes } in minutes, { deadline } as an ISO time or null, { slot: { start, end } } as ISO times or null, or several.', body.error.issues.map((i) => ({ path: i.path.join('.') || 'edit', message: i.message })));
     await todoCall(() => todos().edit(req.params.id, body.data));
     return todoNow(req.params.id);
   });

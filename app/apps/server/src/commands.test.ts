@@ -1225,6 +1225,27 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     expect(labels[1]).toMatchObject({ set: { deadline } });
   });
 
+  it('keeps the time Frank sets, fits it to a new estimate, and hands it back to the plan (FR-16.9)', async () => {
+    await write(['Send the tier comparison']);
+    await res.runtime.settled();
+    const [todo] = await inboxTodos();
+    expect(todo.noSlot).toEqual({ reason: 'no_calendar' }); // Outlook Calendar is off
+    const edit = (body: object) => call<TodoSummary>('POST', `/api/todos/${todo.id}/edit`, body);
+    const slot = { start: '2026-10-06T13:00:00.000Z', end: '2026-10-06T13:15:00.000Z' };
+    expect((await edit({ slot })).body).toMatchObject({ slot: { ...slot, by: 'you' } });
+    expect((await edit({ slot })).status).toBe(200); // the same time: nothing new
+    expect((await edit({ effortMinutes: 60 })).body.slot).toEqual({ start: slot.start, end: '2026-10-06T14:00:00.000Z', by: 'you' });
+    expect((await edit({ slot: { start: slot.end, end: slot.start } })).status).toBe(422);
+    const back = (await edit({ slot: null })).body;
+    expect(back.slot).toBeUndefined();
+    expect(back.noSlot).toEqual({ reason: 'no_calendar' });
+    await res.scheduleLabels.close();
+    const labels = (await readFile(join(dir, 'labels/schedule.jsonl'), 'utf8')).trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(labels.map((l) => l.origin)).toEqual(['slot_moved', 'estimate_edit', 'slot_moved']);
+    expect(labels[0]).toMatchObject({ set: { slot } });
+    expect(labels[2]).toMatchObject({ set: { slot: null }, was: { slot: { start: slot.start, by: 'you' } } });
+  });
+
   describe('Done from the inbox (FR-16.4, FR-16.5)', () => {
     const done = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/done`);
     const reopen = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/reopen`);

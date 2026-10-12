@@ -16,6 +16,7 @@ const DeadlineFrom = z.enum(['triage', 'line', 'none']);
 export const TodoBy = z.enum(['you', 'tasks_note']);
 export type TodoBy = z.infer<typeof TodoBy>;
 /** Why a To Do's tick couldn't be mirrored to its line in the Tasks note (FR-16.4). */
+export const SlotBy = z.enum(['plan', 'you']);
 export const MirrorFailure = z.enum(['path_refused', 'no_note', 'no_line', 'write_failed']);
 export type MirrorFailure = z.infer<typeof MirrorFailure>;
 
@@ -111,6 +112,11 @@ export const EventPayloads = {
   'todo.planned': z.object({ todoId, effortMinutes: z.number().int().min(5).max(480), confidence: Confidence, ideal: isoDate.optional() }),
   'todo.planFailed': z.object({ todoId, attempts: z.number().int().positive(), reason: z.enum(['output', 'claude', 'content']) }),
   'todo.edited': z.object({ todoId, effortMinutes: z.number().int().min(5).max(960).optional(), deadline: isoDate.nullable().optional() }),
+  // FR-16.8–16.9: when Frank will do it, in Work OS only (nothing is booked). By plan, code found
+  // free time (slots.ts); by you, Frank set it himself and the plan never moves it. unscheduled by
+  // plan: no free time fits any more; by you: Frank handed it back to the plan.
+  'todo.scheduled': z.object({ todoId, start: isoDate, end: isoDate, by: SlotBy }),
+  'todo.unscheduled': z.object({ todoId, by: SlotBy }),
   // E14 (FR-15.7): Frank's word on one filing's stage from the Filing… menu, for this revision.
   // ready implies predraft; predraft false implies ready false (see filingPlan()).
   'filing.staged': z.object({ revision, type: z.enum(['confluence_entry', 'vault_note']), predraft: z.boolean().optional(), ready: z.boolean().optional() }),

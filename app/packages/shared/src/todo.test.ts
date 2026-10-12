@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { askId } from './projection/topics';
 import { lineIdFor, newTodos, parseTaskLine, taskKey, todoContent, todoDeadline, todoDues, todoIdFor, todoLine, todoLines, todoSteps, todoWriteLines, withLineId, withTick } from './todo';
-import { todoGroups, type TodoSummary } from './todos';
+import type { TodoState } from './projection/state';
+import { slotOf, todoGroups, todoSlots, type TodoSummary } from './todos';
 
 const SRC = { title: '#mvi-launch', permalink: 'https://polestar.slack.com/archives/C06/p1791' };
 
@@ -125,5 +126,32 @@ describe('To Do groups (E15, FR-16.2)', () => {
     expect(g.overdue).toEqual([]);
     expect(g.today.map((x) => x.id)).toEqual(['idealPast', 'idealToday']);
     expect(g.upcoming.map((x) => x.id)).toEqual(['idealLater', 'deadlineLater']);
+  });
+
+  it('puts a To Do with a slot today in today, in the order of the slots, then those without one (FR-16.8)', () => {
+    const slot = (start: string) => ({ start, end: start.replace(':00.000Z', ':30.000Z'), by: 'plan' as const });
+    const g = todoGroups(
+      [
+        t('dueToday', { deadline: '2026-10-05T16:30:00.000Z', deadlineFrom: 'line' }),
+        t('four', { slot: slot('2026-10-05T15:00:00.000Z') }),
+        t('two', { deadline: '2026-10-09T11:00:00.000Z', deadlineFrom: 'triage', slot: slot('2026-10-05T13:00:00.000Z') }),
+        t('tomorrow', { slot: slot('2026-10-06T09:00:00.000Z') }),
+      ],
+      now,
+    );
+    expect(g.today.map((x) => x.id)).toEqual(['two', 'four', 'dueToday']);
+    expect(g.upcoming.map((x) => x.id)).toEqual(['tomorrow']);
+  });
+});
+
+describe('To Do slots (FR-16.8)', () => {
+  const state = (id: string, over: Partial<TodoState> = {}): TodoState => ({ id, itemId: 'i', actionId: 'a', createdAt: '2026-10-12T07:00:00.000Z', status: 'open', deadlineFrom: 'none', ...over });
+
+  it('places open To Dos only, and shows a slot or why there is none', () => {
+    const r = todoSlots([state('a', { effortMinutes: 45 }), state('done', { status: 'done' }), state('long', { effortMinutes: 700 })], { now: new Date('2026-10-12T08:02:00.000Z'), workHours: 'Mon–Fri 08:00–18:30', events: [] });
+    expect(Object.keys(r).sort()).toEqual(['a', 'long']);
+    expect(slotOf(r.a)).toEqual({ slot: { start: '2026-10-12T08:15:00.000Z', end: '2026-10-12T09:00:00.000Z', by: 'plan' } });
+    expect(slotOf(r.long)).toEqual({ noSlot: { reason: 'too_long' } });
+    expect(slotOf(undefined)).toEqual({});
   });
 });

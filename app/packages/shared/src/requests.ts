@@ -29,10 +29,16 @@ export type SnoozeInput = z.infer<typeof SnoozeInput>;
 export const TodoActual = z.object({ minutes: z.number().int().min(1).max(960).nullable() }).strict();
 
 /** E15 (FR-16.7): Frank's own estimate (minutes) or deadline (null: none) for a To Do. */
-export const TodoEdit = z
-  .object({ effortMinutes: z.number().int().min(5).max(960).optional(), deadline: z.iso.datetime().nullable().optional() })
+/** FR-16.9: when Frank will do it, in Work OS only. */
+export const TodoSlotSet = z
+  .object({ start: z.iso.datetime(), end: z.iso.datetime() })
   .strict()
-  .refine((e) => e.effortMinutes !== undefined || e.deadline !== undefined, 'Send an estimate or a deadline');
+  .refine((x) => Date.parse(x.end) > Date.parse(x.start) && Date.parse(x.end) - Date.parse(x.start) <= 960 * 60_000, 'A time ends after it starts, at most 16 hours later');
+// slot: Frank's own time (FR-16.9); null hands it back to the plan.
+export const TodoEdit = z
+  .object({ effortMinutes: z.number().int().min(5).max(960).optional(), deadline: z.iso.datetime().nullable().optional(), slot: TodoSlotSet.nullable().optional() })
+  .strict()
+  .refine((e) => e.effortMinutes !== undefined || e.deadline !== undefined || e.slot !== undefined, 'Send an estimate, a deadline or a time');
 export type TodoEdit = z.infer<typeof TodoEdit>;
 
 export const ItemIds = z.object({ ids: z.array(z.string().min(1)).min(1).max(1000) }).strict();

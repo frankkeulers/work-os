@@ -319,6 +319,25 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     l.add('todo.timed', 6, { todoId, minutes: 15 }, ids).add('todo.reopened', 7, { todoId, by: 'you' }, ids);
     expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('actualMinutes');
   });
+
+  it('keeps the slot the plan found until Frank sets his own, which the plan never moves (FR-16.8, FR-16.9)', () => {
+    const l = log();
+    const todoId = created.todoId;
+    const slot = (start: number, by: 'plan' | 'you') => ({ todoId, start: at(start), end: at(start + 30), by });
+    l.add('item.upserted', 0, upserted(1)).add('todo.created', 1, created, ids);
+    l.add('todo.scheduled', 2, slot(100, 'plan'), ids);
+    expect(replay(l.events).todos?.[todoId].slot).toEqual({ start: at(100), end: at(130), by: 'plan' });
+    l.add('todo.scheduled', 3, slot(200, 'you'), ids);
+    l.add('todo.scheduled', 4, slot(150, 'plan'), ids); // the plan never moves Frank's
+    l.add('todo.unscheduled', 5, { todoId, by: 'plan' }, ids);
+    expect(replay(l.events).todos?.[todoId].slot).toEqual({ start: at(200), end: at(230), by: 'you' });
+    // Handed back to the plan.
+    l.add('todo.unscheduled', 6, { todoId, by: 'you' }, ids);
+    expect(replay(l.events).todos?.[todoId]).not.toHaveProperty('slot');
+    // A slot for a done To Do changes nothing; the one it had stays, as it was when done.
+    l.add('todo.scheduled', 7, slot(300, 'plan'), ids).add('todo.done', 8, { todoId, by: 'you' }, ids).add('todo.scheduled', 9, slot(400, 'plan'), ids);
+    expect(replay(l.events).todos?.[todoId].slot).toEqual({ start: at(300), end: at(330), by: 'plan' });
+  });
 });
 
 describe('events that arrive too late', () => {

@@ -2,6 +2,7 @@ import type { MirrorFailure, TodoBy } from './events';
 import type { TodoState } from './projection/state';
 import { SCHEDULE_MAX_ATTEMPTS, type Confidence } from './schedule';
 import type { SourceId } from './schemas';
+import { planSlots, type BusyEvent, type NoSlot, type Slot, type SlotResult } from './slots';
 import { londonParts } from './time';
 import type { DeadlineFrom } from './todo';
 
@@ -37,7 +38,22 @@ export interface TodoSummary {
   idealWhy?: string;
   /** Waiting for its plan: open, unplanned, and not yet given up on. */
   planning?: boolean;
+  /**
+   * FR-16.8–16.9: when Frank will do it, in Work OS only: free time the plan found, or his own
+   * (by 'you'), marked when a meeting clashes with it or its time has gone by.
+   */
+  slot?: Slot & { clash?: true; passed?: true };
+  /** Open with no slot: why, and when it would first fit after its deadline. */
+  noSlot?: { reason: NoSlot; firstAfter?: { start: string; end: string } };
 }
+
+/** Why an open To Do has no slot, in words (FR-16.8). */
+export const NO_SLOT: Record<NoSlot, string> = {
+  no_fit_before_deadline: 'No free time before it is due',
+  too_long: 'Longer than a working day: split it, or set a time',
+  no_free_time: 'No free time in the next two weeks',
+  no_calendar: 'Turn on Outlook Calendar to plan a time',
+};
 
 /** A tick that couldn't be mirrored, in words (FR-16.4). */
 export const MIRROR_FAILURE: Record<MirrorFailure, string> = {
@@ -52,12 +68,14 @@ export const TODO_GROUPS: readonly TodoGroup[] = ['overdue', 'today', 'upcoming'
 
 /**
  * Where a To Do sits: done (today; older ones aren't shown), overdue once its deadline has passed,
- * today when it is due today in London (ideally, or by its deadline), else upcoming, with To Dos
- * that have no date.
+ * today when it is due today in London (ideally, or by its deadline) or has a slot today, else
+ * upcoming, with To Dos that have no date.
  */
-export function todoGroup(t: Pick<TodoSummary, 'status' | 'deadline' | 'ideal'>, now: Date): TodoGroup {
+export function todoGroup(t: Pick<TodoSummary, 'status' | 'deadline' | 'ideal' | 'slot'>, now: Date): TodoGroup {
   if (t.status === 'done') return 'done';
   if (t.deadline && t.deadline < now.toISOString()) return 'overdue';
+  // Planned for today: today, whenever it is due.
+  if (t.slot && londonParts(t.slot.start).dateKey === londonParts(now).dateKey) return 'today';
   // Ideally done by today, or already: today. Past an ideal date is not overdue.
   const due = todoDue(t);
   if (!due) return 'upcoming';
@@ -82,7 +100,9 @@ export function todoGroups(todos: readonly TodoSummary[], now: Date): Record<Tod
     if (g === 'done' && (!t.doneAt || londonParts(t.doneAt).dateKey !== today)) continue;
     out[g].push(t);
   }
-  for (const g of ['overdue', 'today', 'upcoming'] as const) out[g].sort(byDue);
+  for (const g of ['overdue', 'upcoming'] as const) out[g].sort(byDue);
+  // Today runs in the order Frank will do them: by slot, then those without one.
+  out.today.sort((a, b) => Number(!a.slot) - Number(!b.slot) || (a.slot?.start ?? '').localeCompare(b.slot?.start ?? '') || byDue(a, b));
   out.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
   return out;
 }
@@ -102,4 +122,20 @@ export function planOf(t: TodoState, words?: { estimateWhy: string; deadlineWhy?
     ...(t.ideal && { ideal: t.ideal, ...(words?.deadlineWhy && { idealWhy: words.deadlineWhy }) }),
     ...(t.status === 'open' && !t.planned && (t.planFailures ?? 0) < SCHEDULE_MAX_ATTEMPTS && { planning: true }),
   };
+}
+
+/**
+ * Every open To Do's slot or why it has none (FR-16.8), from the slots already kept: placed again
+ * the same way, it shows what the planner keeps or would write. Without events, the calendar is off.
+ */
+export function todoSlots(todos: readonly TodoState[], a: { now: Date; workHours: string; events?: readonly BusyEvent[]; calendarTo?: string; bufferMinutes?: number }): Record<string, SlotResult> {
+  const open = todos.filter((t) => t.status === 'open');
+  return planSlots({ ...a, todos: open.map((t) => ({ id: t.id, createdAt: t.createdAt, ...(t.effortMinutes && { effortMinutes: t.effortMinutes }), ...(t.deadline && { deadline: t.deadline }), ...(t.ideal && { ideal: t.ideal }), ...(t.slot && { slot: t.slot }) })) });
+}
+
+/** A slot result as a row shows it. */
+export function slotOf(r: SlotResult | undefined): Pick<TodoSummary, 'slot' | 'noSlot'> {
+  if (!r) return {};
+  if (r.kind === 'none') return { noSlot: { reason: r.reason, ...(r.firstAfter && { firstAfter: r.firstAfter }) } };
+  return { slot: { start: r.start, end: r.end, by: r.by, ...(r.clash && { clash: r.clash }), ...(r.passed && { passed: r.passed }) } };
 }

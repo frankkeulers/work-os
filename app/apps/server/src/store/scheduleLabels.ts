@@ -22,7 +22,7 @@ export const ScheduleLabelRecord = z.object({
   input: z.record(z.string(), z.unknown()),
   /** What the plan was when Frank answered, when there was one. */
   was: z.record(z.string(), z.unknown()).optional(),
-  /** The edits: what Frank set (effortMinutes, or deadline, null for none). */
+  /** The edits: what Frank set (effortMinutes; deadline, null for none; slot, null to hand it back to the plan). */
   set: z.record(z.string(), z.unknown()).optional(),
   /** `actual`: the minutes Frank chose; null when the answer was taken back. */
   actualMinutes: z.number().int().positive().nullable().optional(),

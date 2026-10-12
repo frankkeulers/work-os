@@ -75,6 +75,7 @@ import { DraftStore } from './store/drafts';
 import { TodoTextStore } from './store/todos';
 import { backfillTodos } from './todos/backfill';
 import { TodoMirror } from './todos/mirror';
+import { TodoPlanner } from './todos/planner';
 import { TodoService } from './todos/service';
 import { TasksNoteWatcher } from './todos/tasksNote';
 import { ScheduleLabelStore } from './store/scheduleLabels';
@@ -141,6 +142,7 @@ export type RunResult =
       todoTexts: TodoTextStore;
       tasksNote: TasksNoteWatcher;
       todoMirror: TodoMirror;
+      todoPlanner: TodoPlanner;
       todoService: TodoService;
       scheduleLabels: ScheduleLabelStore;
       recovery: RecoveryReport;
@@ -467,7 +469,10 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   const scheduleLabels = await ScheduleLabelStore.open(paths(config.dataDir).scheduleLabels);
   lifecycle.onStop('schedule-labels', () => scheduleLabels.close());
   const todoMirror = new TodoMirror({ store, todos: todoTexts, targets: () => actions.targets(), path: () => settings.editable.settings.tasksNote, canWrite: () => runtime.canUseClaude(), now, logger });
-  const todoService = new TodoService({ store, texts: todoTexts, mirror: todoMirror, labels: scheduleLabels, now, logger });
+  // When Frank will do each To Do (FR-16.8): placed in free time on every tick, after each calendar poll and after a To Do changes.
+  const todoPlanner = new TodoPlanner({ store, now, config: () => ({ settings: settings.editable.settings }), calendar: () => ({ on: Boolean(calendarMe()), snapshot: calendar.snapshot }), logger });
+  calendar.onPublish(() => void todoPlanner.plan());
+  const todoService = new TodoService({ store, texts: todoTexts, mirror: todoMirror, planner: todoPlanner, labels: scheduleLabels, now, logger });
   // Each new To Do's estimate and ideal deadline (FR-16.6), after the settle checks.
   const scheduleDeps: ScheduleDeps = { ...triageDeps, texts: todoTexts, prompt: () => loadPromptFile(config.dataDir, 'schedule'), calendar: () => (calendarMe() ? calendar.snapshot?.events : undefined) };
   const alerts = new HealthAlerts({
@@ -508,7 +513,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       return { ...r, calls: r.calls + settled.calls + finished.calls + planned.calls };
     },
     regroup: (signal, conversation) => routeTopics({ ...triageDeps, topicsPrompt: triageDeps.topicsPrompt! }, signal, { regroup: conversation }),
-    onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick(), tasksNote.check(), todoMirror.pump()]),
+    onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick(), tasksNote.check(), todoMirror.pump(), todoPlanner.plan()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),
     onHealthChange: (c) => alerts.onChange(c),
     // The sidebar shows which sources are polling (FR-2.6).
@@ -527,6 +532,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // A new To Do is planned soon after it is written, not at the next poll (FR-16.6).
   store.subscribe((es) => {
     if (es.some((e) => e.type === 'todo.created')) runtime.wantTriage();
+    // A To Do new, done, reopened or re-estimated: the others move at once. The plan's own slots change nothing more.
+    if (es.some((e) => e.type.startsWith('todo.') && e.type !== 'todo.scheduled' && e.type !== 'todo.unscheduled' && e.type !== 'todo.mirrored' && e.type !== 'todo.mirrorFailed')) void todoPlanner.plan();
   });
 
   const server = await createServer({
@@ -580,7 +587,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     proposals,
     proposing,
     actions,
-    todos: { texts: todoTexts, inNote: (id) => tasksNote.inNote(id), service: todoService },
+    todos: { texts: todoTexts, inNote: (id) => tasksNote.inNote(id), service: todoService, planner: todoPlanner },
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
     // The guide's Markdown: set by agent:install for prod; development reads the repo's copy.
     guideDir: deps.env.WORKOS_GUIDE_DIR ? resolve(deps.env.WORKOS_GUIDE_DIR) : config.instance === 'dev' ? REPO_GUIDE_DIR : undefined,
@@ -610,5 +617,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, filingEvals, proposing, proposals, filingLabels, actions, notifications, alerts, retention, todoTexts, tasksNote, todoMirror, todoService, scheduleLabels, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, filingEvals, proposing, proposals, filingLabels, actions, notifications, alerts, retention, todoTexts, tasksNote, todoMirror, todoService, todoPlanner, scheduleLabels, recovery, token, logger, lifecycle, flush };
 }

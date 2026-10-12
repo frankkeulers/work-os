@@ -110,8 +110,8 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
 }
 
 /** The To Do events (E15). todo.dismissed is the item's suggestion, not a To Do. */
-const TODO_EVENTS = new Set(['todo.created', 'todo.done', 'todo.reopened', 'todo.mirrored', 'todo.mirrorFailed', 'todo.timed', 'todo.planned', 'todo.planFailed', 'todo.edited']);
-export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' | 'todo.mirrored' | 'todo.mirrorFailed' | 'todo.timed' | 'todo.planned' | 'todo.planFailed' | 'todo.edited' }> =>
+const TODO_EVENTS = new Set(['todo.created', 'todo.done', 'todo.reopened', 'todo.mirrored', 'todo.mirrorFailed', 'todo.timed', 'todo.planned', 'todo.planFailed', 'todo.edited', 'todo.scheduled', 'todo.unscheduled']);
+export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' | 'todo.mirrored' | 'todo.mirrorFailed' | 'todo.timed' | 'todo.planned' | 'todo.planFailed' | 'todo.edited' | 'todo.scheduled' | 'todo.unscheduled' }> =>
   TODO_EVENTS.has(e.type);
 
 /**
@@ -180,6 +180,14 @@ export function applyTodoEvent(todos: Record<string, TodoState>, e: WorkEvent): 
           t.deadlineFrom = 'you';
         } else Object.assign(t, { deadline: e.data.deadline, deadlineFrom: 'you' });
       }
+      return;
+    case 'todo.scheduled':
+      // The plan never moves Frank's own slot.
+      if (t.status !== 'open' || (e.data.by === 'plan' && t.slot?.by === 'you')) return;
+      t.slot = { start: e.data.start, end: e.data.end, by: e.data.by };
+      return;
+    case 'todo.unscheduled':
+      if (t.slot?.by === e.data.by) delete t.slot;
       return;
   }
 }

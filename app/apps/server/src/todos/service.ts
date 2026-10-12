@@ -1,12 +1,13 @@
-import type { TodoEdit, TodoState } from '@work-os/shared';
+import { slotMinutes, type EventDraft, type TodoEdit, type TodoState } from '@work-os/shared';
 import type { Logger } from '../log';
 import type { ScheduleLabelRecord, ScheduleLabelStore } from '../store/scheduleLabels';
 import type { Store } from '../store/store';
 import type { TodoTextStore } from '../store/todos';
 import type { TodoMirror } from './mirror';
+import type { TodoPlanner } from './planner';
 
-// Done from the inbox (E15, FR-16.4–16.5), and Frank's own estimate and deadline (FR-16.7). Done
-// closes the To Do and is the approval for ticking its line in the Tasks note, which the mirror
+// Done from the inbox (E15, FR-16.4–16.5), and Frank's own estimate, deadline (FR-16.7) and time
+// (FR-16.9). Done closes the To Do and is the approval for ticking its line in the Tasks note, which the mirror
 // does at once; reopen (Undo) unticks it. How long it took, picked on Done, and each edit are
 // labels for the plan. Labels are written before the event, and a label is never worth failing
 // the click.
@@ -16,6 +17,8 @@ export interface TodoServiceDeps {
   texts: TodoTextStore;
   mirror: TodoMirror;
   labels?: ScheduleLabelStore;
+  /** Places the other To Dos again once Frank changes one. */
+  planner?: TodoPlanner;
   now: () => Date;
   logger?: Logger;
 }
@@ -28,6 +31,7 @@ const wasOf = (t: TodoState) => ({
   ...(t.effortMinutes && { effortMinutes: t.effortMinutes, effortBy: t.effortBy }),
   ...(t.confidence && { confidence: t.confidence }),
   ...(t.ideal && { ideal: t.ideal }),
+  ...(t.slot && { slot: t.slot }),
 });
 
 export class TodoNotFoundError extends Error {
@@ -79,17 +83,32 @@ export class TodoService {
   }
 
   /**
-   * Frank's own estimate or deadline (FR-16.7): the plan never overrides it. Each change is a
-   * label, with the plan it replaced.
+   * Frank's own estimate, deadline (FR-16.7) or time (FR-16.9): the plan never overrides them. A
+   * time of his own that a new estimate changes the length of keeps its start. Each change is a
+   * label, with the plan it replaced; null for the time hands it back to the plan.
    */
   async edit(id: string, e: TodoEdit): Promise<void> {
     const t = this.get(id);
     const effort = e.effortMinutes !== undefined && e.effortMinutes !== t.effortMinutes ? e.effortMinutes : undefined;
     const deadline = e.deadline !== undefined && (e.deadline ?? undefined) !== t.deadline ? e.deadline : undefined;
-    if (effort === undefined && deadline === undefined) return;
+    const mine = t.slot?.by === 'you' ? t.slot : undefined;
+    let slot = e.slot === null ? (mine ? null : undefined) : e.slot && (e.slot.start !== mine?.start || e.slot.end !== mine.end) ? e.slot : undefined;
+    if (slot === undefined && effort !== undefined && mine && e.slot === undefined) {
+      const end = new Date(Date.parse(mine.start) + slotMinutes(effort) * 60_000).toISOString();
+      if (end !== mine.end) slot = { start: mine.start, end };
+    }
+    if (effort === undefined && deadline === undefined && slot === undefined) return;
     if (effort !== undefined) await this.label(t, 'estimate_edit', { set: { effortMinutes: effort } });
     if (deadline !== undefined) await this.label(t, 'deadline_edit', { set: { deadline } });
-    await this.d.store.append({ type: 'todo.edited', itemId: t.itemId, actionId: t.actionId, data: { todoId: id, ...(effort !== undefined && { effortMinutes: effort }), ...(deadline !== undefined && { deadline }) } });
+    if (slot !== undefined && e.slot !== undefined) await this.label(t, 'slot_moved', { set: { slot } });
+    const ids = { itemId: t.itemId, actionId: t.actionId };
+    const events: EventDraft[] = [];
+    if (effort !== undefined || deadline !== undefined) events.push({ type: 'todo.edited', ...ids, data: { todoId: id, ...(effort !== undefined && { effortMinutes: effort }), ...(deadline !== undefined && { deadline }) } });
+    if (slot === null) events.push({ type: 'todo.unscheduled', ...ids, data: { todoId: id, by: 'you' } });
+    else if (slot) events.push({ type: 'todo.scheduled', ...ids, data: { todoId: id, ...slot, by: 'you' } });
+    await this.d.store.append(...events);
+    // The rest move around it at once, not at the next tick.
+    await this.d.planner?.plan();
   }
 
   private async once(id: string, write: () => Promise<unknown>) {

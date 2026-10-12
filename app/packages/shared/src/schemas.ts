@@ -466,6 +466,8 @@ export const Settings = z.object({
     workHours: z.string().min(1, 'Enter work hours'),
     intervalWorkMinutes: minutes,
     intervalOffMinutes: minutes,
+    // Amendment (FR-16.8): minutes kept clear either side of a meeting when planning To Dos; 10 when unset.
+    slotBufferMinutes: z.number().int().min(0, 'At least 0').max(60, 'At most 60').optional(),
   }),
   triage: z.object({
     quietMinutes: minutes,
