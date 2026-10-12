@@ -733,7 +733,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const todayKey = londonParts(now).dateKey;
     const today = this.s.usage.filter((u) => londonParts(u.at).dateKey === todayKey);
     const budgets = this.budgets();
-    const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence';
+    const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence' || p === 'draft_todo';
 
     const days: UsageView['days'] = [];
     for (let i = 6; i >= 0; i--) {

@@ -607,7 +607,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
   };
 }
 
-const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence';
+const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence' || p === 'draft_todo';
 
 /** Today and the last seven days from the usage log (FR-7.2), against the baseline. */
 export function usageView(d: ViewDeps): UsageView {

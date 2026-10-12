@@ -23,6 +23,11 @@ export const StoredDraft = z.object({
   expectedHashes: z.record(z.string(), z.string()).optional(),
   /** The outcome shown in the item panel. */
   result: z.string().optional(),
+  /**
+   * What Frank added when he asked for the draft (FR-9.12), saved before the request is logged so a
+   * draft still queued at a restart keeps it. A re-draft carries it on. Never in an event.
+   */
+  additionalInfo: z.string().optional(),
 });
 export type StoredDraft = z.infer<typeof StoredDraft>;
 

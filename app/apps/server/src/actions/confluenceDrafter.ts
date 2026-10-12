@@ -9,7 +9,7 @@ import { findOnPages, type FiledSection } from './alreadyFiled';
 import { DraftError } from './errors';
 import { entryStorage } from './markdown';
 import { findHeading, outline, textOf } from './storage';
-import { draftThread, filingTarget } from './vaultDrafter';
+import { additionalInfo, draftThread, filingTarget } from './vaultDrafter';
 
 // "Draft Confluence entry" (FR-10.1–10.4), in two calls, because the PSG context tree is too big to
 // outline in one. Code reads the live catalogue (every page in scope, from CQL: path, labels, hub)
@@ -100,10 +100,12 @@ export interface ConfluenceDraftDeps {
   links: string[];
   /** Where triage suggested filing it: the product or page area (FR-15.4). */
   target?: string;
+  /** What Frank added when he asked for the draft (FR-9.12). Both calls see it. */
+  additionalInfo?: string;
 }
 
 /** The catalogue as the picker sees it: one compact object per page. */
-export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[], routing: string, now: Date, transcript?: string, target?: string): string {
+export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[], routing: string, now: Date, transcript?: string, target?: string, info?: string): string {
   const thread = draftThread(item, me, transcript);
   const pages = catalogue.map((c) => ({ id: c.id, path: c.path, ...(c.labels.length && { labels: c.labels }), ...(c.hub && { hub: true }) }));
   return [
@@ -116,13 +118,14 @@ export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[
     JSON.stringify(thread),
     '</thread>',
     ...filingTarget(target),
+    ...additionalInfo(info, { noNames: true }),
     'Pick the candidate pages. Answer with the JSON only.',
   ].join('\n');
 }
 
 const noFit = (a: { reason: string; suggestedHome?: string }) => new DraftError(a.suggestedHome?.trim() ? `${a.reason} Suggested home: ${a.suggestedHome.trim()}.` : a.reason, 'no_fit');
 
-export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routing: string, now: Date, transcript?: string, filed: FiledSection[] = []): string {
+export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routing: string, now: Date, transcript?: string, filed: FiledSection[] = [], info?: string): string {
   const thread = draftThread(item, me, transcript);
   const outlines = pages.map((p) => {
     let budget = OUTLINE_CHARS;
@@ -141,6 +144,7 @@ export function renderConfluenceRequest(item: Item, me: Me, pages: Page[], routi
     '<thread>',
     JSON.stringify(thread),
     '</thread>',
+    ...additionalInfo(info, { noNames: true }),
     'Draft the Confluence entry. Answer with the JSON only.',
   ].join('\n');
 }
@@ -158,7 +162,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
       purpose: 'confluence_pick',
       model,
       system: d.pickPrompt.text,
-      prompt: renderPickRequest(item, me, catalogue, d.routing, d.now(), d.transcript, d.target),
+      prompt: renderPickRequest(item, me, catalogue, d.routing, d.now(), d.transcript, d.target, d.additionalInfo),
       promptVersion: d.pickPrompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,
@@ -190,7 +194,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
       purpose: 'draft_confluence',
       model,
       system: d.prompt.text,
-      prompt: renderConfluenceRequest(item, me, pages, d.routing, d.now(), d.transcript, filed),
+      prompt: renderConfluenceRequest(item, me, pages, d.routing, d.now(), d.transcript, filed, d.additionalInfo),
       promptVersion: d.prompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,
@@ -210,6 +214,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
     durationMs: Math.round(performance.now() - t0),
     tokens: usage.reduce((n, u) => n + u.inputTokens + u.outputTokens + u.cacheTokens, 0),
     edited: false,
+    ...(d.additionalInfo && { additionalInfo: d.additionalInfo }),
   });
   const ancestorIds = catalogue.find((c) => c.id === page.id)?.ancestorIds;
   // Nothing to file: no entry, so no people check either.

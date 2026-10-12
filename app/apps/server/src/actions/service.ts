@@ -155,9 +155,10 @@ export class ActionService {
 
   /**
    * `quiet`: drafted ahead while filing in a batch, so no macOS notification (FR-11.6). `steps`: a
-   * to-do's lines to start from (UX-5); a ready to-do is replaced by one with these.
+   * to-do's lines to start from (UX-5); a ready to-do is replaced by one with these. `additionalInfo`:
+   * what Frank adds for the drafter (FR-9.12); a ready draft is replaced by one that uses it.
    */
-  async request(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean } = {}): Promise<Action> {
+  async request(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean; additionalInfo?: string } = {}): Promise<Action> {
     // A request still on its way in answers a second one for the same filing: a double click, or
     // a draft ahead meeting Frank's own, starts one draft (RV-S1).
     const key = `${itemId}|${type}`;
@@ -168,8 +169,14 @@ export class ActionService {
     return p;
   }
 
-  private async requestNow(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean }): Promise<Action> {
+  private async requestNow(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean; additionalInfo?: string }): Promise<Action> {
     const existing = Object.values(this.actions).find((a) => a.itemId === itemId && a.type === type && ACTIVE.includes(a.status));
+    if (opts.additionalInfo) {
+      if (existing?.status === 'drafting') throw new HttpError('conflict', 'A draft is already being made. Cancel it, or re-draft with your information once it’s ready.');
+      if (existing && existing.status !== 'ready') throw new HttpError('conflict', 'This one is already being written.');
+      if (existing) await this.d.store.append({ type: 'action.discarded', itemId, actionId: existing.id, data: { reason: 'redraft' } });
+      return this.create(itemId, type, { supersedes: existing?.id, quiet: opts.quiet, additionalInfo: opts.additionalInfo });
+    }
     const from = opts.steps ?? (opts.suggested ? 'suggested' : undefined);
     if (existing && type === 'todo' && from && existing.status === 'ready') {
       await this.d.store.append({ type: 'action.discarded', itemId, actionId: existing.id, data: { reason: 'redraft' } });
@@ -177,7 +184,7 @@ export class ActionService {
     }
     if (existing) return this.toAction(existing);
     if (type === 'todo') return this.createTodo(itemId, from);
-    return this.create(itemId, type, undefined, opts.quiet);
+    return this.create(itemId, type, { quiet: opts.quiet });
   }
 
   /**
@@ -207,7 +214,9 @@ export class ActionService {
     return this.toAction(this.actions[id]);
   }
 
-  private async create(itemId: string, type: ActionType, supersedes?: string, quiet?: boolean): Promise<Action> {
+  /** `additionalInfo` (FR-9.12) goes in the draft file, never the event, and is saved first. */
+  private async create(itemId: string, type: ActionType, opts: { supersedes?: string; quiet?: boolean; additionalInfo?: string } = {}): Promise<Action> {
+    const { supersedes, quiet, additionalInfo } = opts;
     if (type === 'todo') return this.createTodo(itemId, undefined, supersedes);
     const it = this.d.store.projection.items[itemId];
     if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
@@ -217,6 +226,7 @@ export class ActionService {
     if (this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
     if (type === 'vault_note' && !(await vaultExists(this.vaultRoot()))) throw new HttpError('unavailable', `The vault folder ${this.vaultRoot()} doesn't exist. Set the vault path in Settings.`);
     const id = `act-${randomUUID()}`;
+    if (additionalInfo) await this.d.drafts.update(id, itemId, (s) => ({ ...s, additionalInfo }));
     await this.d.store.append({
       type: 'action.requested',
       itemId,
@@ -265,8 +275,10 @@ export class ActionService {
     });
   }
 
-  async redraft(id: string): Promise<Action> {
+  /** Keeps the old draft's additional information, unless `additionalInfo` replaces it or null drops it (FR-9.12). */
+  async redraft(id: string, opts: { additionalInfo?: string | null } = {}): Promise<Action> {
     const a = this.action(id);
+    const additionalInfo = opts.additionalInfo === undefined ? (await this.d.drafts.read(id))?.additionalInfo : (opts.additionalInfo ?? undefined);
     if (a.status === 'executing' || a.status === 'done') throw new HttpError('conflict', 'This action has already been written.');
     if (a.type !== 'todo' && this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today.');
     if (a.status !== 'failed' && a.status !== 'discarded') {
@@ -278,7 +290,7 @@ export class ActionService {
         data: { reason: 'redraft' },
       });
     }
-    return this.create(a.itemId, a.type, id);
+    return this.create(a.itemId, a.type, { supersedes: id, additionalInfo });
   }
 
   async discard(id: string) {
@@ -527,6 +539,7 @@ export class ActionService {
         startedAt: Date.now(),
       });
     let stored = await this.d.drafts.read(a.id);
+    const additionalInfo = stored?.additionalInfo;
     if (!stored?.draft) {
       // A topic is drafted from all its pieces.
       const topic = await readTopic(this.d.store.projection, this.d.items, a.itemId);
@@ -551,6 +564,7 @@ export class ActionService {
                   links: content.links,
                   ...(this.d.dryRun() && { sandboxRoot: this.targets().sandboxRoot }),
                   target: this.targetHint(a),
+                  additionalInfo,
                 },
                 content.item,
                 this.d.me(content.item.source),
@@ -570,6 +584,7 @@ export class ActionService {
                   transcript,
                   links: content.links,
                   target: this.targetHint(a),
+                  additionalInfo,
                 },
                 content.item,
                 this.d.me(content.item.source),
@@ -801,7 +816,7 @@ export class ActionService {
     await this.fail(a, 'conflict', message, redraft);
     if (!redraft) return;
     try {
-      await this.create(a.itemId, a.type, a.id, a.quiet);
+      await this.create(a.itemId, a.type, { supersedes: a.id, quiet: a.quiet, additionalInfo: (await this.d.drafts.read(a.id))?.additionalInfo });
     } catch (err) {
       this.d.logger?.warn({ err, actionId: a.id }, 'Could not re-draft after a conflict');
     }

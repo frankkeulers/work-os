@@ -1131,6 +1131,102 @@ describe('to-do action (UX-5)', () => {
   });
 });
 
+describe('draft with additional information (FR-9.12)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const INFO = 'Speaker 1 is Anna from Ops. The rollout is planned for Q1, not Q4.';
+  const BLOCK = `<additional-information>\n${INFO}\n</additional-information>\nFrank added this`;
+  const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;
+  const request = async (body: object) => {
+    const r = await call<Action & ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, body);
+    await res.actions.settled();
+    return r;
+  };
+  const redraft = async (id: string, body?: object) => {
+    const r = await call<Action & ApiErrorBody>('POST', `/api/actions/${id}/redraft`, body);
+    await res.actions.settled();
+    return r;
+  };
+  const vaultCalls = () => claude.calls.filter((c) => /draft-vault/.test(c.system));
+  /** Every event logged so far, as text: the information must never be in one. */
+  const events = async () => {
+    const files = (await readdir(join(dir, 'events'), { recursive: true })).filter((f) => f.endsWith('.jsonl'));
+    expect(files.length).toBeGreaterThan(0);
+    return (await Promise.all(files.map((f) => readFile(join(dir, 'events', f), 'utf8')))).join('');
+  };
+
+  beforeEach(async () => {
+    const vault = join(dir, '..', 'vault');
+    await mkdir(join(vault, 'Projects'), { recursive: true });
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, vaultPath: vault, confluence: SCOPE }, rules: view.rules })).status).toBe(200);
+  });
+
+  it('gives a vault draft Frank’s information, keeps it with the draft and out of the event log', async () => {
+    const r = await request({ type: 'vault_note', additionalInfo: `  ${INFO}\n` });
+    expect(r.status).toBe(201);
+    expect(vaultCalls().at(-1)!.prompt).toContain(BLOCK);
+    const v = await item();
+    expect(v.actions[0]).toMatchObject({ id: r.body.id, status: 'ready' });
+    expect(v.drafts[r.body.id]).toMatchObject({ kind: 'vault_new', additionalInfo: INFO });
+    expect(await events()).not.toContain('Anna');
+  });
+
+  it('gives both Confluence calls the information, with the rule that the entry names no one', async () => {
+    const r = await request({ type: 'confluence_entry', additionalInfo: INFO });
+    expect(r.status).toBe(201);
+    const pick = claude.calls.find((c) => /pick-confluence/.test(c.system))!;
+    const draft = claude.calls.find((c) => /draft-confluence/.test(c.system))!;
+    for (const c of [pick, draft]) {
+      expect(c.prompt).toContain(BLOCK);
+      expect(c.prompt).toContain('Use any names in it only to understand who said what. The entry still identifies no one.');
+    }
+    // The people check sees the entry alone, never the information.
+    expect(claude.calls.find((c) => /people-check/.test(c.system))!.prompt).not.toContain('Anna');
+    expect((await item()).drafts[r.body.id]).toMatchObject({ kind: 'confluence', additionalInfo: INFO });
+  });
+
+  it('keeps the information on a plain re-draft, replaces it with a new one, and drops it on null', async () => {
+    const first = await request({ type: 'vault_note', additionalInfo: INFO });
+    const kept = await redraft(first.body.id);
+    expect(kept.status).toBe(201);
+    expect(vaultCalls().at(-1)!.prompt).toContain(BLOCK);
+    expect((await item()).drafts[kept.body.id]).toMatchObject({ additionalInfo: INFO });
+
+    const replaced = await redraft(kept.body.id, { additionalInfo: 'Speaker 2 is me.' });
+    expect(vaultCalls().at(-1)!.prompt).toContain('<additional-information>\nSpeaker 2 is me.\n</additional-information>');
+    expect((await item()).drafts[replaced.body.id]).toMatchObject({ additionalInfo: 'Speaker 2 is me.' });
+
+    const dropped = await redraft(replaced.body.id, { additionalInfo: null });
+    expect(vaultCalls().at(-1)!.prompt).not.toContain('<additional-information>');
+    expect((await item()).drafts[dropped.body.id]).not.toHaveProperty('additionalInfo');
+    expect((await redraft(dropped.body.id, { additionalInfo: '' })).status).toBe(422);
+  });
+
+  it('replaces a ready draft when asked again with information, and refuses while one is being made', async () => {
+    const plain = await request({ type: 'vault_note' });
+    const withInfo = await request({ type: 'vault_note', additionalInfo: INFO });
+    expect(withInfo.body.id).not.toBe(plain.body.id);
+    const v = await item();
+    expect(v.actions.find((a) => a.id === plain.body.id)?.status).toBe('discarded');
+    expect(v.actions.find((a) => a.id === withInfo.body.id)).toMatchObject({ status: 'ready', supersedes: plain.body.id });
+
+    await call('POST', `/api/actions/${withInfo.body.id}/discard`);
+    claude.failNext = Object.assign(new Error('Not logged in · Please run /login'), {});
+    await request({ type: 'vault_note' });
+    expect((await item()).actions[0].status).toBe('drafting');
+    const busy = await request({ type: 'vault_note', additionalInfo: INFO });
+    expect(busy.status).toBe(409);
+    expect(busy.body.message).toMatch(/already being made/);
+  });
+
+  it('refuses information with given steps or the suggested to-do, or over 2000 characters', async () => {
+    expect((await request({ type: 'todo', steps: ['Call Sam'], additionalInfo: INFO })).status).toBe(422);
+    expect((await request({ type: 'todo', suggested: true, additionalInfo: INFO })).status).toBe(422);
+    expect((await request({ type: 'vault_note', additionalInfo: 'x'.repeat(2001) })).status).toBe(422);
+    expect((await request({ type: 'vault_note', additionalInfo: '   ' })).status).toBe(422);
+  });
+});
+
 describe('a suggested to-do (FR-15.6)', () => {
   const PROD = `slack:C01PROD:${P}`;
   const TODO = { step: 'Send the export spec to Dana', dueAt: '2026-10-09T16:30:00.000Z', rule: 'T2' };
