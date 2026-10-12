@@ -104,6 +104,8 @@ export const JOURNEYS: Journey[] = [
   // Notifications, toasts and the bell open the inbox panel (UX-6).
   { id: 'J83', group: 'Follow-ups', title: 'Open from a notification', start: (c) => (fresh(c), later(() => c.simulatePoll('vip_dm'), 2500), '/') },
   { id: 'J84', group: 'Follow-ups', title: 'Open what the inbox doesn’t show', start: (c) => (fresh(c), usePrefs.getState().setScope('mvp'), item(c, 'm1', '?tab=vault')) },
+  // Draft with additional information (FR-9.12, UX-14).
+  { id: 'J93', group: 'Vault', title: 'Draft with additional information', start: (c) => (fresh(c), `/?item=${encodeURIComponent(c.itemIdForKey('f4') ?? '')}`) },
   // Done today shows filings (UX-12).
   { id: 'J85', group: 'Vault', title: 'What was filed today', start: (c) => (fresh(c), '/settings/writing') },
   // The ? overlay (UX-11).
