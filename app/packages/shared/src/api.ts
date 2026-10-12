@@ -158,6 +158,8 @@ export interface AgendaEvent {
   organizer?: string; // a name, or the address when the name isn't known
   /** Opens the event in Outlook on the web. */
   link?: string;
+  /** Joins the meeting in Teams, when it is a Teams meeting. */
+  joinUrl?: string;
   /** Frank's answer: "organizer" for his own meetings; unset when it hasn't been read. */
   response?: string;
   /** The open invite item asking Frank to answer it. */

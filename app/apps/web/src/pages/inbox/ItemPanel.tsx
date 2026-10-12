@@ -4,6 +4,7 @@ import type { ActionType, FilingFeedbackBody, Message, TopicPiece } from '@work-
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
+import { JoinTeams } from '../../components/JoinTeams';
 import { CategoryTags, CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../../components/item';
 import { Icon, MoreIcon } from '../../components/icons';
 import { useEarlierToggle } from '../../components/Earlier';
@@ -898,6 +899,7 @@ export function ItemPanel({
             <FilingFeedback item={item} />
           </div>
           <ItemMarkers item={item} />
+          {item.source === 'calendar' && view?.item.meeting && <JoinTeams joinUrl={view.item.meeting.calendar?.joinUrl} end={view.item.meeting.end} />}
           {item.source === 'wispr' && view?.item.meeting?.calendar && <OnCalendar calendar={view.item.meeting.calendar} />}
           {view?.calendarCategories && <CategoryTags tags={view.calendarCategories} />}
         </div>

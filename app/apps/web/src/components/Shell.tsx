@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, NavLink, Outlet, useLocation, useOutletContext } from 'react-router';
+import { Link, NavLink, Outlet, useOutletContext } from 'react-router';
 import type { SourceHealth, SourceId } from '@work-os/shared';
 import { API_MODE, api, type InboxView } from '../api';
 import { onTopics, useApiQuery, type QueryState } from '../hooks/useApiQuery';
@@ -262,11 +262,6 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
   const wide = useWideLayout();
   const collapsed = usePrefs((s) => (wide ? s.navCollapsedWide : s.navCollapsed));
   const setCollapsed = usePrefs((s) => (wide ? s.setNavCollapsedWide : s.setNavCollapsed));
-  // The time column shows the next meeting on the cockpit, so the cues step aside there (CK-3.7),
-  // unless it's folded to a rail.
-  const path = useLocation().pathname;
-  const timeCollapsed = usePrefs((s) => s.timeCollapsed);
-  const onCockpit = wide && path === '/' && !timeCollapsed;
   const health = useApiQuery(() => api.getHealth(), onTopics('health'), []).data;
   const status = health && appHealth(health, problemsOf(health));
   const full = scope === 'full';
@@ -326,7 +321,8 @@ export function Nav({ inbox }: { inbox?: InboxView }) {
           <NavItem to="/usage" icon="usage" label="Usage & health" status={status} collapsed={collapsed} />
           <NavItem to="/settings" icon="settings" label="Settings & rules" collapsed={collapsed} />
         </div>
-        {!onCockpit && <MeetingCues collapsed={collapsed} />}
+        {/* On every page, the cockpit too, so the sidebar doesn't shift between pages (CK-3.7 amended). */}
+        <MeetingCues collapsed={collapsed} />
         <div className="flex flex-col gap-2">
           {collapsed ? <div className="mx-2 border-t border-line-soft" /> : <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">Sources</div>}
           {sources.map(({ id, health }) => {

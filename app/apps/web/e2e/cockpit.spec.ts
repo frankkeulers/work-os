@@ -40,19 +40,21 @@ async function afternoon(page: Page) {
 test('J56: three zones at a glance — the time, what needs you, and what can wait (CK-3.1, 3.4–3.8, 3.11)', async ({ page }) => {
   await afternoon(page);
 
-  // Three zones, side by side; the agenda strip and the sidebar's meeting cues give way to the time column.
+  // Three zones, side by side; the agenda strip gives way to the time column.
   for (const z of ['Time', 'Needs you', 'Later'] as const) await expect(zone(page, z)).toBeVisible();
   expect((await zone(page, 'Time').boundingBox())!.width).toBeCloseTo(400, 0);
   expect((await zone(page, 'Later').boundingBox())!.width).toBeCloseTo(440, 0);
   await expect(page.getByRole('region', { name: 'Agenda' })).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible(); // the 60 px rail
 
   // The next meeting, and what's due before it.
   const card = page.getByTestId('next-meeting');
   await expect(card).toHaveAttribute('data-phase', 'next');
   await expect(card).toContainText(/NEXT · IN 1[12] MIN/); // the mock clock runs on in real time
-  await expect(card.getByRole('link', { name: '14:00 [Customer] renewal call' })).toHaveAttribute('href', /AAMkMOCKRENEWAL/);
+  // A Teams meeting: the card joins it in the browser; Outlook is a link of its own beside the label.
+  await expect(card.getByRole('link', { name: '14:00 [Customer] renewal call' })).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#\/l\/meetup-join\/19:meeting_AAMkMOCKRENEWAL@/);
+  await expect(card).toContainText('Join in Teams');
+  await expect(card.getByRole('link', { name: 'Outlook', exact: true })).toHaveAttribute('href', /itemid=AAMkMOCKRENEWAL/);
   await expect(card).toContainText('+1 at the same time');
   await expect(card.locator('[data-open-item]')).toHaveText([/#mvi-launch · Confirm the data-licensing/, /Insights APIs v2 pricing · Answer the three pricing/]);
 
@@ -62,6 +64,15 @@ test('J56: three zones at a glance — the time, what needs you, and what can wa
   await expect(meetings).toHaveText([/06:45 Voyage Insights/, /09:00 Product stand-up/, /09:30 MVI V2 launch readiness/, /14:00 \[Customer\] renewal call/, /14:30 Pricing sign-off/, /16:00 Product weekly/]);
   await expect(meetings.filter({ hasText: 'stand-up' })).toHaveAttribute('data-past', 'true');
   await expect(meetings.filter({ hasText: 'renewal call' })).not.toHaveAttribute('data-past');
+  // Each in its first category's colour, shaded behind as on the agenda strip; a Teams meeting to come
+  // joins in the browser, one that has ended opens in Outlook.
+  const renewal = meetings.filter({ hasText: 'renewal call' });
+  await expect(renewal).toHaveAttribute('data-category-color', /.+/);
+  expect(await renewal.getByRole('link').evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(await meetings.filter({ hasText: 'Pricing sign-off' }).getByRole('link').evaluate((el) => getComputedStyle(el).backgroundColor));
+  await expect(renewal.getByRole('link')).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#/);
+  await expect(meetings.filter({ hasText: 'stand-up' }).getByRole('link')).toHaveAttribute('href', /itemid=AAMkMOCKSTANDUP/);
+  // A short meeting is one line; its colour bar still runs its full height.
+  expect((await meetings.filter({ hasText: 'stand-up' }).locator('a > span[aria-hidden]').boundingBox())!.height).toBeGreaterThan(10);
   const pins = zone(page, 'Time').getByRole('list', { name: 'Deadlines' }).getByRole('button');
   await expect(pins).toHaveText([/^Overdue · Confirm the data-licensing/, /^14:00 Answer the three pricing/]);
   await expect(pins.nth(0)).toHaveAttribute('data-pin', 'late');
@@ -240,8 +251,8 @@ test('J65: the time column lines up with the other headers and folds to a rail; 
   await laterHandle.dblclick();
   await expect(laterHandle).toHaveAttribute('aria-valuenow', '440');
 
-  // Folded, it's a rail with the clock, and the sidebar's meeting cues come back (13:58, two minutes
-  // before the renewal call); kept on reload.
+  // Folded, it's a rail with the clock; kept on reload. The sidebar's meeting cue (13:58, two minutes
+  // before the renewal call) shows either way, so the sidebar doesn't shift (CK-3.7 amended).
   await time.getByRole('button', { name: 'Collapse the time column' }).click();
   await expect(time).toHaveAttribute('data-collapsed', 'true');
   expect((await time.boundingBox())!.width).toBeCloseTo(56, 0);
@@ -254,7 +265,10 @@ test('J65: the time column lines up with the other headers and folds to a rail; 
   await expect(time).toHaveAttribute('data-collapsed', 'true');
   await time.getByRole('button', { name: 'Expand the time column' }).click();
   await expect(page.getByTestId('next-meeting')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toBeVisible();
+  // The sidebar is the 60 px rail here, so the cue is one tile: the renewal call, two minutes out.
+  await expect(page.getByRole('region', { name: 'Meetings now and next' })).toHaveAttribute('data-meeting-cues', '1');
+  await page.screenshot({ path: join(APP, 'screenshots/cockpit-meeting-cue-light.png'), style: HIDE, animations: 'disabled' });
 });
 
 test('J59: below 1600 px the Inbox keeps the list and the agenda strip (CK-3.1, 3.7)', async ({ page }) => {

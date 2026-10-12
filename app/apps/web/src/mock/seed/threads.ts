@@ -902,6 +902,7 @@ export const CALENDAR_INVITE: ThreadSeed = {
         { id: 'U09SALES', name: 'Head of Sales' },
       ],
       link: 'https://outlook.office365.com/owa/?itemid=AAMkMOCKQ4&exvsurl=1&path=/calendar/item',
+      joinUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_AAMkMOCKQ4%40thread.v2/0?context=%7b%22Tid%22%3a%22mock%22%7d',
     },
   },
   messages: [

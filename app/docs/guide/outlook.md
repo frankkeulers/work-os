@@ -3,7 +3,7 @@ title: Outlook mail and calendar
 group: Inbox
 order: 44
 summary: Your Inbox, Sent Items and calendar through the Microsoft 365 connector on claude.ai, one item per conversation, with today's meetings above the inbox.
-updated: 2026-10-09
+updated: 2026-10-12
 ---
 
 Work OS reads your Outlook mail through the **Microsoft 365 connector** you already use on
@@ -69,27 +69,35 @@ first.
   meeting and what's due before it on top (see [Three zones](inbox.md#the-time-column)). In a
   narrower window they show in a strip above the inbox, the one on now picked out;
   **Tomorrow** shows the next day's. Cancelled meetings and ones you declined are left out. Choose
-  a meeting to open it in Outlook. When the meetings don't all fit, the strip fades at the edge and
-  an arrow there scrolls to the rest.
+  a Teams meeting to join it, or any other meeting to open it in Outlook. When the meetings don't
+  all fit, the strip fades at the edge and an arrow there scrolls to the rest.
+- **Joining.** A Teams meeting shows the Teams mark, and choosing it joins the meeting in your
+  browser, not the Teams app, wherever it appears: the time column, the agenda, the sidebar, an
+  invite (**Join in Teams**) and the calendar's week. Once the meeting is over it opens in Outlook
+  instead. A Teams meeting whose description starts with a long agenda gets its link a poll or two
+  after it first shows, once Work OS has read the whole meeting.
 - **Not answered** marks a meeting someone else invited you to that you haven't accepted or
   declined yet. Choose it to open the invite's item.
 - **What's kept.** Work OS keeps your calendar from yesterday to two weeks ahead: titles, times,
-  who organised it and who is invited, its categories, and your answer. Never a meeting's description, its Teams
-  link or its passcode.
+  who organised it and who is invited, its categories, your answer, and a Teams meeting's join link,
+  so you can join from the calendar. Never a meeting's description, or the rest of its Teams
+  details such as the meeting ID and passcode.
 - Work OS only reads. It never answers, moves or changes a meeting.
 
 The calendar polls on its own schedule, every 30 minutes in work hours and every 2 hours outside
 them; change either under **Calendar** in [Settings › Outlook](/settings/outlook). Each poll is a
-short Claude Haiku run, about $0.002, plus about $0.002 for each ten invites it reads; it shows on
+short Claude Haiku run, about $0.002, plus about $0.002 for each ten meetings it reads (invites,
+and Teams meetings whose join link it hasn't found yet); it shows on
 [Usage](/usage). If the last read is old, the strip says when it was.
 
 ### Now and next
 
-On a wide screen the time column's meeting card does this job, and the sidebar leaves it out. In a
-narrower window, five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
-the title and a countdown, on every page; on the agenda, its meeting says **in 4 min**. In the last
+Five minutes before a meeting you're going to, the sidebar shows it under **Next**, with the time,
+the title and a countdown, on every page, the inbox included; on the agenda, its meeting says
+**in 4 min**. In the last
 two minutes the countdown turns amber. Once it starts, the sidebar shows it under **Now**, with
-when it ends, until it does. Choose a meeting there to open it in Outlook, where the Join button is.
+when it ends, until it does. Choose a Teams meeting there to join it in your browser; any other
+meeting opens in Outlook.
 
 - It's for meetings you've accepted, accepted tentatively or organised. Not ones you declined or
   haven't answered, all-day events, or ones shown as Free.
@@ -106,7 +114,8 @@ when it ends, until it does. Choose a meeting there to open it in Outlook, where
 ### Categories
 
 The Outlook categories on your meetings come with the calendar. A meeting with one has that
-category's colour down its left edge on the agenda, and a light shade of it behind. An invite or a
+category's colour down its left edge on the agenda, the time column and the calendar's week, and a
+light shade of it behind. An invite or a
 Wispr Flow meeting joined to it has a dot in each category's colour beside its title in the inbox,
 and lists its categories under the summary.
 

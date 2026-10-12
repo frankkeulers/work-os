@@ -7,7 +7,7 @@ import type { EventDetail, EventRow } from '../ms365/types';
 import { meOf, type MeInfo } from '../outlook/normalise';
 import { fixedTs } from '../time';
 import type { FetchContext, FetchResult, SourceAdapter } from '../types';
-import { inviteBody, inviteItem, inviteItemId, inviteMessage, isCandidate, movedMessage, rowHash, snapFromDetail, snapFromRow, wantsAnswer } from './normalise';
+import { inviteBody, inviteItem, inviteItemId, inviteMessage, isCandidate, movedMessage, rowHash, snapFromDetail, snapFromRow, wantsAnswer, wantsJoinLink } from './normalise';
 import type { CalendarSnapshot, CalendarStore, InviteGroup, SnapEvent } from './store';
 
 // The Outlook calendar source (Phase 2, R2.8, P0-12). Calendar search filters on start time and has
@@ -16,8 +16,9 @@ import type { CalendarSnapshot, CalendarStore, InviteGroup, SnapEvent } from './
 // (cockpit CK-5.6) shows the days of this week already gone; past meetings are never read:
 //   1. searches the window, oldest first, the first page alone and the rest in one relay run;
 //   2. reads, at most MAX_READS, soonest first: someone else's new or changed meetings, then every
-//      event in an open invite (search has no answer, so only a read shows Frank has answered). New
-//      ones go first so a crowd of open invites can't keep a new one from being seen;
+//      event in an open invite (search has no answer, so only a read shows Frank has answered), then
+//      Teams meetings whose join link search's summary cut off, once each. New ones go first so a
+//      crowd of open invites can't keep a new one from being seen;
 //   3. opens an invite item for each organiser and subject Frank hasn't answered, and adds a
 //      message when one of its events moves;
 //   4. closes an invite item once nothing in it wants an answer: answered, cancelled, deleted or
@@ -100,11 +101,13 @@ export class CalendarAdapter implements SourceAdapter {
       hashes.set(row.id, hash);
       const was = prevById.get(row.id);
       if (was?.hash === hash) {
-        // Categories come with search, so a change to them needs no read.
+        // Categories come with search, so a change to them needs no read. A join link search shows
+        // wins; one only a read found is kept.
         const { categories: _was, ...kept } = was;
-        listed.set(row.id, { ...kept, uri: row.uri, showAs: fresh.showAs, isOrganizer: fresh.isOrganizer, ...(fresh.categories && { categories: fresh.categories }) });
+        listed.set(row.id, { ...kept, uri: row.uri, showAs: fresh.showAs, isOrganizer: fresh.isOrganizer, ...(fresh.categories && { categories: fresh.categories }), ...(fresh.joinUrl && { joinUrl: fresh.joinUrl }), ...(fresh.teams && { teams: true }) });
       } else {
-        listed.set(row.id, { ...fresh, ...(was?.response !== undefined && { response: was.response }) });
+        // A moved meeting keeps its join link: one a read found stays until a read finds another.
+        listed.set(row.id, { ...fresh, ...(was?.response !== undefined && { response: was.response }), ...(!fresh.joinUrl && was?.joinUrl && { joinUrl: was.joinUrl }) });
         changed.add(row.id);
       }
     }
@@ -114,7 +117,9 @@ export class CalendarAdapter implements SourceAdapter {
     const open = [...openIds].map((id) => listed.get(id) ?? prevById.get(id)).filter((e): e is SnapEvent => !!e);
     const fresh = [...changed].map((id) => listed.get(id)!).filter((e) => !openIds.has(e.id) && isCandidate(e, now));
     const bySoonest = (a: SnapEvent, b: SnapEvent) => a.start.localeCompare(b.start);
-    const toRead = [...fresh.sort(bySoonest), ...open.sort(bySoonest)].slice(0, MAX_READS);
+    const linkless = [...listed.values()].filter((e) => wantsJoinLink(e, now) && !openIds.has(e.id) && !fresh.includes(e));
+    const wanted = [...fresh.sort(bySoonest), ...open.sort(bySoonest), ...linkless.sort(bySoonest)];
+    const toRead = wanted.slice(0, MAX_READS);
     const outcomes = toRead.length ? await this.o.api.readEvents(toRead.map((e) => e.uri), ctx.signal) : [];
 
     const details = new Map<string, EventDetail>();
@@ -124,7 +129,7 @@ export class CalendarAdapter implements SourceAdapter {
       if (r?.ok) details.set(e.id, r.event);
       else if (r?.gone) gone.add(e.id);
     });
-    const unread = toRead.filter((e) => !details.has(e.id) && !gone.has(e.id)).length + open.length + fresh.length - toRead.length;
+    const unread = toRead.filter((e) => !details.has(e.id) && !gone.has(e.id)).length + wanted.length - toRead.length;
     if (unread > 0) this.o.logger?.info({ unread }, 'Outlook Calendar: some events were not read; the next poll tries again');
 
     // The new picture: the window, plus open invites that moved out of it (still tracked by read).
@@ -132,7 +137,7 @@ export class CalendarAdapter implements SourceAdapter {
     for (const [id, e] of listed) {
       const d = details.get(id);
       const read = d && snapFromDetail(d, e, me);
-      if (read) events.set(id, { ...read, hash: hashes.get(id) });
+      if (read) events.set(id, { ...read, hash: hashes.get(id), joinRead: true });
       else if (changed.has(id)) events.set(id, { ...e, hash: isCandidate(e, now) ? undefined : hashes.get(id) }); // unset: read next poll
       else events.set(id, e);
     }

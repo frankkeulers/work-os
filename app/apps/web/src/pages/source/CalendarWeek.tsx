@@ -1,16 +1,19 @@
 import { OUTLOOK_COLORS, londonAt, londonParts, mondayOf, type WeekEvent, type WeekView } from '@work-os/shared';
+import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { CategoryTags } from '../../components/item';
 import { Icon } from '../../components/icons';
+import { JoinTeams } from '../../components/JoinTeams';
 import { Button, IconButton, cx } from '../../components/ui';
 import { fmtAgo, fmtDate, fmtDayDate, fmtTime, plural } from '../../lib/format';
+import { OUTLOOK_CALENDAR } from '../../lib/links';
 import { minuteOf, placeMeetings, timelineSpan, workSpan } from '../../lib/timeline';
 
 // Outlook Calendar's history (cockpit CK-5.6): the week, Monday to Sunday, every meeting the
 // calendar holds, cancelled and declined ones too, marked. A meeting opens its Wispr Flow notes or
-// its invite in the item panel, or else a card with what the calendar says about it.
+// its invite in the item panel, or else a card with what the calendar says about it, and a link to
+// join it in Teams, in the browser. A meeting with Outlook categories takes the first one's colour, as on the agenda.
 
-const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
 const PX_PER_HOUR = 48;
 const HOURS_WIDTH = 44;
 const MEETING_MIN_HEIGHT = 18;
@@ -143,26 +146,44 @@ export function CalendarWeek({ week, weekStart, setWeekStart, workHours, now, se
   );
 }
 
+/** A tagged meeting's colours: its first category mixed into the surface, as on the agenda strip, so it stays dark in the dark theme. */
+const TAGGED = {
+  selected: 'border-accent ring-1 ring-accent bg-[color-mix(in_srgb,var(--tag)_22%,var(--surface))] !text-ink',
+  state: 'border-dashed border-[color-mix(in_srgb,var(--tag)_35%,var(--surface))] bg-[color-mix(in_srgb,var(--tag)_6%,var(--surface))] text-muted',
+  past: 'border-[color-mix(in_srgb,var(--tag)_25%,var(--surface))] bg-[color-mix(in_srgb,var(--tag)_9%,var(--surface))] text-muted',
+  later: 'border-[color-mix(in_srgb,var(--tag)_45%,var(--surface))] bg-[color-mix(in_srgb,var(--tag)_16%,var(--surface))] text-ink hover:bg-[color-mix(in_srgb,var(--tag)_24%,var(--surface))]',
+};
+const PLAIN = {
+  selected: 'border-accent bg-accent-wash !text-ink',
+  state: 'border-dashed border-line bg-surface-2 text-muted',
+  past: 'border-line bg-tray text-faint',
+  later: 'border-accent-line bg-surface text-ink hover:bg-surface-2',
+};
+
 function EventBlock({ e, selected, onEvent, past, allDay }: { e: WeekEvent; selected: boolean; onEvent: (e: WeekEvent) => void; past: boolean; allDay?: boolean }) {
   const state = eventState(e);
-  const hex = e.categories?.length ? OUTLOOK_COLORS[e.categories[0].color] : undefined;
+  const color = e.categories?.[0]?.color;
+  const hex = color ? OUTLOOK_COLORS[color] : undefined;
   const linked = e.notesItemId ? 'Notes' : e.inviteItemId ? 'Invite' : undefined;
+  const look = hex ? TAGGED : PLAIN;
   return (
     <button
       type="button"
       data-week-event={e.id}
       data-state={state?.toLowerCase()}
       data-linked={linked?.toLowerCase()}
+      data-category-color={color}
       aria-current={selected ? 'true' : undefined}
-      title={`${allDay ? 'All day' : `${fmtTime(e.start)}–${fmtTime(e.end)}`} ${e.title}${e.organizer ? ` · ${e.organizer}` : ''}${state ? ` · ${state}` : ''}`}
+      title={`${allDay ? 'All day' : `${fmtTime(e.start)}–${fmtTime(e.end)}`} ${e.title}${e.organizer ? ` · ${e.organizer}` : ''}${e.categories?.length ? ` · ${e.categories.map((c) => c.name).join(', ')}` : ''}${state ? ` · ${state}` : ''}`}
       onClick={() => onEvent(e)}
       className={cx(
         'flex h-full w-full gap-1 overflow-hidden rounded-md border px-1.5 py-[3px] text-left text-[11px] leading-[14px] cursor-pointer',
-        selected ? 'border-accent bg-accent-wash !text-ink' : state ? 'border-dashed border-line bg-surface-2 text-muted' : past ? 'border-line bg-tray text-faint' : 'border-accent-line bg-surface text-ink hover:bg-surface-2',
+        selected ? look.selected : state ? look.state : past ? look.past : look.later,
         allDay && 'min-h-6 items-center',
       )}
+      style={hex ? ({ '--tag': hex } as CSSProperties) : undefined}
     >
-      <span aria-hidden className="w-[3px] shrink-0 rounded-sm" style={{ background: hex ?? 'var(--gray-mid)' }} />
+      <span aria-hidden className="w-[3px] shrink-0 self-stretch rounded-sm" style={{ background: hex ?? 'var(--gray-mid)' }} />
       <span className="min-w-0">
         {!allDay && <b className="font-semibold">{fmtTime(e.start)} </b>}
         <span className={cx(state && 'line-through')}>{e.title}</span>
@@ -231,6 +252,7 @@ export function EventCard({ e, onClose }: { e: WeekEvent; onClose: () => void })
           ) : null}
         </dl>
         <div className="flex flex-wrap gap-2">
+          {!e.cancelled && <JoinTeams joinUrl={e.joinUrl} end={e.end} solid />}
           <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-line px-3 text-[13px] font-medium !text-ink no-underline hover:bg-surface-2">
             <Icon name="external" size={14} /> Open in Outlook
           </a>

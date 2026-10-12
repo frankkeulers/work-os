@@ -2,6 +2,7 @@ import type { AgendaEvent, WeekEvent } from '@work-os/shared';
 
 // Outlook Calendar (R2.8) in the seed week, as the agenda strip shows it once the calendar is on.
 // Day 5 is Mon 5 Oct; the seed clock is 09:45, so the stand-up is over and the launch check is on.
+// Every timed meeting is on Teams but the design review, held in a room.
 
 /** A London wall-clock time in the seed week (BST, UTC+1). */
 const london = (day: number, hhmm: string) => {
@@ -9,6 +10,8 @@ const london = (day: number, hhmm: string) => {
   return new Date(Date.UTC(2026, 9, day, h - 1, m)).toISOString();
 };
 const link = (id: string) => `https://outlook.office365.com/owa/?itemid=${id}&exvsurl=1&path=/calendar/item`;
+/** A Teams meeting's join link, in the classic meetup-join form. */
+const teams = (id: string) => `https://teams.microsoft.com/l/meetup-join/19%3ameeting_${id}%40thread.v2/0?context=%7b%22Tid%22%3a%22mock%22%7d`;
 const event = (id: string, title: string, day: number, from: string, to: string, over: Partial<WeekEvent> = {}): WeekEvent => ({
   id,
   title,
@@ -17,6 +20,7 @@ const event = (id: string, title: string, day: number, from: string, to: string,
   allDay: false,
   showAs: 'busy',
   link: link(id),
+  joinUrl: teams(id),
   response: 'accepted',
   ...over,
 });
@@ -29,7 +33,7 @@ export const CALENDAR: AgendaEvent[] = [
   // Inside the renewal call: two meetings on at once (Scenarios › 14:28).
   event('AAMkMOCKSIGNOFF', 'Pricing sign-off', 5, '14:30', '14:45', { organizer: 'Head of Sales' }),
   event('AAMkMOCKWEEKLY', 'Product weekly', 5, '16:00', '16:30', { response: 'organizer' }),
-  event('AAMkMOCKKICKOFF', 'Sales kick-off', 6, '00:00', '24:00', { allDay: true, showAs: 'free', organizer: 'Head of Sales' }),
+  event('AAMkMOCKKICKOFF', 'Sales kick-off', 6, '00:00', '24:00', { allDay: true, showAs: 'free', organizer: 'Head of Sales', joinUrl: undefined }),
   event('AAMkMOCKQ4', 'Q4 roadmap review', 6, '10:00', '11:00', { organizer: 'Matt M.', response: 'none', showAs: 'tentative' }),
   event('AAMkMOCKAPIS', 'Insights APIs sync', 6, '15:00', '15:30', { organizer: 'Backend lead', response: 'tentativelyAccepted', showAs: 'tentative' }),
 ];
@@ -41,6 +45,11 @@ export const CALENDAR_CATEGORIES: Record<string, string[]> = {
   AAMkMOCKRENEWAL: ['Customer'],
   AAMkMOCKWEEKLY: ['Product'],
   AAMkMOCKQ4: ['Planning', 'Product'],
+  // Later in the week, for the week view.
+  AAMkMOCKONEONE: ['Product'],
+  AAMkMOCKCUSTOMER: ['Customer'],
+  AAMkMOCKRETRO: ['Planning'],
+  AAMkMOCKDEMO: ['Product'],
 };
 
 /**
@@ -49,7 +58,7 @@ export const CALENDAR_CATEGORIES: Record<string, string[]> = {
  */
 export const CALENDAR_WEEK: WeekEvent[] = [
   event('AAMkMOCKONEONE', '1:1 with Head of Product', 7, '11:00', '11:30', { organizer: 'Head of Product', attendees: ['Head of Product', 'Frank Keulers'] }),
-  event('AAMkMOCKDESIGN', 'Fleet map design review', 7, '14:00', '15:00', { organizer: 'Design lead', response: 'declined', attendees: ['Design lead', 'Frontend lead', 'Frank Keulers'] }),
+  event('AAMkMOCKDESIGN', 'Fleet map design review', 7, '14:00', '15:00', { organizer: 'Design lead', response: 'declined', attendees: ['Design lead', 'Frontend lead', 'Frank Keulers'], joinUrl: undefined }),
   event('AAMkMOCKCUSTOMER', '[Customer] quarterly review', 8, '10:00', '11:30', { organizer: 'Account lead, [Customer]', attendees: ['Account lead, [Customer]', 'Head of Sales', 'Frank Keulers'] }),
   event('AAMkMOCKRETRO', 'Sprint retro', 8, '15:30', '16:15', { organizer: 'Delivery manager', cancelled: true }),
   event('AAMkMOCKDEMO', 'Friday demo', 9, '16:00', '16:45', { response: 'organizer' }),

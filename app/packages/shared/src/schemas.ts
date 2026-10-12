@@ -42,6 +42,7 @@ export const ItemMeeting = z.object({
       invitees: z.array(Participant),
       link: z.url().optional(),
       categories: z.array(z.string()).optional(), // Outlook category names, as the event had them
+      joinUrl: z.url().optional(), // amendment (Frank, 12 Oct 2026): a Teams meeting's join link; never sent to a model
     })
     .optional(),
 });

@@ -107,6 +107,8 @@ export const EventRow = z.looseObject({
   isOrganizer: z.boolean().nullish(),
   webLink: z.string().nullish(),
   categories: z.array(z.string()).nullish(), // Outlook category names; their colours aren't given
+  summary: z.string().nullish(), // the body's opening text: on a Teams meeting, its joining details
+  location: z.string().nullish(), // "Microsoft Teams Meeting" on a Teams meeting
 });
 export type EventRow = z.infer<typeof EventRow>;
 
@@ -141,5 +143,7 @@ export const EventDetail = z.looseObject({
   lastModifiedDateTime: z.string().nullish(),
   webLink: z.string().nullish(),
   categories: z.array(z.string()).nullish(),
+  onlineMeeting: z.looseObject({ joinUrl: z.string().nullish() }).nullish(),
+  location: z.looseObject({ displayName: z.string().nullish() }).nullish(),
 });
 export type EventDetail = z.infer<typeof EventDetail>;

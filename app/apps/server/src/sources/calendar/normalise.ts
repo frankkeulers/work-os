@@ -10,7 +10,8 @@ import { wallToUtc, whenText } from './time';
 // one per organiser and subject, so a weekly series or a meeting sent again is one item, not one per
 // occurrence (search has no series ID, P0-12). Its messages are what happened: the invite, and each
 // time an event in it moved. The body keeps the agenda the organiser wrote; the Teams block under it
-// (join link, meeting ID, passcode) is cut, here and everywhere else.
+// (join link, meeting ID, passcode) is cut from the text. The join link alone is kept on the event,
+// so the week view can open the meeting in Teams.
 
 export const ITEM_PREFIX = 'calendar:';
 const FALLBACK_LINK = 'https://outlook.office.com/calendar/';
@@ -25,6 +26,18 @@ export function inviteBody(body: EventDetail['body']): string {
   const at = text.search(JOIN_BLOCK_RE);
   const cut = (at < 0 ? text : text.slice(0, at)).trim();
   return cut.length > INVITE_MAX_CHARS ? `${cut.slice(0, INVITE_MAX_CHARS - 1)}…` : cut;
+}
+
+/** A Teams join link: the classic meetup-join form, or the newer /meet/ one. Not "Meeting options". */
+const TEAMS_JOIN_RE = /https:\/\/teams\.(?:microsoft|live)\.com\/(?:l\/meetup-join|meet)\/[^\s<>"'\])]+/i;
+
+/** The first Teams join link in these texts, in order: a join URL as given, a body or a summary. */
+export function teamsJoinUrl(...texts: (string | null | undefined)[]): string | undefined {
+  for (const t of texts) {
+    const found = t?.replace(/&amp;/g, '&').match(TEAMS_JOIN_RE)?.[0];
+    if (found) return found;
+  }
+  return undefined;
 }
 
 const lower = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
@@ -67,6 +80,8 @@ export function snapFromRow(r: EventRow, me: MeInfo): SnapEvent | undefined {
     ...(r.showAs && { showAs: r.showAs }),
     ...(https(r.webLink) && { link: r.webLink! }),
     ...(categoriesOf(r.categories) && { categories: categoriesOf(r.categories) }),
+    ...(teamsJoinUrl(r.summary) && { joinUrl: teamsJoinUrl(r.summary) }),
+    ...(/microsoft teams/i.test(r.location ?? '') && { teams: true }),
   };
 }
 
@@ -82,6 +97,8 @@ export function snapFromDetail(e: EventDetail, base: SnapEvent | undefined, me: 
   const end = wallToUtc(e.end);
   if (!start || !end) return base;
   const organizer: SnapPerson | undefined = e.organizer ? { ...(e.organizer.name && { name: e.organizer.name }), ...(e.organizer.address && { address: lower(e.organizer.address) }) } : base?.organizer;
+  // Search's summary is the body's first 255 characters, so an agenda above the Teams block hides it.
+  const joinUrl = teamsJoinUrl(e.onlineMeeting?.joinUrl, e.body?.content) ?? base?.joinUrl;
   return {
     ...base,
     id: e.id,
@@ -97,11 +114,18 @@ export function snapFromDetail(e: EventDetail, base: SnapEvent | undefined, me: 
     ...(https(e.webLink) && { link: e.webLink! }),
     response: responseOf(e, me),
     ...(isoOf(e.createdDateTime) && { created: isoOf(e.createdDateTime) }),
+    ...(joinUrl && { joinUrl }),
   };
 }
 
 /** Frank still has to answer it: invited by someone else, not cancelled, not started, unanswered. */
 export const wantsAnswer = (e: SnapEvent, now: Date) => !e.isOrganizer && !e.cancelled && Date.parse(e.start) > now.getTime() && (e.response === 'none' || e.response === 'notResponded');
+
+/**
+ * Worth reading for its join link: a Teams meeting not over whose link search's summary didn't
+ * show (an agenda above the Teams block), not read since search last changed it. Frank's own too.
+ */
+export const wantsJoinLink = (e: SnapEvent, now: Date) => !!e.teams && !e.joinUrl && !e.joinRead && !e.cancelled && Date.parse(e.end) > now.getTime();
 
 /** Worth reading to learn Frank's answer: someone else's meeting with people on it, still to come. */
 export const isCandidate = (e: SnapEvent, now: Date) => !e.isOrganizer && !e.cancelled && e.attendees.length > 0 && Date.parse(e.start) > now.getTime();
@@ -178,7 +202,7 @@ export function inviteItem(itemId: string, events: SnapEvent[], messages: Messag
     meeting: {
       start: first.start,
       end: first.end,
-      calendar: { eventId: first.id, title: first.subject || '(no title)', ...(organizer && { organizer }), invitees, ...(https(first.link) && { link: first.link }), ...(first.categories && { categories: first.categories }) },
+      calendar: { eventId: first.id, title: first.subject || '(no title)', ...(organizer && { organizer }), invitees, ...(https(first.link) && { link: first.link }), ...(first.categories && { categories: first.categories }), ...(first.joinUrl && { joinUrl: first.joinUrl }) },
     },
   };
 }

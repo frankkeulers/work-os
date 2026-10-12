@@ -102,6 +102,8 @@ export class FakeMs365 implements Ms365Api {
       isOrganizer: (e.organizer?.address ?? '').toLowerCase() === me,
       webLink: e.webLink,
       categories: e.categories ?? [],
+      summary: summaryOf(e.body?.content),
+      location: e.location?.displayName ?? null,
     };
   }
 
@@ -211,6 +213,8 @@ export function fakeEvent(o: {
   allDay?: boolean;
   created?: string;
   categories?: string[];
+  /** A Teams meeting's join link, as a read gives it; its location then says Microsoft Teams. */
+  joinUrl?: string;
 }): EventDetail {
   const id = o.id ?? `AAMkFAKEEVENT${String(++eventSeq).padStart(4, '0')}`;
   return {
@@ -227,5 +231,12 @@ export function fakeEvent(o: {
     lastModifiedDateTime: o.created ?? o.start,
     webLink: `https://outlook.office365.com/owa/?itemid=${encodeURIComponent(id)}&exvsurl=1&path=/calendar/item`,
     categories: o.categories ?? [],
+    ...(o.joinUrl && { onlineMeeting: { joinUrl: o.joinUrl }, location: { displayName: 'Microsoft Teams Meeting' } }),
   };
+}
+
+/** Search's summary of a body: its text, links' words only, cut at 255 characters as Graph's preview is. */
+function summaryOf(html: string | null | undefined): string | null {
+  const text = (html ?? '').replace(/<\/p>|<br\s*\/?>/g, '\r\n').replace(/<[^>]+>/g, '').trim();
+  return text ? text.slice(0, 255) : null;
 }

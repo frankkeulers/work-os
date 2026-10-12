@@ -67,9 +67,11 @@ test('the agenda shows today’s meetings above the inbox, the one on now picked
   await expect(meeting(page, 'Product stand-up')).toHaveAttribute('data-phase', 'past');
   await expect(meeting(page, 'MVI V2 launch readiness')).toHaveAttribute('data-phase', 'now');
   await expect(meeting(page, 'Product weekly')).toHaveAttribute('data-phase', 'later');
+  // A Teams meeting joins in the browser, not the Teams app; one that has ended opens in Outlook.
   const link = meeting(page, 'renewal call').getByRole('link');
-  await expect(link).toHaveAttribute('href', /^https:\/\/outlook\.office365\.com\/owa\/\?itemid=AAMkMOCKRENEWAL/);
+  await expect(link).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#\/l\/meetup-join\/19:meeting_AAMkMOCKRENEWAL@thread\.v2\//);
   await expect(link).toHaveAttribute('target', '_blank');
+  await expect(meeting(page, 'Product stand-up').getByRole('link')).toHaveAttribute('href', /^https:\/\/outlook\.office365\.com\/owa\/\?itemid=AAMkMOCKSTANDUP/);
   await dismissToasts(page);
   const panel = page.getByRole('complementary', { name: 'Item panel' });
   if (await panel.count()) await page.keyboard.press('Escape'); // the list, not the first item, under the strip
@@ -139,7 +141,7 @@ test('the sidebar shows a meeting from five minutes before it starts until it en
   await expect(cue('[Customer] renewal call')).toHaveAttribute('data-phase', 'next');
   await expect(cue('[Customer] renewal call')).toContainText(/Next ·\s*in [34] min/); // the mock clock runs on in real time
   await expect(cue('[Customer] renewal call')).not.toHaveAttribute('data-imminent');
-  await expect(cue('[Customer] renewal call').getByRole('link')).toHaveAttribute('href', /itemid=AAMkMOCKRENEWAL/);
+  await expect(cue('[Customer] renewal call').getByRole('link')).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#\/l\/meetup-join\/19:meeting_AAMkMOCKRENEWAL@/);
   await expect(meeting(page, 'renewal call')).toHaveAttribute('data-soon', '');
   await expect(meeting(page, 'renewal call')).toContainText(/in [34] min/);
   await expect(meeting(page, 'Product weekly')).not.toHaveAttribute('data-soon');
@@ -288,6 +290,8 @@ test('an invite you haven’t answered is an item to answer in Outlook, with not
   await expect(panel.getByRole('heading', { level: 2 })).toHaveText(/^Matt invited you to the Q4 roadmap review/);
   await expect(panel.getByText('Accept or decline the invitation')).toBeVisible();
   await expect(panel.getByRole('button', { name: 'Respond in Outlook' })).toBeVisible();
+  // A Teams invite can be joined from here too, in the browser.
+  await expect(panel.getByRole('link', { name: 'Join in Teams' })).toHaveAttribute('href', /^https:\/\/teams\.microsoft\.com\/v2\/\?meetingjoin=true#\/l\/meetup-join\/19:meeting_AAMkMOCKQ4@/);
   await expect(panel.getByRole('region', { name: /File it|Also file/ })).toHaveCount(0);
   await expect(panel.getByRole('heading', { name: 'The invitation' })).toBeVisible();
   await expect(panel.getByTestId('calendar-categories').getByRole('listitem')).toHaveText(['Planning', 'Product']);

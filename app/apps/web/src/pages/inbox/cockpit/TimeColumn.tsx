@@ -2,6 +2,7 @@ import { OUTLOOK_COLORS, type AgendaEvent, type AgendaView } from '@work-os/shar
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type ItemSummary } from '../../../api';
+import { BrandIcon } from '../../../components/BrandIcon';
 import { Icon } from '../../../components/icons';
 import { IconButton, Segmented, cx } from '../../../components/ui';
 import { useResizable } from '../../../components/useResizable';
@@ -9,14 +10,15 @@ import { onTopics, useApiQuery } from '../../../hooks/useApiQuery';
 import { useNow } from '../../../hooks/useNow';
 import { dayEvents, type AgendaDay } from '../../../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime } from '../../../lib/format';
+import { OUTLOOK_CALENDAR, meetingLink } from '../../../lib/links';
 import { TIME_WIDTH, usePrefs } from '../../../store/prefs';
 import { dayPins, dayStart, dueBefore, hourHeight, minuteOf, nextMeeting, placeMeetings, shortTitle, timelineSpan, workSpan, type Pin, type PinTone } from '../../../lib/timeline';
 
 // The cockpit's time column (CK-3.4–3.6): the clock, the next meeting and what's due before it, and
-// the day as a timeline of meetings and deadline pins. Meetings open in Outlook; pins open the item.
+// the day as a timeline of meetings and deadline pins. A Teams meeting joins in the browser until it
+// ends; other meetings open in Outlook; pins open the item. A meeting with Outlook categories has the
+// first one's colour down its edge and a light shade of it behind, as on the agenda strip.
 // It folds to a rail, and its right edge drags to widen it; both are kept in prefs.
-
-const OUTLOOK_CALENDAR = 'https://outlook.office.com/calendar/';
 
 /** Where the timeline's lanes sit: hour labels, then meetings, then pins. The meetings take 60% of
  * the width after the labels (186 px at the default width) and the pins the rest, as the column widens. */
@@ -33,6 +35,9 @@ const PIN_TONE: Record<PinTone, { pin: string; dot: string }> = {
 };
 
 const categoryHex = (e: AgendaEvent) => (e.categories?.length ? OUTLOOK_COLORS[e.categories[0].color] : undefined);
+
+/** A meeting's shade of its category's colour, mixed into the surface so it stays dark in the dark theme; fainter once over. */
+const tint = (hex: string | undefined, past: boolean) => (hex ? { background: `color-mix(in srgb, ${hex} ${past ? 8 : 14}%, var(--surface))`, borderColor: `color-mix(in srgb, ${hex} ${past ? 25 : 45}%, var(--surface))` } : undefined);
 
 /** "Matt M. · MVI V2 go/no-go": who it's from and what's due. */
 const dueName = (i: ItemSummary) => `${i.title} · ${shortTitle(i)}`;
@@ -57,18 +62,30 @@ function NextMeetingCard({ v, items, now, onOpenItem }: { v: AgendaView; items: 
   const e = next.event;
   const due = dueBefore(items, e.start);
   const head = next.phase === 'now' ? `NOW · UNTIL ${fmtTime(e.end)}` : `NEXT · ${fmtIn(e.start, now).toUpperCase()}`;
+  const go = meetingLink(e, now);
   return (
-    // The whole card opens the meeting in Outlook; what's due before it opens the item, above that link.
+    // The whole card joins the meeting in Teams, or opens it in Outlook; what's due before it opens the
+    // item, and a Teams meeting's Outlook link sits beside the label, both above the card's link.
     <div data-testid="next-meeting" data-phase={next.phase} data-imminent={next.imminent || undefined} className={cx('relative rounded-[10px] border px-4 py-3.5', next.imminent ? 'border-amber-line bg-amber-wash' : 'border-accent-line bg-accent-wash')}>
-      <div className={cx('flex justify-between text-xs font-semibold tracking-[0.04em]', next.imminent ? 'text-amber-fg' : 'text-accent-ink')}>
+      <div className={cx('flex justify-between gap-2 text-xs font-semibold tracking-[0.04em]', next.imminent ? 'text-amber-fg' : 'text-accent-ink')}>
         <span>{head}</span>
-        <span className="font-medium tracking-normal">Open in Outlook</span>
+        {go.teams ? (
+          <span className="flex items-center gap-1.5 font-medium tracking-normal">
+            <BrandIcon brand="teams" size={14} decorative /> Join in Teams ·
+            <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" data-open-outlook className="relative z-[1] !text-inherit">
+              Outlook
+            </a>
+          </span>
+        ) : (
+          <span className="font-medium tracking-normal">Open in Outlook</span>
+        )}
       </div>
       <a
-        href={e.link ?? OUTLOOK_CALENDAR}
+        href={go.href}
         target="_blank"
         rel="noreferrer"
-        title={`${e.title}${e.organizer ? ` · ${e.organizer}` : ''}: open in Outlook`}
+        data-join-teams={go.teams || undefined}
+        title={`${e.title}${e.organizer ? ` · ${e.organizer}` : ''}: ${go.teams ? 'join in Teams' : 'open in Outlook'}`}
         className="mt-1 block truncate text-glance-m !text-ink no-underline after:absolute after:inset-0 after:rounded-[10px] hover:underline"
       >
         {fmtTime(e.start)} {e.title}
@@ -157,8 +174,9 @@ function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView
       {allDay.length > 0 && (
         <ul aria-label="All day" className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {allDay.map((e) => (
-            <li key={e.id} data-timeline-event={e.id}>
-              <a href={e.link ?? OUTLOOK_CALENDAR} target="_blank" rel="noreferrer" className="inline-flex min-h-6 items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2 text-xs !text-ink-2 no-underline hover:underline">
+            <li key={e.id} data-timeline-event={e.id} data-category-color={e.categories?.[0]?.color}>
+              <a href={meetingLink(e, now).href} target="_blank" rel="noreferrer" className="inline-flex min-h-6 items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2 text-xs !text-ink-2 no-underline hover:underline" style={tint(categoryHex(e), false)}>
+                {meetingLink(e, now).teams && <BrandIcon brand="teams" size={12} decorative />}
                 <span className="font-semibold">All day</span> {e.title}
               </a>
             </li>
@@ -181,23 +199,28 @@ function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView
               const h = Math.max(MEETING_MIN_HEIGHT, top(m.to) - top(m.from) - 2);
               // A short meeting is one line, so its time and title show however short the block.
               const short = h < 34;
+              const go = meetingLink(m.event, now);
               return (
-                <li key={m.event.id} data-timeline-event={m.event.id} data-past={m.past || undefined} className="absolute" style={{ top: top(m.from), height: h, left: MEETINGS_LEFT + m.col * w, width: w - (m.cols > 1 ? 2 : 0) }}>
+                <li key={m.event.id} data-timeline-event={m.event.id} data-past={m.past || undefined} data-category-color={m.event.categories?.[0]?.color} className="absolute" style={{ top: top(m.from), height: h, left: MEETINGS_LEFT + m.col * w, width: w - (m.cols > 1 ? 2 : 0) }}>
                   <a
-                    href={m.event.link ?? OUTLOOK_CALENDAR}
+                    href={go.href}
                     target="_blank"
                     rel="noreferrer"
-                    title={`${fmtTime(m.event.start)}–${fmtTime(m.event.end)} ${m.event.title}${named ? ` · ${named}` : ''}: open in Outlook`}
+                    data-join-teams={go.teams || undefined}
+                    title={`${fmtTime(m.event.start)}–${fmtTime(m.event.end)} ${m.event.title}${named ? ` · ${named}` : ''}: ${go.teams ? 'join in Teams' : 'open in Outlook'}`}
                     className={cx(
                       'flex h-full gap-1.5 overflow-hidden rounded-md border px-2 text-xs leading-[15px] no-underline hover:underline',
                       short ? 'items-center py-0' : 'py-[3px]',
                       m.past ? 'border-line bg-tray !text-faint' : 'border-accent-line bg-surface !text-ink',
+                      hex && m.past && '!text-muted',
                     )}
+                    style={tint(hex, m.past)}
                   >
-                    <span aria-hidden className="w-[3px] shrink-0 rounded-sm" style={{ background: hex ?? 'var(--gray-mid)' }} />
-                    <span className={cx('min-w-0', short && 'truncate')}>
+                    <span aria-hidden className="w-[3px] shrink-0 self-stretch rounded-sm" style={{ background: hex ?? 'var(--gray-mid)' }} />
+                    <span className={cx('min-w-0 flex-1', short && 'truncate')}>
                       <b className="font-semibold">{fmtTime(m.event.start)}</b> {m.event.title}
                     </span>
+                    {go.teams && <BrandIcon brand="teams" size={13} decorative className={cx('shrink-0', !short && 'mt-px')} />}
                   </a>
                 </li>
               );

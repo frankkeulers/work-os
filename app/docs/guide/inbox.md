@@ -36,11 +36,15 @@ described below; nothing is lost.
   not shown as Free) that hasn't ended: **NEXT · IN 12 MIN**, amber in the last two minutes, or
   **NOW · UNTIL 14:30** while it's on. Under it, **Due before it** lists what in Needs you is due
   by the time it starts, so you can clear it in the gap. **+1 at the same time** means another
-  meeting overlaps; point at it to see which. Click the card to open the meeting in Outlook. With
-  no meetings left, it says so and shows tomorrow's first.
+  meeting overlaps; point at it to see which. Click the card to join a Teams meeting in your
+  browser (**Join in Teams**), or to open any other meeting in Outlook; a Teams meeting's card has
+  its own **Outlook** link beside the label. With no meetings left, it says so and shows
+  tomorrow's first.
 - **The timeline.** Your work hours, widened to fit the day's meetings and deadlines. Meetings sit
-  on the left with their Outlook category colour; those that are over are greyed. A red line with
-  the time marks now. All-day events are one line above.
+  on the left with their Outlook category colour down the edge and a light shade of it behind;
+  those that are over are paler. A Teams meeting shows the Teams mark: click it to join in your
+  browser. Other meetings, and any that are over, open in Outlook. A red line with the time marks
+  now. All-day events are one line above.
 - **Deadline pins**, to the right of the meetings: one for each Needs you item due today, at its
   time, with a few words of what's due. Orange within about four hours, blue later today. A missed
   deadline turns red, says **Overdue** and sits at the red line. Pins within 30 minutes of each
@@ -48,8 +52,8 @@ described below; nothing is lost.
   item.
 - **Tomorrow** (or `t`) shows tomorrow's meetings, with pins for This week items due then.
 - **Fold it away** with the arrow at the right of its header: it becomes a narrow rail with the
-  clock, and the sidebar shows your next meeting again in its last few minutes. The arrow on the
-  rail opens it. **Drag its right edge** to make it wider or narrower (360 to 600 px; with the
+  clock. The arrow on the rail opens it. Either way, the sidebar shows a meeting that's on now or
+  about to start, as on every other page. **Drag its right edge** to make it wider or narrower (360 to 600 px; with the
   edge focused, the arrow keys move it too), and double-click the edge to put it back to 400 px.
   Both choices are kept in this browser.
 
@@ -115,7 +119,7 @@ A new arrival carries a blue **New** dot until you have looked at it: two second
 the window is in front, or opening it. The dot also goes after 30 minutes.
 
 With [Outlook Calendar](outlook.md) on, in a window narrower than 1600 px, a strip above the
-groups shows today's meetings, the one on now picked out, and **Tomorrow** shows the next day's. A meeting opens in Outlook. An
+groups shows today's meetings, the one on now picked out, and **Tomorrow** shows the next day's. A Teams meeting joins in your browser; any other meeting opens in Outlook. An
 invite you haven't answered is also an item, which closes itself once you answer it in Outlook;
 see [Invites](outlook.md#invites).
 
@@ -299,10 +303,12 @@ retention period, an item keeps its title and link but its text is gone ("text e
 - **Outlook** lists mail by day, with each email's subject above its summary.
 - **Wispr Flow** lists meeting notes by week.
 - **Outlook Calendar** shows the week, Monday to Sunday. Cancelled and declined meetings are
-  struck through rather than left out. A meeting marked **Notes** opens its Wispr Flow notes, and
-  one marked **Invite** opens its invite. Any other meeting opens a card with who's invited and a
-  link to Outlook. The arrows move a week at a time. The calendar keeps this week and the next two,
-  so earlier weeks are empty.
+  struck through rather than left out. A meeting with an Outlook category is shaded in that
+  category's colour (the first one, when it has several). A meeting marked **Notes** opens its Wispr
+  Flow notes, and one marked **Invite** opens its invite. Any other meeting opens a card with who's
+  invited, **Join in Teams** for a Teams meeting that isn't over, and a link to Outlook. The
+  arrows move a week at a time. The calendar keeps this week and the next two, so earlier weeks
+  are empty.
 
 Each row says where triage put it: its lane, **Done by you**, or **Filed · Confluence**. The chips
 under the top bar show or hide each state. Done is hidden to begin with: click **Done** to bring
