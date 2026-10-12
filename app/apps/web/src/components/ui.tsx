@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode, type Ref } from 'react';
 import { Icon, type IconName } from './icons';
 import { toast } from '../store/toasts';
 
@@ -301,6 +301,19 @@ export function usePopover() {
   return { open, setOpen, close, trigger, panel };
 }
 
+/** The left and right edges a popover must stay within: the window's, narrowed by any ancestor that clips. */
+function clipBounds(el: HTMLElement): { left: number; right: number } {
+  let left = 0;
+  let right = document.documentElement.clientWidth;
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    if (getComputedStyle(p).overflowX === 'visible') continue;
+    const r = p.getBoundingClientRect();
+    left = Math.max(left, r.left);
+    right = Math.min(right, r.right);
+  }
+  return { left, right };
+}
+
 export function PopoverPanel({
   panelRef,
   children,
@@ -310,7 +323,8 @@ export function PopoverPanel({
   align = 'right',
   side = 'bottom',
 }: {
-  panelRef: Ref<HTMLDivElement>;
+  /** usePopover's `panel`. */
+  panelRef: (el: HTMLDivElement | null) => void;
   children: ReactNode;
   className?: string;
   role?: 'dialog' | 'menu';
@@ -318,9 +332,21 @@ export function PopoverPanel({
   align?: 'left' | 'right';
   side?: 'top' | 'bottom';
 }) {
+  // `align` is a preference: a panel that would run past the window, or past the scrolling panel
+  // that clips it, opens the other way instead. Measured as it mounts, before it is painted.
+  const ref = useCallback(
+    (el: HTMLDivElement | null) => {
+      panelRef(el);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const { left, right } = clipBounds(el);
+      if (align === 'left' ? r.right > right : r.left < left) Object.assign(el.style, align === 'left' ? { left: 'auto', right: '0' } : { left: '0', right: 'auto' });
+    },
+    [panelRef, align],
+  );
   return (
     <div
-      ref={panelRef}
+      ref={ref}
       role={role}
       aria-label={label}
       className={cx(

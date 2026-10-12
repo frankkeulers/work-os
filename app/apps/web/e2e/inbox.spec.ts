@@ -369,6 +369,29 @@ test('the Next step card holds the filing: its options, the draft’s progress a
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 });
 
+test('a menu beside a button at the right edge opens towards the left, inside the panel and the window', async ({ page }) => {
+  await sortBy(page, 'Newest first');
+  await group(page, 'Needs you').locator('[data-row]').first().click();
+  const options = itemPanel(page).getByRole('region', { name: 'Next step' }).getByRole('region', { name: 'File it' });
+  // The to-do's split button sits at the right of its row; its menu would run off to the right.
+  await options.getByRole('button', { name: 'Add with additional information' }).click();
+  const menu = page.getByRole('menu', { name: 'Draft options' });
+  await expect(menu).toBeVisible();
+  const m = (await menu.boundingBox())!;
+  const p = (await itemPanel(page).boundingBox())!;
+  const width = await page.evaluate(() => document.documentElement.clientWidth);
+  expect(m.x).toBeGreaterThanOrEqual(p.x);
+  expect(m.x + m.width).toBeLessThanOrEqual(Math.min(p.x + p.width, width));
+  await page.screenshot({ path: join(APP, 'screenshots/popover-edge-light.png') });
+  // A menu with room to its right still opens that way: the Confluence one, further left.
+  await page.keyboard.press('Escape');
+  await options.getByRole('button', { name: 'Draft with additional information' }).first().click();
+  const l = (await page.getByRole('menu', { name: 'Draft options' }).boundingBox())!;
+  const b = (await options.getByRole('button', { name: 'Draft Confluence entry' }).boundingBox())!;
+  expect(Math.abs(l.x - b.x)).toBeLessThan(1);
+  expect(l.x + l.width).toBeLessThanOrEqual(Math.min(p.x + p.width, width));
+});
+
 test('drafts with additional information from the menu beside a draft button, and re-drafts with it (FR-9.12)', async ({ page }) => {
   await sortBy(page, 'Newest first');
   await group(page, 'Needs you').locator('[data-row]').first().click();
