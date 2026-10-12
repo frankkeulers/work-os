@@ -71,6 +71,7 @@ import {
   type ActionType,
   type BudgetState,
   type CorrectionInput,
+  type FilingFeedbackBody,
   type DependencyHealth,
   type Criterion,
   type DraftProgress,
@@ -1091,6 +1092,17 @@ export class MockServer implements WorkOsApi, MockControls {
     rec.todoDismissed = rec.decision.itemRevision;
     this.event('todo.dismissed', { revision: rec.decision.itemRevision }, { itemId });
     this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+  }
+
+  async filingFeedback(itemId: string, body: FilingFeedbackBody) {
+    const rec = this.rec(itemId);
+    const eff = effectiveTriage(rec.decision, rec.correction);
+    const on = (t: 'confluence_entry' | 'vault_note') => (!body.type || body.type === t) && !!eff?.[t === 'confluence_entry' ? 'confluence' : 'vault'];
+    if (!eff || (!on('confluence_entry') && !on('vault_note'))) throw new ApiError('conflict', body.type ? 'This item isn’t suggested for that filing.' : 'This item has nothing to file.');
+    if (body.signal === 'not_for_filing') await this.correctTriage(itemId, { attention: eff.attention, confluence: eff.confluence && !on('confluence_entry'), vault: eff.vault && !on('vault_note') });
+    else await this.gate(COMMAND_MS);
+    this.s.filingLabelCount = (this.s.filingLabelCount ?? 0) + 1;
+    return { labelCount: this.s.filingLabelCount };
   }
 
   async retryTriage(itemId: string) {

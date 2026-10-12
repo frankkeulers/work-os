@@ -142,6 +142,8 @@ export interface MockState {
   checkedAt: string;
   labelCount: number;
   correctionCount: number;
+  /** Items in labels/filing.jsonl (FR-15.7). */
+  filingLabelCount?: number;
   source: {
     status: SlackStatus;
     lastPollAt?: string;

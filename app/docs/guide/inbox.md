@@ -374,6 +374,27 @@ corrections or while new messages wait to be triaged. A later correction replace
 The eval needs labels to run. Aim for about 30 before reading much into it, a mix of corrections
 and confirmations, from both Slack and Outlook if you use both.
 
+### Feedback on filing
+
+Your filing policy decides what goes to To file, what is drafted ahead and what is ready to
+approve. **Filing…** beside the decision tells it where it was wrong:
+
+- **Not for filing** takes the item out of To file, as a correction does.
+- Per filing (**Vault note** or **Confluence entry**, with the rule that applied):
+  **Don't draft items like this ahead**, and **Should** or **Shouldn't be ready to approve**.
+  These leave the item where it is; they only teach the policy.
+- **Should be filed to the vault** or **to Confluence** for a filing triage didn't suggest.
+
+What you do counts too, as a weaker signal: approving a draft as it was says it could have been
+ready to approve; approving it after an edit says drafting ahead was right but it wasn't ready;
+discarding one (not re-drafting it) says it wasn't worth drafting ahead; **Done** on an item in To
+file with nothing filed says it didn't belong there; adding or dismissing a suggested to-do says
+whether it was right. A correction that turns a filing on or off, and **Triage was right**, count
+as your word. Where you've said something yourself, it wins over what your actions suggest.
+
+These are kept, with the thread, as filing labels. Nothing changes the policy on its own: the
+filing eval scores the policy against them, and a proposed change waits for you to apply it.
+
 ## Keeping it open
 
 The cockpit is made to stay open on your screen all day.

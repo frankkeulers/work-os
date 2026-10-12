@@ -2,6 +2,7 @@ import type { CategoryTag } from './categories';
 import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type { FilingPlans } from './policy';
+import type { FilingFeedbackBody } from './requests';
 import type { DoneBy } from './projection/state';
 import type {
   Action,
@@ -619,6 +620,8 @@ export interface WorkOsApi {
   requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean }): Promise<Action>;
   /** E14 (FR-15.6): Frank doesn't want the to-do the filing policy suggested. */
   dismissTodo(itemId: string): Promise<void>;
+  /** E14 (FR-15.7): Frank's word on the filing policy's call. Answers with the items in the filing labels. */
+  filingFeedback(itemId: string, body: FilingFeedbackBody): Promise<{ labelCount: number }>;
   cancelDraft(actionId: string): Promise<void>;
   /** `part`: which note of a draft that files into several (FR-9.7). */
   saveDraftEdit(actionId: string, content: string, part?: number): Promise<void>;

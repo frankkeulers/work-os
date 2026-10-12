@@ -41,6 +41,17 @@ describe('inbox commands', () => {
     expect(server.getEvents()[0].type).toBe('triage.corrected');
   });
 
+  it('takes filing feedback: Not for filing corrects the item out of To file, the rest only count (FR-15.7)', async () => {
+    server.applyFilingPolicy();
+    expect(await lane('f1')).toBe('file');
+    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_ready', type: 'vault_note' }))).toEqual({ labelCount: 1 });
+    expect(await lane('f1')).toBe('file');
+    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_for_filing' }))).toEqual({ labelCount: 2 });
+    expect(await lane('f1')).not.toBe('file');
+    const err = (await settle(server.filingFeedback(id('f1'), { signal: 'no_predraft' }).catch((e) => e))) as ApiError;
+    expect(err).toMatchObject({ status: 409, message: 'This item has nothing to file.' });
+  });
+
   it('drafts Confluence for a thread that mentions people (FR-10.1, amended)', async () => {
     const a = await settle(server.requestDraft(id('t4'), 'confluence_entry'));
     expect(a).toMatchObject({ type: 'confluence_entry', status: 'drafting' });

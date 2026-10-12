@@ -1043,12 +1043,12 @@ The triage prompt (v10) keeps the fundamentals: what Confluence and the vault ar
 
 **FR-15.6 To-do suggestions.** *Amends FR-9.11 ("Triage never suggests a to-do").* When a decision has a `todo`, the item panel shows **Add to-do: {step}** with `a`, which builds the to-do from that step as FR-9.9 does and opens it for review. A × dismisses the suggestion for this revision. Nothing is added to Tasks without Frank's approval, as before. Both answers are labels (FR-15.7). Settings › Learning can turn suggestions off. The **Add to-do** button stays as it is.
 
-**FR-15.7 Filing labels.** `labels/filing.jsonl` holds one line per signal: the item, revision and source; `origin` (`explicit` or `implicit`); `signal`; `label`, which sets some of `toFile`, `predraft`, `ready` and `todo`; `was` (the decision's filing fields, `policyVersion` and rules); and the thread as the model saw it, as in `labels/triage.jsonl` (FR-6.2). For each item and field, the latest line wins. Labels follow the retention rule for `labels/triage.jsonl`.
+**FR-15.7 Filing labels.** `labels/filing.jsonl` holds one line per signal: the item, revision and source; `origin` (`explicit` or `implicit`); `signal`; `label`, which sets some of `toFile`, `predraft` and `ready` per filing (`confluence`, `vault`), and `todo`; what a field implies is filled in (`ready` implies `predraft` implies `toFile`, and the reverse for false); `was` (the decision's filing fields, `policyVersion` and rules); and the thread as the model saw it, as in `labels/triage.jsonl` (FR-6.2). For each item and field, the latest explicit line wins, else the latest implicit one. Labels follow the retention rule for `labels/triage.jsonl`.
 
-Explicit signals come from the item panel's **Filing** menu, next to Correct triage:
+Explicit signals come from the item panel's **Filing…** menu beside the decision, per filing where it has two:
 - **Not for filing:** `toFile` false. It also corrects the item out of To file (FR-6.2).
-- **Should have been filed:** `toFile` true, as the existing correction does.
-- **Don't pre-draft this kind:** `predraft` false.
+- **Should be filed to the vault / to Confluence:** `toFile` true, as a correction. Any correction that turns a filing on or off labels it the same way.
+- **Don't draft items like this ahead:** `predraft` false.
 - **Should be ready to approve** and **Shouldn't be ready:** `ready` true or false.
 
 **Triage was right** (`y`) also labels the filing fields shown. Implicit signals are written after the event that causes them and never fail the click:

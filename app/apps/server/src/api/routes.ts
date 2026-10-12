@@ -1,4 +1,4 @@
-import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, ItemIds, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -67,6 +67,8 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     await d.settleLabels?.label(d, before, type === 'item.done' ? 'done' : 'reopened').catch(() => 0); // a label is never worth failing the click
     // Done on a topic that looks finished: the suggestion was right (CK-2.10).
     if (type === 'item.done') for (const it of before) if (it.looksFinished) await d.finishLabels?.labelFinish(d, it, true).catch(() => false);
+    // Done from To file with nothing filed: it didn't belong there (FR-15.7).
+    if (type === 'item.done') await d.filingFeedback?.doneUnfiled(before).catch(() => 0);
   };
   const many = (type: 'item.done' | 'item.reopened') => async (req: { body: unknown }) => {
     const body = ItemIds.safeParse(req.body);
@@ -172,7 +174,26 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const it = d.store.projection.items[id];
     if (!it.decision?.todo) throw new HttpError('conflict', 'No to-do is suggested for this item.');
     await d.store.append({ type: 'todo.dismissed', itemId: id, data: { revision: it.decision.itemRevision } });
+    await d.filingFeedback?.todo(id, false).catch(() => false);
     return reply.code(204).send();
+  });
+
+  // E14 (FR-15.7): Frank's word on the filing policy's call. "Not for filing" is a correction that
+  // turns the filings off, so the item leaves To file; the rest only teach the policy.
+  app.post<{ Params: { id: string } }>('/api/items/:id/filing-feedback', async (req, reply) => {
+    const id = item(req.params.id);
+    const f = d.filingFeedback;
+    if (!f) throw new HttpError('unavailable', 'Filing feedback is not available.');
+    const body = FilingFeedbackBody.safeParse(req.body);
+    if (!body.success) throw new HttpError('validation', 'Send { signal: "not_for_filing" | "no_predraft" | "should_be_ready" | "not_ready" }, and { type } for one filing.');
+    if (body.data.signal !== 'not_for_filing') return reply.headers(noStore).send(await f.feedback(id, body.data));
+    if (!d.correct) throw new HttpError('unavailable', 'Corrections are not available.');
+    const it = d.store.projection.items[id];
+    const eff = effectiveTriage(it.decision, it.correction);
+    const off = (t: 'confluence_entry' | 'vault_note') => !body.data.type || body.data.type === t;
+    if (!eff || (!eff.confluence && !eff.vault)) throw new HttpError('conflict', 'This item has nothing to file.');
+    await d.correct(id, { attention: eff.attention, confluence: eff.confluence && !off('confluence_entry'), vault: eff.vault && !off('vault_note') });
+    return reply.headers(noStore).send({ labelCount: f.counts.labels });
   });
 
   // Actions (FR-9.x): drafted in the background, written by the outbox after approval.

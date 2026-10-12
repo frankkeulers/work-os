@@ -69,6 +69,7 @@ import type { Ms365Link } from '../sources/ms365/link';
 import type { WisprLink } from '../sources/wispr/link';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
+import type { FilingFeedback } from '../pipeline/filingFeedback';
 import type { LabelStore } from '../store/labels';
 import type { SettleLabelStore } from '../store/settleLabels';
 import type { RecoveryReport, Store } from '../store/store';
@@ -105,6 +106,8 @@ export interface ViewDeps {
   settleLabels?: SettleLabelStore;
   /** Frank's answers to "Looks finished" (cockpit CK-2.10), for the finish eval. */
   finishLabels?: SettleLabelStore;
+  /** E14 (FR-15.7): feedback on the filing policy, labels/filing.jsonl. */
+  filingFeedback?: FilingFeedback;
   /** The settle check on an item's reply as it stands, for a Done no check saw (CK-2.6). */
   settleCheck?: (it: ItemState) => Promise<object | undefined>;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */

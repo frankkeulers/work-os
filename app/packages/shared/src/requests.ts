@@ -39,6 +39,16 @@ export const DraftRequest = z
   .refine((r) => !r.steps || r.type === 'todo', 'Only a to-do takes steps.')
   .refine((r) => !r.suggested || (r.type === 'todo' && !r.steps), 'Only a to-do can be the suggested one, and it takes no steps.');
 
+/**
+ * POST /api/items/:id/filing-feedback (E14, FR-15.7): Frank's word on the filing policy's call.
+ * "Not for filing" also takes the item out of To file; the others only teach the policy. Without
+ * `type`, it is about every filing the item has.
+ */
+export const FilingFeedbackSignal = z.enum(['not_for_filing', 'no_predraft', 'should_be_ready', 'not_ready']);
+export type FilingFeedbackSignal = z.infer<typeof FilingFeedbackSignal>;
+export const FilingFeedbackBody = z.object({ signal: FilingFeedbackSignal, type: z.enum(['confluence_entry', 'vault_note']).optional() }).strict();
+export type FilingFeedbackBody = z.infer<typeof FilingFeedbackBody>;
+
 /** POST /api/attention/dismiss (FR-11.5): an entry in the bell, by its key. */
 export const AttentionDismiss = z.object({ key: z.string().min(1).max(300) }).strict();
 

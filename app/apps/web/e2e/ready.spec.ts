@@ -111,3 +111,30 @@ test('J89 dismissing the suggested to-do keeps it gone (FR-15.6)', async ({ page
   await expect(panel(page).getByTestId('panel-pos')).toBeVisible();
   await expect(chip).toHaveCount(0);
 });
+
+test('J90 the Filing… menu: feedback for the policy, and Not for filing takes it out of To file (FR-15.7)', async ({ page }) => {
+  await withPolicy(page);
+  await row(page, F1).click();
+  await expect(panel(page).getByTestId('panel-pos')).toBeVisible();
+  const trigger = panel(page).getByRole('button', { name: 'Filing…' });
+  await trigger.click();
+  const menu = page.getByRole('menu', { name: 'Filing feedback' });
+  // f1 files to both: the vault note is ready (R1), the Confluence entry isn't drafted ahead (F1).
+  await expect(menu.getByRole('menuitem')).toHaveText(['Not for filing', 'Don’t draft items like this ahead', 'Shouldn’t be ready to approve', 'Should be ready to approve']);
+  await expect(menu.getByRole('group', { name: 'Vault note' }).getByRole('menuitem')).toHaveCount(2);
+  await expect(menu.getByRole('group', { name: 'Confluence entry' }).getByRole('menuitem')).toHaveText(['Should be ready to approve']);
+  await page.addStyleTag({ content: HIDE });
+  await menu.screenshot({ path: join(APP, 'screenshots/panel-filing-feedback-light.png'), animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'dark'));
+  await menu.screenshot({ path: join(APP, 'screenshots/panel-filing-feedback-dark.png'), animations: 'disabled' });
+  await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
+
+  await menu.getByRole('group', { name: 'Vault note' }).getByRole('menuitem', { name: 'Shouldn’t be ready to approve' }).click();
+  await expect(page.getByText(/Noted: not ready to approve · filing labels now 1/)).toBeVisible();
+  await expect(row(page, F1)).toContainText('Ready · R1'); // feedback teaches the policy; the item stays put
+
+  await trigger.click();
+  await page.getByRole('menu', { name: 'Filing feedback' }).getByRole('menuitem', { name: 'Not for filing' }).click();
+  await expect(page.getByText(/Taken out of To file · filing labels now 2/)).toBeVisible();
+  await expect(row(page, F1)).toHaveCount(0, { timeout: 10_000 });
+});

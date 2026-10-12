@@ -45,7 +45,7 @@ import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
 import { EarlierMessages } from './sources/slack/earlier';
 import { createServer, type WorkOsServer } from './server';
-import { budgetsOf, sourceSchedule, type Item, type SourceId } from '@work-os/shared';
+import { budgetsOf, filingSettings, sourceSchedule, type Item, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
 import { loadPromptFile, loadTriagePrompt, PROMPT_FILES } from './claude/promptFiles';
@@ -62,6 +62,8 @@ import { confirmTriage, correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
 import { LabelStore } from './store/labels';
 import { SettleLabelStore } from './store/settleLabels';
+import { FilingLabelStore } from './store/filingLabels';
+import { FilingFeedback } from './pipeline/filingFeedback';
 import { DraftStore } from './store/drafts';
 import { ActionService } from './actions/service';
 import type { Notice } from '@work-os/shared';
@@ -324,7 +326,11 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   lifecycle.onStop('settle-labels', () => settleLabels.close());
   const finishLabels = await SettleLabelStore.open(paths(config.dataDir).finishLabels);
   lifecycle.onStop('finish-labels', () => finishLabels.close());
-  const correctionDeps = { store, items, labels, now, me: triageDeps.me, keepLastMessages: () => settings.editable.settings.triage.keepLastMessages };
+  const filingLabels = await FilingLabelStore.open(paths(config.dataDir).filingLabels);
+  lifecycle.onStop('filing-labels', () => filingLabels.close());
+  const keepLastMessages = () => settings.editable.settings.triage.keepLastMessages;
+  const filingFeedback = new FilingFeedback({ store, items, labels: filingLabels, now, me: triageDeps.me, keepLastMessages, filing: () => filingSettings(settings.editable.settings) });
+  const correctionDeps = { store, items, labels, now, me: triageDeps.me, keepLastMessages, filing: filingFeedback };
   const correct = (id: string, input: Parameters<typeof correctTriage>[2]) => correctTriage(correctionDeps, id, input);
   const confirm = (id: string) => confirmTriage(correctionDeps, id);
   const evals = await Evals.open({
@@ -380,6 +386,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     routing: async () => (await loadPromptFile(config.dataDir, 'confluence-routing')).text,
     conventions: async () => (await loadPromptFile(config.dataDir, 'vault-conventions')).text,
     transcript: async (item, signal) => buildSources(settings.settings, factories).find((s) => s.id === item.source)?.transcript?.(item, signal),
+    feedback: filingFeedback,
     notify: (n) => publish(n),
     notifyDraft: (n) => void notifications.draft(n),
   });
@@ -477,6 +484,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     labels,
     settleLabels,
     finishLabels,
+    filingFeedback,
     settleCheck: async (it) => {
       const c = await settleCheckOf(settleDeps, it, settleDeps.me(it.source), settleDeps.config().settings.triage.keepLastMessages);
       return c?.messageId && c.revision === it.revision ? c.check : undefined;

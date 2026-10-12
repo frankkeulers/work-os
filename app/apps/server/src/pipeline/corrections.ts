@@ -3,6 +3,7 @@ import { HttpError } from '../api/errors';
 import type { ItemFiles } from '../store/items';
 import type { LabelStore } from '../store/labels';
 import type { Store } from '../store/store';
+import type { FilingFeedback } from './filingFeedback';
 import { topicForTriage } from './topics';
 
 // "Correct triage" (FR-6.2, Story 6.1): the inbox moves the item, and the labelled set gains a
@@ -16,6 +17,8 @@ export interface CorrectionDeps {
   now: () => Date;
   me: () => Me;
   keepLastMessages: () => number;
+  /** E14 (FR-15.7): a correction or a confirmation also labels the filing fields. */
+  filing?: Pick<FilingFeedback, 'corrected' | 'confirmed'>;
 }
 
 export async function correctTriage(d: CorrectionDeps, itemId: string, input: CorrectionInput): Promise<{ labelCount: number }> {
@@ -38,6 +41,7 @@ export async function correctTriage(d: CorrectionDeps, itemId: string, input: Co
       ...(was && { was: { attention: was.attention, confluence: was.confluence, vault: was.vault, by: was.by } }),
       thread: topic.view, // a topic's label holds all its pieces
     });
+    await d.filing?.corrected(itemId, input, topic).catch(() => false);
   }
   await d.store.append({ type: 'triage.corrected', itemId, data: { correction: { itemId, itemRevision: it.revision, ...input, correctedAt: at } } });
   return { labelCount: d.labels.counts.labels };
@@ -68,6 +72,7 @@ export async function confirmTriage(d: CorrectionDeps, itemId: string): Promise<
     was: { ...label, by: eff.by },
     thread: topic.view,
   });
+  await d.filing?.confirmed(itemId, topic).catch(() => false);
   await d.store.append({ type: 'triage.confirmed', itemId, data: { revision: it.decision.itemRevision } });
   return { labelCount: d.labels.counts.labels };
 }

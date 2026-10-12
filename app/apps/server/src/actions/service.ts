@@ -21,6 +21,7 @@ import { ConfluenceError, type ConfluenceApi } from './confluenceApi';
 import { scopeCql } from './confluenceCatalogue';
 import { checkPeople, draftConfluenceEntry } from './confluenceDrafter';
 import { marker, planConfluenceWrite } from './confluenceExecutor';
+import type { FilingFeedback } from '../pipeline/filingFeedback';
 import { readTopic } from '../pipeline/topics';
 import { itemLinks } from './alreadyFiled';
 import { DraftError } from './errors';
@@ -85,6 +86,8 @@ export interface ActionDeps {
   notify: (n: Notice) => void;
   /** A draft is ready or failed: a macOS notification, as Frank may have moved on (FR-11.6). Not for quiet drafts. */
   notifyDraft?: (n: DraftOutcomeNotice) => void;
+  /** E14 (FR-15.7): approvals, discards and suggested to-dos teach the filing policy. */
+  feedback?: Pick<FilingFeedback, 'approved' | 'discarded' | 'todo'>;
 }
 
 export interface DraftOutcomeNotice {
@@ -200,6 +203,7 @@ export class ActionService {
       { type: 'action.requested', itemId, actionId: id, data: { type: 'todo', revision: it.revision, ...(supersedes && { supersedes }) } },
       { type: 'action.drafted', itemId, actionId: id, data: { type: 'todo', revision: it.revision, draftRef: `drafts/${id}.json`, tokens: 0, target: draftTarget(draft) } },
     );
+    if (steps === 'suggested') await this.d.feedback?.todo(itemId, true).catch(() => false);
     return this.toAction(this.actions[id]);
   }
 
@@ -291,6 +295,8 @@ export class ActionService {
     // The write may have started between the check above and the append: then the discard
     // changed nothing (the reducer ignores it), and Frank is told so.
     if (this.statusOf(id) !== 'discarded') throw new HttpError('conflict', 'This action was already being written.');
+    const draft = a.type !== 'todo' ? (await this.d.drafts.read(id))?.draft : undefined;
+    if (a.type !== 'todo' && !(draft && isFiledDraft(draft))) await this.d.feedback?.discarded(a.itemId, a.type).catch(() => false);
   }
 
   /** `markDoneWhenFiled`: approved while filing in a batch (cockpit CK-4.4). */
@@ -308,6 +314,10 @@ export class ActionService {
       data: opts.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined,
     });
     this.pump();
+    if (a.type !== 'todo') {
+      const draft = (await this.d.drafts.read(id))?.draft;
+      if (draft && !isFiledDraft(draft)) await this.d.feedback?.approved(a.itemId, a.type, !!draft.edited).catch(() => false);
+    }
   }
 
   /**

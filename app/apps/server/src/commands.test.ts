@@ -1176,6 +1176,117 @@ describe('a suggested to-do (FR-15.6)', () => {
   });
 });
 
+describe('filing feedback (FR-15.7)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const DM = `slack:D01DANA:${isoToTs(START - 20 * MIN)}`;
+  const enc = encodeURIComponent;
+  const feedback = (body: object, id = PROD) => call<{ labelCount: number } & ApiErrorBody>('POST', `/api/items/${enc(id)}/filing-feedback`, body);
+  const lines = async () =>
+    (await readFile(join(dir, 'labels/filing.jsonl'), 'utf8').catch(() => ''))
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as { origin: string; signal: string; itemId: string; label: object; was?: object; thread: { id: string } });
+  const draft = async () => {
+    const r = await call<Action>('POST', `/api/items/${enc(PROD)}/actions`, { type: 'vault_note' });
+    await res.actions.settled();
+    return r.body.id;
+  };
+
+  beforeEach(async () => {
+    const vault = join(dir, '..', 'vault');
+    await mkdir(join(vault, 'Projects'), { recursive: true });
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, vaultPath: vault }, rules: view.rules })).status).toBe(200);
+  });
+
+  it('labels what the Filing… menu says, with the decision and the thread, and leaves the item where it is', async () => {
+    const r = await feedback({ signal: 'no_predraft' });
+    expect(r).toMatchObject({ status: 200, body: { labelCount: 1 } });
+    expect(await feedback({ signal: 'should_be_ready', type: 'vault_note' })).toMatchObject({ status: 200, body: { labelCount: 1 } });
+    const [a, b] = await lines();
+    expect(a).toMatchObject({ origin: 'explicit', signal: 'no_predraft', itemId: PROD, label: { vault: { predraft: false, ready: false } }, was: { vault: { suggested: true, targetHint: 'Product notes' }, by: 'model' } });
+    expect(a.label).not.toHaveProperty('confluence');
+    expect(a.thread).toMatchObject({ id: PROD });
+    expect(b).toMatchObject({ signal: 'should_be_ready', label: { vault: { toFile: true, predraft: true, ready: true } } });
+    expect(res.store.projection.items[PROD].correction).toBeUndefined();
+  });
+
+  it('“Not for filing” corrects the item out of To file, and labels it explicitly', async () => {
+    expect((await feedback({ signal: 'not_for_filing' })).status).toBe(200);
+    expect(res.store.projection.items[PROD].correction).toMatchObject({ confluence: false, vault: false });
+    expect(await lines()).toEqual([expect.objectContaining({ origin: 'explicit', signal: 'corrected', label: { vault: { toFile: false, predraft: false, ready: false } } })]);
+    // Now there is nothing to file, so nothing to say about it.
+    expect((await feedback({ signal: 'no_predraft' })).status).toBe(409);
+    expect((await feedback({ signal: 'not_ready', type: 'confluence_entry' })).status).toBe(409);
+  });
+
+  it('refuses a malformed body and an unknown item', async () => {
+    expect((await feedback({ signal: 'file_it' })).status).toBe(422);
+    expect((await feedback({ signal: 'no_predraft', extra: 1 })).status).toBe(422);
+    expect((await feedback({ signal: 'no_predraft' }, 'slack:nope')).status).toBe(404);
+    expect(await lines()).toHaveLength(0);
+  });
+
+  it('a correction that turns a filing on, and “Triage was right”, label the filing too', async () => {
+    await call('POST', `/api/items/${enc(DM)}/correction`, { attention: 'none', confluence: true, vault: false });
+    expect(await lines()).toEqual([expect.objectContaining({ signal: 'corrected', itemId: DM, label: { confluence: { toFile: true } } })]);
+    // A correction of attention alone says nothing about filing.
+    await call('POST', `/api/items/${enc(DM)}/correction`, { attention: 'today', confluence: true, vault: false });
+    expect(await lines()).toHaveLength(1);
+    expect((await call('POST', `/api/items/${enc(PROD)}/confirm`)).status).toBe(200);
+    expect((await lines())[1]).toMatchObject({ origin: 'explicit', signal: 'confirmed', itemId: PROD, label: { confluence: { toFile: false }, vault: { toFile: true } } });
+  });
+
+  it('reads an approval as drafted: worth drafting ahead, and ready', async () => {
+    const id = await draft();
+    expect((await call('POST', `/api/actions/${id}/approve`)).status).toBe(202);
+    await res.actions.settled();
+    expect(await lines()).toEqual([expect.objectContaining({ origin: 'implicit', signal: 'approved', label: { vault: { toFile: true, predraft: true, ready: true } } })]);
+  });
+
+  it('reads a discard, not a re-draft, as not worth drafting ahead, and an edit as not ready', async () => {
+    let id = await draft();
+    id = (await call<Action>('POST', `/api/actions/${id}/redraft`)).body.id;
+    await res.actions.settled();
+    expect(await lines()).toHaveLength(0);
+    expect((await call('POST', `/api/actions/${id}/discard`)).status).toBe(204);
+    expect(await lines()).toEqual([expect.objectContaining({ signal: 'discarded', label: { vault: { predraft: false, ready: false } } })]);
+    id = await draft();
+    expect((await call('PUT', `/api/actions/${id}/draft`, { content: '# Product\n\nEdited.\n' })).status).toBe(204);
+    expect((await call('POST', `/api/actions/${id}/approve`)).status).toBe(202);
+    await res.actions.settled();
+    expect((await lines())[1]).toMatchObject({ signal: 'approved_edited', label: { vault: { toFile: true, predraft: true, ready: false } } });
+  });
+
+  it('Done from To file with nothing filed: the filing didn’t belong there; from another lane, nothing', async () => {
+    await call('POST', `/api/items/${enc(DM)}/done`);
+    expect(await lines()).toHaveLength(0);
+    await call('POST', `/api/items/${enc(PROD)}/correction`, { attention: 'none', confluence: true, vault: true });
+    const before = (await lines()).length;
+    // The vault note is filed; the Confluence entry never was.
+    const id = await draft();
+    await call('POST', `/api/actions/${id}/approve`);
+    await res.actions.settled();
+    await call('POST', `/api/items/${enc(PROD)}/done`);
+    const done = (await lines()).slice(before).filter((l) => l.signal === 'done_unfiled');
+    expect(done).toEqual([expect.objectContaining({ origin: 'implicit', label: { confluence: { toFile: false, predraft: false, ready: false } } })]);
+  });
+
+  it('a suggested to-do, added or dismissed', async () => {
+    const TODO = { step: 'Send the export spec to Dana', rule: 'T2' };
+    await res.items.update('slack', PROD, (s) => s && { ...s, text: { ...s.text!, todo: TODO } });
+    const d = res.store.projection.items[PROD].decision!;
+    await res.store.append({ type: 'triage.decided', itemId: PROD, data: { decision: { ...d, decidedAt: new Date(Date.parse(d.decidedAt) + 1000).toISOString(), todo: { rule: 'T2' } } } });
+    expect((await call('POST', `/api/items/${enc(PROD)}/todo/dismiss`)).status).toBe(204);
+    expect((await call('POST', `/api/items/${enc(PROD)}/actions`, { type: 'todo', suggested: true })).status).toBe(201);
+    expect((await lines()).map((l) => [l.signal, l.label])).toEqual([
+      ['todo_dismissed', { todo: false }],
+      ['todo_added', { todo: true }],
+    ]);
+    expect((await lines())[0]).toMatchObject({ was: { todo: { rule: 'T2' } } });
+  });
+});
+
 describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
   const PROD = `slack:C01PROD:${P}`;
   const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;

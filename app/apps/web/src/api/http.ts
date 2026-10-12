@@ -1,4 +1,4 @@
-import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, FilingFeedbackBody, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -177,6 +177,7 @@ export class HttpApi implements WorkOsApi {
   requestDraft = (itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean }) =>
     this.post<Action>(`${this.item(itemId)}/actions`, { type, ...(opts?.quiet && { quiet: true }), ...(opts?.steps && { steps: opts.steps }), ...(opts?.suggested && { suggested: true }) });
   dismissTodo = (id: string) => this.post<void>(`${this.item(id)}/todo/dismiss`);
+  filingFeedback = (id: string, body: FilingFeedbackBody) => this.post<{ labelCount: number }>(`${this.item(id)}/filing-feedback`, body);
   cancelDraft = (id: string) => this.post(`${this.action(id)}/cancel`);
   saveDraftEdit = (id: string, content: string, part?: number) => this.request<void>('PUT', `${this.action(id)}/draft`, part === undefined ? { content } : { content, part });
   redraft = (id: string) => this.post<Action>(`${this.action(id)}/redraft`);

@@ -76,7 +76,7 @@ export const ATTENTION_ORDER: readonly Attention[] = ['now', 'today', 'follow', 
 // E14 (FR-15.2): what the filing policy says about a suggested filing. Written by policy-era
 // triage whenever a filing is suggested; absent on earlier decisions, which pre-draft every
 // suggested filing (see filingPlan()).
-const FilingSuggestion = z.object({
+export const FilingSuggestion = z.object({
   suggested: z.boolean(),
   targetHint: z.string().optional(),
   predraft: z.boolean().optional(),

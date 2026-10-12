@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import type { ActionType, Message, TopicPiece } from '@work-os/shared';
+import type { ActionType, FilingFeedbackBody, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
@@ -11,7 +11,7 @@ import { MessageText, Recipients } from '../../components/SlackText';
 import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime, fmtWhen, plural } from '../../lib/format';
-import { TYPE_LABEL, canFile, draftButton, draftState } from '../../lib/lanes';
+import { TYPE_LABEL, TYPE_NOUN, canFile, draftButton, draftState } from '../../lib/lanes';
 import { SOURCE_NAME, dueInfo, isLive, needLabel, shownStep, suggestedSnooze, topicAsks } from '../../lib/next';
 import { usePrefs } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
@@ -603,6 +603,75 @@ function TriageRight({ item }: { item: ItemSummary }) {
   );
 }
 
+// ---------- Filing feedback ----------
+
+type FilingType = Exclude<ActionType, 'todo'>;
+const FILING_TYPES: FilingType[] = ['vault_note', 'confluence_entry'];
+const FIELD: Record<FilingType, 'vault' | 'confluence'> = { vault_note: 'vault', confluence_entry: 'confluence' };
+
+/**
+ * Beside the decision (E14, FR-15.7): Frank's word on the filing policy's call, for the filing eval
+ * and the policy proposals. "Not for filing" and "Should be filed" correct the item as well; the
+ * rest only teach the policy.
+ */
+function FilingFeedback({ item }: { item: ItemSummary }) {
+  const { open, setOpen, close, trigger, panel } = usePopover();
+  const t = item.triage;
+  if (item.triageState !== 'triaged' || !t || item.status !== 'open') return null;
+  const on = FILING_TYPES.filter((f) => t[FIELD[f]]);
+  const off = FILING_TYPES.filter((f) => !t[FIELD[f]]);
+  const send = (body: FilingFeedbackBody, done: string) => {
+    close();
+    void api.filingFeedback(item.id, body).then((r) => toast(`${done} · filing labels now ${r.labelCount}`, { tone: 'success' }), errorToast);
+  };
+  const fileIt = (f: FilingType) => {
+    close();
+    void api.correctTriage(item.id, { attention: t.attention, confluence: t.confluence || f === 'confluence_entry', vault: t.vault || f === 'vault_note' }).then(() => toast(`Suggested for the ${TYPE_NOUN[f]} · noted for the filing policy`, { tone: 'success' }), errorToast);
+  };
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        ref={trigger}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Tell the filing policy what it got wrong"
+        className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted hover:bg-track hover:text-ink cursor-pointer"
+        onClick={() => setOpen(!open)}
+      >
+        <Icon name="flask" size={13} /> Filing…
+      </button>
+      {open && (
+        <PopoverPanel panelRef={panel} label="Filing feedback" role="menu" align="left" className="w-[260px]">
+          {on.length > 0 && (
+            <MenuItem onClick={() => send({ signal: 'not_for_filing' }, 'Taken out of To file')}>Not for filing</MenuItem>
+          )}
+          {on.map((f) => {
+            const plan = item.filing?.[f];
+            return (
+              <div key={f} role="group" aria-label={TYPE_LABEL[f].short} className="flex flex-col border-t border-line-soft pt-1 mt-1">
+                <span aria-hidden className="px-2.5 pb-0.5 pt-1 text-[11px] font-medium text-muted">
+                  {TYPE_LABEL[f].short}
+                  {plan?.rule && ` · ${plan.rule}`}
+                </span>
+                {plan?.predraft && <MenuItem onClick={() => send({ signal: 'no_predraft', type: f }, 'Noted: don’t draft it ahead')}>Don’t draft items like this ahead</MenuItem>}
+                {plan?.ready ? (
+                  <MenuItem onClick={() => send({ signal: 'not_ready', type: f }, 'Noted: not ready to approve')}>Shouldn’t be ready to approve</MenuItem>
+                ) : (
+                  <MenuItem onClick={() => send({ signal: 'should_be_ready', type: f }, 'Noted: ready to approve')}>Should be ready to approve</MenuItem>
+                )}
+              </div>
+            );
+          })}
+          {off.map((f) => (
+            <MenuItem key={f} onClick={() => fileIt(f)}>{f === 'vault_note' ? 'Should be filed to the vault' : 'Should be filed to Confluence'}</MenuItem>
+          ))}
+        </PopoverPanel>
+      )}
+    </div>
+  );
+}
+
 // ---------- Panel ----------
 
 export function ItemPanel({
@@ -826,6 +895,7 @@ export function ItemPanel({
             <LaneChip lane={item.lane} />
             {item.reason && <span>{item.reason}</span>}
             <TriageRight item={item} />
+            <FilingFeedback item={item} />
           </div>
           <ItemMarkers item={item} />
           {item.source === 'wispr' && view?.item.meeting?.calendar && <OnCalendar calendar={view.item.meeting.calendar} />}
