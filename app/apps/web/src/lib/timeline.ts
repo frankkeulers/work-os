@@ -1,4 +1,4 @@
-import { londonAt, type AgendaEvent } from '@work-os/shared';
+import { londonAt, type AgendaEvent, type TodoSummary } from '@work-os/shared';
 import type { ItemSummary } from '../api';
 import { headsUp, IMMINENT_MINUTES, type AgendaDay } from './agenda';
 import { fmtTime } from './format';
@@ -90,6 +90,29 @@ export function placeMeetings(events: readonly AgendaEvent[], start: string, now
   }
   if (cluster.length) close();
   return timed;
+}
+
+export interface PlacedTodo {
+  todo: TodoSummary;
+  from: number;
+  to: number;
+  past: boolean;
+}
+
+/**
+ * The day's planned To Dos (FR-16.8): open ones whose slot is on the day shown, at least 15
+ * minutes tall. The plan never puts one on a meeting; Frank's own time may (marked clash).
+ */
+export function placeTodos(todos: readonly TodoSummary[], start: string, now: Date): PlacedTodo[] {
+  const end = Date.parse(start) + DAY * MIN;
+  return todos
+    .flatMap((todo) => {
+      const s = todo.status === 'open' ? todo.slot : undefined;
+      if (!s || Date.parse(s.end) <= Date.parse(start) || Date.parse(s.start) >= end) return [];
+      const from = minuteOf(s.start, start);
+      return [{ todo, from, to: Math.max(from + 15, minuteOf(s.end, start)), past: Date.parse(s.end) <= now.getTime() }];
+    })
+    .sort((a, b) => a.from - b.from);
 }
 
 export type PinTone = 'late' | 'now' | 'today';

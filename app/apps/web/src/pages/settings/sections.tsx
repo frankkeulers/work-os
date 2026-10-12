@@ -1,6 +1,6 @@
 import { useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { OutlookColor, categoryColor, closeOnReply, colorLabel, suggestFinished, meetingLead, sourceSchedule, type SourceId, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
+import { OutlookColor, categoryColor, closeOnReply, colorLabel, suggestFinished, meetingLead, sourceSchedule, SLOT_BUFFER_MINUTES, type SourceId, type CataloguePageView, type ConfluenceCatalogueView, type ConfluencePage, type ModelId, type PromptFileId, type Rule, type Settings, type SourceHealth, type SourceSchedule } from '@work-os/shared';
 import { api, isApiError, type CheckStatus, type OutlookStatusView, type PromptFileView, type SettingsView, type SlackStatus, type UsageView } from '../../api';
 import { Avatar } from '../../components/Avatar';
 import { ChannelPicker, PeoplePicker } from '../../components/LookupPicker';
@@ -161,6 +161,9 @@ function ScheduleSection({ s, type, flush, err }: Ctx) {
         </Row>
         <Row label="Quiet window" help="How long a thread must be quiet before it’s triaged, so a live conversation is read once." error={err('triage.quietMinutes')}>
           <NumInput label="Quiet window before triage" suffix="min" value={s.triage.quietMinutes} invalid={!!err('triage.quietMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.triage.quietMinutes = v ?? NaN))} />
+        </Row>
+        <Row label="Gap around meetings" help="Kept free either side of a meeting when Work OS finds time for your To Dos. Nothing is booked." error={err('schedule.slotBufferMinutes')}>
+          <NumInput label="Gap around meetings for To Dos" suffix="min" value={s.schedule.slotBufferMinutes ?? SLOT_BUFFER_MINUTES} invalid={!!err('schedule.slotBufferMinutes')} onBlur={flush} onChange={(v) => type((x) => (x.schedule.slotBufferMinutes = v ?? NaN))} />
         </Row>
       </Group>
     </>
@@ -1710,7 +1713,7 @@ const under = (...prefixes: string[]) => (path: string) => prefixes.some((p) => 
 export const SECTIONS: SectionDef[] = [
   { id: 'rules', label: 'Triage rules', group: 'Inbox', View: RulesSection, owns: under('rules', 'settings.triage.closeOnReply', 'settings.triage.suggestFinished') },
   { id: 'people', label: 'People', group: 'Inbox', View: PeopleSection, owns: under('settings.people') },
-  { id: 'schedule', label: 'Schedule', group: 'Inbox', View: ScheduleSection, owns: under('settings.schedule.workHours', 'settings.triage.quietMinutes') },
+  { id: 'schedule', label: 'Schedule', group: 'Inbox', View: ScheduleSection, owns: under('settings.schedule.workHours', 'settings.schedule.slotBufferMinutes', 'settings.triage.quietMinutes') },
   { id: 'notifications', label: 'Notifications', group: 'Inbox', View: NotificationsSection, owns: under('settings.notifications') },
   { id: 'slack', label: 'Slack', group: 'Sources', View: SlackSection, owns: under('settings.slack', 'settings.schedule.intervalWorkMinutes', 'settings.schedule.intervalOffMinutes') },
   { id: 'outlook', label: 'Outlook', group: 'Sources', View: OutlookSection, owns: under('settings.sources.outlook') },

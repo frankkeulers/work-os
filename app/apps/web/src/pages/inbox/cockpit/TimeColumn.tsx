@@ -1,4 +1,4 @@
-import { OUTLOOK_COLORS, type AgendaEvent, type AgendaView } from '@work-os/shared';
+import { OUTLOOK_COLORS, type AgendaEvent, type AgendaView, type TodoSummary } from '@work-os/shared';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type ItemSummary } from '../../../api';
@@ -12,13 +12,16 @@ import { dayEvents, type AgendaDay } from '../../../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime } from '../../../lib/format';
 import { OUTLOOK_CALENDAR, meetingLink } from '../../../lib/links';
 import { TIME_WIDTH, usePrefs } from '../../../store/prefs';
-import { dayPins, dayStart, dueBefore, hourHeight, minuteOf, nextMeeting, placeMeetings, shortTitle, timelineSpan, workSpan, type Pin, type PinTone } from '../../../lib/timeline';
+import { dayPins, dayStart, dueBefore, hourHeight, minuteOf, nextMeeting, placeMeetings, placeTodos, shortTitle, timelineSpan, workSpan, type Pin, type PinTone } from '../../../lib/timeline';
+import { openTodoPlan } from '../TodoGroup';
 
 // The cockpit's time column (CK-3.4–3.6): the clock, the next meeting and what's due before it, and
 // the day as a timeline of meetings and deadline pins. A Teams meeting joins in the browser until it
 // ends; other meetings open in Outlook; pins open the item. A meeting with Outlook categories has the
 // first one's colour down its edge and a light shade of it behind, as on the agenda strip.
-// It folds to a rail, and its right edge drags to widen it; both are kept in prefs.
+// It folds to a rail, and its right edge drags to widen it; both are kept in prefs. The time Work OS
+// planned for each To Do (FR-16.8) shows in the meetings' lane, dashed (solid when Frank set it);
+// a click opens its plan.
 
 /** Where the timeline's lanes sit: hour labels, then meetings, then pins. The meetings take 60% of
  * the width after the labels (186 px at the default width) and the pins the rest, as the column widens. */
@@ -127,7 +130,7 @@ function pinTops(pins: Pin[], top: (minute: number) => number): number[] {
 
 const fmtHour = (minute: number) => `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:00`;
 
-function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView | undefined; items: readonly ItemSummary[]; now: Date; day: AgendaDay; workHours: string; onOpenItem: (id: string) => void }) {
+function Timeline({ v, items, todos, now, day, workHours, onOpenItem }: { v: AgendaView | undefined; items: readonly ItemSummary[]; todos: readonly TodoSummary[]; now: Date; day: AgendaDay; workHours: string; onOpenItem: (id: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(0);
@@ -150,8 +153,9 @@ function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView
   const allDay = events.filter((e) => e.allDay);
   const meetings = placeMeetings(events, start, now);
   const pins = dayPins(items, now, day);
+  const planned = placeTodos(todos, start, now);
   const nowMin = minuteOf(now.getTime(), start);
-  const span = timelineSpan(workSpan(workHours), [...meetings.flatMap((m) => [m.from, m.to]), ...pins.map((p) => p.at), ...(day === 'today' ? [nowMin] : [])]);
+  const span = timelineSpan(workSpan(workHours), [...meetings.flatMap((m) => [m.from, m.to]), ...planned.flatMap((t) => [t.from, t.to]), ...pins.map((p) => p.at), ...(day === 'today' ? [nowMin] : [])]);
   // A little room above the first hour and below the last, so their labels and pins aren't cut off.
   const pad = 12;
   const ph = hourHeight(available - 2 * pad, span);
@@ -226,6 +230,33 @@ function Timeline({ v, items, now, day, workHours, onOpenItem }: { v: AgendaView
               );
             })}
           </ol>
+          <ol aria-label={day === 'today' ? 'To Dos planned today' : 'To Dos planned tomorrow'} className="m-0 list-none p-0">
+            {planned.map((p) => {
+              const s = p.todo.slot!;
+              const h = Math.max(MEETING_MIN_HEIGHT, top(p.to) - top(p.from) - 2);
+              // On a meeting (Frank's own time only): the right half, so both show.
+              const half = s.clash ? meetingsWidth / 2 : 0;
+              return (
+                <li key={p.todo.id} data-timeline-todo={p.todo.id} data-slot-by={s.by} data-clash={s.clash || undefined} data-past={p.past || undefined} className="absolute" style={{ top: top(p.from), height: h, left: MEETINGS_LEFT + half, width: meetingsWidth - half }}>
+                  <button
+                    type="button"
+                    title={`${fmtTime(s.start)}–${fmtTime(s.end)} ${p.todo.step}: ${s.by === 'you' ? 'your time' : 'free time Work OS found'}${s.clash ? ', on a meeting' : ''}. Click to change it.`}
+                    onClick={() => openTodoPlan(p.todo.id)}
+                    className={cx(
+                      'flex size-full items-center gap-1.5 overflow-hidden rounded-md border px-2 text-left text-xs leading-[15px] cursor-pointer hover:brightness-[0.97]',
+                      s.by === 'you' ? 'border-violet-line' : 'border-dashed border-violet-line',
+                      s.clash && 'border-l-2 border-l-red',
+                      p.past ? 'bg-tray text-faint' : 'bg-violet-wash text-violet-fg',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      <b className="font-semibold">{fmtTime(s.start)}</b> {p.todo.step}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
           {/* Under the pins: an overdue pin sits on it. */}
           {day === 'today' && (
             <div data-testid="now-line" aria-hidden className="absolute right-0 border-t-2 border-red" style={{ left: 36, top: top(nowMin) - 1 }}>
@@ -274,7 +305,7 @@ function CalendarNote({ v, now }: { v: AgendaView | undefined; now: Date }) {
   return null;
 }
 
-export function TimeColumn({ items, day, setDay, onOpenItem }: { items: readonly ItemSummary[]; day: AgendaDay; setDay: (d: AgendaDay) => void; onOpenItem: (id: string) => void }) {
+export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { items: readonly ItemSummary[]; todos?: readonly TodoSummary[]; day: AgendaDay; setDay: (d: AgendaDay) => void; onOpenItem: (id: string) => void }) {
   const now = useNow(15_000);
   const agenda = useApiQuery(() => api.getAgenda(), onTopics('inbox', 'settings', 'health'), []).data;
   const workHours = useApiQuery(() => api.getSettings(), onTopics('settings'), []).data?.settings.schedule.workHours ?? '';
@@ -327,7 +358,7 @@ export function TimeColumn({ items, day, setDay, onOpenItem }: { items: readonly
       <div className="flex min-h-0 flex-1 flex-col gap-4 border-t border-line px-5 pt-4">
         {calendar && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
         <CalendarNote v={agenda} now={now} />
-        <Timeline v={agenda} items={items} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
+        <Timeline v={agenda} items={items} todos={todos} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
       </div>
       {handle}
     </section>

@@ -1,5 +1,5 @@
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
-import { MIRROR_FAILURE, todoGroups, type TodoGroup as Group, type TodoSummary } from '@work-os/shared';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { MIRROR_FAILURE, NO_SLOT, todoGroups, type TodoGroup as Group, type TodoSummary } from '@work-os/shared';
 import { api } from '../../api';
 import { errorToast, toast } from '../../store/toasts';
 import { SourceMark } from '../../components/BrandIcon';
@@ -9,15 +9,57 @@ import { useNow } from '../../hooks/useNow';
 import { fmtTime, fmtWhen } from '../../lib/format';
 import { dueInfo } from '../../lib/next';
 import { DueChip } from './chips';
-import { EstimateChip, LENGTHS, durLabel, nearestLength } from './TodoPlan';
+import { EstimateChip, LENGTHS, durLabel, nearestLength, slotLabel } from './TodoPlan';
 
 // To Dos on the inbox (E15, FR-16.2): every line Frank wrote to the Tasks note, with where it came
 // from and when it is due. The list layout has a To do group after Needs you; the cockpit puts
 // what is overdue or due today in Needs you and the rest in Later. A row opens its source item;
 // its ✓, or `e` on it, marks it done and ticks its line in the Tasks note (FR-16.4). Its estimate,
 // and when it would ideally be done, come from the model (FR-16.6); Frank can set both (FR-16.7).
+// When he'll do it is free time code found in his calendar (FR-16.8), or his own (FR-16.9).
 
 const HEAD: Record<Exclude<Group, 'done'>, string> = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming' };
+
+const PLAN_EVENT = 'workos:todo-plan';
+
+/** Opens a To Do's plan from elsewhere (the time column): its row takes focus and opens the editor. */
+export const openTodoPlan = (todoId: string) => window.dispatchEvent(new CustomEvent<string>(PLAN_EVENT, { detail: todoId }));
+
+/** When Frank will do it (FR-16.8, FR-16.9): the slot, or why there is none and when it would first fit. */
+function SlotNote({ todo, now, onPlan }: { todo: TodoSummary; now: Date; onPlan: () => void }) {
+  const s = todo.slot;
+  if (s) {
+    const mine = s.by === 'you';
+    return (
+      <button
+        type="button"
+        data-todo-slot={s.by}
+        data-clash={s.clash || undefined}
+        title={`${mine ? 'Your time for it' : 'Free time Work OS found for it: nothing is booked'}${s.clash ? '. A meeting is on at the same time' : ''}${s.passed ? '. This time has gone by' : ''}. Click to change it (p).`}
+        onClick={onPlan}
+        className={cx('inline-flex shrink-0 items-center gap-1 rounded border px-1 tabular-nums cursor-pointer hover:bg-surface-2', mine ? 'border-violet-line' : 'border-dashed border-violet-line', s.passed ? 'text-muted' : 'text-violet-fg')}
+      >
+        {s.clash && <span aria-label="Clashes with a meeting" className="size-1.5 rounded-full bg-red" />}
+        {slotLabel(s, now)}
+      </button>
+    );
+  }
+  const none = todo.noSlot;
+  if (!none || none.reason === 'no_calendar') return null;
+  return (
+    <span data-todo-noslot={none.reason} className="flex min-w-0 shrink-0 items-center gap-1 text-amber-fg">
+      · {NO_SLOT[none.reason]}
+      {none.firstAfter && (
+        <>
+          <span className="text-muted">· first free {slotLabel(none.firstAfter, now)}</span>
+          <button type="button" onClick={() => void api.editTodo(todo.id, { slot: none.firstAfter }).catch(errorToast)} className="font-medium text-accent-ink cursor-pointer hover:underline" title="Do it then: keep this time for it">
+            Use
+          </button>
+        </>
+      )}
+    </span>
+  );
+}
 
 /**
  * How long it took (FR-16.5): one tap, a second tap on the same chip takes it back. The chip
@@ -84,6 +126,17 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
   const due = !done && todo.deadline ? dueInfo({ dueAt: todo.deadline }, now) : undefined;
   const pop = usePopover();
   const { setOpen } = pop;
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== todo.id || done) return;
+      ref.current?.scrollIntoView({ block: 'nearest' });
+      ref.current?.focus();
+      setOpen(true);
+    };
+    window.addEventListener(PLAN_EVENT, on);
+    return () => window.removeEventListener(PLAN_EVENT, on);
+  }, [todo.id, done, setOpen]);
   // Keys on a focused row are its own (`g d` focuses the first): the item panel's don't see them.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -96,6 +149,7 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
   };
   return (
     <div
+      ref={ref}
       data-todo={todo.id}
       data-todo-status={todo.status}
       tabIndex={0}
@@ -113,6 +167,7 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
             <SourceMark source={todo.source} size={12} decorative />
             <span className="truncate">{todo.sourceTitle}</span>
           </button>
+          {!done && <SlotNote todo={todo} now={now} onPlan={() => setOpen(true)} />}
           {done && todo.doneAt && <span className="shrink-0">· {todo.doneBy === 'tasks_note' ? 'ticked in Obsidian' : 'done'} {fmtTime(todo.doneAt)}</span>}
           {done && todo.actualMinutes && <span className="shrink-0">· took {durLabel(todo.actualMinutes)}</span>}
           {!done && todo.ideal && (

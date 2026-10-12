@@ -1148,7 +1148,7 @@ The stages:
 - **1a:** the entity, the inbox and the read-back (FR-16.1–16.3).
 - **1b:** Done from the inbox, which ticks the line, and the time chips (FR-16.4–16.5).
 - **2:** the estimate and deadline (FR-16.6–16.7).
-- **3:** the slot finder and the time column.
+- **3:** the slot finder and the time column (FR-16.8–16.10).
 - **4:** follow-ups.
 - **5:** the learning loops and evals.
 
@@ -1200,12 +1200,29 @@ The stages:
 - **Logging.** `todo.edited` sets them. A plan never overrides them, and a deadline Frank sets replaces the ideal one.
 - **Labels.** Each change is a label in `labels/schedule.jsonl` (`estimate_edit`, `deadline_edit`), written first. It holds the plan it replaced (`was`), what Frank set (`set`), and the input the plan was made from.
 
+**FR-16.8 Time to do it, found in the calendar.** Code, not a model, gives each open To Do a slot: free time in Frank's working hours, around his meetings, before it is due. Nothing is booked, and nothing is written to Outlook or the Tasks note: the slot is shown in Work OS only. *(Builds part of cockpit SPEC §10 B1, "Free time and what fits".)*
+- **Busy time.** A meeting is busy unless it is cancelled, declined, or shown as free or working elsewhere; tentative counts as busy. An all-day event is busy only when shown as out of office. Each busy meeting keeps a gap either side (Settings › Schedule › Gap around meetings, 10 minutes by default).
+- **Free time.** Working hours (Settings › Schedule › Work hours), from the next quarter hour at least five minutes ahead, up to two weeks on or the end of the calendar Work OS holds, less busy time and the slots already taken.
+- **Placing.** Soonest due first (the ideal date, else the deadline; those without one last, then the oldest). A slot is the estimate rounded up to quarter hours (30 minutes without one), never split. It is the first free time that ends by the ideal date, else by the deadline. Once the deadline has passed, it is the first free time at all.
+- **None.** With no room before its deadline, a To Do has no slot, and the row says so with the first time it would fit and **Use**, which keeps that time (FR-16.9). Longer than a working day: no slot ("split it, or set a time"). Outlook Calendar off: no slots; the editor says to turn it on.
+- **Stability.** A slot already planned that still fits is kept, so a new meeting moves only the slots it lands on. A slot whose time has gone by with the To Do still open is placed again.
+- **Logging.** `todo.scheduled` (`by: plan`) when a slot is found or moves, and `todo.unscheduled` when none fits any more or the calendar is turned off. The planner runs on every tick, after each calendar poll and after a To Do changes, and logs only what moved. While the calendar is on but not yet polled, it changes nothing.
+
+**FR-16.9 Frank's own time.** The editor (FR-16.7) has **When you'll do it**, a date and time. Saving one keeps it as Frank's own (`todo.scheduled`, `by: you`), as long as the estimate; a new estimate later keeps its start. The plan never moves it and places the rest around it. A meeting at the same time marks it (a red dot, "a meeting is on then"); a time gone by is shown faint. **Let Work OS plan** hands it back (`todo.unscheduled`, `by: you`).
+- **Labels.** Each time set or handed back is a `slot_moved` label in `labels/schedule.jsonl`, with the slot it replaced in `was`.
+
+**FR-16.10 On the inbox and the time column.**
+- **A row.** The slot shows after the source: "Today 15:15–15:45", or "Tue 09:00–09:30". It has a dashed outline when Work OS found it and a solid one when it is Frank's own. Clicking it opens the editor.
+- **Order.** Today's To Dos run in the order of their slots, then those without one. A slot moves no To Do between groups: those stay by their dates (FR-16.2).
+- **The time column.** In the cockpit, each open To Do with a slot on the day shown is a block in the meetings' lane, violet, dashed or solid as on the row. One on a meeting (Frank's own only) takes the right half, with a red edge. A click focuses its row and opens the editor.
+
 > **Story 16.1** As Frank, I want the to-dos I filed to stay in front of me until they are done.
 >
 > - Given I approved a to-do with two lines, when the write lands, then the inbox's To do group shows both, each with its source and deadline.
 > - Given I tick one in Obsidian, when I look at the inbox within a minute, then it shows as done today, ticked in Obsidian.
 > - Given a To Do on the inbox, when I press its Done, then its line in the Tasks note is ticked and the toast asks how long it took; when I press Undo, then the line is unticked again.
 > - Given a new To Do, when the next triage run ends, then its row shows an estimate, and an ideal deadline when its source gives a reason to do it sooner; when I set my own, then the plan never overrides it.
+> - Given Outlook Calendar is on and a To Do is due today, when I look at the cockpit, then the time column shows it in free time before it is due, around my meetings; when a meeting is added on that time, then it moves and the others stay; when I set my own time, then it stays there.
 
 ---
 

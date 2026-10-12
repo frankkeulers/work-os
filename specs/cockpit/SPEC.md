@@ -34,7 +34,7 @@ The biggest saving isn't the layout. It's that **an item closes by itself once F
 | 9 | Time column: clock, next-meeting card, timeline with deadline pins | 3 |
 | 10 | Later zone: To file, This week, Snoozed, Low priority | 3 |
 | 11 | File in a batch | 4 |
-| 12 | Free time and what fits in it | Backlog (B1) |
+| 12 | Free time and what fits in it | Backlog (B1); partly built for To Dos (PLAN FR-16.8–16.10) |
 | 13 | Source views: a sidebar source opens everything it has stored, untriaged, with the item panel | 5 |
 | 14 | Related items across sources, filed together and optionally marked done | 6 (specced) |
 
@@ -481,6 +481,7 @@ Notes about one subject arrive from several sources: a Slack thread, a reply by 
 - **Optional:** "Plan this gap", which snoozes the rest until the gap ends.
 - **Prerequisites:** Stage 3 shipped, and C4 data to check estimates against.
 - **Risk:** estimates that are wrong are worse than none, because they invite overcommitting a gap.
+- **Partly built (12 Oct 2026), for To Dos:** PLAN E15 finds each open To Do free time before it is due and shows it as a block in the time column (FR-16.8–16.10), using the schedule prompt's estimate (FR-16.6). Free gaps for items, and what fits in them, are still to do.
 
 **B2 Slack reaction as a close signal.** A ✅ reaction from Frank on the ask message settles it. It needs `reactions:read` and a fetch path for reactions. Search results may not include them; this is a guess to check in a spike.
 

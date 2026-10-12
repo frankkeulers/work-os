@@ -200,6 +200,30 @@ describe('To Dos (E15, FR-16.1, FR-16.2)', () => {
     expect(after.ideal).toBeUndefined();
     expect(after.confidence).toBeUndefined();
   });
+
+  it('finds each open To Do free time around the seed’s meetings, and keeps the time Frank sets (FR-16.8, FR-16.9)', async () => {
+    server.seedTodos();
+    const open = (await settle(server.getInbox())).todos.filter((t) => t.status === 'open');
+    expect(open.every((t) => t.slot?.by === 'plan')).toBe(true);
+    // 13:48: the renewal call runs 14:00–15:00, so the overdue one is first, at 15:15 (BST).
+    const late = open.find((t) => t.step.startsWith('Send Matt'))!;
+    expect(late.slot).toMatchObject({ start: '2026-10-05T14:15:00.000Z' });
+    const spans = open.map((t) => [t.slot!.start, t.slot!.end]).sort();
+    expect(spans.every(([, end], i) => i === 0 || spans[i - 1][1] <= spans[i][0] || end === spans[i][1])).toBe(true);
+
+    const slot = { start: '2026-10-06T08:00:00.000Z', end: '2026-10-06T08:30:00.000Z' };
+    expect(await settle(server.editTodo(late.id, { slot }))).toMatchObject({ slot: { ...slot, by: 'you' } });
+    const moved = (await settle(server.getInbox())).todos.find((t) => t.step.startsWith('Share the graduation'))!;
+    expect(moved.slot?.start).toBe('2026-10-05T14:15:00.000Z'); // the next one takes the time freed
+    expect((await settle(server.editTodo(late.id, { slot: null })))?.slot).toMatchObject({ by: 'plan' });
+  });
+
+  it('has no time to plan with the calendar off', async () => {
+    server.seedTodos();
+    await settle(server.disconnectOutlook());
+    const open = (await settle(server.getInbox())).todos.filter((t) => t.status === 'open');
+    expect(open.every((t) => t.noSlot?.reason === 'no_calendar' && !t.slot)).toBe(true);
+  });
 });
 
 describe('draft and approval outcomes', () => {

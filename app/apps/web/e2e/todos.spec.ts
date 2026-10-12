@@ -126,6 +126,50 @@ test.describe('wide window (cockpit)', () => {
     await expect(later.locator('[data-todo]', { hasText: 'Send Matt the one-line' })).toBeVisible();
     await expect(needs.locator('[data-todo]', { hasText: 'Send Matt the one-line' })).toHaveCount(0);
   });
+
+  test('J96 each To Do gets free time around the meetings, shown in the time column, and you can keep your own time (FR-16.8, FR-16.9)', async ({ page }) => {
+    await withTodos(page);
+    const needs = page.getByRole('region', { name: 'To do today' });
+    // 13:48, the renewal call 14:00–15:00: the overdue one first, at 15:15, then today's.
+    const send = needs.locator('[data-todo]', { hasText: 'Send Matt the one-line' });
+    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
+    await expect(send.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:15–15:30');
+    await expect(share.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:30–15:45');
+    // Today's run in the order of their slots.
+    await expect(needs.locator('[data-todo]').nth(1)).toContainText('Share the graduation gate checklist');
+
+    const column = page.getByRole('list', { name: 'To Dos planned today' });
+    const blocks = column.locator('[data-timeline-todo]');
+    await expect(blocks.first()).toContainText('15:15 Send Matt the one-line');
+    const shareBlock = column.locator(`[data-timeline-todo="${await share.getAttribute('data-todo')}"]`);
+    await expect(shareBlock).toHaveAttribute('data-slot-by', 'plan');
+    await shoot(page, page.locator('[data-cockpit-zone="time"]'), 'todos-time-column');
+
+    // A block opens its plan: keep your own time, tomorrow at 09:00.
+    await shareBlock.getByRole('button').click();
+    const editor = page.getByRole('dialog', { name: 'Plan: Share the graduation gate checklist' });
+    await expect(editor.locator('[data-slot-note]')).toContainText('Free time Work OS found in your calendar. Nothing is booked.');
+    // The mock's day is Mon 5 Oct 2026: 09:00 London on the Tuesday, in the browser's own zone.
+    const tomorrow9 = await page.evaluate(() => {
+      const t = new Date('2026-10-06T08:00:00.000Z');
+      return new Date(t.getTime() - t.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+    });
+    await editor.getByLabel('When you’ll do it').fill(tomorrow9);
+    await shoot(page, editor, 'todos-slot-editor');
+    await editor.getByRole('button', { name: 'Save' }).click();
+    await expect(share.locator('[data-todo-slot="you"]')).toHaveText('Tue 09:00–09:15');
+    await expect(shareBlock).toHaveCount(0);
+    // Tomorrow's column has it, solid: Frank's own time.
+    await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Tomorrow' }).click();
+    await expect(page.getByRole('list', { name: 'To Dos planned tomorrow' }).locator('[data-timeline-todo]')).toHaveAttribute('data-slot-by', 'you');
+    await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Today', exact: true }).click();
+
+    // Hand it back.
+    await share.locator('[data-todo-slot]').click();
+    await editor.getByRole('button', { name: 'Let Work OS plan' }).click();
+    await editor.getByRole('button', { name: 'Save' }).click();
+    await expect(share.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:30–15:45');
+  });
 });
 
 test.describe('list layout', () => {

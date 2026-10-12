@@ -88,6 +88,13 @@ describe('free time for To Dos (FR-16.8)', () => {
     expect(r.a).toEqual({ kind: 'none', reason: 'no_fit_before_deadline', firstAfter: { start: '2026-10-12T08:15:00.000Z', end: '2026-10-12T09:15:00.000Z' } });
   });
 
+  it('puts a To Do past its deadline first, as soon as it fits', () => {
+    const r = plan([todo('soon', { deadline: '2026-10-13T16:00:00.000Z' }), todo('late', { deadline: '2026-10-09T16:30:00.000Z', ideal: '2026-10-08T12:00:00.000Z', slot: { start: '2026-10-12T15:00:00.000Z', end: '2026-10-12T15:30:00.000Z', by: 'plan' } })], [], { bufferMinutes: 0 });
+    // Its slot from before still fits, so it stays; the rest go around it.
+    expect(r.late).toEqual(at('2026-10-12T15:00:00.000Z', '2026-10-12T15:30:00.000Z'));
+    expect(plan([todo('soon', { deadline: '2026-10-13T16:00:00.000Z' }), todo('late', { deadline: '2026-10-09T16:30:00.000Z' })], [], { bufferMinutes: 0 }).late).toEqual(at('2026-10-12T08:15:00.000Z', '2026-10-12T08:45:00.000Z'));
+  });
+
   it('never splits a To Do longer than a working day', () => {
     expect(plan([todo('a', { effortMinutes: 660 })]).a).toEqual({ kind: 'none', reason: 'too_long' });
   });

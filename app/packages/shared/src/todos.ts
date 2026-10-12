@@ -68,14 +68,12 @@ export const TODO_GROUPS: readonly TodoGroup[] = ['overdue', 'today', 'upcoming'
 
 /**
  * Where a To Do sits: done (today; older ones aren't shown), overdue once its deadline has passed,
- * today when it is due today in London (ideally, or by its deadline) or has a slot today, else
- * upcoming, with To Dos that have no date.
+ * today when it is due today in London (ideally, or by its deadline), else upcoming, with To Dos
+ * that have no date. A slot (FR-16.8) orders today's, but moves none between groups.
  */
-export function todoGroup(t: Pick<TodoSummary, 'status' | 'deadline' | 'ideal' | 'slot'>, now: Date): TodoGroup {
+export function todoGroup(t: Pick<TodoSummary, 'status' | 'deadline' | 'ideal'>, now: Date): TodoGroup {
   if (t.status === 'done') return 'done';
   if (t.deadline && t.deadline < now.toISOString()) return 'overdue';
-  // Planned for today: today, whenever it is due.
-  if (t.slot && londonParts(t.slot.start).dateKey === londonParts(now).dateKey) return 'today';
   // Ideally done by today, or already: today. Past an ideal date is not overdue.
   const due = todoDue(t);
   if (!due) return 'upcoming';

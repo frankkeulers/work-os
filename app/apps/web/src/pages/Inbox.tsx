@@ -1093,7 +1093,7 @@ export function InboxPage() {
       <div className="relative flex min-h-0 flex-1">
         {wide ? (
           <>
-            <TimeColumn items={all} day={day} setDay={setDay} onOpenItem={openItem} />
+            <TimeColumn items={all} todos={todos} day={day} setDay={setDay} onOpenItem={openItem} />
             <NeedsYouZone
               rows={needsRows}
               render={(r, n, list) => row(r, n, list, 'needs')}

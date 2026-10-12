@@ -16,6 +16,10 @@ import {
   type TodoEdit,
   clampPlan,
   planOf,
+  slotMinutes,
+  slotOf,
+  todoSlots,
+  SLOT_BUFFER_MINUTES,
   awaitsReply,
   effectiveTriage,
   STAGE_OF,
@@ -291,10 +295,18 @@ export class MockServer implements WorkOsApi, MockControls {
 
   /** E15 (FR-16.2): the To Dos the inbox shows, as the server's todoSummaries. */
   private todoSummaries(): TodoSummary[] {
-    return shownTodos(Object.values(this.s.todos ?? {}), this.now()).flatMap((t) => this.todoSummary(t.id) ?? []);
+    const slots = this.todoSlots();
+    return shownTodos(Object.values(this.s.todos ?? {}), this.now()).flatMap((t) => this.todoSummary(t.id, slots) ?? []);
   }
 
-  private todoSummary(id: string): TodoSummary | undefined {
+  /** As the server's planner (FR-16.8): placed in the seed calendar's free time, worked out on each read. */
+  private todoSlots() {
+    const events = this.calendarOn() ? [...CALENDAR, ...CALENDAR_WEEK] : undefined;
+    const s = this.s.settings.schedule;
+    return todoSlots(Object.values(this.s.todos ?? {}), { now: this.now(), workHours: s.workHours, ...(events && { events, calendarTo: londonAt(this.now(), '00:00', 15) }), bufferMinutes: s.slotBufferMinutes ?? SLOT_BUFFER_MINUTES });
+  }
+
+  private todoSummary(id: string, slots = this.todoSlots()): TodoSummary | undefined {
     const t = this.s.todos?.[id];
     const words = this.s.todoTexts?.[id];
     if (!t || !words) return undefined;
@@ -314,6 +326,7 @@ export class MockServer implements WorkOsApi, MockControls {
       ...(t.mirror && { mirror: { want: t.mirror.want, ...(t.mirror.failed && { failed: t.mirror.failed }) } }),
       ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
       ...planOf(t, words.estimateWhy ? { estimateWhy: words.estimateWhy, ...(words.deadlineWhy && { deadlineWhy: words.deadlineWhy }) } : undefined),
+      ...(t.status === 'open' && slotOf(slots[id])),
     };
   }
 
@@ -1186,10 +1199,18 @@ export class MockServer implements WorkOsApi, MockControls {
     const t = this.todo(todoId);
     const effort = edit.effortMinutes !== undefined && edit.effortMinutes !== t.effortMinutes ? edit.effortMinutes : undefined;
     const deadline = edit.deadline !== undefined && (edit.deadline ?? undefined) !== t.deadline ? edit.deadline : undefined;
-    if (effort !== undefined || deadline !== undefined) {
-      this.event('todo.edited', { todoId, ...(effort !== undefined && { effortMinutes: effort }), ...(deadline !== undefined && { deadline }) }, { itemId: t.itemId, actionId: t.actionId });
-      this.emit({ topic: 'inbox' });
+    // As the server (FR-16.9): Frank's own time, fitted to a new estimate; null hands it back.
+    const mine = t.slot?.by === 'you' ? t.slot : undefined;
+    let slot = edit.slot === null ? (mine ? null : undefined) : edit.slot && (edit.slot.start !== mine?.start || edit.slot.end !== mine.end) ? edit.slot : undefined;
+    if (slot === undefined && effort !== undefined && mine && edit.slot === undefined) {
+      const end = new Date(Date.parse(mine.start) + slotMinutes(effort) * 60_000).toISOString();
+      if (end !== mine.end) slot = { start: mine.start, end };
     }
+    const ids = { itemId: t.itemId, actionId: t.actionId };
+    if (effort !== undefined || deadline !== undefined) this.event('todo.edited', { todoId, ...(effort !== undefined && { effortMinutes: effort }), ...(deadline !== undefined && { deadline }) }, ids);
+    if (slot === null) this.event('todo.unscheduled', { todoId, by: 'you' }, ids);
+    else if (slot) this.event('todo.scheduled', { todoId, ...slot, by: 'you' }, ids);
+    if (effort !== undefined || deadline !== undefined || slot !== undefined) this.emit({ topic: 'inbox' });
     return this.todoSummary(todoId) ?? null;
   }
 

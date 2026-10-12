@@ -12,7 +12,8 @@ import { londonAt, londonParts, parseWorkHours } from './time';
 // - Order: soonest due first (the ideal date, else the deadline), those without one last.
 // - A slot is the To Do's estimate (30 minutes without one) in quarter hours, never split: the first
 //   free time it fits, ending by its ideal date if it can, else by its deadline. With no room
-//   before its deadline, it has none, with the first time it would fit after.
+//   before its deadline, it has none, with the first time it would fit after. Once its deadline
+//   has passed, the first free time it fits.
 // - Stability: a slot already planned that still fits is kept, so a new meeting moves only the
 //   slots it hits. Frank's own slots are never moved; they are marked when a meeting clashes or
 //   the time has passed. A planned slot whose time passed with the To Do still open is placed again.
@@ -107,6 +108,8 @@ const dueOf = (t: SlotTodo) => t.ideal ?? t.deadline;
 
 export function planSlots(a: { now: Date; workHours: string; events?: readonly BusyEvent[]; calendarTo?: string; todos: readonly SlotTodo[]; bufferMinutes?: number }): Record<string, SlotResult> {
   const now = a.now.getTime();
+  // A date already gone by bounds nothing: late either way, it goes in as soon as it fits.
+  const bound = (iso?: string) => (iso && Date.parse(iso) > now ? Date.parse(iso) : undefined);
   const out: Record<string, SlotResult> = {};
   const pinned = a.todos.filter((t) => t.slot?.by === 'you');
   const busy: Span[] = (a.events ?? []).filter(isBusy).map((e) => [Date.parse(e.start), Date.parse(e.end)]);
@@ -133,7 +136,8 @@ export function planSlots(a: { now: Date; workHours: string; events?: readonly B
   const placed = new Set<string>();
   for (const t of [...rest].filter((x) => x.slot).sort((x, y) => x.slot!.start.localeCompare(y.slot!.start))) {
     const s: Span = [Date.parse(t.slot!.start), Date.parse(t.slot!.end)];
-    const ok = s[1] > now && s[1] - s[0] === slotMinutes(t.effortMinutes) * MIN && inside(free, s) && (!t.deadline || s[1] <= Date.parse(t.deadline));
+    const deadline = bound(t.deadline);
+    const ok = s[1] > now && s[1] - s[0] === slotMinutes(t.effortMinutes) * MIN && inside(free, s) && (deadline === undefined || s[1] <= deadline);
     if (!ok) continue;
     free = without(free, s);
     placed.add(t.id);
@@ -153,8 +157,8 @@ export function planSlots(a: { now: Date; workHours: string; events?: readonly B
       out[t.id] = { kind: 'none', reason: 'too_long' };
       continue;
     }
-    const ideal = t.ideal ? Date.parse(t.ideal) : undefined;
-    const deadline = t.deadline ? Date.parse(t.deadline) : undefined;
+    const ideal = bound(t.ideal);
+    const deadline = bound(t.deadline);
     const fit = (ideal !== undefined && firstFit(free, ms, from, ideal)) || firstFit(free, ms, from, deadline);
     if (!fit) {
       const after = firstFit(free, ms, from);

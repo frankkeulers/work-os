@@ -1,12 +1,13 @@
 import { useState, type KeyboardEvent } from 'react';
-import type { TodoEdit, TodoSummary } from '@work-os/shared';
+import { NO_SLOT, londonParts, slotMinutes, type TodoEdit, type TodoSummary } from '@work-os/shared';
 import { api } from '../../api';
 import { Button, PopoverPanel, cx, inputBase, type usePopover } from '../../components/ui';
 import { errorToast } from '../../store/toasts';
+import { fmtTime, fmtWhen } from '../../lib/format';
 
 // A To Do's plan on its row (E15, FR-16.6, FR-16.7): the estimate as a chip, dimmed when the model
 // was unsure, its why on hover. The chip, or `p` on the row, opens the editor: Frank's own
-// estimate and deadline, which the plan never overrides.
+// estimate, deadline and time to do it (FR-16.9), which the plan never overrides.
 
 /** The lengths offered: on Done for how long it took (FR-16.5), and here for how long it should take. */
 export const LENGTHS: readonly (readonly [number, string])[] = [
@@ -21,6 +22,9 @@ export const durLabel = (m: number) => LENGTHS.find(([n]) => n === m)?.[1] ?? (m
 
 /** The offered length nearest an estimate: the one Done's chips mark as Work OS's guess. */
 export const nearestLength = (m: number) => LENGTHS.reduce((best, [n]) => (Math.abs(Math.log(n / m)) < Math.abs(Math.log(best / m)) ? n : best), LENGTHS[0][0]);
+
+/** "Today 15:15–15:45", "Tue 09:00–09:30". */
+export const slotLabel = (s: { start: string; end: string }, now: Date) => `${londonParts(s.start).dateKey === londonParts(now).dateKey ? 'Today ' : ''}${fmtWhen(s.start, now)}–${fmtTime(s.end)}`;
 
 /** "2026-10-12T16:30" in the browser's zone, as a datetime-local input wants it. */
 const local = (iso: string) => {
@@ -73,6 +77,9 @@ function PlanEditor({ todo, onDone }: { todo: TodoSummary; onDone: () => void })
   const [minutes, setMinutes] = useState<number | undefined>(todo.effortMinutes);
   const [other, setOther] = useState(todo.effortMinutes && !LENGTHS.some(([n]) => n === todo.effortMinutes) ? String(todo.effortMinutes) : '');
   const [deadline, setDeadline] = useState(todo.deadline ? local(todo.deadline) : '');
+  const startWhen = todo.slot ? local(todo.slot.start) : '';
+  const [when, setWhen] = useState(startWhen);
+  const [handBack, setHandBack] = useState(false);
   const [saving, setSaving] = useState(false);
   const typed = Number(other);
   const effort = other ? (Number.isInteger(typed) && typed >= 5 && typed <= 960 ? typed : undefined) : minutes;
@@ -82,7 +89,12 @@ function PlanEditor({ todo, onDone }: { todo: TodoSummary; onDone: () => void })
     if (effort !== undefined && effort !== todo.effortMinutes) edit.effortMinutes = effort;
     const iso = deadline ? new Date(deadline).toISOString() : null;
     if (iso !== (todo.deadline ?? null)) edit.deadline = iso;
-    if (edit.effortMinutes === undefined && edit.deadline === undefined) return onDone();
+    // A time picked: Frank's own, as long as the estimate. Handed back: the plan places it again.
+    if (when && when !== startWhen) {
+      const start = new Date(when);
+      edit.slot = { start: start.toISOString(), end: new Date(start.getTime() + slotMinutes(effort ?? todo.effortMinutes) * 60_000).toISOString() };
+    } else if (handBack) edit.slot = null;
+    if (edit.effortMinutes === undefined && edit.deadline === undefined && edit.slot === undefined) return onDone();
     setSaving(true);
     try {
       await api.editTodo(todo.id, edit);
@@ -138,6 +150,20 @@ function PlanEditor({ todo, onDone }: { todo: TodoSummary; onDone: () => void })
         </div>
         {todo.ideal && <p className="m-0 mt-1.5 text-xs text-muted">Ideally sooner{todo.idealWhy ? `: ${todo.idealWhy}` : ''}. Setting a deadline replaces it.</p>}
       </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-semibold text-ink-2" htmlFor={`slot-${todo.id}`}>
+          When you’ll do it
+        </label>
+        <div className="flex items-center gap-2">
+          <input id={`slot-${todo.id}`} type="datetime-local" step={900} value={when} onChange={(e) => (setWhen(e.target.value), setHandBack(false))} className={cx(inputBase, 'min-h-8 flex-1 text-xs')} />
+          {todo.slot?.by === 'you' && !handBack && (
+            <button type="button" onClick={() => (setHandBack(true), setWhen(''))} className="text-xs text-muted cursor-pointer hover:text-ink hover:underline">
+              Let Work OS plan
+            </button>
+          )}
+        </div>
+        <p data-slot-note className="m-0 mt-1.5 text-xs text-muted">{slotNote(todo, handBack)}</p>
+      </div>
       <div className="flex justify-end gap-2">
         <Button size="sm" onClick={onDone}>
           Cancel
@@ -148,4 +174,13 @@ function PlanEditor({ todo, onDone }: { todo: TodoSummary; onDone: () => void })
       </div>
     </div>
   );
+}
+
+/** What the editor says about the time: whose it is, or why there is none. Nothing is booked. */
+function slotNote(todo: TodoSummary, handBack: boolean) {
+  if (handBack) return 'Work OS will find it free time again.';
+  if (todo.slot?.by === 'you') return `Your time: Work OS plans the rest around it.${todo.slot.clash ? ' A meeting is on then.' : ''}`;
+  if (todo.slot) return 'Free time Work OS found in your calendar. Nothing is booked. Pick a time to keep your own.';
+  if (todo.noSlot) return `${NO_SLOT[todo.noSlot.reason]}. Pick a time to keep your own.`;
+  return 'Pick a time to keep your own.';
 }

@@ -128,19 +128,19 @@ describe('To Do groups (E15, FR-16.2)', () => {
     expect(g.upcoming.map((x) => x.id)).toEqual(['idealLater', 'deadlineLater']);
   });
 
-  it('puts a To Do with a slot today in today, in the order of the slots, then those without one (FR-16.8)', () => {
+  it('orders today’s To Dos by slot, then those without one; a slot moves none between groups (FR-16.8)', () => {
     const slot = (start: string) => ({ start, end: start.replace(':00.000Z', ':30.000Z'), by: 'plan' as const });
     const g = todoGroups(
       [
         t('dueToday', { deadline: '2026-10-05T16:30:00.000Z', deadlineFrom: 'line' }),
-        t('four', { slot: slot('2026-10-05T15:00:00.000Z') }),
-        t('two', { deadline: '2026-10-09T11:00:00.000Z', deadlineFrom: 'triage', slot: slot('2026-10-05T13:00:00.000Z') }),
-        t('tomorrow', { slot: slot('2026-10-06T09:00:00.000Z') }),
+        t('four', { deadline: '2026-10-05T17:00:00.000Z', deadlineFrom: 'line', slot: slot('2026-10-05T15:00:00.000Z') }),
+        t('two', { ideal: '2026-10-05T16:00:00.000Z', slot: slot('2026-10-05T13:00:00.000Z') }),
+        t('later', { deadline: '2026-10-09T11:00:00.000Z', deadlineFrom: 'triage', slot: slot('2026-10-05T14:00:00.000Z') }),
       ],
       now,
     );
     expect(g.today.map((x) => x.id)).toEqual(['two', 'four', 'dueToday']);
-    expect(g.upcoming.map((x) => x.id)).toEqual(['tomorrow']);
+    expect(g.upcoming.map((x) => x.id)).toEqual(['later']);
   });
 });
 

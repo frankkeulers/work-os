@@ -50,6 +50,9 @@ described below; nothing is lost.
   deadline turns red, says **Overdue** and sits at the red line. Pins within 30 minutes of each
   other stack, such as **2 due 17:30**; point at a pin to see what it holds, click it to open the
   item.
+- **To Dos** sit in the meetings' lane, in violet, at the time Work OS found for them (see
+  [Time to do it](#time-to-do-it)): dashed when Work OS picked the time, solid when you did. Click
+  one to change its time.
 - **Tomorrow** (or `t`) shows tomorrow's meetings, with pins for This week items due then.
 - **Fold it away** with the arrow at the right of its header: it becomes a narrow rail with the
   clock. The arrow on the rail opens it. Either way, the sidebar shows a meeting that's on now or
@@ -161,6 +164,29 @@ only). It never gives an ideal date later than the deadline the To Do already ha
 set a deadline or choose **None**, then **Save**. Work OS never overrides what you set, and your
 deadline replaces the ideal one. Each change is kept as a label, so Work OS can learn how long your
 To Dos really take. The prompt is **To Do estimates** in [Settings › Prompts](/settings/prompts).
+
+### Time to do it
+
+With [Outlook Calendar](outlook.md) on, Work OS finds each open To Do some free time in your work
+hours, around your meetings, before it's due. Nothing is booked: the time shows in Work OS only,
+never in Outlook or your Tasks note.
+
+- **On the row**, after the source: "Today 15:15–15:45" or "Tue 09:00–09:30". A dashed outline
+  means Work OS found the time. Today's To Dos are listed in the order of their times.
+- **How it picks:** the To Do due soonest goes first, and one past its deadline goes first of all.
+  Each gets the first free time that's as long as its estimate (30 minutes without one) and ends
+  before it's ideally due, or else before its deadline. Meetings you've accepted, your own and
+  tentative ones count as busy; free, declined and cancelled ones don't, and an all-day event only
+  counts when you're out of office. Work OS keeps 10 minutes clear either side of a meeting; change
+  it in [Settings › Schedule](/settings/schedule) under **Gap around meetings**.
+- **It stays put.** A new meeting moves only the To Dos it lands on.
+- **No time before it's due:** the row says so, shows the first free time after, and **Use** keeps
+  that time for it. A To Do longer than a working day gets no time: split it or pick one yourself.
+
+**Pick your own time:** click the time, or the estimate chip, or press `p`. Set **When you'll do
+it** and **Save**. Your time has a solid outline, Work OS never moves it, and it plans the rest
+around it. If a meeting is later put on at the same time, a red dot marks it. **Let Work OS plan**
+hands it back. Each time you pick is kept as a label, so Work OS can learn when you'd rather work.
 
 ### Done
 
