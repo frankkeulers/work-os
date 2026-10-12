@@ -5,6 +5,7 @@ import type { FilingPlans } from './policy';
 import type { LearningLoop, LearningView, PolicyProposal } from './learning';
 import type { FilingFeedbackBody } from './requests';
 import type { DoneBy } from './projection/state';
+import type { TodoSummary } from './todos';
 import type {
   Action,
   ActionType,
@@ -236,6 +237,8 @@ export interface BudgetState {
 
 export interface InboxView {
   items: ItemSummary[];
+  /** E15 (FR-16.2): every open To Do, and those done today. */
+  todos: TodoSummary[];
   poll: PollStatus;
   source: SourceHealth; // Slack, until the UI shows several sources
   sources: SourceHealth[]; // every enabled source (R2.1)

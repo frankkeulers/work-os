@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useOutletContext } from 'react-router';
+import type { ShellContext } from '../../components/Shell';
 import type { ActionType, FilingFeedbackBody, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
@@ -499,6 +500,11 @@ const targetOf = (item: ItemSummary, t: ActionType) => (t === 'vault_note' ? ite
 /** The filing targets, as the lower half of the Next step or Status card. `skip` is already the card's primary action. */
 function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void; skip?: ActionType }) {
   const title = skip ? 'Also file' : 'File it';
+  // E15 (FR-16.2): the To Dos this item's to-dos made, open and done today, as the inbox shows them.
+  const shell = useOutletContext<ShellContext | undefined>();
+  const mine = shell?.inbox.data?.todos.filter((x) => x.itemId === item.id) ?? [];
+  const openTodos = mine.filter((x) => x.status === 'open').length;
+  const todosLine = mine.length ? ` · ${openTodos} open${mine.length > openTodos ? `, ${mine.length - openTodos} done today` : ''}` : '';
   return (
     <section aria-label={title} className="flex flex-col border-t border-line-soft px-[18px] pb-2 pt-3">
       <h3 className="m-0 text-[13px] font-semibold">{title}</h3>
@@ -518,7 +524,7 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
               : b.state === 'stale'
                 ? `${draftWord} out of date: new messages since`
                 : b.state === 'done'
-                  ? `${v ? `${v} ${t === 'todo' ? 'added' : 'filed'}` : t === 'todo' ? 'Added to Tasks' : 'Filed'}${a?.repliesSince ? ' · new replies since' : ''}`
+                  ? `${v ? `${v} ${t === 'todo' ? 'added' : 'filed'}` : t === 'todo' ? 'Added to Tasks' : 'Filed'}${t === 'todo' ? todosLine : ''}${a?.repliesSince ? ' · new replies since' : ''}`
                   : b.state === 'failed'
                     ? a?.failedWhile === 'writing'
                       ? `Not written to ${TYPE_LABEL[t].target}`

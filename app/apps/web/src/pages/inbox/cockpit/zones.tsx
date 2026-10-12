@@ -160,6 +160,7 @@ export function LaterZone({
   pill,
   fileAction,
   filedToday,
+  todos,
   scrollerRef,
 }: {
   /** Waiting on others (FR-8.1, amended): Frank owns the outcome, someone else has the next move. */
@@ -178,6 +179,8 @@ export function LaterZone({
   fileAction?: ReactNode;
   /** What was filed today, at the top of the Done list (UX-12). */
   filedToday?: ReactNode;
+  /** Upcoming To Dos (E15, FR-16.2), after This week. */
+  todos?: ReactNode;
   scrollerRef: RefObject<HTMLElement | null>;
 }) {
   const now = useNow(30_000);
@@ -230,6 +233,7 @@ export function LaterZone({
               <SubHead dot="bg-gray-mid" title="This week" count={by.week.length} />
               {by.week.length ? by.week.flatMap(renderLower) : <p className="m-0 border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing due later this week.</p>}
             </section>
+            {todos}
             {by.snoozed.length > 0 && (
               <button
                 type="button"

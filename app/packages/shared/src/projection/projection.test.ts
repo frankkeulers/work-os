@@ -236,6 +236,37 @@ describe('reduce', () => {
   });
 });
 
+describe('To Dos (E15, FR-16.1–16.3)', () => {
+  const ids = { itemId: ITEM, actionId: 'act-1' };
+  const created = { todoId: 'todo-aaaa1111bbbb', lineId: 'a1b2c3', deadline: at(300), deadlineFrom: 'triage' as const };
+
+  it('creates a To Do once, closes and reopens it, and ignores what changes nothing', () => {
+    const l = log();
+    l.add('item.upserted', 0, upserted(1));
+    l.add('todo.created', 1, created, ids);
+    l.add('todo.created', 2, { ...created, deadline: at(900) }, ids); // a replay: the first stands
+    l.add('todo.done', 3, { todoId: created.todoId, by: 'tasks_note', on: '2026-10-05' }, ids);
+    l.add('todo.done', 4, { todoId: created.todoId, by: 'you' }, ids); // already done
+    const p = replay(l.events);
+    expect(p.todos?.[created.todoId]).toEqual({ id: created.todoId, itemId: ITEM, actionId: 'act-1', lineId: 'a1b2c3', createdAt: at(1), status: 'done', deadline: at(300), deadlineFrom: 'triage', doneAt: at(3), doneBy: 'tasks_note' });
+    l.add('todo.reopened', 5, { todoId: created.todoId, by: 'tasks_note' }, ids);
+    l.add('todo.reopened', 6, { todoId: 'todo-ffff', by: 'you' }, ids); // never created
+    const q = replay(l.events);
+    expect(q.todos?.[created.todoId]).toMatchObject({ status: 'open' });
+    expect(q.todos?.[created.todoId]).not.toHaveProperty('doneAt');
+    expect(Object.keys(q.todos ?? {})).toEqual([created.todoId]);
+    // The item's own suggestion is another thing: todo.dismissed still marks the item.
+    l.add('todo.dismissed', 7, { revision: 1 });
+    expect(replay(l.events).items[ITEM].todoDismissed).toBe(1);
+  });
+
+  it('needs the action and the item to create one', () => {
+    const l = log();
+    l.add('todo.created', 1, created, { itemId: ITEM });
+    expect(replay(l.events).todos).toEqual({});
+  });
+});
+
 describe('events that arrive too late', () => {
   const ids = { itemId: ITEM, actionId: 'act-1' };
   const drafted: EventData<'action.drafted'> = { type: 'confluence_entry', revision: 1, draftRef: 'drafts/act-1.json', tokens: 900, target: { pageId: '42', baseVersion: 7 } };

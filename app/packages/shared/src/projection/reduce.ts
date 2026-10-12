@@ -1,7 +1,7 @@
 import type { EventType, WorkEvent } from '../events';
 import { stageFiling } from '../policy';
 import type { ActionStatus } from '../schemas';
-import { DISMISSED_DAYS, emptyProjection, type ActionState, type Projection } from './state';
+import { DISMISSED_DAYS, emptyProjection, type ActionState, type Projection, type TodoState } from './state';
 import {
   applyDecision,
   confirm,
@@ -109,6 +109,34 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
   return true;
 }
 
+/** The To Do events (E15). todo.dismissed is the item's suggestion, not a To Do. */
+export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' }> =>
+  e.type === 'todo.created' || e.type === 'todo.done' || e.type === 'todo.reopened';
+
+/**
+ * Applies one To Do event, in place (FR-16.1–16.3). A To Do is created once: a replay of its
+ * creation changes nothing. Done and reopened only move it from the other state, so a tick read
+ * back from the note after Frank pressed Done changes nothing either.
+ */
+export function applyTodoEvent(todos: Record<string, TodoState>, e: WorkEvent): void {
+  if (!isTodoEvent(e)) return;
+  const id = e.data.todoId;
+  if (e.type === 'todo.created') {
+    if (todos[id] || !e.itemId || !e.actionId) return;
+    const { lineId, deadline, deadlineFrom, backfilled } = e.data;
+    todos[id] = { id, itemId: e.itemId, actionId: e.actionId, ...(lineId && { lineId }), createdAt: e.at, status: 'open', ...(deadline && { deadline }), deadlineFrom, ...(backfilled && { backfilled }) };
+    return;
+  }
+  const t = todos[id];
+  if (!t) return;
+  if (e.type === 'todo.done' && t.status === 'open') Object.assign(t, { status: 'done', doneAt: e.at, doneBy: e.data.by });
+  if (e.type === 'todo.reopened' && t.status === 'done') {
+    t.status = 'open';
+    delete t.doneAt;
+    delete t.doneBy;
+  }
+}
+
 /** Records a dismissal and forgets those older than DISMISSED_DAYS, so the set stays small. */
 export function dismiss(dismissed: Record<string, string>, key: string, at: string) {
   const cutoff = new Date(Date.parse(at) - DISMISSED_DAYS * 86_400_000).toISOString();
@@ -130,6 +158,10 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
   }
   if (e.type.startsWith('action.')) {
     applyActionEvent(p.actions, e);
+    return p;
+  }
+  if (isTodoEvent(e)) {
+    applyTodoEvent((p.todos ??= {}), e);
     return p;
   }
   if (e.type === 'attention.dismissed') {

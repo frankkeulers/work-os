@@ -93,6 +93,16 @@ Review the lines, edit them if you like (a line without a checkbox becomes a tas
 **Approve and add to Tasks**. The lines go at the end of the note, and the note is created if it
 isn't there. A task that is already in the note, ticked or not, isn't added again.
 
+Each line is written with an id, the Tasks plugin's `🆔` field, after its date:
+
+```
+- [ ] Confirm the data-licensing wording in the doc 📅 2026-10-05 🆔 3fa9c1 [#mvi-launch](https://…)
+```
+
+The id lets Work OS find the line again, even after you move it or edit its words. Each line
+becomes a To Do on the inbox (see [To do](inbox.md#to-do)), and ticking it in Obsidian marks
+that To Do done.
+
 When your filing policy suggests a to-do, the panel shows **Add to-do:** with the step and its
 date: `a` adds that one for review, × dismisses it. Both teach the policy; see
 [Feedback on filing](inbox.md#feedback-on-filing).

@@ -1,4 +1,5 @@
-import type { LoggedDecision } from '../events';
+import type { LoggedDecision, TodoBy } from '../events';
+import type { DeadlineFrom } from '../todo';
 import type { ItemStatus, TriageState } from '../lanes';
 import type { FilingStages } from '../policy';
 import type { Action, Attention, ItemKind, Participant, SourceId, TriageCorrection } from '../schemas';
@@ -6,7 +7,7 @@ import type { Action, Attention, ItemKind, Participant, SourceId, TriageCorrecti
 // The inbox state that the event log projects to (PLAN.md §4.3). The server keeps it in memory
 // and in snapshot.json; the mock keeps the same flags on its own records. Bump PROJECTION_VERSION
 // whenever reduce() changes, so the server replays the whole log instead of trusting the snapshot.
-export const PROJECTION_VERSION = 8; // 8: Frank's word on a filing's stage (filing.staged, FR-15.7); 7: Retry write (a failed write approved again), failedWhile only once approved; 6: events that arrive too late change nothing (action status guards, stale failures and checks); 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10); 5: the bell's dismissals, back-from-snooze times, failedWhile (FR-11.3–11.5)
+export const PROJECTION_VERSION = 9; // 9: To Dos (todo.created, todo.done, todo.reopened, FR-16.1–16.3); 8: Frank's word on a filing's stage (filing.staged, FR-15.7); 7: Retry write (a failed write approved again), failedWhile only once approved; 6: events that arrive too late change nothing (action status guards, stale failures and checks); 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10); 5: the bell's dismissals, back-from-snooze times, failedWhile (FR-11.3–11.5)
 
 /**
  * What the inbox knows about an item beyond its content. `D` is the decision type: the server
@@ -91,10 +92,32 @@ export interface CloseStats {
   undone: number;
 }
 
+/**
+ * A To Do (E15, FR-16.1): one line a to-do action wrote to the Tasks note, tracked by Work OS. Its
+ * words live in todos/<id>.json; the log keeps when it is due and whether it is done.
+ */
+export interface TodoState {
+  id: string;
+  itemId: string;
+  actionId: string;
+  /** The line's 🆔 in the Tasks note; absent for a line written before To Dos had ids. */
+  lineId?: string;
+  createdAt: string;
+  status: 'open' | 'done';
+  deadline?: string;
+  deadlineFrom: DeadlineFrom;
+  doneAt?: string;
+  doneBy?: TodoBy;
+  /** Made at start from a to-do written before Work OS tracked To Dos. */
+  backfilled?: true;
+}
+
 export interface Projection {
   lastSeq: number;
   items: Record<string, ItemState>;
   actions: Record<string, ActionState>;
+  /** E15 (FR-16.1): To Dos by id. Absent in a snapshot written before it existed. */
+  todos?: Record<string, TodoState>;
   sources: Partial<Record<SourceId, SourceState>>;
   /** By London date, the last 30 days. Absent in a snapshot written before it existed. */
   closes?: Record<string, CloseStats>;

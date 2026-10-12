@@ -285,6 +285,8 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
     slack/<itemId>.json       raw thread content (subject to retention)
   drafts/
     <actionId>.json           draft content + target + base version
+  todos/
+    <todoId>.json             a To Do's words and its line in the Tasks note (E15, FR-16.1); removed once done and its item has expired
   labels/
     triage.jsonl              labelled set + corrections from the UI
     settle.jsonl              settle checks Frank showed wrong: an Undo, or a Done soon after "not settled" (cockpit CK-2.6)
@@ -1125,6 +1127,58 @@ The proposal is saved under `proposals/` with its diff, changes and scores, and 
 > **Story 15.4** As Frank, I want a to-do suggested only when it's clearly mine, and never added without me.
 >
 > - Given a decision suggests a to-do, when I press `a`, then the to-do opens for review; when I press ×, then the suggestion goes and a label records it.
+
+### 7.16 E15 To Dos on the inbox
+
+*Added 12 Oct 2026, from Frank: "any filed To Do items are not shown anywhere".* A to-do (FR-9.8–9.11) was a line appended to the Tasks note and nothing more: the inbox never showed it again. E15 makes each line a **To Do** that Work OS tracks, shows on the inbox and lets Frank close. It then adds, in stages:
+- an estimate and an ideal deadline from a model;
+- a free slot found in the calendar and shown in Work OS only, with no invites;
+- follow-ups suggested on Done;
+- learning loops for all of these.
+
+Decisions (Frank, 12 Oct 2026):
+1. **Work OS is the home of To Dos, mirrored to the Tasks note.** The line is still written there. A line ticked in Obsidian is read back as done.
+2. **Follow-ups are drafted, and Frank sends them** (NF-4 and non-negotiable 8 stay).
+3. **The actual time comes from a one-tap chip on Done.**
+
+The stages:
+- **1a:** the entity, the inbox and the read-back (FR-16.1–16.3).
+- **1b:** Done from the inbox, which ticks the line, and the time chips.
+- **2:** the estimate and deadline.
+- **3:** the slot finder and the time column.
+- **4:** follow-ups.
+- **5:** the learning loops and evals.
+
+**FR-16.1 To Dos.**
+- **One per line.** Each line an approved to-do writes to the Tasks note becomes a To Do.
+- **Line ids.** The line carries the Tasks plugin's id field, `🆔 a1b2c3`, after its date or before its link back. The id comes from the action and the task, so a write cut short and finished later gives the same line and writes nothing new. FR-9.10's "already there" ignores the id.
+- **Logging.** `todo.created` events are logged in the same append as `action.executed`, with the To Do's id, its line's id, and its deadline:
+  - triage's deadline for the step, while the line keeps its date (the draft keeps them as `dues`);
+  - else the line's 📅 date at 17:30;
+  - else none.
+- **Words.** The step's words and the line live in `todos/<todoId>.json`, never in the log. Retention removes them once the To Do has been done for longer than `retentionDays` and its item has expired.
+- **Backfill.** At start, to-dos written before E15 get their To Dos from their drafts (`backfilled`), found again by their task since their lines have no id. A draft retention removed is skipped.
+
+**FR-16.2 On the inbox.**
+- **The list layout.** It has a **To do** group after Needs you, still shown at Inbox Zero:
+  - **Overdue** (red), **Today** and **Upcoming** (later, or no deadline), soonest first;
+  - then **N done today**, folded.
+- **The cockpit.** It shows what is overdue or due today under Needs you as **TO DO**, and the rest under Later after This week.
+- **A row.** Each row shows the step, its source (click to open the item), its deadline chip, and "not in the Tasks note" when its line has gone.
+- **Scope.** To Dos from preview sources show only in Full scope, as items do.
+- **The item panel.** Add to-do says how many of the item's To Dos are open and done today.
+
+**FR-16.3 Read back from the Tasks note.** The server looks at the Tasks note every 30 seconds, and reads it only when its modified time, its size or the To Dos changed. In dry-run it reads the sandbox copy when there is one.
+- **Matching.** Lines are matched by id, else by task.
+- **A line ticked in Obsidian** closes its To Do (`todo.done`, `by: tasks_note`, with the ✅ date).
+- **A line unticked** reopens a To Do the note had closed.
+- **A missing line** is shown as such and changes nothing else: Frank may have moved it.
+- **Reads only.** Nothing is written to the vault by the read-back.
+
+> **Story 16.1** As Frank, I want the to-dos I filed to stay in front of me until they are done.
+>
+> - Given I approved a to-do with two lines, when the write lands, then the inbox's To do group shows both, each with its source and deadline.
+> - Given I tick one in Obsidian, when I look at the inbox within a minute, then it shows as done today, ticked in Obsidian.
 
 ---
 

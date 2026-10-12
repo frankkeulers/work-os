@@ -98,6 +98,9 @@ function Controls() {
       <Group title="Filing policy" hint="the cockpit's afternoon, as triage under the policy would have decided the To file seeds (E14)">
         <Ctl onClick={() => mockControls.applyFilingPolicy()}>13:48 with the filing policy (cockpit)</Ctl>
       </Group>
+      <Group title="To Dos" hint="the cockpit's afternoon, with to-dos written over the past few days: overdue, due today, later, undated and done (E15)">
+        <Ctl onClick={() => mockControls.seedTodos()}>13:48 with To Dos (cockpit)</Ctl>
+      </Group>
       <Group title="Poll outcome" hint={`${s.timelinePending} scripted arrivals left`}>
         {POLLS.map(([o, l]) => (
           <Ctl key={o} onClick={() => mockControls.simulatePoll(o)}>

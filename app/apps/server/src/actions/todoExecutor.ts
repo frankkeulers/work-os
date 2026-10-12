@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { todoLines, type TodoDraft } from '@work-os/shared';
+import { taskKey, todoWriteLines, type TodoDraft } from '@work-os/shared';
 import type { StoredDraft } from '../store/drafts';
 import type { VaultTargets } from './vaultExecutor';
 import { checkNotePath, readOrNull, sha256, touchUpdated, VaultPathError } from './vaultFiles';
@@ -10,22 +10,13 @@ import { checkNotePath, readOrNull, sha256, touchUpdated, VaultPathError } from 
 // in the note since (ticking a task, say), so there is no conflict: the lines go at the end of the
 // note as it is now. A task already in the note, ticked or not, is not added again, so an attempt
 // cut short by a crash or sleep is finished, never repeated.
+// E15 (FR-16.1): each line is written with its id (🆔), from the action and the task, so Work OS
+// finds the line again; a task counts as there whatever its id (taskKey).
 
 export type TodoPlan =
   | { kind: 'write'; file: string; real: string; content: string; expectedHash: string; baseHash: string | null; isNew: boolean; message: string }
   | { kind: 'already'; file: string; message: string }
   | { kind: 'refused'; message: string };
-
-/**
- * A task as Frank may have left it: ticked or not, and with the completion date the Tasks plugin
- * adds when he ticks it (✅ 2026-10-06), it is the same task.
- */
-const taskKey = (line: string) =>
-  line
-    .trim()
-    .replace(/^- \[.\]\s*/, '')
-    .replace(/\s*✅\s*\d{4}-\d{2}-\d{2}/u, '')
-    .trim();
 
 /** A new Tasks note: a heading, then the lines. */
 const NEW_NOTE = (lines: string[]) => `# Tasks\n\n${lines.join('\n')}\n`;
@@ -44,7 +35,7 @@ export async function planTodoWrite(t: VaultTargets, stored: StoredDraft, d: Tod
     if (e instanceof VaultPathError) return { kind: 'refused', message: `${e.message} The executor refused the write. Check the Tasks note in Settings › Write targets.` };
     throw e;
   }
-  const lines = todoLines(d.content);
+  const lines = todoWriteLines(d.content, stored.actionId);
   if (!lines.length) return { kind: 'refused', message: 'The to-do has no lines, so nothing was written.' };
   const real = join(t.vaultRoot, path);
   const file = t.dryRun ? join(t.sandboxRoot, path) : real;

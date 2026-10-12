@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { TodoDraft } from '@work-os/shared';
+import { withLineId, type TodoDraft } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { StoredDraft } from '../store/drafts';
 import { planTodoWrite, unchangedSince } from './todoExecutor';
@@ -27,7 +27,8 @@ describe('planTodoWrite (UX-5)', () => {
   it('creates the note, then appends below what is there, and finishes an attempt cut short without repeating it', async () => {
     const d = draft('- [ ] One\n- [ ] Two');
     const first = await planTodoWrite(t, stored(d), d);
-    expect(first).toMatchObject({ kind: 'write', isNew: true, content: '# Tasks\n\n- [ ] One\n- [ ] Two\n', baseHash: null });
+    // Each line with its id (E15, FR-16.1).
+    expect(first).toMatchObject({ kind: 'write', isNew: true, content: `# Tasks\n\n${withLineId('- [ ] One', 'act-1')}\n${withLineId('- [ ] Two', 'act-1')}\n`, baseHash: null });
     if (first.kind !== 'write') return;
     await writeVaultFile(first);
     // Written, then a crash before it was logged: the next attempt finds it there.
@@ -46,12 +47,13 @@ describe('planTodoWrite (UX-5)', () => {
     const dry = { ...t, dryRun: true };
     const d = draft('- [ ] New');
     const p = await planTodoWrite(dry, stored(d), d);
-    expect(p).toMatchObject({ kind: 'write', file: join(t.sandboxRoot, 'Work/Tasks.md'), content: '# Tasks\n\n- [ ] Old\n- [ ] New\n' });
+    const added = `# Tasks\n\n- [ ] Old\n${withLineId('- [ ] New', 'act-1')}\n`;
+    expect(p).toMatchObject({ kind: 'write', file: join(t.sandboxRoot, 'Work/Tasks.md'), content: added });
     if (p.kind !== 'write') return;
     expect(await unchangedSince(p, true)).toBe(true);
     await writeVaultFile(p);
     expect(await readFile(join(dir, NOTE), 'utf8')).toBe('# Tasks\n\n- [ ] Old\n');
-    expect(await readFile(p.file, 'utf8')).toBe('# Tasks\n\n- [ ] Old\n- [ ] New\n');
+    expect(await readFile(p.file, 'utf8')).toBe(added);
   });
 
   it('refuses a path outside the vault or in a hidden folder, and a to-do with no lines', async () => {

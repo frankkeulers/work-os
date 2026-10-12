@@ -8,6 +8,12 @@ import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participan
 const isoDate = z.iso.datetime();
 const revision = z.number().int().positive();
 const none = z.object({}).strict().optional();
+const todoId = z.string().regex(/^todo-[0-9a-f]+$/);
+const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const DeadlineFrom = z.enum(['triage', 'line', 'none']);
+/** Who closed or reopened a To Do: Frank in Work OS, or the line in the Tasks note. */
+export const TodoBy = z.enum(['you', 'tasks_note']);
+export type TodoBy = z.infer<typeof TodoBy>;
 
 export const PollReason = z.enum(['manual', 'scheduled', 'wake', 'reconnect', 'first']);
 export type PollReason = z.infer<typeof PollReason>;
@@ -81,6 +87,14 @@ export const EventPayloads = {
   'triage.confirmed': z.object({ revision }),
   // E14 (FR-15.6): Frank dismissed the to-do the policy suggested for this revision.
   'todo.dismissed': z.object({ revision }),
+  // E15 (FR-16.1–16.3): To Dos, one per line a to-do action wrote to the Tasks note. Unlike
+  // todo.dismissed above, which is about an item's suggestion, these carry the To Do's id: the
+  // envelope's itemId is its source item and actionId the action that wrote its line. Its words
+  // live in todos/, never here. done and reopened come from Frank in Work OS, or from the line
+  // ticked or unticked in the note (tasks_note).
+  'todo.created': z.object({ todoId, lineId: z.string().min(1).optional(), deadline: isoDate.optional(), deadlineFrom: DeadlineFrom, backfilled: z.literal(true).optional() }),
+  'todo.done': z.object({ todoId, by: TodoBy, on: dateKey.optional() }),
+  'todo.reopened': z.object({ todoId, by: TodoBy }),
   // E14 (FR-15.7): Frank's word on one filing's stage from the Filing… menu, for this revision.
   // ready implies predraft; predraft false implies ready false (see filingPlan()).
   'filing.staged': z.object({ revision, type: z.enum(['confluence_entry', 'vault_note']), predraft: z.boolean().optional(), ready: z.boolean().optional() }),

@@ -273,6 +273,8 @@ export const TodoDraft = DraftMeta.extend({
   kind: z.literal('todo'),
   path: z.string().min(1),
   content: z.string(),
+  /** E15 (FR-16.1): triage's deadline for each line by its task, so a To Do keeps the time, not just the 📅 date. */
+  dues: z.record(z.string(), z.iso.datetime()).optional(),
 });
 /** Nothing to file: the page's section already holds it (FR-10.7). Approving writes nothing. */
 export const ConfluenceFiledDraft = DraftMeta.extend({

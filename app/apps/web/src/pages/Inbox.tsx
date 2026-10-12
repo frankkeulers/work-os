@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { ActionType } from '@work-os/shared';
 import { api, type InboxView, type ItemSummary } from '../api';
@@ -33,6 +33,7 @@ import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox
 import { BatchDone, ItemPanel, SweepDone } from './inbox/ItemPanel';
 import { counted, newSweep, nextInSweep, type Sweep } from './inbox/sweep';
 import { FiledToday } from './inbox/FiledToday';
+import { TodoGroup, TodoLater, TodoNeeds } from './inbox/TodoGroup';
 import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
 import { useDraftAhead } from './inbox/draftAhead';
 import { LeaveDialog, PanelSlide } from './inbox/PanelSlide';
@@ -701,6 +702,8 @@ export function InboxPage() {
   // Outlook and Teams are Phase 2 previews: their items only show in Full scope.
   const inScope = useCallback((i: ItemSummary) => full || isLive(i.source), [full]);
   const all = useMemo(() => (inbox?.items ?? []).filter(inScope), [inbox, inScope]);
+  // To Dos (E15, FR-16.2): from the sources in scope, as items are.
+  const todos = useMemo(() => (inbox?.todos ?? []).filter((t) => full || isLive(t.source)), [inbox, full]);
   const [open, setOpen] = useState<Lower | null>(null);
   const toggle = (g: Lower) => setOpen(open === g ? null : g);
   const now = useNow(60_000);
@@ -1098,6 +1101,7 @@ export function InboxPage() {
               empty={inbox.firstRun ? <FirstRun inbox={inbox} /> : undefined}
               footer={<RepliesLine closed={inbox.closedByReply} onReview={() => setOpen('replied')} className="h-12" />}
             >
+              <TodoNeeds todos={todos} onOpen={openItem} />
               {full && <CommitmentsGroup />}
             </NeedsYouZone>
             <LaterZone
@@ -1113,6 +1117,7 @@ export function InboxPage() {
               pill={<NewPill group="file" items={pillItems('file')} above={stable.pending.file.every((p) => p.above)} onGo={() => goNew('file')} />}
               fileAction={batchButton}
               filedToday={<FiledToday onOpen={openItem} />}
+              todos={<TodoLater todos={todos} onOpen={openItem} />}
               scrollerRef={laterRef}
             />
           </>
@@ -1124,10 +1129,14 @@ export function InboxPage() {
           ) : (
             <>
               {topCount === 0 ? (
-                <InboxZero inbox={inbox} />
+                <>
+                  <InboxZero inbox={inbox} />
+                  <TodoGroup todos={todos} onOpen={openItem} />
+                </>
               ) : (
                 GROUPS.filter((g) => !g.hideEmpty || groupRows[g.id].length > 0).map((g) => (
-                  <section key={g.id} aria-label={g.title} data-group={g.id} className="flex flex-col pb-3">
+                  <Fragment key={g.id}>
+                  <section aria-label={g.title} data-group={g.id} className="flex flex-col pb-3">
                     <NewPill group={g.id} items={pillItems(g.id)} above={stable.pending[g.id].every((p) => p.above)} onGo={() => goNew(g.id)} />
                     <div className="flex items-baseline gap-2 px-6 pb-2 pt-3">
                       <GroupHead dot={g.dot} title={g.title} count={by[g.id].length} />
@@ -1139,6 +1148,8 @@ export function InboxPage() {
                     </div>
                     {g.id === 'needs' && <RepliesLine closed={inbox.closedByReply} onReview={() => setOpen('replied')} className="border-t-0 py-2.5" />}
                   </section>
+                  {g.id === 'needs' && <TodoGroup todos={todos} onOpen={openItem} />}
+                  </Fragment>
                 ))
               )}
               {full && <CommitmentsGroup />}

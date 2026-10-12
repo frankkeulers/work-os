@@ -2,6 +2,9 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Action, ApiErrorBody, AttentionView, EvalReport, FiledView, FilingEvalReport, PolicyProposal, PromptFileView, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
+import { withLineId } from '@work-os/shared';
+import { DraftStore } from './store/drafts';
+import { backfillTodos } from './todos/backfill';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
@@ -1084,10 +1087,10 @@ describe('to-do action (UX-5)', () => {
     expect(v.summary.actions.todo).toMatchObject({ status: 'ready' });
     expect((await call<UsageView>('GET', '/api/usage')).body.days.at(-1)).toMatchObject({ drafts: 0 });
 
-    // Approved: appended to a new Tasks note in the sandbox; the vault is untouched.
+    // Approved: appended to a new Tasks note in the sandbox, with its id (FR-16.1); the vault is untouched.
     expect((await call('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(202);
     await res.actions.settled();
-    expect(await sandboxTasks()).toBe(`# Tasks\n\n- [ ] Follow up: Release notes draft is up [#product](${permalink})\n`);
+    expect(await sandboxTasks()).toBe(`# Tasks\n\n${withLineId(`- [ ] Follow up: Release notes draft is up [#product](${permalink})`, r.body.id)}\n`);
     expect((await item()).results[r.body.id]).toMatch(/^Dry-run: Created .*Work\/Tasks\.md \(dry-run sandbox\) with the to-do\./);
     await expect(readFile(join(vault, 'Work/Tasks.md'))).rejects.toThrow();
   });
@@ -1101,7 +1104,8 @@ describe('to-do action (UX-5)', () => {
     expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: `- [ ] Send the tier comparison 📅 2026-10-09 ${link}\nCall Sam` })).status).toBe(204);
     expect((await call('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(202);
     await res.actions.settled();
-    expect(await sandboxTasks()).toBe(`---\nupdated: 2026-10-06\n---\n# Tasks\n\n- [x] Old one\n- [ ] Send the tier comparison 📅 2026-10-09 ${link}\n- [ ] Call Sam\n`);
+    const id = (line: string) => withLineId(line, r.body.id);
+    expect(await sandboxTasks()).toBe(`---\nupdated: 2026-10-06\n---\n# Tasks\n\n- [x] Old one\n${id(`- [ ] Send the tier comparison 📅 2026-10-09 ${link}`)}\n${id('- [ ] Call Sam')}\n`);
 
     // The same lines again: nothing is added.
     const again = await request({ type: 'todo', steps: ['Call Sam'] });
@@ -1128,6 +1132,76 @@ describe('to-do action (UX-5)', () => {
 
     const view = (await call<SettingsView>('GET', '/api/settings')).body;
     expect((await call('PUT', '/api/settings', { settings: { ...view.settings, tasksNote: '../Tasks.md' }, rules: view.rules })).status).toBe(422);
+  });
+});
+
+describe('To Dos (E15, FR-16.1–16.3)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+
+  beforeEach(async () => {
+    const vault = join(dir, '..', 'vault');
+    await mkdir(join(vault, 'Work'), { recursive: true });
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, vaultPath: vault }, rules: view.rules })).status).toBe(200);
+  });
+  let tasks: string;
+  beforeEach(() => void (tasks = join(dir, 'sandbox/vault/Work/Tasks.md')));
+  const inboxTodos = async () => (await call<InboxView>('GET', '/api/inbox')).body.todos;
+  const write = async (steps: string[]) => {
+    const r = await call<Action>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, { type: 'todo', steps });
+    expect((await call('POST', `/api/actions/${r.body.id}/approve`)).status).toBe(202);
+    await res.actions.settled();
+    return r.body.id;
+  };
+
+  it('makes a To Do of each written line, shown on the inbox with where it came from', async () => {
+    const id = await write(['Send the tier comparison', 'Book the trial kick-off']);
+    const todos = await inboxTodos();
+    expect(todos.map((t) => t.step)).toEqual(['Send the tier comparison', 'Book the trial kick-off']);
+    expect(todos[0]).toMatchObject({ itemId: PROD, source: 'slack', sourceTitle: '#product', status: 'open', deadlineFrom: 'none' });
+    // One event per To Do, in the append that logged the write; their words in todos/, not the log.
+    const made = Object.values(res.store.projection.todos ?? {}).filter((t) => t.actionId === id);
+    expect(made).toHaveLength(2);
+    expect(made.every((t) => t.lineId && res.todoTexts.get(t.id)?.line.includes(`🆔 ${t.lineId}`))).toBe(true);
+    expect(JSON.stringify(res.store.projection.todos)).not.toContain('tier comparison');
+  });
+
+  it('closes a To Do whose line Frank ticks in Obsidian, reopens it when he unticks it, and says when its line has gone', async () => {
+    await write(['Send the tier comparison']);
+    const [todo] = await inboxTodos();
+    const note = await readFile(tasks, 'utf8');
+    await writeFile(tasks, note.replace('- [ ] Send the tier comparison', '- [x] Send the tier comparison').replace(/\n$/, ' ✅ 2026-10-06\n'));
+    expect(await res.tasksNote.check(true)).toBe(1);
+    expect((await inboxTodos())[0]).toMatchObject({ id: todo.id, status: 'done', doneBy: 'tasks_note', inNote: true });
+    expect(await res.tasksNote.check(true)).toBe(0); // read again: nothing new
+    await writeFile(tasks, note);
+    expect(await res.tasksNote.check(true)).toBe(1);
+    expect((await inboxTodos())[0]).toMatchObject({ status: 'open' });
+    await writeFile(tasks, '# Tasks\n');
+    await res.tasksNote.check(true);
+    expect((await inboxTodos())[0]).toMatchObject({ status: 'open', inNote: false });
+  });
+
+  it('backfills To Dos from a to-do written before Work OS tracked them, once', async () => {
+    const id = await write(['Send the tier comparison']);
+    // As a to-do written before E15: its To Dos never logged.
+    const old = 'act-before-e15';
+    const drafts = new DraftStore(join(dir, 'drafts'));
+    const stored = await drafts.read(id);
+    await drafts.update(old, PROD, (s) => ({ ...s, draft: stored!.draft }));
+    const revision = res.store.projection.items[PROD].revision;
+    const ids = { itemId: PROD, actionId: old };
+    await res.store.append(
+      { type: 'action.requested', ...ids, data: { type: 'todo', revision } },
+      { type: 'action.drafted', ...ids, data: { type: 'todo', revision, draftRef: `drafts/${old}.json`, tokens: 0, target: { path: 'Work/Tasks.md' } } },
+      { type: 'action.approved', ...ids, data: undefined },
+      { type: 'action.executed', ...ids, data: { dryRun: true, path: tasks } },
+    );
+    expect(await backfillTodos({ store: res.store, drafts, todos: res.todoTexts })).toBe(1);
+    expect(await backfillTodos({ store: res.store, drafts, todos: res.todoTexts })).toBe(0);
+    const back = Object.values(res.store.projection.todos ?? {}).find((t) => t.actionId === old);
+    expect(back).toMatchObject({ backfilled: true, status: 'open' });
+    expect(back?.lineId).toBeUndefined();
   });
 });
 

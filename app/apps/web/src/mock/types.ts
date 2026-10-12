@@ -14,7 +14,9 @@ import type {
   Rule,
   Settings,
   SlackStatus,
+  SourceId,
   StartupFailure,
+  TodoState,
   TriageDecision,
   UsageRecord,
   VaultPart,
@@ -179,4 +181,15 @@ export interface MockState {
   seq: number;
   /** The bell's dismissed entries (FR-11.5): key → when. */
   dismissed?: Record<string, string>;
+  /** E15 (FR-16.1): To Dos as the log projects them, and their words, as todos/ keeps them. */
+  todos?: Record<string, TodoState>;
+  todoTexts?: Record<string, MockTodoText>;
+}
+
+/** A To Do's words (E15): the server's todos/<id>.json, without what the mock doesn't need. */
+export interface MockTodoText {
+  step: string;
+  line: string;
+  source: SourceId;
+  sourceTitle: string;
 }

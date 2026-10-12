@@ -2,7 +2,7 @@
 title: The inbox
 group: Inbox
 order: 30
-summary: The three zones on a wide screen, Needs you, Waiting on others, To file and Ready to approve, closing on reply, the bell, the item panel, batches and the sweep, topics, and how to correct a decision or give feedback on filing.
+summary: The three zones on a wide screen, Needs you, Waiting on others, To file and Ready to approve, your To Dos, closing on reply, the bell, the item panel, batches and the sweep, topics, and how to correct a decision or give feedback on filing.
 updated: 2026-10-12
 ---
 
@@ -123,6 +123,24 @@ With [Outlook Calendar](outlook.md) on, in a window narrower than 1600 px, a str
 groups shows today's meetings, the one on now picked out, and **Tomorrow** shows the next day's. A Teams meeting joins in your browser; any other meeting opens in Outlook. An
 invite you haven't answered is also an item, which closes itself once you answer it in Outlook;
 see [Invites](outlook.md#invites).
+
+## To do
+
+Every to-do you add (`a`) and approve becomes a **To Do** here, one per line it wrote to your
+[Tasks note](vault.md#to-dos). It stays on the inbox until it's done.
+
+- **In a narrower window**, the **To do** group sits after Needs you, even at Inbox Zero. It is split
+  into **Overdue** (in red), **Today** and **Upcoming** (later, or with no date), soonest first.
+  **N done today** at its foot opens what you finished today.
+- **On a wide screen**, what is overdue or due today shows at the foot of Needs you, under **TO DO**.
+  The rest shows in Later, after This week.
+- **Each row** shows the step and the item it came from: click the source to open that item. It
+  also shows the deadline, which is triage's when the step had one, or 17:30 on the date in the line.
+- **Tick a line in Obsidian** and its To Do shows as done within a minute, "ticked in Obsidian".
+  Untick it and the To Do comes back.
+- **A line you moved or deleted** shows as "not in the Tasks note". Nothing else changes.
+
+The item panel's **Add to-do** row says how many of the item's To Dos are open.
 
 ## This week, low priority, snoozed and done
 

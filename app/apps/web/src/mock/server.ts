@@ -5,7 +5,14 @@ import {
   Settings as SettingsSchema,
   askId,
   todoContent,
+  todoDues,
   todoSteps,
+  newTodos,
+  shownTodos,
+  applyTodoEvent,
+  isTodoEvent,
+  type TodoDraft,
+  type TodoSummary,
   awaitsReply,
   effectiveTriage,
   STAGE_OF,
@@ -262,6 +269,27 @@ export class MockServer implements WorkOsApi, MockControls {
     this.s.events.push(e);
     if (this.s.events.length > 2000) this.s.events.splice(0, this.s.events.length - 2000);
     applyActionEvent(this.s.actions, e);
+    if (isTodoEvent(e)) applyTodoEvent((this.s.todos ??= {}), e);
+  }
+
+  /** As the server (E15, FR-16.1): a written to-do's To Dos, their words kept first. */
+  private makeTodos(actionId: string, d: TodoDraft, rec: ItemRec, backfilled = false) {
+    const known = this.s.todos ?? {};
+    for (const t of newTodos(actionId, d, (id) => !!known[id], backfilled)) {
+      (this.s.todoTexts ??= {})[t.todoId] = { step: t.step, line: t.line, source: rec.item.source, sourceTitle: rec.item.title };
+      this.event('todo.created', { todoId: t.todoId, ...(t.lineId && { lineId: t.lineId }), ...(t.deadline && { deadline: t.deadline }), deadlineFrom: t.deadlineFrom, ...(backfilled && { backfilled: true as const }) }, { itemId: rec.item.id, actionId });
+    }
+  }
+
+  /** E15 (FR-16.2): the To Dos the inbox shows, as the server's todoSummaries. */
+  private todoSummaries(): TodoSummary[] {
+    const out: TodoSummary[] = [];
+    for (const t of shownTodos(Object.values(this.s.todos ?? {}), this.now())) {
+      const words = this.s.todoTexts?.[t.id];
+      if (!words) continue;
+      out.push({ id: t.id, itemId: t.itemId, step: words.step, source: words.source, sourceTitle: words.sourceTitle, status: t.status, ...(t.deadline && { deadline: t.deadline }), deadlineFrom: t.deadlineFrom, createdAt: t.createdAt, ...(t.doneAt && { doneAt: t.doneAt }), ...(t.doneBy && { doneBy: t.doneBy }), inNote: true });
+    }
+    return out;
   }
 
   private async gate(ms: number) {
@@ -602,6 +630,7 @@ export class MockServer implements WorkOsApi, MockControls {
       .sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt));
     return {
       items,
+      todos: this.todoSummaries(),
       poll: { ...this.s.poll, lastPollAt: this.s.source.lastPollAt, nextPollAt: this.s.source.nextPollAt },
       source: this.sourceHealth(),
       sources: [this.sourceHealth(), ...this.outlookHealth(), ...this.wisprHealth()],
@@ -1255,10 +1284,13 @@ export class MockServer implements WorkOsApi, MockControls {
     const list = steps === 'suggested' ? [rec.decision!.todo!] : steps ? steps.map((step) => ({ step })) : todoSteps(rec.decision, rec.asksDone);
     if (!list.length) throw new ApiError('validation', 'Nothing to add: this item has no next step.');
     const id = `act-${rec.key}-t${this.s.seq + 1}`;
+    const link = { title: rec.item.title, permalink: rec.item.permalink };
+    const dues = todoDues(list, link);
     const draft: Draft = {
       kind: 'todo',
       path: this.s.settings.tasksNote,
-      content: todoContent(list, { title: rec.item.title, permalink: rec.item.permalink }),
+      content: todoContent(list, link),
+      ...(dues && { dues }),
       model: 'code',
       promptVersion: 'todo v1',
       durationMs: 0,
@@ -1502,6 +1534,7 @@ export class MockServer implements WorkOsApi, MockControls {
       const n = d.content.split('\n').filter((l) => l.trim()).length;
       msg = `${dry ? 'Dry-run: ' : ''}Added ${n === 1 ? 'the to-do' : `${n} to-dos`} to ${where}. Logged action.executed.`;
       this.event('action.executed', { dryRun: dry, path: dry ? `${this.s.settings.dataDir}/sandbox/vault/${d.path}` : `${this.s.settings.vaultPath}/${d.path}` }, { itemId: a.itemId, actionId });
+      this.makeTodos(actionId, d, rec);
     } else if (d.kind === 'vault_multi') {
       // FR-9.7: every note, in one approval.
       const root = dry ? `${this.s.settings.dataDir}/sandbox/vault` : this.s.settings.vaultPath;
@@ -1897,6 +1930,46 @@ export class MockServer implements WorkOsApi, MockControls {
     this.s.filingLabelCount = 24;
     this.s.settleLabelCount = 14;
     this.s.finishLabelCount = 6;
+    this.emitAll();
+  }
+
+  seedTodos() {
+    // E15 (FR-16.1, FR-16.2): the afternoon, with to-dos Frank wrote over the past few days, each
+    // now a To Do: one overdue, two due today, one later this week, one with no date, one done.
+    this.cockpitAfternoon();
+    const now = this.now();
+    const todos: { key: string; step: string; dueAt?: string; ago: number; done?: boolean }[] = [
+      { key: 't2', step: 'Share the graduation gate checklist', dueAt: londonAt(now, '16:00'), ago: 90 },
+      { key: 'n1', step: 'Send Matt the one-line MVI V2 go/no-go reason', dueAt: londonAt(now, '17:30', -3), ago: 4 * 24 * 60 },
+      { key: 'f1', step: 'Add the imo_str deprecation to the developer portal changelog', dueAt: londonAt(now, '17:30'), ago: 26 * 60 },
+      { key: 'f3', step: 'Confirm the IMO STR wording with Legal', dueAt: londonAt(now, '12:00', 3), ago: 3 * 60 },
+      { key: 't4', step: 'Book a kick-off with the Data team', ago: 2 * 24 * 60 },
+      { key: 't1', step: 'Send Meridia IQ beta feedback summary to the team', ago: 5 * 60, done: true },
+    ];
+    for (const t of todos) {
+      const rec = Object.values(this.s.items).find((r) => r.key === t.key);
+      if (!rec) continue;
+      const link = { title: rec.item.title, permalink: rec.item.permalink };
+      const steps = [{ step: t.step, ...(t.dueAt && { dueAt: t.dueAt }) }];
+      const dues = todoDues(steps, link);
+      const id = `act-${rec.key}-t${this.s.seq + 1}`;
+      const draft: TodoDraft = { kind: 'todo', path: this.s.settings.tasksNote, content: todoContent(steps, link), ...(dues && { dues }), model: 'code', promptVersion: 'todo v1', durationMs: 0, tokens: 0, edited: false };
+      this.s.drafts[id] = draft;
+      const ids = { itemId: rec.item.id, actionId: id };
+      const revision = rec.item.revision;
+      this.event('action.requested', { type: 'todo', revision }, ids);
+      this.event('action.drafted', { type: 'todo', revision, draftRef: `drafts/${id}.json`, tokens: 0, target: draftTarget(draft) }, ids);
+      this.event('action.approved', undefined, ids);
+      this.event('action.executed', { dryRun: true, path: `${this.s.settings.dataDir}/sandbox/vault/${draft.path}` }, ids);
+      this.s.results[id] = 'Dry-run: Added the to-do. Logged action.executed.';
+      this.makeTodos(id, draft, rec);
+      // Written `ago` minutes back: the To Do keeps that time, as the server's log would.
+      const made = Object.values(this.s.todos ?? {}).filter((x) => x.actionId === id);
+      for (const m of made) {
+        m.createdAt = addMins(now.toISOString(), -t.ago);
+        if (t.done) this.event('todo.done', { todoId: m.id, by: 'tasks_note', on: londonParts(now).dateKey }, ids);
+      }
+    }
     this.emitAll();
   }
 

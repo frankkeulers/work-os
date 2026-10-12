@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Action, ActionState, ActionType, ConfluenceDraft, Draft, DraftProgress, FailureReason, Item, Me, Notice, Settings, SourceId, TodoDraft, VaultMultiDraft } from '@work-os/shared';
-import { draftTarget, filedAll, isFiledDraft, londonParts, todoContent, todoSteps, topicItem } from '@work-os/shared';
+import { draftTarget, filedAll, isFiledDraft, londonParts, todoContent, todoDues, todoSteps, topicItem, type EventDraft } from '@work-os/shared';
 import { HttpError } from '../api/errors';
 import type { ClaudeAdapter } from '../claude/adapter';
 import { ClaudeError, ClaudeOutputError } from '../claude/errors';
@@ -28,6 +28,8 @@ import { DraftError } from './errors';
 import { draftVaultNote, vaultExists } from './vaultDrafter';
 import { NoteExistsError, planVaultWrite, writeVaultFile, type VaultTargets } from './vaultExecutor';
 import { planTodoWrite, unchangedSince } from './todoExecutor';
+import type { TodoTextStore } from '../store/todos';
+import { todoRecords } from '../todos/records';
 
 // Actions (FR-9.x, FR-10.x, FR-14.4, FR-14.5): requested, drafted by a model, edited and approved
 // by Frank, then written by code. The event log is the queue, so nothing waits in memory alone:
@@ -88,6 +90,8 @@ export interface ActionDeps {
   notifyDraft?: (n: DraftOutcomeNotice) => void;
   /** E14 (FR-15.7): approvals, discards and suggested to-dos teach the filing policy. */
   feedback?: Pick<FilingFeedback, 'approved' | 'discarded' | 'todo'>;
+  /** E15 (FR-16.1): a written to-do's To Dos keep their words here. Without it, a to-do makes none. */
+  todos?: TodoTextStore;
 }
 
 export interface DraftOutcomeNotice {
@@ -122,7 +126,8 @@ export class ActionService {
     return resolve(expandHome(this.d.settings().vaultPath, homedir()));
   }
 
-  private targets(): VaultTargets {
+  /** Where vault writes go now; the Tasks note's watcher and mirror (E15) read the same. */
+  targets(): VaultTargets {
     return {
       vaultRoot: this.vaultRoot(),
       sandboxRoot: join(this.d.dataDir, 'sandbox/vault'),
@@ -196,7 +201,9 @@ export class ActionService {
     const list = steps === 'suggested' ? [suggested!] : steps ? steps.map((step) => ({ step })) : todoSteps(topic.anchor.text, it.asksDone);
     if (!list.length) throw new HttpError('validation', 'Nothing to add: this item has no next step.');
     const source = topic.anchor.item;
-    const draft: TodoDraft = { kind: 'todo', path: this.d.settings().tasksNote, content: todoContent(list, { title: source.title, permalink: source.permalink }), model: 'code', promptVersion: 'todo v1', durationMs: 0, tokens: 0, edited: false };
+    const link = { title: source.title, permalink: source.permalink };
+    const dues = todoDues(list, link);
+    const draft: TodoDraft = { kind: 'todo', path: this.d.settings().tasksNote, content: todoContent(list, link), ...(dues && { dues }), model: 'code', promptVersion: 'todo v1', durationMs: 0, tokens: 0, edited: false };
     const id = `act-${randomUUID()}`;
     await this.d.drafts.update(id, itemId, (s) => ({ ...s, draft }));
     await this.d.store.append(
@@ -689,7 +696,7 @@ export class ActionService {
     try {
       const plan = await planTodoWrite(t, stored, d);
       if (plan.kind === 'refused') return this.fail(a, 'allow_list', plan.message);
-      if (plan.kind === 'already') return await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file, unchanged: true });
+      if (plan.kind === 'already') return await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file, unchanged: true }, await this.makeTodos(a, d));
       const attempt = this.nextAttempt(a.id);
       await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, expectedHash: plan.expectedHash }));
       await this.d.store.append({ type: 'action.executing', itemId: a.itemId, actionId: a.id, data: { attempt, expectedHash: plan.expectedHash } });
@@ -703,7 +710,7 @@ export class ActionService {
       crashPoint('before-write');
       await writeVaultFile(plan);
       crashPoint('after-write');
-      await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file });
+      await this.done(a, plan.message, { dryRun: t.dryRun, path: plan.file }, await this.makeTodos(a, d));
     } catch (err) {
       if (err instanceof NoteExistsError) {
         // The note appeared meanwhile: plan again on it.
@@ -762,7 +769,20 @@ export class ActionService {
     if (n) this.attempts.set(id, n - 1);
   }
 
-  private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; paths?: string[]; pageId?: string; pageVersion?: number; unchanged?: true }) {
+  /**
+   * E15 (FR-16.1): the To Dos a written to-do makes, their words saved first, so their events
+   * (logged with action.executed) never name a To Do without them.
+   */
+  private async makeTodos(a: ActionState, d: TodoDraft): Promise<EventDraft[]> {
+    const it = this.d.store.projection.items[a.itemId];
+    if (!this.d.todos || !it) return [];
+    const known = this.d.store.projection.todos ?? {};
+    const made = todoRecords(a, d, it, (id) => !!known[id]);
+    await this.d.todos.put(...made.texts);
+    return made.events;
+  }
+
+  private async done(a: ActionState, message: string, data: { dryRun: boolean; path?: string; paths?: string[]; pageId?: string; pageVersion?: number; unchanged?: true }, also: EventDraft[] = []) {
     if (!this.writable(a.id)) return; // discarded meanwhile: nothing to report
     await this.d.drafts.update(a.id, a.itemId, (s) => ({ ...s, result: message }));
     // Filed in a batch (CK-4.4): the write that completes the item's filings also marks it done, in the same append.
@@ -773,7 +793,7 @@ export class ActionService {
       .reverse()
       .sort((x, y) => y.createdAt.localeCompare(x.createdAt));
     const close = a.markDoneWhenFiled && it?.status === 'open' && filedAll(it, mine);
-    await this.d.store.append({ type: 'action.executed', itemId: a.itemId, actionId: a.id, data }, ...(close ? [{ type: 'item.done' as const, itemId: a.itemId, data: undefined }] : []));
+    await this.d.store.append({ type: 'action.executed', itemId: a.itemId, actionId: a.id, data }, ...also, ...(close ? [{ type: 'item.done' as const, itemId: a.itemId, data: undefined }] : []));
     this.attempts.delete(a.id);
     this.failures.delete(a.id);
     this.retryAt.delete(a.id);

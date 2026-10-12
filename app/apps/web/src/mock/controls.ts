@@ -48,6 +48,8 @@ export interface MockControls {
   cockpitAfternoon(): void;
   /** The cockpit's afternoon, with the filing policy's say on the To file seeds (E14): what is pre-drafted and ready to approve, and a to-do on offer. */
   applyFilingPolicy(): void;
+  /** The cockpit's afternoon with To Dos written over the past few days (E15): overdue, due today, later, undated and done. */
+  seedTodos(): void;
   simulatePoll(outcome: PollOutcome): void;
   /** Frank answers the top item in Needs you, or `itemId`; a moment later the settle check settles it, leaves it open, or fails. */
   frankReplies(outcome: SettleOutcome, itemId?: string): void;

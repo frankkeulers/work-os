@@ -71,6 +71,9 @@ import { ProposalStore } from './learning/proposals';
 import { propose, type LoopAdapter, type ProposalRunner } from './learning/tuner';
 import { FilingFeedback } from './pipeline/filingFeedback';
 import { DraftStore } from './store/drafts';
+import { TodoTextStore } from './store/todos';
+import { backfillTodos } from './todos/backfill';
+import { TasksNoteWatcher } from './todos/tasksNote';
 import { ActionService } from './actions/service';
 import type { Notice } from '@work-os/shared';
 import { ClaudeError } from './claude/errors';
@@ -131,6 +134,8 @@ export type RunResult =
       notifications: Notifications;
       alerts: HealthAlerts;
       retention: RetentionJob;
+      todoTexts: TodoTextStore;
+      tasksNote: TasksNoteWatcher;
       recovery: RecoveryReport;
       token: string;
       logger: Logger;
@@ -402,6 +407,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Actions (M3): drafted when Claude may be called, written by the outbox after approval.
   let publish: (n: Notice) => void = () => undefined; // the SSE hub, once the server exists
   const drafts = new DraftStore(join(config.dataDir, 'drafts'));
+  // To Dos' words (E15, FR-16.1), all kept in memory.
+  const todoTexts = await TodoTextStore.open(paths(config.dataDir).todos);
   // Belt and braces, as for Claude: a test without a fake Confluence fails instead of calling one.
   const confluenceApi = new ConfluenceApi(secrets, () => settings.editable.settings.confluence.siteUrl, deps.confluenceFetch ?? (process.env.VITEST ? noConfluence : fetch));
   // Notifications (FR-11.x): new Now items, and health problems that need Frank. Built before
@@ -439,11 +446,16 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     conventions: async () => (await loadPromptFile(config.dataDir, 'vault-conventions')).text,
     transcript: async (item, signal) => buildSources(settings.settings, factories).find((s) => s.id === item.source)?.transcript?.(item, signal),
     feedback: filingFeedback,
+    todos: todoTexts,
     notify: (n) => publish(n),
     notifyDraft: (n) => void notifications.draft(n),
   });
   await actions.recover();
   lifecycle.onStop('actions', () => actions.stop());
+  // To Dos (E15): those from to-dos written before Work OS tracked them, then the Tasks note read
+  // back on the tick, so a line ticked in Obsidian closes its To Do (FR-16.3).
+  await backfillTodos({ store, drafts, todos: todoTexts, logger }).catch((err: unknown) => logger.warn({ err }, 'Backfilling To Dos failed; it runs again at the next start'));
+  const tasksNote = new TasksNoteWatcher({ store, todos: todoTexts, targets: () => actions.targets(), path: () => settings.editable.settings.tasksNote, now, logger });
   const alerts = new HealthAlerts({
     notifier,
     settings: () => settings.editable.settings,
@@ -455,7 +467,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
   });
   // Retention (FR-12.1): nightly, on the first tick after 03:00.
-  const retention = new RetentionJob({ dataDir: config.dataDir, store, items, drafts, settings: () => settings.editable.settings, now, logger });
+  const retention = new RetentionJob({ dataDir: config.dataDir, store, items, drafts, todos: todoTexts, settings: () => settings.editable.settings, now, logger });
   lifecycle.onStop('retention', () => retention.settled());
   lifecycle.onStop('notifications', async () => {
     notifications.stop();
@@ -481,7 +493,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       return { ...r, calls: r.calls + settled.calls + finished.calls };
     },
     regroup: (signal, conversation) => routeTopics({ ...triageDeps, topicsPrompt: triageDeps.topicsPrompt! }, signal, { regroup: conversation }),
-    onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick()]),
+    onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick(), tasksNote.check()]),
     onTriaged: (catchUp) => notifications.afterTriage(catchUp),
     onHealthChange: (c) => alerts.onChange(c),
     // The sidebar shows which sources are polling (FR-2.6).
@@ -549,6 +561,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     proposals,
     proposing,
     actions,
+    todos: { texts: todoTexts, inNote: (id) => tasksNote.inNote(id) },
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
     // The guide's Markdown: set by agent:install for prod; development reads the repo's copy.
     guideDir: deps.env.WORKOS_GUIDE_DIR ? resolve(deps.env.WORKOS_GUIDE_DIR) : config.instance === 'dev' ? REPO_GUIDE_DIR : undefined,
@@ -578,5 +591,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, filingEvals, proposing, proposals, filingLabels, actions, notifications, alerts, retention, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, filingEvals, proposing, proposals, filingLabels, actions, notifications, alerts, retention, todoTexts, tasksNote, recovery, token, logger, lifecycle, flush };
 }

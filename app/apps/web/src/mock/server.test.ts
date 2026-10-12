@@ -1,3 +1,4 @@
+import { todoGroups } from '@work-os/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/errors';
 import { MockServer } from './server';
@@ -154,6 +155,24 @@ describe('polling and triage', () => {
     server.simulatePoll('vip_dm');
     await run(3000);
     expect(notes).toHaveLength(1);
+  });
+});
+
+describe('To Dos (E15, FR-16.1, FR-16.2)', () => {
+  it('makes a To Do of each line an approved to-do writes, as the server does', async () => {
+    const a = await settle(server.requestDraft(id('t2'), 'todo', { steps: ['Share the checklist', 'Book the review'] }));
+    await settle(server.approveAction(a.id), 3000);
+    const todos = (await settle(server.getInbox())).todos;
+    expect(todos.map((t) => t.step)).toEqual(['Share the checklist', 'Book the review']);
+    expect(todos[0]).toMatchObject({ itemId: id('t2'), status: 'open', sourceTitle: '#pole-star-labs' });
+  });
+
+  it('seeds the afternoon’s To Dos: overdue, due today, later, undated and one done', async () => {
+    server.seedTodos();
+    const todos = (await settle(server.getInbox())).todos;
+    const g = todoGroups(todos, server.now());
+    expect([g.overdue.length, g.today.length, g.upcoming.length, g.done.length]).toEqual([1, 2, 2, 1]);
+    expect(g.done[0]).toMatchObject({ doneBy: 'tasks_note' });
   });
 });
 

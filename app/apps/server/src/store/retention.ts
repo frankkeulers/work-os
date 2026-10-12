@@ -5,6 +5,7 @@ import type { Logger } from 'pino';
 import { writeJsonAtomic } from './atomic';
 import type { DraftStore } from './drafts';
 import type { ItemFiles } from './items';
+import type { TodoTextStore } from './todos';
 import type { Store } from './store';
 
 // Retention (FR-12.1, PLAN.md §4.3). Once a day, on the first tick after 03:00 (or after the wake
@@ -12,6 +13,7 @@ import type { Store } from './store';
 // `retentionDays`:
 //   - items/<source>/<id>.json, by the thread's last activity (the inbox then shows "expired");
 //   - drafts of finished actions (done, failed, discarded) whose item has expired;
+//   - To Dos' words (todos/) once done, on an item that has expired (E15);
 //   - sandbox/ files: dry-run vault notes and would-be Confluence pages;
 //   - logs/app-<date>.log by date (they hold no message text, but nobody needs them older).
 // Events, the usage log and labels stay: events and usage hold no message text, and the labelled
@@ -29,6 +31,7 @@ export interface RetentionDeps {
   store: Store;
   items: ItemFiles;
   drafts: DraftStore;
+  todos?: TodoTextStore;
   settings: () => Settings;
   now: () => Date;
   logger?: Logger;
@@ -39,6 +42,7 @@ export interface RetentionReport {
   cutoff: string;
   items: number;
   drafts: number;
+  todos: number;
   sandboxFiles: number;
   appLogs: number;
   launchdLogsCut: number;
@@ -49,7 +53,7 @@ export async function runRetention(d: RetentionDeps): Promise<RetentionReport> {
   const t0 = performance.now();
   const now = d.now();
   const cutoff = new Date(now.getTime() - d.settings().retentionDays * DAY_MS).toISOString();
-  const report: RetentionReport = { at: now.toISOString(), cutoff, items: 0, drafts: 0, sandboxFiles: 0, appLogs: 0, launchdLogsCut: 0, durationMs: 0 };
+  const report: RetentionReport = { at: now.toISOString(), cutoff, items: 0, drafts: 0, todos: 0, sandboxFiles: 0, appLogs: 0, launchdLogsCut: 0, durationMs: 0 };
 
   // Items: the projection says which might be old; the file under its lock has the final word.
   const expired = new Set<string>();
@@ -64,6 +68,13 @@ export async function runRetention(d: RetentionDeps): Promise<RetentionReport> {
   for (const a of Object.values(d.store.projection.actions)) {
     if (!FINISHED.has(a.status) || !expired.has(a.itemId) || a.updatedAt >= cutoff) continue;
     if (await d.drafts.remove(a.id)) report.drafts++;
+  }
+
+  // To Dos' words (E15), once done before the cutoff on an expired item. Open ones keep them: the
+  // same words are in the Tasks note anyway, and the inbox still shows them.
+  for (const t of Object.values(d.store.projection.todos ?? {})) {
+    if (t.status !== 'done' || !t.doneAt || t.doneAt >= cutoff || !expired.has(t.itemId)) continue;
+    if (await d.todos?.remove(t.id)) report.todos++;
   }
 
   report.sandboxFiles = await removeOlder(join(d.dataDir, 'sandbox'), Date.parse(cutoff));
