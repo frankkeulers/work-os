@@ -106,6 +106,7 @@ export interface ActionsView {
   drafts: Record<string, Draft>;
   progress: Record<string, DraftProgress>;
   results: Record<string, string>;
+  additionalInfo: Record<string, string>;
 }
 
 export class ActionService {
@@ -385,11 +386,13 @@ export class ActionService {
       drafts: {},
       progress: {},
       results: {},
+      additionalInfo: {},
     };
     for (const a of list) {
       const stored = await this.d.drafts.read(a.id);
       if (stored?.draft) out.drafts[a.id] = stored.draft;
       if (stored?.result) out.results[a.id] = stored.result;
+      if (stored?.additionalInfo) out.additionalInfo[a.id] = stored.additionalInfo;
       if (a.status === 'drafting')
         out.progress[a.id] = this.progress.get(a.id) ?? {
           stages: DRAFT_STAGES[a.type],

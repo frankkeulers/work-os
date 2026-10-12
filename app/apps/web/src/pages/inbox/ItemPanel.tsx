@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import type { ActionType, FilingFeedbackBody, Message, TopicPiece } from '@work-os/shared';
 import { api, type ItemSummary, type ItemView } from '../../api';
 import { ActionPanel, TYPES } from '../../components/ActionPanel';
+import { DraftSplit } from '../../components/DraftWithInfo';
 import { BrandIcon, SourceMark } from '../../components/BrandIcon';
 import { JoinTeams } from '../../components/JoinTeams';
 import { CategoryTags, CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPath, kindLabel, markDoneWithUndo, openInSource, ruleOverride } from '../../components/item';
@@ -137,6 +138,7 @@ function NextStepCard({
   draftsBudgetHit,
   closesOnReply,
   onFile,
+  onFileWith,
   onReplied,
   workflow,
 }: {
@@ -144,6 +146,8 @@ function NextStepCard({
   draftsBudgetHit: boolean;
   closesOnReply: boolean;
   onFile: (t: ActionType) => void;
+  /** Draft with additional information (FR-9.12). */
+  onFileWith: (t: ActionType, info: string) => Promise<unknown>;
   /** In a sweep (UX-10), replying moves it on. */
   onReplied?: () => void;
   workflow?: ReactNode;
@@ -151,7 +155,7 @@ function NextStepCard({
   const now = useNow(30_000);
   const step = shownStep(item, draftsBudgetHit, now);
   const hint = suggestedSnooze(item, now);
-  if (!step) return <StatusCard item={item}>{workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} />)}</StatusCard>;
+  if (!step) return <StatusCard item={item}>{workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} onFileWith={onFileWith} />)}</StatusCard>;
   const p = step.primary;
   // A draft as the primary action leaves the filing options; once a draft is open, its tabs take over.
   const draft = p.kind === 'draft' && !workflow ? p.button : undefined;
@@ -183,19 +187,27 @@ function NextStepCard({
               {p.label}
             </Button>
           ) : (
-            draft && (
+            draft &&
+            (draft.state === 'none' ? (
               <span title={draft.disabledReason} className="inline-flex">
-                <Button
+                <DraftSplit
+                  type={draft.type}
                   variant="solid"
                   icon={draft.type === 'vault_note' ? 'vault' : 'confluence'}
-                  disabled={!!draft.disabledReason && draft.state === 'none'}
-                  onClick={() => onFile(draft.type)}
+                  disabled={!!draft.disabledReason}
+                  infoDisabledReason={draftsBudgetHit ? 'Drafts budget reached' : undefined}
+                  onDraft={() => onFile(draft.type)}
+                  onInfo={(text) => onFileWith(draft.type, text!)}
                 >
-                  {(draft.state === 'drafting' || draft.state === 'writing') && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
                   {draft.label}
-                </Button>
+                </DraftSplit>
               </span>
-            )
+            ) : (
+              <Button variant="solid" icon={draft.type === 'vault_note' ? 'vault' : 'confluence'} onClick={() => onFile(draft.type)}>
+                {(draft.state === 'drafting' || draft.state === 'writing') && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
+                {draft.label}
+              </Button>
+            ))
           )}
           <SnoozeSplit item={item} hint={hint} />
         </div>
@@ -203,7 +215,7 @@ function NextStepCard({
         {p.kind === 'open' && closesOnReply && <CloseNote item={item} />}
         <ReplyNote item={item} wrap finish={false} />
       </div>
-      {workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} skip={draft?.type} />)}
+      {workflow ?? (canFile(item) && <FileIt item={item} draftsBudgetHit={draftsBudgetHit} onFile={onFile} onFileWith={onFileWith} skip={draft?.type} />)}
     </section>
   );
 }
@@ -497,7 +509,19 @@ function Messages({ view }: { view: ItemView }) {
 const targetOf = (item: ItemSummary, t: ActionType) => (t === 'vault_note' ? item.targetHints.vault : t === 'confluence_entry' ? item.targetHints.confluence : undefined);
 
 /** The filing targets, as the lower half of the Next step or Status card. `skip` is already the card's primary action. */
-function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; draftsBudgetHit: boolean; onFile: (t: ActionType) => void; skip?: ActionType }) {
+function FileIt({
+  item,
+  draftsBudgetHit,
+  onFile,
+  onFileWith,
+  skip,
+}: {
+  item: ItemSummary;
+  draftsBudgetHit: boolean;
+  onFile: (t: ActionType) => void;
+  onFileWith: (t: ActionType, info: string) => Promise<unknown>;
+  skip?: ActionType;
+}) {
   const title = skip ? 'Also file' : 'File it';
   return (
     <section aria-label={title} className="flex flex-col border-t border-line-soft px-[18px] pb-2 pt-3">
@@ -533,10 +557,22 @@ function FileIt({ item, draftsBudgetHit, onFile, skip }: { item: ItemSummary; dr
               <span className="text-[13px] font-medium">{TYPE_LABEL[t].short}</span>
               <span className="text-xs text-muted">{hint}</span>
             </span>
-            <Button className="min-h-9" disabled={!!b.disabledReason && b.state === 'none'} onClick={() => onFile(t)}>
-              {b.state === 'none' ? TYPE_LABEL[t].draft : b.state === 'done' ? 'View' : 'Review'}
-              {t === 'todo' && b.state === 'none' && <Kbd>a</Kbd>}
-            </Button>
+            {b.state === 'none' ? (
+              <DraftSplit
+                type={t}
+                disabled={!!b.disabledReason}
+                infoDisabledReason={draftsBudgetHit ? 'Drafts budget reached' : undefined}
+                onDraft={() => onFile(t)}
+                onInfo={(text) => onFileWith(t, text!)}
+              >
+                {TYPE_LABEL[t].draft}
+                {t === 'todo' && <Kbd>a</Kbd>}
+              </DraftSplit>
+            ) : (
+              <Button className="min-h-9" onClick={() => onFile(t)}>
+                {b.state === 'done' ? 'View' : 'Review'}
+              </Button>
+            )}
           </div>
         );
       })}
@@ -729,6 +765,8 @@ export function ItemPanel({
     },
     [item, draftsBudgetHit, setFiling],
   );
+  // From the additional-information box (FR-9.12): an error stays in the box, which shows it.
+  const fileWith = useCallback((t: ActionType, additionalInfo: string) => api.requestDraft(item.id, t, { additionalInfo }).then(() => setFiling(t)), [item.id, setFiling]);
   // An edit in progress holds the panel on its draft: `a` doesn't switch it away.
   const dirtyNow = useRef(false);
   const dirty = useCallback(
@@ -923,6 +961,7 @@ export function ItemPanel({
           draftsBudgetHit={draftsBudgetHit}
           closesOnReply={!!view?.closesOnReply}
           onFile={file}
+          onFileWith={fileWith}
           onReplied={sweep?.onReplied}
           workflow={
             filing && view ? (

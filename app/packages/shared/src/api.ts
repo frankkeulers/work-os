@@ -264,6 +264,8 @@ export interface ItemView {
   drafts: Record<string, Draft>; // by action id
   progress: Record<string, DraftProgress>; // by action id, while drafting
   results: Record<string, string>; // by action id, outcome message after execution or failure
+  /** By action id: what Frank added when he asked for it (FR-9.12), whether it is drafting, ready or failed. */
+  additionalInfo?: Record<string, string>;
   /** Pages excluded from the Confluence scope: a draft for one of them, or below one, will be refused. */
   excludedPageIds: string[];
   /** Frank's reply closes this item once it settles the asks (cockpit CK-2.5): closing on reply is on for its source. */
