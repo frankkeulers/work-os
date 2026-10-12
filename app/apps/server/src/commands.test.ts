@@ -787,6 +787,8 @@ describe('vault note action (FR-9.x, Story 9.1, FR-14.5)', () => {
     expect(draftCall.system).toMatch(/^<!-- prompt: draft-vault v5 -->/);
     // The vault conventions written on first run go with the request.
     expect(draftCall.prompt).toMatch(/<vault-conventions>\n<!-- prompt: vault-conventions v4 -->/);
+    // Where triage suggested filing it goes with it, as a hint (FR-15.4).
+    expect(draftCall.prompt).toContain('<filing-target>\nProduct notes\n</filing-target>');
 
     // Frank edits, then approves; the outbox writes once it may.
     expect((await call('PUT', `/api/actions/${r.body.id}/draft`, { content: '# Product\n\nEdited.\n' })).status).toBe(204);

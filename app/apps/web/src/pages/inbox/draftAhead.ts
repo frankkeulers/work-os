@@ -3,12 +3,15 @@ import type { ActionType, BudgetState } from '@work-os/shared';
 import type { ItemSummary } from '../../api';
 import { draftState } from '../../lib/lanes';
 import { requestQuietDraft } from '../../store/quietDrafts';
-import { batchable, filingFor } from './batch';
+import { batchable, openFilings } from './batch';
 
 // Draft ahead (BACKLOG UX-3): the suggested draft for a To file item starts before Frank opens it,
 // so review is instant. It starts when an item enters To file, or when j/k (or a click) lands on
 // one, one draft at a time, and never eats into the last few drafts of the day: those are kept for
 // the ones Frank asks for. What was in To file on load waits until he lands on it.
+//
+// Only what the filing policy says to pre-draft is drafted ahead (FR-15.3), and what is ready to
+// approve goes first (FR-15.5). The rest waits for Frank's f or v.
 
 /** Drafts left today at or below which nothing is drafted ahead. */
 export const SPARE_DRAFTS = 3;
@@ -18,17 +21,30 @@ export const canDraftAhead = (b: BudgetState) => !b.drafts.hit && !b.cost.hit &&
 
 const drafting = (items: readonly ItemSummary[]) => items.some((i) => Object.values(i.actions).some((a) => a?.status === 'drafting'));
 
+/** Whether the policy pre-drafts this filing. A row without a plan is from before the policy, which pre-drafted every one. */
+export const predrafted = (item: ItemSummary, type: ActionType) => (item.filing ? !!(type !== 'todo' && item.filing[type]?.predraft) : true);
+
+/** Whether the item has a filing in Ready to approve (FR-15.5). */
+export const isReady = (item: ItemSummary | undefined) => !!item && Object.values(item.filing ?? {}).some((p) => p?.ready);
+
+/** The order to look in: the item Frank landed on, then those that entered To file, ready ones first. */
+export function aheadQueue(items: readonly ItemSummary[], selected: string | null, entered: readonly string[]): string[] {
+  const ready = (id: string) => isReady(items.find((i) => i.id === id));
+  return [...(selected ? [selected] : []), ...entered.filter(ready), ...entered.filter((id) => !ready(id))];
+}
+
 /**
  * The draft to start now, if any: the first in `queue` that is in To file with a suggested filing
- * not yet drafted, and not drafted ahead before (a discarded one isn't drafted again).
+ * the policy pre-drafts, not yet drafted, and not drafted ahead before (a discarded one isn't
+ * drafted again).
  */
 export function pickDraftAhead(items: readonly ItemSummary[], queue: readonly string[], tried: ReadonlySet<string>, budgets: BudgetState): { item: ItemSummary; type: ActionType } | undefined {
   if (!canDraftAhead(budgets) || drafting(items)) return undefined;
   for (const id of queue) {
     const item = items.find((i) => i.id === id);
     if (!batchable(item)) continue;
-    const type = filingFor(item);
-    if (type && draftState(item, type) === 'none' && !tried.has(`${id}:${type}`)) return { item, type };
+    const type = openFilings(item).find((t) => predrafted(item, t) && draftState(item, t) === 'none' && !tried.has(`${id}:${t}`));
+    if (type) return { item, type };
   }
   return undefined;
 }
@@ -56,11 +72,11 @@ export function useDraftAhead(items: readonly ItemSummary[] | undefined, selecte
       if (item && draftState(item, f.type) === 'none') return;
       inFlight.current = null;
     }
-    const pick = pickDraftAhead(items, [...(selected ? [selected] : []), ...entered.current], tried.current, budgets);
+    const pick = pickDraftAhead(items, aheadQueue(items, selected, entered.current), tried.current, budgets);
     if (!pick) return;
     const { item, type } = pick;
+    // Kept in the queue: an item may have a second filing to draft ahead once this one is done.
     tried.current.add(`${item.id}:${type}`);
-    entered.current = entered.current.filter((id) => id !== item.id);
     inFlight.current = { id: item.id, type };
     requestQuietDraft(item.id, type).catch(() => {
       if (inFlight.current?.id === item.id) inFlight.current = null;

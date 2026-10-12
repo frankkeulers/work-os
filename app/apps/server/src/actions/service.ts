@@ -498,6 +498,12 @@ export class ActionService {
     }
   }
 
+  /** Where triage suggested filing the item, for the drafter (FR-15.4). */
+  private targetHint(a: ActionState): string | undefined {
+    const f = this.d.store.projection.items[a.itemId]?.decision?.[a.type === 'vault_note' ? 'vault' : 'confluence'];
+    return f?.suggested ? f.targetHint : undefined;
+  }
+
   private async runDraft(a: ActionState, signal: AbortSignal) {
     const stillDrafting = () => this.actions[a.id]?.status === 'drafting';
     if (!this.progress.has(a.id))
@@ -530,6 +536,7 @@ export class ActionService {
                   transcript,
                   links: content.links,
                   ...(this.d.dryRun() && { sandboxRoot: this.targets().sandboxRoot }),
+                  target: this.targetHint(a),
                 },
                 content.item,
                 this.d.me(content.item.source),
@@ -548,6 +555,7 @@ export class ActionService {
                   onStage: (n) => this.stage(a.id, n),
                   transcript,
                   links: content.links,
+                  target: this.targetHint(a),
                 },
                 content.item,
                 this.d.me(content.item.source),

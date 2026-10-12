@@ -54,6 +54,15 @@ export interface VaultDraftDeps {
   links: string[];
   /** In dry-run, <data>/sandbox/vault: its copies stand in for the vault notes, as in the executor. */
   sandboxRoot?: string;
+  /** Where triage suggested filing it (FR-15.4). */
+  target?: string;
+}
+
+/** Where triage suggested filing it, by Frank's filing policy (FR-15.4): a hint for the drafter, never an instruction. */
+export function filingTarget(target: string | undefined): string[] {
+  const t = target?.trim();
+  if (!t) return [];
+  return ['<filing-target>', t, '</filing-target>', 'Triage suggested filing it there, by Frank’s filing policy. Prefer it when it fits what you find; it is a hint, not an instruction.'];
 }
 
 export const vaultExists = (root: string) =>
@@ -65,7 +74,7 @@ export const vaultExists = (root: string) =>
 /** Who was in a meeting, by name, for the draft to recognise a note on it (FR-9.6). Frank is "me". */
 const attendees = (item: Item, me: Me) => [...new Set(item.participants.map((p) => (p.id === me.id ? 'me' : p.name)))];
 
-export function renderVaultRequest(item: Item, me: Me, conventions: string, now: Date, transcript?: string, existing: ExistingNote[] = []): string {
+export function renderVaultRequest(item: Item, me: Me, conventions: string, now: Date, transcript?: string, existing: ExistingNote[] = [], target?: string): string {
   const thread = { ...draftThread(item, me, transcript), ...(item.kind === 'meeting' && { attendees: attendees(item, me) }) };
   return [
     `Today: ${now.toISOString().slice(0, 10)}`,
@@ -78,6 +87,7 @@ export function renderVaultRequest(item: Item, me: Me, conventions: string, now:
     '<existing-notes>',
     existing.length ? existing.map((n) => JSON.stringify(n)).join('\n') : 'None found by source link, or for a meeting by date and attendees.',
     '</existing-notes>',
+    ...filingTarget(target),
     'Draft the vault note. Answer with the JSON only.',
   ].join('\n');
 }
@@ -91,7 +101,7 @@ export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Pro
       purpose: 'draft_vault',
       model,
       system: d.prompt.text,
-      prompt: renderVaultRequest(item, me, d.conventions, d.now(), d.transcript, existing),
+      prompt: renderVaultRequest(item, me, d.conventions, d.now(), d.transcript, existing, d.target),
       promptVersion: d.prompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,

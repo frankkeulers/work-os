@@ -9,7 +9,7 @@ import { findOnPages, type FiledSection } from './alreadyFiled';
 import { DraftError } from './errors';
 import { entryStorage } from './markdown';
 import { findHeading, outline, textOf } from './storage';
-import { draftThread } from './vaultDrafter';
+import { draftThread, filingTarget } from './vaultDrafter';
 
 // "Draft Confluence entry" (FR-10.1–10.4), in two calls, because the PSG context tree is too big to
 // outline in one. Code reads the live catalogue (every page in scope, from CQL: path, labels, hub)
@@ -98,10 +98,12 @@ export interface ConfluenceDraftDeps {
   transcript?: string;
   /** The links of the topic's pieces (itemLinks), which mark an entry already filed from it (FR-10.7). */
   links: string[];
+  /** Where triage suggested filing it: the product or page area (FR-15.4). */
+  target?: string;
 }
 
 /** The catalogue as the picker sees it: one compact object per page. */
-export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[], routing: string, now: Date, transcript?: string): string {
+export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[], routing: string, now: Date, transcript?: string, target?: string): string {
   const thread = draftThread(item, me, transcript);
   const pages = catalogue.map((c) => ({ id: c.id, path: c.path, ...(c.labels.length && { labels: c.labels }), ...(c.hub && { hub: true }) }));
   return [
@@ -113,6 +115,7 @@ export function renderPickRequest(item: Item, me: Me, catalogue: CatalogueEntry[
     '<thread>',
     JSON.stringify(thread),
     '</thread>',
+    ...filingTarget(target),
     'Pick the candidate pages. Answer with the JSON only.',
   ].join('\n');
 }
@@ -155,7 +158,7 @@ export async function draftConfluenceEntry(d: ConfluenceDraftDeps, item: Item, m
       purpose: 'confluence_pick',
       model,
       system: d.pickPrompt.text,
-      prompt: renderPickRequest(item, me, catalogue, d.routing, d.now(), d.transcript),
+      prompt: renderPickRequest(item, me, catalogue, d.routing, d.now(), d.transcript, d.target),
       promptVersion: d.pickPrompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,

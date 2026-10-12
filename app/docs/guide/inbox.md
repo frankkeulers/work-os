@@ -3,7 +3,7 @@ title: The inbox
 group: Inbox
 order: 30
 summary: The three zones on a wide screen, Needs you, Waiting on others and To file, the bell, what the chips mean, topics, and how to correct a decision.
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 ## Three zones on a wide screen
@@ -254,11 +254,14 @@ While a draft is open, its action bar stays in view at the foot of the panel as 
 (`⌘↵`), **Edit**, **Re-draft** and **Discard** (`x`). While you edit, `⌘↵` saves your edit and
 approves in one go.
 
-Drafts start ahead of you. When an item arrives in To file, or when you land on one with `j`, `k`
-or a click, Work OS starts the draft triage suggests, so it's usually ready by the time you look.
-It drafts one at a time, says nothing when one is ready (the bell still lists it), and stops while
-3 or fewer drafts are left in the day's budget, so those stay yours. A draft you discard isn't
-drafted ahead again. What was already in To file when you opened Work OS waits until you land on it.
+Drafts start ahead of you, for the filings your [filing policy](prompts.md#the-filing-policy)
+says to pre-draft. When such an item arrives in To file, or when you land on one with `j`, `k` or
+a click, Work OS starts its draft, so it's usually ready by the time you look. Other filings wait
+for `f` or `v`. It drafts one at a time, items ready to approve first, says nothing when one is
+ready (the bell still lists it), and stops while 3 or fewer drafts are left in the day's budget, so
+those stay yours. A draft you discard isn't drafted ahead again. What was already in To file when
+you opened Work OS waits until you land on it. Where triage suggested filing it goes to the drafter
+as a hint.
 
 An item in To file is done once everything triage suggested for it is written: approve its last
 filing and it closes by itself, with **Undo** in the toast. An item with something left to do, such
