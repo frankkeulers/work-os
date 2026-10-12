@@ -174,7 +174,9 @@ export class HttpApi implements WorkOsApi {
   splitPiece = (pieceId: string) => this.post(`${this.item(pieceId)}/split`);
   regroup = (conversation: string) => this.post<{ merged: number }>('/api/topics/regroup', { conversation });
 
-  requestDraft = (itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[] }) => this.post<Action>(`${this.item(itemId)}/actions`, { type, ...(opts?.quiet && { quiet: true }), ...(opts?.steps && { steps: opts.steps }) });
+  requestDraft = (itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean }) =>
+    this.post<Action>(`${this.item(itemId)}/actions`, { type, ...(opts?.quiet && { quiet: true }), ...(opts?.steps && { steps: opts.steps }), ...(opts?.suggested && { suggested: true }) });
+  dismissTodo = (id: string) => this.post<void>(`${this.item(id)}/todo/dismiss`);
   cancelDraft = (id: string) => this.post(`${this.action(id)}/cancel`);
   saveDraftEdit = (id: string, content: string, part?: number) => this.request<void>('PUT', `${this.action(id)}/draft`, part === undefined ? { content } : { content, part });
   redraft = (id: string) => this.post<Action>(`${this.action(id)}/redraft`);

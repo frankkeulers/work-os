@@ -1131,6 +1131,51 @@ describe('to-do action (UX-5)', () => {
   });
 });
 
+describe('a suggested to-do (FR-15.6)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+  const TODO = { step: 'Send the export spec to Dana', dueAt: '2026-10-09T16:30:00.000Z', rule: 'T2' };
+
+  beforeEach(async () => {
+    const vault = join(dir, '..', 'vault');
+    await mkdir(join(vault, 'Work'), { recursive: true });
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, vaultPath: vault }, rules: view.rules })).status).toBe(200);
+    // As triage under the policy decides it: the wording with the item's text, the rest in the log.
+    await res.items.update('slack', PROD, (s) => s && { ...s, text: { ...s.text!, todo: TODO } });
+    const d = res.store.projection.items[PROD].decision!;
+    await res.store.append({ type: 'triage.decided', itemId: PROD, data: { decision: { ...d, decidedAt: new Date(Date.parse(d.decidedAt) + 1000).toISOString(), todo: { dueAt: TODO.dueAt, rule: 'T2' } } } });
+  });
+  const summary = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body.summary;
+  const request = (body: object) => call<Action & ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, body);
+  const dismiss = () => call<ApiErrorBody>('POST', `/api/items/${encodeURIComponent(PROD)}/todo/dismiss`);
+
+  it('is offered until added, and adds as a to-do to review, with its date', async () => {
+    expect((await summary()).todoSuggestion).toEqual(TODO);
+    const r = await request({ type: 'todo', suggested: true });
+    expect(r.status).toBe(201);
+    const v = (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;
+    expect(v.drafts[r.body.id]).toMatchObject({ kind: 'todo', content: `- [ ] Send the export spec to Dana 📅 2026-10-09 [#product](${v.item.permalink})` });
+    expect(v.summary.todoSuggestion).toBeUndefined();
+    expect(v.summary.actions.todo).toMatchObject({ status: 'ready' }); // nothing written until approved
+    expect((await request({ type: 'vault_note', suggested: true })).status).toBe(422);
+  });
+
+  it('stays dismissed for the revision it was suggested for', async () => {
+    expect((await dismiss()).status).toBe(204);
+    expect(res.store.projection.items[PROD].todoDismissed).toBe(res.store.projection.items[PROD].decision!.itemRevision);
+    expect((await summary()).todoSuggestion).toBeUndefined();
+    expect((await request({ type: 'todo', suggested: true })).status).toBe(201); // still there to add on purpose
+  });
+
+  it('refuses when nothing is suggested', async () => {
+    await res.items.update('slack', PROD, (s) => s && { ...s, text: { summary: s.text!.summary, reason: s.text!.reason } });
+    expect((await request({ type: 'todo', suggested: true })).body.message).toMatch(/No to-do is suggested/);
+    const { todo: _todo, ...d } = res.store.projection.items[PROD].decision!;
+    await res.store.append({ type: 'triage.decided', itemId: PROD, data: { decision: { ...d, decidedAt: new Date(Date.parse(d.decidedAt) + 1000).toISOString() } } });
+    expect((await dismiss()).status).toBe(409);
+  });
+});
+
 describe('Confluence entry action (FR-10.x, Story 10.1, FR-14.5)', () => {
   const PROD = `slack:C01PROD:${P}`;
   const item = async () => (await call<ItemView>('GET', `/api/items/${encodeURIComponent(PROD)}`)).body;

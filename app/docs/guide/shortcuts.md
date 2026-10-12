@@ -3,7 +3,7 @@ title: Keyboard shortcuts
 group: Help
 order: 90
 summary: Every key Work OS listens for.
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 Shortcuts work anywhere except while you are typing in a field. Press `?` to see the keys for
@@ -40,7 +40,7 @@ where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` c
 | `r` | Reply in the source: open the thread, email or chat |
 | `f` | File to Confluence: open the draft, starting it if needed |
 | `v` | File to the vault: open the draft, starting it if needed |
-| `a` | Add to-do: your open steps, as tasks in your Tasks note |
+| `a` | Add to-do: the suggested to-do when there is one, otherwise your open steps, as tasks in your Tasks note |
 | `→` | Skip, while filing in a batch or sweeping Needs you: the item stays where it is |
 
 ## Draft

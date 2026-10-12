@@ -1084,6 +1084,15 @@ export class MockServer implements WorkOsApi, MockControls {
     return { labelCount: this.s.labelCount };
   }
 
+  async dismissTodo(itemId: string) {
+    await this.gate(COMMAND_MS);
+    const rec = this.rec(itemId);
+    if (!rec.decision?.todo) throw new ApiError('conflict', 'No to-do is suggested for this item.');
+    rec.todoDismissed = rec.decision.itemRevision;
+    this.event('todo.dismissed', { revision: rec.decision.itemRevision }, { itemId });
+    this.emit({ topic: 'inbox' }, { topic: 'item', id: itemId });
+  }
+
   async retryTriage(itemId: string) {
     await this.gate(COMMAND_MS);
     const rec = this.rec(itemId);
@@ -1161,26 +1170,28 @@ export class MockServer implements WorkOsApi, MockControls {
     return 'normal';
   }
 
-  async requestDraft(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[] } = {}): Promise<Action> {
+  async requestDraft(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean } = {}): Promise<Action> {
     await this.gate(COMMAND_MS);
     const rec = this.rec(itemId);
-    if (opts.steps && type !== 'todo') throw new ApiError('validation', 'Only a to-do takes steps.');
+    if ((opts.steps || opts.suggested) && type !== 'todo') throw new ApiError('validation', 'Only a to-do takes steps.');
     const existing = this.actionsFor(itemId).find((a) => a.type === type && ACTIVE.includes(a.status));
-    // As the server: picked steps replace a to-do still waiting for review.
-    if (existing && type === 'todo' && opts.steps && existing.status === 'ready') {
+    const from = opts.steps ?? (opts.suggested ? 'suggested' : undefined);
+    // As the server: picked steps, or the suggested to-do, replace a to-do still waiting for review.
+    if (existing && type === 'todo' && from && existing.status === 'ready') {
       this.event('action.discarded', { reason: 'redraft' }, { itemId, actionId: existing.id });
-      return structuredClone(this.createTodo(rec, opts.steps, existing.id));
+      return structuredClone(this.createTodo(rec, from, existing.id));
     }
     if (existing) return structuredClone(existing);
-    if (type === 'todo') return structuredClone(this.createTodo(rec, opts.steps));
+    if (type === 'todo') return structuredClone(this.createTodo(rec, from));
     if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
     const outcome = this.takeOutcome((o) => DRAFT_TIME_OUTCOMES.includes(o) || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
     return structuredClone(this.createAction(rec, type, outcome, undefined, opts.quiet));
   }
 
   /** As the server's createTodo (UX-5): built by code from the open steps, ready at once, no draft spent. */
-  private createTodo(rec: ItemRec, steps?: string[], supersedes?: string): Action {
-    const list = steps ? steps.map((step) => ({ step })) : todoSteps(rec.decision, rec.asksDone);
+  private createTodo(rec: ItemRec, steps?: string[] | 'suggested', supersedes?: string): Action {
+    if (steps === 'suggested' && !rec.decision?.todo) throw new ApiError('conflict', 'No to-do is suggested for this item any more.');
+    const list = steps === 'suggested' ? [rec.decision!.todo!] : steps ? steps.map((step) => ({ step })) : todoSteps(rec.decision, rec.asksDone);
     if (!list.length) throw new ApiError('validation', 'Nothing to add: this item has no next step.');
     const id = `act-${rec.key}-t${this.s.seq + 1}`;
     const draft: Draft = {

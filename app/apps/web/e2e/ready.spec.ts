@@ -84,3 +84,30 @@ test('J88 what the policy doesn’t pre-draft waits for f or v (FR-15.3)', async
   await page.waitForTimeout(800);
   await expect(step).toHaveText(/^Draft (vault note|Confluence entry)$/);
 });
+
+test('J89 a suggested to-do: a adds it for review (FR-15.6)', async ({ page }) => {
+  await withPolicy(page);
+  const needs = page.locator('[data-row]').filter({ hasText: 'Meridia IQ beta feedback shared' });
+  await needs.click();
+  const chip = panel(page).getByRole('region', { name: 'Suggested to-do' });
+  await expect(chip).toContainText('Add to-do: Send Meridia IQ beta feedback summary to the team');
+  await expect(chip).toContainText('T2');
+  await page.addStyleTag({ content: HIDE });
+  await chip.screenshot({ path: join(APP, 'screenshots/panel-suggested-todo-light.png'), animations: 'disabled' });
+  await page.keyboard.press('a');
+  // The to-do opens for review; nothing is written until it is approved.
+  await expect(panel(page).getByRole('region', { name: 'Action' })).toContainText('Send Meridia IQ beta feedback summary to the team', { timeout: 10_000 });
+  await expect(chip).toHaveCount(0);
+});
+
+test('J89 dismissing the suggested to-do keeps it gone (FR-15.6)', async ({ page }) => {
+  await withPolicy(page);
+  await page.locator('[data-row]').filter({ hasText: 'Meridia IQ beta feedback shared' }).click();
+  const chip = panel(page).getByRole('region', { name: 'Suggested to-do' });
+  await chip.getByRole('button', { name: 'Dismiss the suggested to-do' }).click();
+  await expect(chip).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.locator('[data-row]').filter({ hasText: 'Meridia IQ beta feedback shared' }).click();
+  await expect(panel(page).getByTestId('panel-pos')).toBeVisible();
+  await expect(chip).toHaveCount(0);
+});

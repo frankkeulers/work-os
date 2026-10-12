@@ -32,10 +32,12 @@ export const CorrectionBody = z.object({ attention: Attention, confluence: z.boo
 
 /** POST /api/items/:id/actions (FR-9.1, FR-10.2). */
 // quiet: drafted ahead in a batch (FR-11.6). steps: for a to-do, the lines to start from (UX-5), else Frank's open steps.
+// suggested: for a to-do, the one the filing policy suggested (FR-15.6), with its date.
 export const DraftRequest = z
-  .object({ type: ActionType, quiet: z.boolean().optional(), steps: z.array(z.string().trim().min(1).max(TODO_MAX_STEP)).min(1).max(TODO_MAX_LINES).optional() })
+  .object({ type: ActionType, quiet: z.boolean().optional(), steps: z.array(z.string().trim().min(1).max(TODO_MAX_STEP)).min(1).max(TODO_MAX_LINES).optional(), suggested: z.literal(true).optional() })
   .strict()
-  .refine((r) => !r.steps || r.type === 'todo', 'Only a to-do takes steps.');
+  .refine((r) => !r.steps || r.type === 'todo', 'Only a to-do takes steps.')
+  .refine((r) => !r.suggested || (r.type === 'todo' && !r.steps), 'Only a to-do can be the suggested one, and it takes no steps.');
 
 /** POST /api/attention/dismiss (FR-11.5): an entry in the bell, by its key. */
 export const AttentionDismiss = z.object({ key: z.string().min(1).max(300) }).strict();

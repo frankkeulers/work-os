@@ -195,6 +195,9 @@ export function reduce(p: Projection, e: WorkEvent): Projection {
     case 'triage.confirmed':
       confirm(item, e.data.revision);
       break;
+    case 'todo.dismissed':
+      item.todoDismissed = e.data.revision;
+      break;
     // Failures and checks for older messages than the item now has are stale, like decisions: the
     // newer messages get their own triage and checks.
     case 'triage.failed':

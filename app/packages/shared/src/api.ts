@@ -616,7 +616,9 @@ export interface WorkOsApi {
 
   /** `quiet`: drafted ahead while filing in a batch, so no macOS notification when it's ready (FR-11.6). */
   /** steps: a to-do's lines to start from (UX-5). */
-  requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[] }): Promise<Action>;
+  requestDraft(itemId: string, type: ActionType, opts?: { quiet?: boolean; steps?: string[]; suggested?: boolean }): Promise<Action>;
+  /** E14 (FR-15.6): Frank doesn't want the to-do the filing policy suggested. */
+  dismissTodo(itemId: string): Promise<void>;
   cancelDraft(actionId: string): Promise<void>;
   /** `part`: which note of a draft that files into several (FR-9.7). */
   saveDraftEdit(actionId: string, content: string, part?: number): Promise<void>;

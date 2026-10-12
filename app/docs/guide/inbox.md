@@ -246,6 +246,10 @@ time. It stays open or closed as you left it, in this browser.
 - **Open in Slack** (`r`) goes to the thread, in the browser or the desktop app as set in Settings.
 - `f` files to Confluence, `v` to the vault and `a` adds a to-do: each opens its draft, starting it
   if there isn't one.
+- When your [filing policy](prompts.md#the-filing-policy) suggests a to-do, the panel shows
+  **Add to-do:** with the step, its date and the rule. `a` adds that one, for you to review and
+  approve as any to-do; × dismisses it until new messages are triaged. Suggestions are strict: when
+  in doubt, there is none.
 - `o` opens the item as a full page; `Esc` or a click outside closes the panel.
 
 ### Reviewing a draft

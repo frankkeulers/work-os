@@ -166,6 +166,15 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.headers(noStore).send(await d.confirm(id));
   });
 
+  // E14 (FR-15.6): Frank dismissed the to-do the policy suggested; it shows again only for a newer revision.
+  app.post<{ Params: { id: string } }>('/api/items/:id/todo/dismiss', async (req, reply) => {
+    const id = item(req.params.id);
+    const it = d.store.projection.items[id];
+    if (!it.decision?.todo) throw new HttpError('conflict', 'No to-do is suggested for this item.');
+    await d.store.append({ type: 'todo.dismissed', itemId: id, data: { revision: it.decision.itemRevision } });
+    return reply.code(204).send();
+  });
+
   // Actions (FR-9.x): drafted in the background, written by the outbox after approval.
   const actions = () => {
     if (!d.actions) throw new HttpError('unavailable', 'Actions are not available.');
@@ -174,11 +183,11 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   app.post<{ Params: { id: string } }>('/api/items/:id/actions', async (req, reply) => {
     const id = item(req.params.id);
     const body = DraftRequest.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" | "todo" }, { quiet } for a draft made ahead in a batch, and { steps } for a to-do’s lines.');
+    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" | "todo" }, { quiet } for a draft made ahead in a batch, and { steps } for a to-do’s lines or { suggested: true } for the to-do triage suggested.');
     return reply
       .code(201)
       .headers(noStore)
-      .send(await actions().request(id, body.data.type, { quiet: body.data.quiet, steps: body.data.steps }));
+      .send(await actions().request(id, body.data.type, { quiet: body.data.quiet, steps: body.data.steps, suggested: body.data.suggested }));
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/cancel', async (req, reply) => {
     await actions().cancel(req.params.id);

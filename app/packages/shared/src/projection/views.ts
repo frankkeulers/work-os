@@ -100,7 +100,7 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
   const actions = actionSummaries(ctx.actions, meta.revision);
   const filingSettings = ctx.filing ?? DEFAULT_FILING;
   const filing = filingPlan(d, s.correction, filingSettings);
-  const todo = todoOffer(ctx.text.todo, { settings: filingSettings, revision: meta.revision, dismissed: s.todoDismissed, hasTodo: !!actions.todo, open: s.status === 'open' });
+  const todo = todoOffer(ctx.text.todo, { settings: filingSettings, revision: d?.itemRevision ?? meta.revision, dismissed: s.todoDismissed, hasTodo: !!actions.todo, open: s.status === 'open' });
   return {
     id: meta.id,
     source: meta.source,

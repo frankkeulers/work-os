@@ -267,6 +267,42 @@ function StatusCard({ item, children }: { item: ItemSummary; children: ReactNode
 }
 
 /**
+ * The to-do the filing policy suggests (FR-15.6): `a` adds it as a to-do to review, × dismisses it.
+ * Nothing goes to Tasks until Frank approves the to-do.
+ */
+function SuggestedTodo({ item, onAdd }: { item: ItemSummary; onAdd: () => Promise<void> }) {
+  const now = useNow(60_000);
+  const [busy, setBusy] = useState(false);
+  const t = item.todoSuggestion;
+  if (!t) return null;
+  const due = dueInfo({ dueAt: t.dueAt }, now);
+  const add = async () => {
+    setBusy(true);
+    await onAdd();
+    setBusy(false);
+  };
+  return (
+    <section aria-label="Suggested to-do" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line px-3 py-2 text-[13px]">
+      <Icon name="commitments" size={16} className="text-ink-2" />
+      <span className="min-w-0 flex-[1_1_200px]">
+        <span className="text-muted">Add to-do: </span>
+        <span className="font-medium">{t.step}</span>
+      </span>
+      {due && <DueChip due={due} />}
+      {t.rule && (
+        <span className="font-mono text-[11px] text-muted" title={`Suggested by filing policy rule ${t.rule}`}>
+          {t.rule}
+        </span>
+      )}
+      <Button size="sm" icon="plus" disabled={busy} onClick={() => void add()}>
+        Add <Kbd>a</Kbd>
+      </Button>
+      <IconButton label="Dismiss the suggested to-do" icon="x" size={28} onClick={() => void api.dismissTodo(item.id).catch(errorToast)} />
+    </section>
+  );
+}
+
+/**
  * A meeting's action items for Frank (UX-5): pick the ones to track, and they go to the Tasks note
  * as a to-do to review and approve. They are ticked off in Obsidian, not here.
  */
@@ -637,6 +673,14 @@ export function ItemPanel({
       () => setFiling('todo'),
       (e: unknown) => void errorToast(e),
     );
+  const addSuggested = useCallback(
+    () =>
+      api.requestDraft(item.id, 'todo', { suggested: true }).then(
+        () => setFiling('todo'),
+        (e: unknown) => void errorToast(e),
+      ),
+    [item.id, setFiling],
+  );
   useEffect(() => {
     if (filing) filingRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [filing]);
@@ -664,6 +708,10 @@ export function ItemPanel({
       } else if (e.key === 'y' && canConfirm(item)) {
         e.preventDefault();
         void confirmTriage(item);
+      } else if (e.key === 'a' && item.todoSuggestion && !dirtyNow.current) {
+        // The suggested to-do (FR-15.6) first; once added or dismissed, a adds the open steps as before.
+        e.preventDefault();
+        void addSuggested();
       } else if ((e.key === 'a' || e.key === 'f' || e.key === 'v') && canFile(item) && !dirtyNow.current) {
         e.preventDefault();
         file(e.key === 'a' ? 'todo' : e.key === 'f' ? 'confluence_entry' : 'vault_note');
@@ -678,7 +726,7 @@ export function ItemPanel({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [item, open, onDoneNext, setSnoozeOpen, batch, sweep, file]);
+  }, [item, open, onDoneNext, setSnoozeOpen, batch, sweep, file, addSuggested]);
 
   const reopen = () => void api.reopen(item.id).then(() => toast(item.status === 'snoozed' ? 'Unsnoozed.' : 'Reopened.'), errorToast);
   const ago = fmtAgo(item.lastActivityAt, now);
@@ -812,6 +860,7 @@ export function ItemPanel({
             ) : undefined
           }
         />
+        <SuggestedTodo key={`todo:${item.id}`} item={item} onAdd={addSuggested} />
         <Asks key={`asks:${item.id}`} item={item} />
 
         {item.next?.actionItems?.length ? <ActionItems key={`actions:${item.id}`} item={item} items={item.next.actionItems} onAdd={addTodo} /> : null}

@@ -154,7 +154,7 @@ export class ActionService {
    * `quiet`: drafted ahead while filing in a batch, so no macOS notification (FR-11.6). `steps`: a
    * to-do's lines to start from (UX-5); a ready to-do is replaced by one with these.
    */
-  async request(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[] } = {}): Promise<Action> {
+  async request(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean } = {}): Promise<Action> {
     // A request still on its way in answers a second one for the same filing: a double click, or
     // a draft ahead meeting Frank's own, starts one draft (RV-S1).
     const key = `${itemId}|${type}`;
@@ -165,28 +165,32 @@ export class ActionService {
     return p;
   }
 
-  private async requestNow(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[] }): Promise<Action> {
+  private async requestNow(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean }): Promise<Action> {
     const existing = Object.values(this.actions).find((a) => a.itemId === itemId && a.type === type && ACTIVE.includes(a.status));
-    if (existing && type === 'todo' && opts.steps && existing.status === 'ready') {
+    const from = opts.steps ?? (opts.suggested ? 'suggested' : undefined);
+    if (existing && type === 'todo' && from && existing.status === 'ready') {
       await this.d.store.append({ type: 'action.discarded', itemId, actionId: existing.id, data: { reason: 'redraft' } });
-      return this.createTodo(itemId, opts.steps, existing.id);
+      return this.createTodo(itemId, from, existing.id);
     }
     if (existing) return this.toAction(existing);
-    if (type === 'todo') return this.createTodo(itemId, opts.steps);
+    if (type === 'todo') return this.createTodo(itemId, from);
     return this.create(itemId, type, undefined, opts.quiet);
   }
 
   /**
-   * A to-do, drafted by code from the item's open steps (or `steps`) and ready at once: the draft
-   * file first, then its request and draft in one append, so it is never left drafting.
+   * A to-do, drafted by code from the item's open steps (or `steps`, or the one the filing policy
+   * suggested) and ready at once: the draft file first, then its request and draft in one append,
+   * so it is never left drafting.
    */
-  private async createTodo(itemId: string, steps?: string[], supersedes?: string): Promise<Action> {
+  private async createTodo(itemId: string, steps?: string[] | 'suggested', supersedes?: string): Promise<Action> {
     const it = this.d.store.projection.items[itemId];
     if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     if (!(await vaultExists(this.vaultRoot()))) throw new HttpError('unavailable', `The vault folder ${this.vaultRoot()} doesn't exist. Set the vault path in Settings.`);
     const topic = await readTopic(this.d.store.projection, this.d.items, itemId);
     if (!topic) throw new HttpError('conflict', 'The thread’s content is no longer available, so there is nothing to add.');
-    const list = steps ? steps.map((step) => ({ step })) : todoSteps(topic.anchor.text, it.asksDone);
+    const suggested = topic.anchor.text?.todo;
+    if (steps === 'suggested' && !suggested) throw new HttpError('conflict', 'No to-do is suggested for this item any more.');
+    const list = steps === 'suggested' ? [suggested!] : steps ? steps.map((step) => ({ step })) : todoSteps(topic.anchor.text, it.asksDone);
     if (!list.length) throw new HttpError('validation', 'Nothing to add: this item has no next step.');
     const source = topic.anchor.item;
     const draft: TodoDraft = { kind: 'todo', path: this.d.settings().tasksNote, content: todoContent(list, { title: source.title, permalink: source.permalink }), model: 'code', promptVersion: 'todo v1', durationMs: 0, tokens: 0, edited: false };
