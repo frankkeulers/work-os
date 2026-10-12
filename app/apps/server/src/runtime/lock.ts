@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { link, readFile, rename, rm, unlink } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { link, readFile, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { Instance } from '../config/env';
 import { fsyncDir, tmpName, writeSynced } from '../store/atomic';
@@ -8,6 +9,13 @@ import { fsyncDir, tmpName, writeSynced } from '../store/atomic';
 // it is written to a tmp file and hard-linked into place, and link() fails if the lock exists.
 // A lock is stale when its process is gone, its pid now belongs to another process, or it was
 // taken before the last boot. A stale lock is moved aside, never deleted, then taken over.
+// Only one starter at a time may do that: it holds `<lock>.takeover` while it reads the lock again,
+// moves it aside and links its own. Without that, a starter could move a lock another had just
+// taken, and two would win.
+
+/** A takeover file older than this was left by a starter that died mid-takeover. */
+const TAKEOVER_STALE_MS = 30_000;
+const MAX_ATTEMPTS = 200;
 
 export interface LockInfo {
   pid: number;
@@ -88,42 +96,58 @@ export async function acquireLock(
   };
   const tmp = tmpName(file);
   await writeSynced(tmp, `${JSON.stringify(info)}\n`);
-  let tookOver: LockInfo | undefined;
+  const lock: Lock = {
+    info,
+    release: async () => {
+      // Only remove the lock if it is still ours.
+      if (sameHolder(await readLock(file), info)) await unlink(file).catch(() => undefined);
+    },
+  };
+  /** Links ours into place; false when a lock is there. */
+  const take = async () => {
+    try {
+      await link(tmp, file);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw e;
+    }
+    await fsyncDir(dirname(file));
+    return true;
+  };
+  const aside = (name: string) => `${name}.stale-${now().getTime()}-${process.pid}-${randomBytes(3).toString('hex')}`;
+  const takeover = `${file}.takeover`;
   try {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        await link(tmp, file);
-        await fsyncDir(dirname(file));
-        const lock: Lock = {
-          info,
-          release: async () => {
-            // Only remove the lock if it is still ours.
-            if (sameHolder(await readLock(file), info)) await unlink(file).catch(() => undefined);
-          },
-        };
-        return { ok: true, lock, tookOver };
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
-      }
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      if (await take()) return { ok: true, lock };
       const holder = await readLock(file);
       if (!isStale(holder, probe)) return { ok: false, holder: holder! };
-      // Move the stale lock aside. Another starter may have done the same and taken the lock in
-      // between; if what we moved isn't the lock we judged stale, put it back and report it held.
-      const aside = `${file}.stale-${now().getTime()}-${process.pid}`;
       try {
-        await rename(file, aside);
+        await writeFile(takeover, `${process.pid}\n`, { flag: 'wx', mode: 0o600 });
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue;
-        throw e;
-      }
-      const moved = await readLock(aside);
-      if (holder && moved && !sameHolder(moved, holder)) {
-        await link(aside, file).catch(() => undefined);
-        await rm(aside, { force: true });
-        if (!isStale(moved, probe)) return { ok: false, holder: moved };
+        if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+        // Another starter is taking over. A takeover file left by a crash is moved aside too.
+        const s = await stat(takeover).catch(() => undefined);
+        if (s && now().getTime() - s.mtimeMs > TAKEOVER_STALE_MS) await rename(takeover, aside(takeover)).catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 5));
         continue;
       }
-      tookOver = holder;
+      try {
+        // Nobody else moves the lock while we hold the takeover file, but a starter may have
+        // linked a fresh one since we read it.
+        const current = await readLock(file);
+        if (!isStale(current, probe)) return { ok: false, holder: current! };
+        try {
+          await rename(file, aside(file));
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+        }
+        if (await take()) return { ok: true, lock, tookOver: current };
+        // A starter linked one in the gap: theirs is fresh.
+        const winner = await readLock(file);
+        if (!isStale(winner, probe)) return { ok: false, holder: winner! };
+      } finally {
+        await unlink(takeover).catch(() => undefined);
+      }
     }
     throw new Error(`Could not take the lock at ${file}`);
   } finally {

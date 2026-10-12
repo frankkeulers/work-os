@@ -81,6 +81,30 @@ describe('lock', () => {
     expect(JSON.parse(await readFile(file, 'utf8')).pid).toBe(process.pid);
   });
 
+  it('lets exactly one win however the starters interleave over a stale lock', async () => {
+    const p = probe({ [process.pid]: ME });
+    for (let round = 0; round < 40; round++) {
+      await writeHolder(holder({}));
+      const res = await Promise.all(Array.from({ length: 8 }, () => acquireLock(file, meta, p)));
+      expect(res.filter((r) => r.ok), `round ${round}`).toHaveLength(1);
+      for (const r of res) if (r.ok) await r.lock.release();
+    }
+    // Every stale lock was kept aside, none lost.
+    expect((await readdir(dir)).filter((f) => f.startsWith('lock.stale-'))).toHaveLength(40);
+    expect(await readdir(dir)).not.toContain('lock.takeover');
+  });
+
+  it('moves aside a takeover file a crashed starter left behind', async () => {
+    await writeHolder(holder({}));
+    await writeFile(`${file}.takeover`, '4242\n');
+    const later = () => new Date(Date.now() + 60_000);
+    const res = await acquireLock(file, meta, probe({ [process.pid]: ME }), later);
+    expect(res.ok).toBe(true);
+    const files = await readdir(dir);
+    expect(files.filter((f) => f.startsWith('lock.takeover.stale-'))).toHaveLength(1);
+    expect(files).not.toContain('lock.takeover');
+  });
+
   it('does not remove a lock someone else holds now', async () => {
     const res = await acquireLock(file, meta, probe({ [process.pid]: ME }));
     if (!res.ok) throw new Error('expected the lock');
