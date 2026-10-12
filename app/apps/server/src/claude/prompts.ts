@@ -179,9 +179,12 @@ file.
 - [F4] An email: customer requirements, commitments and decisions suit Confluence, as in chat.
   Newsletters, notifications, automated mail and mailing lists are never filed.
 - [F5] A meeting invitation is never filed.
-- [F6] Not Frank's to file: product context for products he isn't PM for, the Shipping & Offshore
-  ones (Podium, FleetWeather, SSAS, FleetTrak). Their PMs keep those PRD pages. Neither Confluence
-  nor the vault, whichever channel or person it comes from.
+- [F6] Not Frank's to file: product context for business units he isn't PM for. Their PMs keep
+  those PRD pages. Neither Confluence nor the vault, whichever channel or person it comes from.
+  They are Shipping & Offshore (Podium, FleetWeather, SSAS, FleetTrak), Maritime Risk & Compliance
+  (PurpleTRAC), Global Government Solutions (MDA, LRIT, AMVER and the other flag-state and
+  government programmes), Insurance (Coral, Risk Intelligence, Clearwater Dynamics) and Defense.
+  Data Products is his (Meridia, MTI, the Insights Data API, Veritas, MVI): file it as F1 says.
 
 ## Pre-draft
 
