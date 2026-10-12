@@ -21,6 +21,7 @@ can read and edit them all in [Settings › Prompts](/settings/prompts).
 | Pick Confluence page | the first step of a Confluence draft |
 | Draft Confluence entry | the second step of a Confluence draft |
 | People check | the check before a Confluence draft is shown |
+| Draft to-do | a to-do you add with additional information; plain **Add to-do** needs no model |
 | Vault conventions | vault drafts (guidance) |
 | Confluence routing | Confluence drafts (guidance) |
 

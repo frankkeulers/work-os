@@ -522,6 +522,27 @@ exclusion screen, or the thread is not context. Use the third when the page alre
 everything worth filing from this thread or meeting.
 `;
 
+export const DEFAULT_TODO_PROMPT = `<!-- prompt: draft-todo v1 -->
+You write Frank's to-do for one Slack thread, email or meeting: the tasks he will tick off in his
+Obsidian Tasks note. Code adds the checkbox, the date and the link back to the source, so each step
+is plain text.
+
+You get the thread, Frank's open steps on it as triage found them, and what Frank added when he
+asked for the to-do. What he added comes from him and outranks the thread and the open steps: who
+does what, which steps to drop or merge, the approach, and the dates.
+
+- Start from the open steps. Keep each one unless Frank's information changes, merges or drops it.
+- Add a step only when Frank's information asks for it or plainly implies it.
+- One action per step, starting with a verb, under 120 characters. Name the person it waits on when
+  Frank names them.
+- A date only when Frank's information or the thread gives one. Resolve "Friday" or "end of next
+  week" against Today; never invent a date.
+- Never invent work, owners or facts that neither the thread nor Frank gave.
+
+Answer with JSON only: {"steps":[{"step":"<what to do>","due":"YYYY-MM-DD"}]}. Leave out "due" for
+a step with no date. At most 20 steps.
+`;
+
 export const DEFAULT_PEOPLE_CHECK_PROMPT = `<!-- prompt: people-check v3 -->
 You check a draft Confluence entry before it is shown for approval, and again after Frank edits it. Confluence is shared widely,
 and the entry should already be anonymised, so it must not identify any individual at Pole Star or

@@ -25,6 +25,7 @@ import type { FilingFeedback } from '../pipeline/filingFeedback';
 import { readTopic } from '../pipeline/topics';
 import { itemLinks } from './alreadyFiled';
 import { DraftError } from './errors';
+import { draftTodo } from './todoDrafter';
 import { draftVaultNote, vaultExists } from './vaultDrafter';
 import { NoteExistsError, planVaultWrite, writeVaultFile, type VaultTargets } from './vaultExecutor';
 import { planTodoWrite, unchangedSince } from './todoExecutor';
@@ -39,13 +40,15 @@ import { planTodoWrite, unchangedSince } from './todoExecutor';
 //     attempt (with the expected hash for the vault, the version marker for Confluence), so a crash
 //     or sleep mid-write is never repeated. Offline time doesn't use up attempts.
 // A to-do (UX-5) is drafted by code as it is requested, ready at once, with no model call and no
-// drafts budget; once approved it goes through the outbox like a vault note.
+// drafts budget; once approved it goes through the outbox like a vault note. A to-do with Frank's
+// additional information (FR-9.12) is drafted by Haiku instead, in the queue, within the budget.
 
 const ACTIVE: ActionState['status'][] = ['drafting', 'ready', 'approved', 'executing'];
 export const DRAFT_STAGES: Record<ActionType, string[]> = {
   vault_note: ['Reading the thread', 'Finding related notes in the vault', 'Drafting the note'],
   confluence_entry: ['Reading the thread', 'Reading the Confluence catalogue', 'Picking the page', 'Drafting the entry', 'People check (Haiku)'],
-  todo: ['Writing the to-do'],
+  // Only a to-do with Frank's information is ever drafting: a plain one is ready at once.
+  todo: ['Reading the thread', 'Writing the to-do (Haiku)'],
 };
 export const MAX_ATTEMPTS = 5; // transient write failures before `unreachable` (FR-14.5)
 const RETRY_BASE_MS = 30_000;
@@ -76,7 +79,7 @@ export interface ActionDeps {
   reportOk: (dep: DepId) => Promise<void> | void;
   online: () => boolean;
   confluence: ConfluenceApi;
-  prompt: (id: 'draft-vault' | 'pick-confluence' | 'draft-confluence' | 'people-check') => Promise<Prompt>;
+  prompt: (id: 'draft-vault' | 'pick-confluence' | 'draft-confluence' | 'people-check' | 'draft-todo') => Promise<Prompt>;
   /** The vault conventions for vault drafts. */
   conventions: () => Promise<string>;
   /** A meeting's transcript from its source, read live for a draft (R2.3, R2.7). */
@@ -217,14 +220,14 @@ export class ActionService {
   /** `additionalInfo` (FR-9.12) goes in the draft file, never the event, and is saved first. */
   private async create(itemId: string, type: ActionType, opts: { supersedes?: string; quiet?: boolean; additionalInfo?: string } = {}): Promise<Action> {
     const { supersedes, quiet, additionalInfo } = opts;
-    if (type === 'todo') return this.createTodo(itemId, undefined, supersedes);
+    if (type === 'todo' && !additionalInfo) return this.createTodo(itemId, undefined, supersedes);
     const it = this.d.store.projection.items[itemId];
     if (!it) throw new HttpError('not_found', 'Item not found. It may have been removed by retention.');
     if (type === 'confluence_entry') {
       if (!scopeCql(this.d.settings().confluence)) throw new HttpError('conflict', 'Nothing is in the Confluence scope yet. Add root pages, labels or single pages in Settings › Write targets.');
     }
     if (this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
-    if (type === 'vault_note' && !(await vaultExists(this.vaultRoot()))) throw new HttpError('unavailable', `The vault folder ${this.vaultRoot()} doesn't exist. Set the vault path in Settings.`);
+    if (type !== 'confluence_entry' && !(await vaultExists(this.vaultRoot()))) throw new HttpError('unavailable', `The vault folder ${this.vaultRoot()} doesn't exist. Set the vault path in Settings.`);
     const id = `act-${randomUUID()}`;
     if (additionalInfo) await this.d.drafts.update(id, itemId, (s) => ({ ...s, additionalInfo }));
     await this.d.store.append({
@@ -280,7 +283,7 @@ export class ActionService {
     const a = this.action(id);
     const additionalInfo = opts.additionalInfo === undefined ? (await this.d.drafts.read(id))?.additionalInfo : (opts.additionalInfo ?? undefined);
     if (a.status === 'executing' || a.status === 'done') throw new HttpError('conflict', 'This action has already been written.');
-    if (a.type !== 'todo' && this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today.');
+    if ((a.type !== 'todo' || additionalInfo) && this.d.draftsBudgetHit()) throw new HttpError('budget', 'Drafts budget reached for today.');
     if (a.status !== 'failed' && a.status !== 'discarded') {
       this.stopDrafting(id);
       await this.d.store.append({
@@ -433,7 +436,7 @@ export class ActionService {
     const now = this.d.now().getTime();
     const confluenceReady = this.d.online() && this.d.depReady('confluence');
     if (!this.drafting && this.d.claudeReady() && !this.d.draftsBudgetHit()) {
-      const next = this.oldest((a) => a.status === 'drafting' && a.type !== 'todo' && (this.retryAt.get(a.id) ?? 0) <= now && (a.type === 'vault_note' || confluenceReady));
+      const next = this.oldest((a) => a.status === 'drafting' && (this.retryAt.get(a.id) ?? 0) <= now && (a.type !== 'confluence_entry' || confluenceReady));
       if (next) started.push(this.track(this.startDraft(next)));
     }
     if (!this.executing && this.d.canWrite()) {
@@ -549,7 +552,15 @@ export class ActionService {
         this.stage(a.id, 1);
         const transcript = content.item.kind === 'meeting' ? await this.transcriptFor(content.item, signal) : undefined;
         const result: { draft: Draft; baseHash?: string | null; baseHashes?: Record<string, string | null> } =
-          a.type === 'vault_note'
+          a.type === 'todo'
+            ? await draftTodo(
+                { claude: this.d.claude, prompt: await this.d.prompt('draft-todo'), path: this.d.settings().tasksNote, now: this.d.now, signal, transcript, additionalInfo },
+                content.item,
+                this.d.me(content.item.source),
+                todoSteps(topic.anchor.text, this.d.store.projection.items[a.itemId]?.asksDone),
+                { title: topic.anchor.item.title, permalink: topic.anchor.item.permalink },
+              )
+            : a.type === 'vault_note'
             ? await draftVaultNote(
                 {
                   claude: this.d.claude,

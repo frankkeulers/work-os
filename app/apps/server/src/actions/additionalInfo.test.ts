@@ -1,6 +1,7 @@
 import type { Item } from '@work-os/shared';
 import { describe, expect, it } from 'vitest';
 import { renderConfluenceRequest, renderPickRequest } from './confluenceDrafter';
+import { renderTodoRequest } from './todoDrafter';
 import { additionalInfo, renderVaultRequest } from './vaultDrafter';
 
 // What Frank adds when he asks for a draft reaches the drafters, after the thread (FR-9.12).
@@ -45,6 +46,12 @@ describe('additional information (FR-9.12)', () => {
     const prompt = renderVaultRequest(item, me, '', NOW, undefined, [], 'Bulk export', INFO);
     expect(prompt).toMatch(new RegExp(`</filing-target>\\n[^\\n]*\\n${escape(BLOCK)}Draft the vault note`));
     expect(prompt).not.toContain(NO_NAMES.trim());
+  });
+
+  it('goes to the to-do drafter after the open steps, each dated in London', () => {
+    const prompt = renderTodoRequest(item, me, [{ step: 'Send the spec', dueAt: '2026-10-09T23:30:00.000Z' }], NOW, undefined, INFO);
+    expect(prompt).toMatch(new RegExp(`<open-steps>\\n${escape('{"step":"Send the spec","due":"2026-10-10"}')}\\n</open-steps>\\n${escape(BLOCK)}Write the to-do`));
+    expect(renderTodoRequest(item, me, [], NOW)).toContain('<open-steps>\nNone: triage found no open step for Frank.\n</open-steps>\nWrite the to-do');
   });
 
   it('goes to both Confluence calls after the thread, with the rule that the entry names no one', () => {

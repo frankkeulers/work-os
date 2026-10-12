@@ -1219,6 +1219,46 @@ describe('draft with additional information (FR-9.12)', () => {
     expect(busy.body.message).toMatch(/already being made/);
   });
 
+  it('drafts a to-do with information by Haiku, in the queue and the drafts budget; plain Add to-do stays code', async () => {
+    const info = 'Anna owns the export spec, due 2026-10-09.';
+    const r = await call<Action>('POST', `/api/items/${encodeURIComponent(PROD)}/actions`, { type: 'todo', additionalInfo: info });
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ type: 'todo', status: 'drafting' });
+    await res.actions.settled();
+    const todoCall = claude.calls.at(-1)!;
+    expect(todoCall.system).toMatch(/^<!-- prompt: draft-todo v1 -->/);
+    expect(todoCall.options).toMatchObject({ model: 'claude-haiku-5-5' });
+    expect(todoCall.prompt).toContain('<open-steps>\n{"step":"Follow up: Release notes draft is up"}\n</open-steps>');
+    expect(todoCall.prompt).toContain(`<additional-information>\n${info}\n</additional-information>`);
+    const v = await item();
+    const link = `[#product](${v.item.permalink})`;
+    expect(v.actions[0]).toMatchObject({ id: r.body.id, status: 'ready', target: { path: 'Work/Tasks.md' } });
+    // Code makes the lines: the checkbox, the date and the link are never the model's.
+    expect(v.drafts[r.body.id]).toMatchObject({
+      kind: 'todo',
+      model: 'haiku-5.5',
+      promptVersion: expect.stringMatching(/^draft-todo v1/),
+      additionalInfo: info,
+      content: `- [ ] Follow up: Release notes draft is up ${link}\n- [ ] From Frank: Anna owns the export spec, due 2026-10-09. 📅 2026-10-09 ${link}`,
+    });
+    expect((await call<UsageView>('GET', '/api/usage')).body.budgets.drafts.used).toBe(1);
+
+    // A plain re-draft keeps the information, so it is drafted by Haiku again.
+    const again = await redraft(r.body.id);
+    expect((await item()).drafts[again.body.id]).toMatchObject({ model: 'haiku-5.5', additionalInfo: info });
+
+    // With the budget used up, only the plain to-do can be added.
+    const view = (await call<SettingsView>('GET', '/api/settings')).body;
+    expect((await call('PUT', '/api/settings', { settings: { ...view.settings, budgets: { ...view.settings.budgets, draftsPerDay: 2 } }, rules: view.rules })).status).toBe(200);
+    await call('POST', `/api/actions/${again.body.id}/discard`);
+    expect((await request({ type: 'todo', additionalInfo: info })).status).toBe(429);
+    const calls = claude.calls.length;
+    const plain = await request({ type: 'todo' });
+    expect(plain.body).toMatchObject({ status: 'ready' });
+    expect(claude.calls).toHaveLength(calls);
+    expect((await item()).drafts[plain.body.id]).toMatchObject({ model: 'code' });
+  });
+
   it('refuses information with given steps or the suggested to-do, or over 2000 characters', async () => {
     expect((await request({ type: 'todo', steps: ['Call Sam'], additionalInfo: INFO })).status).toBe(422);
     expect((await request({ type: 'todo', suggested: true, additionalInfo: INFO })).status).toBe(422);
