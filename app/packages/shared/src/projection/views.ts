@@ -1,6 +1,7 @@
 import type { BudgetState, ClosedByReply, Criterion, ItemSummary } from '../api';
 import { effectiveTriage, laneFor, viewLane } from '../lanes';
-import type { ActionType, NextStep, Settings, UsageRecord } from '../schemas';
+import { filingPlan, todoOffer } from '../policy';
+import { DEFAULT_FILING, type ActionType, type FilingSettings, type NextStep, type Settings, type TodoSuggestion, type UsageRecord } from '../schemas';
 import { askId } from './topics';
 import { londonParts } from '../time';
 import type { ActionState, CloseStats, ItemFlags, ItemMeta } from './state';
@@ -58,6 +59,7 @@ export interface DecisionText {
   summary?: string;
   reason?: string;
   next?: NextStep;
+  todo?: TodoSuggestion; // E14 (FR-15.6): the to-do the policy suggests
   firstMessage?: string; // shown, shortened, until the item has a summary
   settleWhy?: string; // the last settle check's reason an ask is still open (CK-2.3)
   finishWhy?: string; // what settled the topic, when it looks finished (CK-2.10)
@@ -69,6 +71,8 @@ export interface SummaryContext {
   now: string;
   triageBudgetHit: boolean;
   text: DecisionText;
+  /** Settings › Learning's switches (E14); the defaults when left out. */
+  filing?: FilingSettings;
 }
 
 /**
@@ -93,6 +97,10 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
   const quietUntil = s.triageState === 'pending' ? new Date(Date.parse(meta.lastActivityAt) + ctx.quietMinutes * MIN).toISOString() : undefined;
   const first = ctx.text.firstMessage ?? '';
   const next = openNext(ctx.text.next, s.asksDone);
+  const actions = actionSummaries(ctx.actions, meta.revision);
+  const filingSettings = ctx.filing ?? DEFAULT_FILING;
+  const filing = filingPlan(d, s.correction, filingSettings);
+  const todo = todoOffer(ctx.text.todo, { settings: filingSettings, revision: meta.revision, dismissed: s.todoDismissed, hasTodo: !!actions.todo, open: s.status === 'open' });
   return {
     id: meta.id,
     source: meta.source,
@@ -112,7 +120,9 @@ export function summaryOf(meta: Omit<ItemMeta, 'participants' | 'messageCount'>,
     ...(confirmedNow(s) && { confirmed: true }),
     containsPeopleObservations: d?.containsPeopleObservations ?? false,
     targetHints: { confluence: d?.confluence.targetHint, vault: d?.vault.targetHint },
-    actions: actionSummaries(ctx.actions, meta.revision),
+    ...(Object.keys(filing).length > 0 && { filing }),
+    ...(todo && { todoSuggestion: todo }),
+    actions,
     newReplies: s.newReplies,
     backFromSnooze: s.backFromSnooze,
     ...(s.backFromSnooze && s.backAt && { backAt: s.backAt }),

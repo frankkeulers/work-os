@@ -3,7 +3,7 @@ title: Triage rules
 group: Inbox
 order: 40
 summary: Rules that decide before Claude does, or set a floor for its decision.
-updated: 2026-10-09
+updated: 2026-10-12
 ---
 
 Rules run before Claude, in order. **The first rule that matches decides**; the rest are skipped.
@@ -44,7 +44,7 @@ source.
 | Today | Straight to Today. Claude is not called. |
 | Drop | Ignored, and not stored. |
 | Ask the model | Claude decides; with a minimum, it can raise the level but never go below it. The minimum holds only while something after your last message matches the rule: once you have answered the mention, Claude's None stands. When a minimum changes Claude's answer, **Triage details** says so, e.g. "model said None · rule mention-me set Today". |
-| To file | Claude still reads it (for the summary and where to file it), but it needs nothing from you, so it lands in To file. |
+| To file | Claude still reads it (for the summary and where to file it), but it needs nothing from you, so it lands in To file. Tick **Pre-draft** to have its draft start ahead, whatever the [filing policy](prompts.md#the-filing-policy) says. |
 
 ## When you reply
 
@@ -70,7 +70,9 @@ Under the rules, **When you reply** sets what happens after you answer an item i
 ## Tips
 
 - Put narrow rules above broad ones: the first match wins.
-- Use **To file** for channels that are mostly reference material, such as release notes.
+- Use **To file** for channels that are mostly reference material, such as release notes. For
+  what is worth filing in general, edit the [filing policy](prompts.md#the-filing-policy) instead:
+  it is read by Claude, so it can say things a condition can't.
 - Use **Drop** sparingly. A dropped thread is never stored, so it cannot be found later.
 - A rule with a regular expression that does not compile is held back and shown in red until it
   is fixed.

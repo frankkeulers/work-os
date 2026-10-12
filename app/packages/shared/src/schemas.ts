@@ -73,10 +73,28 @@ export type Attention = z.infer<typeof Attention>;
 /** Attention levels in the order the eval's confusion matrix lists them. */
 export const ATTENTION_ORDER: readonly Attention[] = ['now', 'today', 'follow', 'none'];
 
+// E14 (FR-15.2): what the filing policy says about a suggested filing. Written by policy-era
+// triage whenever a filing is suggested; absent on earlier decisions, which pre-draft every
+// suggested filing (see filingPlan()).
 const FilingSuggestion = z.object({
   suggested: z.boolean(),
   targetHint: z.string().optional(),
+  predraft: z.boolean().optional(),
+  ready: z.boolean().optional(),
+  rule: z.string().optional(), // the policy rule applied: "R1", "P2", "F1"
 });
+export type FilingSuggestion = z.infer<typeof FilingSuggestion>;
+
+/** A policy rule ID as the filing policy writes them (FR-15.1): letters, then a number. */
+export const POLICY_RULE_RE = /^[A-Z]{1,3}\d{1,3}$/;
+
+/** E14 (FR-15.6): a step the policy suggests as a to-do. Suggest only: Frank adds it, or not. */
+export const TodoSuggestion = z.object({
+  step: z.string().min(1),
+  dueAt: isoDate.optional(),
+  rule: z.string().optional(),
+});
+export type TodoSuggestion = z.infer<typeof TodoSuggestion>;
 
 // amendment: what the triage thinks Frank has to do next (Inbox redesign). Optional, so a
 // decision without it still drives the lanes; the UI then falls back to the lane defaults.
@@ -116,6 +134,7 @@ export const TriageDecision = z.object({
   summary: z.string().min(1),
   reason: z.string().min(1),
   next: NextStep.optional(), // amendment
+  todo: TodoSuggestion.optional(), // E14 (FR-15.6)
   decidedBy: z.enum(['rule', 'model']),
   ruleId: z.string().optional(),
   modelAttention: Attention.optional(), // the model's own answer, when a rule's floor or To file changed it
@@ -318,7 +337,8 @@ export const RuleOutcome = z.discriminatedUnion('type', [
   z.object({ type: z.literal('model'), min: z.enum(['today', 'now']).optional() }),
   // To file: the model still reads the thread (summary, where to file it), but attention is
   // None and at least one filing destination is suggested, so the item lands in To file.
-  z.object({ type: z.literal('file') }),
+  // predraft (FR-15.2): its filings are drafted ahead, whatever the policy says.
+  z.object({ type: z.literal('file'), predraft: z.boolean().optional() }),
 ]);
 export type RuleOutcome = z.infer<typeof RuleOutcome>;
 
@@ -455,6 +475,8 @@ export const Settings = z.object({
     // Amendment (cockpit CK-2.10): on which sources a topic that waited on Frank, and that later
     // messages settled, is suggested as "Looks finished". See suggestFinished().
     suggestFinished: z.object({ sources: z.partialRecord(SourceId, z.boolean()) }).optional(),
+    // E14 (FR-15.3, FR-15.5, FR-15.6): what the filing policy may do. See filingSettings().
+    filing: z.object({ predraft: z.enum(['policy', 'all', 'off']), ready: z.boolean(), todoSuggestions: z.boolean() }).optional(),
   }),
   models: z.object({
     triage: SettingsModelId,
@@ -635,6 +657,11 @@ export function closeOnReply(settings: Pick<Settings, 'triage'>): { enabled: boo
 }
 
 /** "Looks finished" (CK-2.10): suggested on Slack by default, and on Outlook once Frank turns it on. */
+export type FilingSettings = NonNullable<Settings['triage']['filing']>;
+export const DEFAULT_FILING: FilingSettings = { predraft: 'policy', ready: true, todoSuggestions: true };
+export function filingSettings(settings: Pick<Settings, 'triage'>): FilingSettings {
+  return { ...DEFAULT_FILING, ...settings.triage.filing };
+}
 export function suggestFinished(settings: Pick<Settings, 'triage'>): Record<SourceId, boolean> {
   const c = settings.triage.suggestFinished;
   return Object.fromEntries(SourceId.options.map((id) => [id, c?.sources[id] ?? id === 'slack'])) as Record<SourceId, boolean>;

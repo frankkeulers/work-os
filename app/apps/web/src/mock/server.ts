@@ -1,4 +1,5 @@
 import {
+  filingSettings,
   Rules,
   SETTLE_MAX_ATTEMPTS,
   Settings as SettingsSchema,
@@ -532,7 +533,8 @@ export class MockServer implements WorkOsApi, MockControls {
       quietMinutes: this.s.settings.triage.quietMinutes,
       now: this.iso(),
       triageBudgetHit: budgets.triage.hit,
-      text: { summary: d?.summary, reason: d?.reason, next: d?.next, firstMessage: rec.item.messages[0]?.text, ...(rec.settleWhy && { settleWhy: rec.settleWhy }), ...(rec.finishWhy && { finishWhy: rec.finishWhy }) },
+      text: { summary: d?.summary, reason: d?.reason, next: d?.next, ...(d?.todo && { todo: d.todo }), firstMessage: rec.item.messages[0]?.text, ...(rec.settleWhy && { settleWhy: rec.settleWhy }), ...(rec.finishWhy && { finishWhy: rec.finishWhy }) },
+      filing: filingSettings(this.s.settings),
     });
     const calendarCategories = this.categoryTagsOf(rec.item.meeting?.calendar?.eventId);
     return calendarCategories ? { ...row, calendarCategories } : row;

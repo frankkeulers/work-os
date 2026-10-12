@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participant, PromptFileId, SourceId, TriageCorrection, TriageDecision } from './schemas';
+import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participant, PromptFileId, SourceId, TodoSuggestion, TriageCorrection, TriageDecision } from './schemas';
 
 // The event log (PLAN.md §4.3, §4.4). It is the source of truth: every event carries a gap-free
 // `seq` and a typed payload, so the inbox can be rebuilt from the log alone. Events never carry
@@ -24,14 +24,19 @@ export type DepState = z.infer<typeof DepState>;
 // A decision as the log keeps it: without its free text (summary, reason, the wording of the next
 // step). That text paraphrases the messages, so it lives with the raw content in items/ and expires
 // with it (retention, §4.3). Strict, so text can't slip back in.
-export const LoggedDecision = TriageDecision.omit({ summary: true, reason: true, next: true })
-  .extend({ next: NextStep.pick({ need: true, dueAt: true }).strict().optional() })
+export const LoggedDecision = TriageDecision.omit({ summary: true, reason: true, next: true, todo: true })
+  .extend({ next: NextStep.pick({ need: true, dueAt: true }).strict().optional(), todo: TodoSuggestion.pick({ dueAt: true, rule: true }).strict().optional() })
   .strict();
 export type LoggedDecision = z.infer<typeof LoggedDecision>;
 
 export function toLoggedDecision(d: TriageDecision): LoggedDecision {
-  const { summary: _summary, reason: _reason, next, ...rest } = d;
-  return { ...rest, ...(next && { next: { need: next.need, ...(next.dueAt && { dueAt: next.dueAt }) } }) };
+  const { summary: _summary, reason: _reason, next, todo, ...rest } = d;
+  return {
+    ...rest,
+    ...(next && { next: { need: next.need, ...(next.dueAt && { dueAt: next.dueAt }) } }),
+    // The to-do's wording stays with the text in items/; the log keeps that there was one (FR-15.2).
+    ...(todo && { todo: { ...(todo.dueAt && { dueAt: todo.dueAt }), ...(todo.rule && { rule: todo.rule }) } }),
+  };
 }
 
 export const EventPayloads = {

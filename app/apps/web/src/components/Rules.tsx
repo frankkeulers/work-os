@@ -35,7 +35,7 @@ export function conditionText(c: RuleCondition): string {
 
 export function outcomeText(o: RuleOutcome): string {
   if (o.type === 'model') return o.min ? `Model, at least ${o.min === 'now' ? 'Now' : 'Today'}` : 'Model';
-  if (o.type === 'file') return 'File';
+  if (o.type === 'file') return o.predraft ? 'File, pre-drafted' : 'File';
   return o.type === 'now' ? 'Now' : o.type === 'today' ? 'Today' : 'Drop';
 }
 
@@ -492,6 +492,12 @@ function RuleDialog({
                   </select>
                 </label>
               )}
+              {rule.outcome.type === 'file' && (
+                <label className="flex items-center gap-2 text-[13px]">
+                  <input type="checkbox" className="h-4 w-4 accent-[var(--accent-bg)]" checked={!!rule.outcome.predraft} onChange={(e) => setRule({ ...rule, outcome: { type: 'file', ...(e.target.checked && { predraft: true }) } })} />
+                  Pre-draft
+                </label>
+              )}
             </div>
             <span className="text-xs leading-normal text-muted">
               {rule.outcome.type === 'drop'
@@ -499,7 +505,7 @@ function RuleDialog({
                 : rule.outcome.type === 'model'
                   ? 'The thread still goes to batched model triage; the result is raised to the minimum if lower.'
                   : rule.outcome.type === 'file'
-                    ? 'The model still summarises the thread and suggests where to file it (the vault if it suggests nowhere), then it goes to File for review. Put rules for mentions and VIPs above this one, or they won’t reach Now or Today.'
+                    ? `The model still summarises the thread and suggests where to file it (the vault if it suggests nowhere), then it goes to File for review. ${rule.outcome.predraft ? 'Its draft starts ahead, whatever the filing policy says. ' : ''}Put rules for mentions and VIPs above this one, or they won’t reach Now or Today.`
                     : 'A fixed outcome skips the model call entirely.'}
             </span>
           </div>

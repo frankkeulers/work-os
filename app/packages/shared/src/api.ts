@@ -1,6 +1,7 @@
 import type { CategoryTag } from './categories';
 import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
+import type { FilingPlans } from './policy';
 import type { DoneBy } from './projection/state';
 import type {
   Action,
@@ -19,6 +20,7 @@ import type {
   Rule,
   SourceId,
   Settings,
+  TodoSuggestion,
   TriageCorrection,
   TriageDecision,
   UsagePurpose,
@@ -59,6 +61,8 @@ export interface ItemSummary {
   confirmed?: boolean; // Frank said this decision was right: it is in the labelled set
   containsPeopleObservations: boolean;
   targetHints: { confluence?: string; vault?: string };
+  filing?: FilingPlans; // E14 (FR-15.3, FR-15.5): what the policy says about each suggested filing
+  todoSuggestion?: TodoSuggestion; // E14 (FR-15.6): a to-do offered, while not added or dismissed
   actions: Partial<Record<ActionType, ActionSummary>>; // latest action per type
   newReplies: boolean; // new messages since the last triage
   backFromSnooze: boolean;

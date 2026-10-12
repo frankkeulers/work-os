@@ -2,6 +2,7 @@ import { access } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SourceEnv } from '../claude/promptFiles';
 import {
+  filingSettings,
   anchorOf,
   buildAttention,
   buildFiled,
@@ -48,6 +49,8 @@ import {
   type WeekEvent,
   type WeekView,
   type StartupCheck,
+  type DecisionText,
+  type LoggedDecision,
   type TriageDecision,
   type UsagePurpose,
   type UsageRecord,
@@ -392,6 +395,15 @@ export function inboxView(d: ViewDeps): InboxView {
  * now, when the snapshot still has it, else those the item kept.
  */
 /** An item's inbox row: its summary, Open in's URL and its calendar categories. */
+/** A decision from the log with its free text from the item's file put back (§4.3). */
+const withText = ({ todo: _todo, ...d }: LoggedDecision, text: DecisionText | undefined): TriageDecision => ({
+  ...d,
+  summary: text?.summary ?? '',
+  reason: text?.reason ?? '',
+  next: text?.next,
+  ...(text?.todo && { todo: text.todo }),
+});
+
 function rowBuilder(d: ViewDeps, nowIso: string, b: BudgetState) {
   const s = d.settings.editable.settings;
   const actions = actionsByItem(d);
@@ -404,6 +416,7 @@ function rowBuilder(d: ViewDeps, nowIso: string, b: BudgetState) {
         now: nowIso,
         triageBudgetHit: b.triage.hit,
         text: d.items.text(i.id) ?? {},
+        filing: filingSettings(s),
       }),
     );
     const calendarCategories = calendarCategoriesOf(d, d.items.calendarOf(i.id));
@@ -530,6 +543,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
       now: d.now().toISOString(),
       triageBudgetHit: b.triage.hit,
       text: d.items.text(id) ?? {},
+      filing: filingSettings(s),
     }),
   );
   // A topic shows every piece's messages. Without its file the item shows its metadata and permalink only (FR-12.1).
@@ -550,12 +564,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
   const calendarCategories = calendarCategoriesOf(d, item.meeting?.calendar);
   // Who is in the DM, for the header. Nice to have: a Slack failure leaves it out.
   const members = it.kind === 'dm' && d.members ? await d.members(item).catch(() => undefined) : undefined;
-  const decision: TriageDecision | undefined = it.decision && {
-    ...it.decision,
-    summary: text?.summary ?? '',
-    reason: text?.reason ?? '',
-    next: text?.next,
-  };
+  const decision = it.decision && withText(it.decision, text);
   return {
     summary,
     item,

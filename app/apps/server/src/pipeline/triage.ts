@@ -5,11 +5,14 @@ import {
   effectiveTriage,
   londonAt,
   londonParts,
+  policyRule,
   ruleFloor,
   suggestFinished,
+  TodoSuggestion,
   toLoggedDecision,
   type EarlierView,
   type EventDraft,
+  type FilingSuggestion,
   type Item,
   type ItemState,
   type Me,
@@ -43,7 +46,9 @@ import { capThread, estimateTokens, packBatches, threadTokens, type TriageThread
 // the file is still that revision), then `triage.decided` goes into the log. A crash in between
 // leaves the item pending, and it is triaged again.
 
-const Filing = z.object({ suggested: z.boolean(), targetHint: z.string().min(1).optional() });
+// predraft, ready and rule (FR-15.2) are what the filing policy said; code clamps them below.
+const Filing = z.object({ suggested: z.boolean(), targetHint: z.string().min(1).optional(), predraft: z.boolean().optional(), ready: z.boolean().optional(), rule: z.string().optional() });
+const Todo = z.object({ step: z.string().min(1), dueAt: z.string().optional(), rule: z.string().optional() });
 
 /** What the model must answer (FR-5.3); checked with zod, one retry (CL-7). */
 export const TriageAnswer = z.object({
@@ -57,10 +62,32 @@ export const TriageAnswer = z.object({
       summary: z.string().min(1).max(200),
       reason: z.string().min(1).max(400),
       next: NextStep.optional(),
+      todo: Todo.optional(),
     }),
   ),
 });
 export type TriageAnswer = z.infer<typeof TriageAnswer>;
+
+/**
+ * A filing as the policy said, clamped by code (FR-15.2): ready needs predraft, and predraft needs
+ * the filing suggested. Once suggested, predraft and ready are always written, so a decision from
+ * before the policy (with neither) can be told apart. `predraft`: a To file rule says so.
+ */
+export function clampFiling(f: z.infer<typeof Filing>, predraft = false): FilingSuggestion {
+  const hint = f.targetHint && { targetHint: f.targetHint };
+  if (!f.suggested) return { suggested: false, ...hint };
+  const rule = policyRule(f.rule);
+  return { suggested: true, ...hint, predraft: !!(f.predraft || f.ready || predraft), ready: !!f.ready, ...(rule && { rule }) };
+}
+
+/** A to-do as the policy suggested it (FR-15.6): only beside a step of Frank's or an attention level, and with a real date. */
+export function clampTodo(t: z.infer<typeof Todo> | undefined, attention: Attention, next: NextStep | undefined): TodoSuggestion | undefined {
+  const step = t?.step.trim().slice(0, 200);
+  if (!t || !step || (attention === 'none' && !next)) return undefined;
+  const dueAt = t.dueAt && TodoSuggestion.shape.dueAt.safeParse(t.dueAt).success ? t.dueAt : undefined;
+  const rule = policyRule(t.rule);
+  return { step, ...(dueAt && { dueAt }), ...(rule && { rule }) };
+}
 
 const RANK: Record<Attention, number> = { none: 0, follow: 1, today: 2, now: 3 };
 const atLeast = (a: Attention, min?: Attention): Attention => (min && RANK[min] > RANK[a] ? min : a);
@@ -256,11 +283,14 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
       const attention = toFile ? 'none' : atLeast(a.attention, floor?.min);
       const ruleId = (toFile ?? floor?.rule)?.id;
       // People in the thread don't rule out Confluence: the draft anonymises them (FR-10.1, amended).
-      const confluence = a.confluence;
+      // A To file rule may say to draft its filings ahead (FR-15.2).
+      const rulePredraft = toFile?.outcome.type === 'file' && !!toFile.outcome.predraft;
+      const confluence = clampFiling(a.confluence, rulePredraft);
       // To file needs a destination: the model's, or the vault when it suggested neither.
-      const vault = toFile && !confluence.suggested && !a.vault.suggested ? { suggested: true } : a.vault;
+      const vault = clampFiling(toFile && !a.confluence.suggested && !a.vault.suggested ? { suggested: true } : a.vault, rulePredraft);
       // An ask Frank ticked off stays off, even if the model lists it again.
       const next = a.next?.asks ? { ...a.next, asks: a.next.asks.filter((x) => !asksDone.includes(askId(x.step))) } : a.next;
+      const todo = clampTodo(a.todo, attention, next);
       const decision: TriageDecision = {
         itemId: item.id,
         itemRevision: item.revision,
@@ -272,6 +302,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         summary: a.summary,
         reason: a.reason,
         ...(next && { next }),
+        ...(todo && { todo }),
         decidedBy: 'model',
         ...(ruleId && { ruleId }),
         ...(attention !== a.attention && { modelAttention: a.attention }),
@@ -296,7 +327,7 @@ export async function runTriage(d: TriageDeps, signal: AbortSignal, opts: { only
         if (!stored || stored.item.revision !== item.revision || !current()) return undefined;
         const { finish: _finish, ...rest } = stored;
         const asks = finishCheck ? openAsks(stored.text, asksDone) : [];
-        return { ...rest, text: { summary: a.summary, reason: a.reason, ...(next && { next }) }, ...(asks.length > 0 && before && { finish: { asks, since: before.decidedAt } }) };
+        return { ...rest, text: { summary: a.summary, reason: a.reason, ...(next && { next }), ...(todo && { todo }) }, ...(asks.length > 0 && before && { finish: { asks, since: before.decidedAt } }) };
       });
       if (!saved) continue;
       events.push({ type: 'triage.decided', itemId: item.id, data: { decision: toLoggedDecision(decision), ...(finishCheck && saved.finish && { finishCheck: true as const }) } });

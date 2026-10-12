@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Item, Need, NextStep, SettleDecision, type DecisionText } from '@work-os/shared';
+import { Item, Need, NextStep, SettleDecision, TodoSuggestion, type DecisionText } from '@work-os/shared';
 import { z } from 'zod';
 import { writeJsonAtomic } from './atomic';
 
@@ -40,7 +40,7 @@ export type FinishState = z.infer<typeof FinishState>;
 
 export const StoredItem = z.object({
   item: Item,
-  text: z.object({ summary: z.string(), reason: z.string(), next: NextStep.optional() }).optional(),
+  text: z.object({ summary: z.string(), reason: z.string(), next: NextStep.optional(), todo: TodoSuggestion.optional() }).optional(),
   settle: SettleSnapshot.optional(),
   finish: FinishState.optional(),
   schemaVersion: z.literal(1),
@@ -177,6 +177,7 @@ export class ItemFiles {
         summary: stored.text?.summary,
         reason: stored.text?.reason,
         next: stored.text?.next,
+        ...(stored.text?.todo && { todo: stored.text.todo }),
         firstMessage: stored.item.messages[0]?.text,
         ...(stored.settle?.why && { settleWhy: stored.settle.why }),
         ...(stored.finish?.check?.decision.asks[0]?.why && { finishWhy: stored.finish.check.decision.asks[0].why }),

@@ -12,4 +12,5 @@ export * from './todo';
 export * from './merge';
 export * from './attention';
 export * from './filed';
+export * from './policy';
 export type * from './api';
