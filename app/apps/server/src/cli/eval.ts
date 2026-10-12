@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { ATTENTION_ORDER, SourceId, type EvalReport } from '@work-os/shared';
+import { ATTENTION_ORDER, FILING_EVAL_MIN_LABELS, FILING_TARGETS, SourceId, type EvalReport, type FilingEvalReport, type FilingScores } from '@work-os/shared';
 import { ClaudeAdapter } from '../claude/adapter';
 import { loadPromptFile, loadTriagePrompt } from '../claude/promptFiles';
 import { UsageLog } from '../claude/usage';
@@ -9,10 +9,12 @@ import { macKeychain } from '../config/keychain';
 import { loadSettings } from '../config/settings';
 import { SettingsState } from '../config/settingsState';
 import { runEval, saveReport } from '../pipeline/eval';
+import { runFilingEval, saveFilingReport } from '../pipeline/evalFiling';
 import { SETTLE_EVAL_MIN_LABELS, runSettleEval, saveSettleReport, type SettleEvalReport } from '../pipeline/evalSettle';
 import { renderFinishChecks, type FinishCheck } from '../pipeline/finish';
 import { acquireLock } from '../runtime/lock';
 import { API_KEY_FIX, apiKeySet } from '../runtime/refuse';
+import { mergeFilingLabels, readFilingLabels } from '../store/filingLabels';
 import { readLabels } from '../store/labels';
 import { latestSettleLabels, readSettleLabels } from '../store/settleLabels';
 
@@ -20,7 +22,8 @@ import { latestSettleLabels, readSettleLabels } from '../store/settleLabels';
 // saved to logs/eval-<timestamp>.json. `-- --source outlook` scores one source's labels alone (R2.2).
 // `-- --purpose settle` runs the settle prompt over labels/settle.jsonl instead (cockpit CK-2.6),
 // and `-- --purpose finish` the finish prompt over labels/finish.jsonl (CK-2.10), once the file
-// holds 30 labelled checks. It calls Claude on the subscription login, like the server.
+// holds 30 labelled checks. `-- --purpose filing` runs triage with the filing policy over
+// labels/filing.jsonl (FR-15.8). It calls Claude on the subscription login, like the server.
 // It takes the lock, so it never shares the usage log with a running server; while the server
 // runs, use Usage › Run eval instead. Prints scores and counts only, never thread text.
 
@@ -57,12 +60,38 @@ function printSettle(r: SettleEvalReport, file: string, title = 'Settle') {
   console.log(`Saved ${file}`);
 }
 
-/** `--purpose triage|settle|finish`: which prompt to score. */
-function purposeArg(argv: string[]): 'triage' | 'settle' | 'finish' | Error {
+const FIELD_NAME = { toFile: 'To file', predraft: 'Pre-draft', ready: 'Ready', todo: 'To-do' } as const;
+
+function printFilingScores(s: FilingScores) {
+  for (const [k, v] of Object.entries(s) as [keyof FilingScores, FilingScores[keyof FilingScores]][]) {
+    const counts = v.n >= FILING_EVAL_MIN_LABELS ? (v.precision >= FILING_TARGETS[k] ? 'meets target' : 'below target') : `counts from ${FILING_EVAL_MIN_LABELS}`;
+    console.log(`  ${FIELD_NAME[k].padEnd(11)} ${pct(v.precision).padStart(9)} ${pct(v.recall).padStart(7)} ${String(v.n).padStart(8)}   target ≥ ${pct(FILING_TARGETS[k]).trim()}, ${counts}`);
+  }
+}
+
+function printFiling(r: FilingEvalReport, file: string) {
+  console.log(`Filing eval of ${r.labelCount} labelled items · ${r.model} · prompt ${r.promptVersion}${r.policyVersion ? ` · policy ${r.policyVersion}` : ''}`);
+  if (r.failed) console.log(`${r.failed} item(s) got no usable answer and are not scored.`);
+  console.log('');
+  console.log('              precision  recall   labels');
+  printFilingScores(r.scores);
+  for (const origin of ['explicit', 'implicit'] as const) {
+    console.log('');
+    console.log(origin === 'explicit' ? '  Your word (Filing…, corrections, Triage was right):' : '  What your actions said (approve, discard, Done, to-dos):');
+    printFilingScores(r.byOrigin[origin]);
+  }
+  for (const [source, s] of Object.entries(r.bySource ?? {})) console.log(`  ${source.padEnd(8)} ${s.labelCount} items · To file ${pct(s.scores.toFile.precision)} precision · Ready ${pct(s.scores.ready.precision)} precision`);
+  console.log('');
+  console.log(`Tokens ${r.tokens.toLocaleString('en-GB')} · cost-equivalent $${r.costEquivalent.toFixed(4)}`);
+  console.log(`Saved ${file}`);
+}
+
+/** `--purpose triage|settle|finish|filing`: which prompt to score. */
+function purposeArg(argv: string[]): 'triage' | 'settle' | 'finish' | 'filing' | Error {
   const i = argv.indexOf('--purpose');
   if (i < 0) return 'triage';
   const v = argv[i + 1];
-  return v === 'triage' || v === 'settle' || v === 'finish' ? v : new Error('--purpose takes triage, settle or finish');
+  return v === 'triage' || v === 'settle' || v === 'finish' || v === 'filing' ? v : new Error('--purpose takes triage, settle, finish or filing');
 }
 
 /** `--source <id>`: one source's labels only. */
@@ -117,6 +146,19 @@ async function main(): Promise<number> {
       const deps = { claude, settings, prompt: await loadPromptFile(config.dataDir, purpose), now: () => new Date() };
       const report = purpose === 'settle' ? await runSettleEval(deps, settle) : await runSettleEval(deps, settle, (checks, now) => renderFinishChecks(checks as unknown as FinishCheck[], now));
       printSettle(report, await saveSettleReport(p.logs, report), purpose === 'settle' ? 'Settle' : 'Finish');
+      return EXIT.ok;
+    }
+    if (purpose === 'filing') {
+      const merged = mergeFilingLabels(await readFilingLabels(p.filingLabels));
+      if (!merged.length) {
+        console.error(`No filing labels in ${p.filingLabels} yet. Use Filing… on an item, or approve and discard drafts, to add some.`);
+        return EXIT.config;
+      }
+      const settings = (await SettingsState.create(config.dataDir, await loadSettings(config.dataDir), config.forceDryRun)).editable.settings;
+      usage = await UsageLog.open(p.logs);
+      const claude = new ClaudeAdapter({ usage, settings: () => settings, secrets: macKeychain(), now: () => new Date(), cwd: join(config.dataDir, 'sandbox'), client: `work-os-eval/${config.version}` });
+      const report = await runFilingEval({ claude, settings, prompt: await loadTriagePrompt(config.dataDir), now: () => new Date() }, merged);
+      printFiling(report, await saveFilingReport(p.logs, report));
       return EXIT.ok;
     }
     const records = await readLabels(p.labels);

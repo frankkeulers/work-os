@@ -90,14 +90,17 @@ type Thread = z.infer<typeof LabelThread>;
 
 const wins = (prev: LabelValue | undefined, next: LabelValue) => !prev || next.origin === 'explicit' || prev.origin === 'implicit';
 
-/** The label per item, in the order the items were first labelled: explicit beats implicit, later beats earlier. */
+/**
+ * The label per item, in the order the items were first labelled: explicit beats implicit, later
+ * beats earlier, with what each line's fields imply filled in.
+ */
 export function mergeFilingLabels(records: readonly FilingLabelRecord[]): MergedFilingLabel[] {
   const by = new Map<string, MergedFilingLabel>();
   for (const r of records) {
     const m = by.get(r.itemId) ?? { itemId: r.itemId, source: r.source, itemRevision: r.itemRevision, thread: r.thread, confluence: {}, vault: {} };
     Object.assign(m, { itemRevision: r.itemRevision, thread: r.thread, ...(r.was && { was: r.was }) });
     for (const target of ['confluence', 'vault'] as const) {
-      for (const [field, value] of Object.entries(r.label[target] ?? {}) as [FilingField, boolean][]) {
+      for (const [field, value] of Object.entries(impliedFlags(r.label[target] ?? {})) as [FilingField, boolean][]) {
         const next: LabelValue = { value, origin: r.origin, signal: r.signal };
         if (wins(m[target][field], next)) m[target][field] = next;
       }

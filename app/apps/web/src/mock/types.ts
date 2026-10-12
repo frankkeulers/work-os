@@ -3,6 +3,7 @@ import type {
   Attention,
   Draft,
   EvalReport,
+  FilingEvalReport,
   Item,
   ItemFlags,
   NextStep,
@@ -131,6 +132,9 @@ export interface MockState {
   events: WorkEvent[];
   usage: UsageRecord[];
   evals: EvalReport[];
+  /** Filing eval reports (FR-15.8), oldest first. */
+  filingEvals?: FilingEvalReport[];
+  filingEvalRunning?: boolean;
   settings: Settings;
   rules: Rule[];
   ruleHits: Record<string, number>;

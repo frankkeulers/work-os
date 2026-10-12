@@ -45,7 +45,7 @@ import { SlackApi } from './sources/slack/api';
 import { SlackDirectory } from './sources/slack/directory';
 import { EarlierMessages } from './sources/slack/earlier';
 import { createServer, type WorkOsServer } from './server';
-import { budgetsOf, filingSettings, sourceSchedule, type Item, type SourceId } from '@work-os/shared';
+import { budgetsOf, filingSettings, sourceSchedule, type FilingEvalReport, type Item, type SourceId } from '@work-os/shared';
 import { ClaudeAdapter, type QueryFn } from './claude/adapter';
 import { noClaude } from './claude/fakeClaude';
 import { loadPromptFile, loadTriagePrompt, PROMPT_FILES } from './claude/promptFiles';
@@ -62,7 +62,8 @@ import { confirmTriage, correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
 import { LabelStore } from './store/labels';
 import { SettleLabelStore } from './store/settleLabels';
-import { FilingLabelStore } from './store/filingLabels';
+import { FilingLabelStore, mergeFilingLabels, type MergedFilingLabel } from './store/filingLabels';
+import { listFilingReports, runFilingEval, saveFilingReport } from './pipeline/evalFiling';
 import { FilingFeedback } from './pipeline/filingFeedback';
 import { DraftStore } from './store/drafts';
 import { ActionService } from './actions/service';
@@ -117,6 +118,7 @@ export type RunResult =
       runtime: Runtime;
       labels: LabelStore;
       evals: Evals;
+      filingEvals: Evals<MergedFilingLabel, FilingEvalReport>;
       actions: ActionService;
       notifications: Notifications;
       alerts: HealthAlerts;
@@ -347,6 +349,22 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     },
   });
   lifecycle.onStop('evals', () => evals.stop());
+  // The filing eval (FR-15.8): the same runner over labels/filing.jsonl.
+  const filingEvals = await Evals.open<MergedFilingLabel, FilingEvalReport>({
+    logsDir: paths(config.dataDir).logs,
+    labels: async () => mergeFilingLabels(await filingLabels.all()),
+    logger,
+    reports: { save: saveFilingReport, list: listFilingReports },
+    run: async (merged, signal) => {
+      try {
+        return await runFilingEval({ claude, settings: settings.editable.settings, prompt: await triageDeps.prompt(), now, signal, logger }, merged);
+      } catch (err) {
+        if (err instanceof ClaudeError) await runtime.reportFailure('claude', err.failure);
+        throw err;
+      }
+    },
+  });
+  lifecycle.onStop('filing-evals', () => filingEvals.stop());
   // Actions (M3): drafted when Claude may be called, written by the outbox after approval.
   let publish: (n: Notice) => void = () => undefined; // the SSE hub, once the server exists
   const drafts = new DraftStore(join(config.dataDir, 'drafts'));
@@ -492,6 +510,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     correct,
     confirm,
     evals,
+    filingEvals,
     actions,
     webDir: deps.env.WORKOS_WEB_DIR ? resolve(deps.env.WORKOS_WEB_DIR) : undefined,
     // The guide's Markdown: set by agent:install for prod; development reads the repo's copy.
@@ -522,5 +541,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, actions, notifications, alerts, retention, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, filingEvals, actions, notifications, alerts, retention, recovery, token, logger, lifecycle, flush };
 }

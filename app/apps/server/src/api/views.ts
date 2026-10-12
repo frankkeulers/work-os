@@ -50,6 +50,7 @@ import {
   type WeekView,
   type StartupCheck,
   type DecisionText,
+  type FilingEvalReport,
   type LoggedDecision,
   type TriageDecision,
   type UsagePurpose,
@@ -70,6 +71,7 @@ import type { WisprLink } from '../sources/wispr/link';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { FilingFeedback } from '../pipeline/filingFeedback';
+import type { MergedFilingLabel } from '../store/filingLabels';
 import type { LabelStore } from '../store/labels';
 import type { SettleLabelStore } from '../store/settleLabels';
 import type { RecoveryReport, Store } from '../store/store';
@@ -112,6 +114,8 @@ export interface ViewDeps {
   settleCheck?: (it: ItemState) => Promise<object | undefined>;
   /** Eval reports and "Run eval" (FR-6.1, FR-6.3). */
   evals?: Evals;
+  /** The filing eval (FR-15.8), over labels/filing.jsonl. */
+  filingEvals?: Evals<MergedFilingLabel, FilingEvalReport>;
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
   slackTeamId?: () => string | undefined;
   /** A group DM's title from its members, when Slack has said who they are. */

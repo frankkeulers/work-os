@@ -77,6 +77,7 @@ import {
   type DraftProgress,
   type EventData,
   type EvalReport,
+  type FilingEvalReport,
   type EventType,
   type HealthView,
   type InboxView,
@@ -1522,6 +1523,43 @@ export class MockServer implements WorkOsApi, MockControls {
       this.s.evalRunning = false;
       this.emit({ topic: 'usage' }, { topic: 'evals' });
     }, 5000);
+  }
+
+  async getFilingEvalReports(): Promise<FilingEvalReport[]> {
+    await this.gate(QUERY_MS);
+    return [...(this.s.filingEvals ?? [])].reverse();
+  }
+
+  /** The filing eval (FR-15.8): a plausible report after a few seconds, a little better each run. */
+  async runFilingEval() {
+    await this.gate(COMMAND_MS);
+    if (this.s.filingEvalRunning) return;
+    if (!this.s.filingLabelCount) throw new ApiError('conflict', 'No filing labels yet. Use Filing… on an item, or approve and discard drafts, to add some.');
+    this.s.filingEvalRunning = true;
+    this.emit({ topic: 'settings' }, { topic: 'evals' });
+    setTimeout(() => {
+      const runs = this.s.filingEvals?.length ?? 0;
+      const score = (precision: number, recall: number, n: number) => {
+        const support = Math.round(n * 0.6);
+        return { precision: Math.min(1, precision + runs * 0.02), recall, support, predicted: Math.round(support / precision), n };
+      };
+      const scores = { toFile: score(0.82, 0.9, 41), predraft: score(0.76, 0.85, 34), ready: score(0.91, 0.6, 18), todo: score(0.88, 0.7, 9) };
+      const report: FilingEvalReport = {
+        id: `filing-eval-${this.iso()}`,
+        at: this.iso(),
+        labelCount: this.s.filingLabelCount ?? 1,
+        promptVersion: 'triage v10',
+        policyVersion: 'filing-policy v1#mock',
+        model: this.s.settings.models.triage,
+        scores,
+        byOrigin: { explicit: scores, implicit: scores },
+        tokens: 212000,
+        costEquivalent: 0.31,
+      };
+      this.s.filingEvals = [...(this.s.filingEvals ?? []), report];
+      this.s.filingEvalRunning = false;
+      this.emit({ topic: 'settings' }, { topic: 'evals' });
+    }, 3000);
   }
 
   async rebuildState() {

@@ -1,4 +1,4 @@
-import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, FilingFeedbackBody, GuideFilesView, EarlierView, EvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, FilingFeedbackBody, GuideFilesView, EarlierView, EvalReport, FilingEvalReport, HealthView, InboxView, ItemView, Notice, OutlookStatusView, PersonOption, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -145,6 +145,7 @@ export class HttpApi implements WorkOsApi {
   getGuide = () => this.get<GuideFilesView>('/api/guide');
   getUsage = () => this.get<UsageView>('/api/usage');
   getEvalReports = () => this.get<EvalReport[]>('/api/evals');
+  getFilingEvalReports = () => this.get<FilingEvalReport[]>('/api/filing-evals');
   getSettings = () => this.get<SettingsView>('/api/settings');
   getWisprStatus = () => this.get<WisprStatusView>('/api/sources/wispr', SLOW_MS);
   getOutlookStatus = () => this.get<OutlookStatusView>('/api/sources/outlook');
@@ -186,6 +187,7 @@ export class HttpApi implements WorkOsApi {
   approveAction = (id: string, opts?: { markDoneWhenFiled?: boolean }) => this.post(`${this.action(id)}/approve`, opts?.markDoneWhenFiled ? { markDoneWhenFiled: true } : undefined);
 
   runEval = () => this.post('/api/evals');
+  runFilingEval = () => this.post('/api/filing-evals');
   rebuildState = () => this.post<{ events: number }>('/api/admin/rebuild-state', undefined, SLOW_MS);
   saveSettings = (settings: Settings, rules: Rule[], base?: { settings: Settings; rules: Rule[] }) => this.request<SettingsSaved>('PUT', '/api/settings', { settings, rules, ...(base && { base }) });
   getPrompts = () => this.get<PromptFileView[]>('/api/prompts');

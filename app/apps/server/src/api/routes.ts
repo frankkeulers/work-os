@@ -334,6 +334,18 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return reply.code(202).send();
   });
 
+  // The filing eval (FR-15.8): the same, over the filing labels.
+  app.get('/api/filing-evals', async (_req, reply) => reply.headers(noStore).send((await d.filingEvals?.list()) ?? []));
+  app.post('/api/filing-evals', async (_req, reply) => {
+    if (!d.filingEvals) throw new HttpError('unavailable', 'The filing eval is not available.');
+    if (!d.filingEvals.running && d.runtime && !d.runtime.claudeReady()) {
+      throw new HttpError('unavailable', d.runtime.health.get('claude').fix ?? 'Claude can’t be called right now. Try the eval again later.');
+    }
+    const r = await d.filingEvals.start();
+    if (r === 'no_labels') throw new HttpError('conflict', 'No filing labels yet. Use Filing… on an item, or approve and discard drafts, to add some.');
+    return reply.code(202).send();
+  });
+
   app.get('/api/settings', async (_req, reply) => reply.headers(noStore).send(await settingsView(d)));
 
   // A source turned on or off from its own page, as if Frank had saved Settings with it changed.

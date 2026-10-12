@@ -624,6 +624,44 @@ export type EvalReport = z.infer<typeof EvalReport>;
 /** A report as saved, before reading fills in what older ones lack. */
 export type EvalReportInput = z.input<typeof EvalReport>;
 
+// ---------------------------------------------------------------- filing eval (E14, FR-15.8)
+
+/** A field's score counts once this many of its values are labelled (FR-15.8). */
+export const FILING_EVAL_MIN_LABELS = 30;
+/** Precision each stage must reach before it is trusted more (FR-15.8). */
+export const FILING_TARGETS = { toFile: 0.85, predraft: 0.8, ready: 0.95, todo: 0.95 } as const;
+export type FilingDimension = keyof typeof FILING_TARGETS;
+
+/** One dimension: `n` labelled values, `support` of them true, `predicted` true by the policy. */
+const FilingScore = z.object({
+  precision: z.number().min(0).max(1),
+  recall: z.number().min(0).max(1),
+  support: z.number().int().nonnegative(),
+  predicted: z.number().int().nonnegative(),
+  n: z.number().int().nonnegative(),
+});
+export type FilingScore = z.infer<typeof FilingScore>;
+export const FilingScores = z.object({ toFile: FilingScore, predraft: FilingScore, ready: FilingScore, todo: FilingScore });
+export type FilingScores = z.infer<typeof FilingScores>;
+
+export const FilingEvalReport = z.object({
+  id: z.string().min(1),
+  at: isoDate,
+  /** Labelled items scored or failed. */
+  labelCount: z.number().int().positive(),
+  promptVersion: z.string(),
+  policyVersion: z.string().optional(),
+  model: ModelId,
+  scores: FilingScores,
+  /** The same, from Frank's word alone and from what his actions said. */
+  byOrigin: z.object({ explicit: FilingScores, implicit: FilingScores }),
+  bySource: z.partialRecord(SourceId, z.object({ labelCount: z.number().int().positive(), scores: FilingScores })).optional(),
+  tokens: z.number().int().nonnegative(),
+  costEquivalent: z.number().nonnegative(),
+  failed: z.number().int().nonnegative().optional(),
+});
+export type FilingEvalReport = z.infer<typeof FilingEvalReport>;
+
 // ---------------------------------------------------------------- settle check (cockpit CK-2.2)
 
 /**

@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { Action, ApiErrorBody, AttentionView, EvalReport, FiledView, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
+import type { Action, ApiErrorBody, AttentionView, EvalReport, FiledView, FilingEvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
@@ -1284,6 +1284,29 @@ describe('filing feedback (FR-15.7)', () => {
       ['todo_added', { todo: true }],
     ]);
     expect((await lines())[0]).toMatchObject({ was: { todo: { rule: 'T2' } } });
+  });
+});
+
+describe('filing eval (FR-15.8)', () => {
+  const PROD = `slack:C01PROD:${P}`;
+
+  it('runs triage with the policy over the filing labels, and saves the report', async () => {
+    const none = await call<ApiErrorBody>('POST', '/api/filing-evals');
+    expect(none.status).toBe(409);
+    expect(none.body.message).toMatch(/No filing labels yet/);
+    expect((await call('POST', `/api/items/${encodeURIComponent(PROD)}/filing-feedback`, { signal: 'should_be_ready' })).status).toBe(200);
+    const before = claude.calls.length;
+    expect((await call('POST', '/api/filing-evals')).status).toBe(202);
+    await res.filingEvals.settled();
+    expect(claude.calls.slice(before)).toHaveLength(1);
+    expect(claude.calls.at(-1)!.system).toContain('<filing-policy>');
+    const reports = (await call<FilingEvalReport[]>('GET', '/api/filing-evals')).body;
+    // The fake suggests the vault for it, with no flags: filed, but neither drafted ahead nor ready.
+    expect(reports).toEqual([expect.objectContaining({ labelCount: 1, scores: expect.objectContaining({ toFile: expect.objectContaining({ precision: 1, n: 1 }), ready: expect.objectContaining({ predicted: 0, support: 1 }) }) })]);
+    expect(reports[0].policyVersion).toMatch(/^filing-policy v1#/);
+    expect((await readdir(join(dir, 'logs'))).filter((f) => f.startsWith('filing-eval-'))).toHaveLength(1);
+    // The triage eval's reports are its own.
+    expect((await call<EvalReport[]>('GET', '/api/evals')).body).toEqual([]);
   });
 });
 

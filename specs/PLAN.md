@@ -1061,7 +1061,7 @@ Explicit signals come from the item panel's **Filing…** menu beside the decisi
 | A To file item marked done with nothing filed | `toFile` false |
 | A suggested to-do added, or dismissed | `todo` true, or false |
 
-**FR-15.8 Filing eval.** `npm run eval -- --purpose filing`, and **Run filing eval** in Settings › Learning, run triage with the current prompt and policy over the filing labels, with no rules. The eval scores precision and recall for each field, split by explicit and implicit labels and by source. A field's score counts from 30 labels. The report goes to `logs/filing-eval-<ts>.json` and shows on the eval page. Targets:
+**FR-15.8 Filing eval.** `npm run eval -- --purpose filing`, and **Run filing eval** in Settings › Learning, run triage with the current prompt and policy over the filing labels, with no rules. The eval scores precision and recall for each field, split by explicit and implicit labels and by source. A field's score counts from 30 labels. The report goes to `logs/filing-eval-<ts>.json`; Settings › Learning shows the latest against the targets. Targets:
 
 | Field | Precision |
 |---|---|

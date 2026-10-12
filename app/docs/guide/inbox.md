@@ -394,6 +394,9 @@ as your word. Where you've said something yourself, it wins over what your actio
 
 These are kept, with the thread, as filing labels. Nothing changes the policy on its own: the
 filing eval scores the policy against them, and a proposed change waits for you to apply it.
+Run the filing eval with `npm run eval -- --purpose filing` while Work OS is stopped. It reports
+precision and recall for To file, pre-draft, ready and to-dos, from your word and from your
+actions separately; a field's score counts once it has 30 labels.
 
 ## Keeping it open
 

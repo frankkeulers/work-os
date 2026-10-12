@@ -10,6 +10,7 @@ import type {
   Attention,
   Draft,
   EvalReport,
+  FilingEvalReport,
   FailureReason,
   Item,
   ItemKind,
@@ -580,6 +581,8 @@ export interface WorkOsApi {
   getGuide(): Promise<GuideFilesView>;
   getUsage(): Promise<UsageView>;
   getEvalReports(): Promise<EvalReport[]>;
+  /** E14 (FR-15.8): filing eval reports, newest first. */
+  getFilingEvalReports(): Promise<FilingEvalReport[]>;
   getSettings(): Promise<SettingsView>;
   /** Whether Wispr Flow is signed in (R2.7). */
   getWisprStatus(): Promise<WisprStatusView>;
@@ -633,6 +636,8 @@ export interface WorkOsApi {
   retryWrite(actionId: string): Promise<void>;
 
   runEval(): Promise<void>;
+  /** E14 (FR-15.8): runs the filing eval in the background; Settings › Learning says when it is done. */
+  runFilingEval(): Promise<void>;
   rebuildState(): Promise<{ events: number }>;
   /** `base`: the files the form had when the change was made; only what changed from it is applied. */
   saveSettings(settings: Settings, rules: Rule[], base?: { settings: Settings; rules: Rule[] }): Promise<SettingsSaved>;

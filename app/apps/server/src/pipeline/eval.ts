@@ -154,31 +154,37 @@ export async function listReports(logsDir: string): Promise<EvalReport[]> {
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
 
+/** What an eval runner reads, runs and saves. */
+export interface EvalsDeps<L, R> {
+  logsDir: string;
+  labels: () => Promise<L[]>;
+  run: (labels: L[], signal: AbortSignal) => Promise<R>;
+  /** Where reports go: the triage eval's by default. The filing eval (FR-15.8) brings its own. */
+  reports?: { save: (logsDir: string, r: R) => Promise<string>; list: (logsDir: string) => Promise<R[]> };
+  logger?: Logger;
+}
+
 /** "Run eval" in the UI: one run at a time, in the background; listeners hear start and end. */
-export class Evals {
+export class Evals<L = LabelRecord, R = EvalReport> {
   running = false;
-  last?: EvalReport;
+  last?: R;
   private current?: Promise<void>;
   private abort = new AbortController();
   private listeners = new Set<() => void>();
+  private readonly reports: NonNullable<EvalsDeps<L, R>['reports']>;
 
-  private constructor(
-    private readonly d: {
-      logsDir: string;
-      labels: () => Promise<LabelRecord[]>;
-      run: (labels: LabelRecord[], signal: AbortSignal) => Promise<EvalReport>;
-      logger?: Logger;
-    },
-  ) {}
+  private constructor(private readonly d: EvalsDeps<L, R>) {
+    this.reports = d.reports ?? ({ save: saveReport, list: listReports } as unknown as NonNullable<EvalsDeps<L, R>['reports']>);
+  }
 
-  static async open(d: Evals['d']): Promise<Evals> {
+  static async open<L = LabelRecord, R = EvalReport>(d: EvalsDeps<L, R>): Promise<Evals<L, R>> {
     const e = new Evals(d);
-    e.last = (await listReports(d.logsDir))[0];
+    e.last = (await e.reports.list(d.logsDir))[0];
     return e;
   }
 
   list() {
-    return listReports(this.d.logsDir);
+    return this.reports.list(this.d.logsDir);
   }
 
   onChange(fn: () => void) {
@@ -196,7 +202,7 @@ export class Evals {
     this.current = this.d
       .run(labels, this.abort.signal)
       .then(async (report) => {
-        await saveReport(this.d.logsDir, report);
+        await this.reports.save(this.d.logsDir, report);
         this.last = report;
       })
       .catch((err) => {
