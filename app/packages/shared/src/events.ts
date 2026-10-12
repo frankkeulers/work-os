@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ActionTarget, ActionType, FailureReason, ItemKind, NextStep, Participant, PromptFileId, SourceId, TodoSuggestion, TriageCorrection, TriageDecision } from './schemas';
 import { Confidence } from './schedule';
+import { FOLLOWUP_MAX, FollowupAnswered, FollowupKind } from './followup';
 
 // The event log (PLAN.md §4.3, §4.4). It is the source of truth: every event carries a gap-free
 // `seq` and a typed payload, so the inbox can be rebuilt from the log alone. Events never carry
@@ -117,6 +118,11 @@ export const EventPayloads = {
   // plan: no free time fits any more; by you: Frank handed it back to the plan.
   'todo.scheduled': z.object({ todoId, start: isoDate, end: isoDate, by: SlotBy }),
   'todo.unscheduled': z.object({ todoId, by: SlotBy }),
+  // FR-16.11–16.12: what usually comes next, suggested once a To Do is done (their words live in
+  // todos/), or a try that failed; and Frank's answer to each, by its place in `kinds`.
+  'todo.followups': z.object({ todoId, kinds: z.array(FollowupKind).max(FOLLOWUP_MAX) }),
+  'todo.followupsFailed': z.object({ todoId, attempts: z.number().int().positive(), reason: z.enum(['output', 'claude']) }),
+  'todo.followupAnswered': z.object({ todoId, index: z.number().int().min(0).max(FOLLOWUP_MAX - 1), answer: FollowupAnswered }),
   // E14 (FR-15.7): Frank's word on one filing's stage from the Filing… menu, for this revision.
   // ready implies predraft; predraft false implies ready false (see filingPlan()).
   'filing.staged': z.object({ revision, type: z.enum(['confluence_entry', 'vault_note']), predraft: z.boolean().optional(), ready: z.boolean().optional() }),

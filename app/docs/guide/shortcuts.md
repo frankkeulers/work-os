@@ -39,6 +39,8 @@ On a To Do's row, after `g` then `d` or a Tab to it:
 | `p` | Plan it: your own estimate and deadline ([Estimates](inbox.md#estimates)) |
 | `↵` | Open the item it came from |
 
+While a To Do's Done toast shows its follow-ups, `1`, `2` and `3` do the first, second and third ([After Done](inbox.md#after-done)).
+
 ## Item
 
 | Key | Does |

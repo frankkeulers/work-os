@@ -1,6 +1,7 @@
 import type { LoggedDecision, MirrorFailure, TodoBy } from '../events';
 import type { Confidence } from '../schedule';
 import type { Slot } from '../slots';
+import type { FollowupAnswered, FollowupKind } from '../followup';
 import type { DeadlineFrom } from '../todo';
 import type { ItemStatus, TriageState } from '../lanes';
 import type { FilingStages } from '../policy';
@@ -9,7 +10,7 @@ import type { Action, Attention, ItemKind, Participant, SourceId, TriageCorrecti
 // The inbox state that the event log projects to (PLAN.md §4.3). The server keeps it in memory
 // and in snapshot.json; the mock keeps the same flags on its own records. Bump PROJECTION_VERSION
 // whenever reduce() changes, so the server replays the whole log instead of trusting the snapshot.
-export const PROJECTION_VERSION = 9; // 9: To Dos (todo.created, todo.done, todo.reopened, FR-16.1–16.3; todo.mirrored, todo.mirrorFailed, todo.timed, FR-16.4–16.5; todo.planned, todo.planFailed, todo.edited, FR-16.6–16.7; todo.scheduled, todo.unscheduled, FR-16.8–16.9); 8: Frank's word on a filing's stage (filing.staged, FR-15.7); 7: Retry write (a failed write approved again), failedWhile only once approved; 6: events that arrive too late change nothing (action status guards, stale failures and checks); 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10); 5: the bell's dismissals, back-from-snooze times, failedWhile (FR-11.3–11.5)
+export const PROJECTION_VERSION = 9; // 9: To Dos (todo.created, todo.done, todo.reopened, FR-16.1–16.3; todo.mirrored, todo.mirrorFailed, todo.timed, FR-16.4–16.5; todo.planned, todo.planFailed, todo.edited, FR-16.6–16.7; todo.scheduled, todo.unscheduled, FR-16.8–16.9; todo.followups, todo.followupsFailed, todo.followupAnswered, FR-16.11–16.12); 8: Frank's word on a filing's stage (filing.staged, FR-15.7); 7: Retry write (a failed write approved again), failedWhile only once approved; 6: events that arrive too late change nothing (action status guards, stale failures and checks); 4: Frank's own piece joining a topic, and Looks finished (CK-2.1, CK-2.10); 5: the bell's dismissals, back-from-snooze times, failedWhile (FR-11.3–11.5)
 
 /**
  * What the inbox knows about an item beyond its content. `D` is the decision type: the server
@@ -131,6 +132,10 @@ export interface TodoState {
   ideal?: string;
   /** FR-16.8–16.9: when Frank will do it: free time the plan found, or his own (by 'you'). */
   slot?: Slot;
+  /** FR-16.11–16.12: the follow-ups suggested once it was done, and Frank's answer to each by its place. */
+  followups?: { kinds: FollowupKind[]; answers?: Record<number, FollowupAnswered> };
+  /** Failed tries at follow-ups, up to FOLLOWUP_MAX_ATTEMPTS. */
+  followupFailures?: number;
 }
 
 export interface Projection {

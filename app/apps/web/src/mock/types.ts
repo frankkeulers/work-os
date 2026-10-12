@@ -17,6 +17,7 @@ import type {
   SourceId,
   StartupFailure,
   TodoState,
+  Followup,
   TriageDecision,
   UsageRecord,
   VaultPart,
@@ -197,4 +198,8 @@ export interface MockTodoText {
   /** Its plan's whys (FR-16.6). */
   estimateWhy?: string;
   deadlineWhy?: string;
+  /** Its item's link (FR-16.11). */
+  permalink?: string;
+  /** Its follow-ups once done, after the clamp (FR-16.11). */
+  followups?: Followup[];
 }

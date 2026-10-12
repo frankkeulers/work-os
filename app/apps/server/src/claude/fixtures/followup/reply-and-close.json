@@ -1,0 +1,26 @@
+{
+  "about": "Matt asked for the reason and it was the last thing on the DM: a reply for Frank to send, then close it.",
+  "now": "2026-10-12T15:10:00.000Z",
+  "todo": {
+    "id": "todo-0000000000aa",
+    "step": "Send Matt the one-line MVI V2 go/no-go reason",
+    "took": 15,
+    "source": "slack",
+    "kind": "dm",
+    "title": "Matt M.",
+    "canReply": true,
+    "summary": "Matt asks for your MVI V2 go/no-go call before Thursday's exec sync.",
+    "excerpt": "Matt M.: Can you send me the one-line reason for the MVI V2 go/no-go before Thursday?",
+    "itemOpen": true,
+    "otherTodos": []
+  },
+  "context": { "source": "slack", "permalink": true, "itemOpen": true, "otherOpenTodos": 0, "vault": true },
+  "answer": {
+    "id": "todo-0000000000aa",
+    "suggestions": [
+      { "kind": "reply", "why": "Matt asked for it before Thursday's exec sync.", "reply": { "text": "Here's the one-line reason for the MVI V2 go: [link]. Shout if you need more before Thursday." } },
+      { "kind": "mark_source_done", "why": "It was the only thing Matt asked of you here." }
+    ]
+  },
+  "kinds": ["reply", "mark_source_done"]
+}

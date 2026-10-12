@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ActionType, Attention, Ms365Connector } from './schemas';
 import { TODO_MAX_LINES, TODO_MAX_STEP } from './todo';
+import { FollowupAnswered } from './followup';
 
 // Request bodies for the API's commands. The server checks every body against these (FR-3.3);
 // the settings themselves are checked field by field, so the UI can show each problem in place.
@@ -40,6 +41,10 @@ export const TodoEdit = z
   .strict()
   .refine((e) => e.effortMinutes !== undefined || e.deadline !== undefined || e.slot !== undefined, 'Send an estimate, a deadline or a time');
 export type TodoEdit = z.infer<typeof TodoEdit>;
+
+/** POST /api/todos/:id/followups/:index (FR-16.12): Frank's answer to one follow-up; `text` when he edited the reply or the To Do before using it. */
+export const FollowupAnswerBody = z.object({ answer: FollowupAnswered, text: z.string().min(1).max(4000).optional() }).strict();
+export type FollowupAnswerBody = z.infer<typeof FollowupAnswerBody>;
 
 export const ItemIds = z.object({ ids: z.array(z.string().min(1)).min(1).max(1000) }).strict();
 

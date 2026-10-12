@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useOpenItem } from '../hooks/useOpenItem';
 import { useToasts, type OsNotification, type Toast } from '../store/toasts';
 import { BrandMark } from './brand/BrandMark';
@@ -8,14 +8,23 @@ import { Kbd, cx } from './ui';
 function ToastRow({ t }: { t: Toast }) {
   const dismiss = useToasts((s) => s.dismiss);
   const ttl = t.ttl ?? (t.action ? 7000 : 4500);
+  // Held while the pointer or focus is on it, so what it asks can be read and answered; the
+  // countdown starts again when they leave.
+  const [held, setHeld] = useState(false);
   useEffect(() => {
+    if (held) return;
     const id = setTimeout(() => dismiss(t.id), ttl);
     return () => clearTimeout(id);
-  }, [t, ttl, dismiss]);
+  }, [t, ttl, dismiss, held]);
   const tone = t.tone ?? 'default';
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
+      data-held={held || undefined}
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setHeld(false)}
       className="pointer-events-auto relative flex w-[380px] max-w-full items-start gap-3 overflow-hidden rounded-xl border border-line bg-surface p-3.5 text-ink shadow-[0_12px_32px_rgba(20,23,28,0.16)]"
     >
       <span className={cx('mt-px inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full', TONE[tone])}>
@@ -47,7 +56,7 @@ function ToastRow({ t }: { t: Toast }) {
         <Icon name="x" size={14} />
       </button>
       {/* Runs down until the toast closes. */}
-      <span aria-hidden data-countdown className={cx('toast-countdown absolute inset-x-0 bottom-0 h-0.5 bg-current opacity-60', BAR[tone])} style={{ animationDuration: `${ttl}ms` }} />
+      {!held && <span aria-hidden data-countdown className={cx('toast-countdown absolute inset-x-0 bottom-0 h-0.5 bg-current opacity-60', BAR[tone])} style={{ animationDuration: `${ttl}ms` }} />}
     </div>
   );
 }

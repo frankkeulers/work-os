@@ -170,6 +170,51 @@ test.describe('wide window (cockpit)', () => {
     await editor.getByRole('button', { name: 'Save' }).click();
     await expect(share.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:30–15:45');
   });
+
+  test('J97 Done suggests what comes next: copy the reply and open the thread, add the next To Do; nothing is sent (FR-16.11, FR-16.12)', async ({ page }) => {
+    // What would be copied and opened, kept instead.
+    await page.addInitScript(() => {
+      const w = window as unknown as { copied: string[]; opened: string[] };
+      w.copied = [];
+      w.opened = [];
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t: string) => void w.copied.push(t) } });
+      window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
+    });
+    await withTodos(page);
+    const needs = page.getByRole('region', { name: 'To do today' });
+    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
+    await share.getByRole('button', { name: 'Done: Share the graduation gate checklist' }).click();
+    const toast = page.getByRole('status').filter({ hasText: 'Done · Share the graduation gate checklist' });
+    await expect(toast).toContainText('Suggesting follow-ups…');
+    const next = toast.getByRole('group', { name: 'Follow-ups' });
+    await expect(next.locator('[data-followup]')).toHaveCount(3);
+    await expect(next.locator('[data-followup="reply"]')).toContainText('Here’s the graduation gate checklist: [link].');
+    await toast.hover(); // held while you read it
+    await shoot(page, toast, 'todos-followups-toast');
+
+    // 1: the reply, copied, and the thread opened for you to send it.
+    await page.mouse.move(5, 5);
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press('1');
+    await expect(page.getByRole('status').filter({ hasText: 'Reply copied' })).toContainText('send it yourself');
+    const kept = await page.evaluate(() => {
+      const w = window as unknown as { copied: string[]; opened: string[] };
+      return { copied: w.copied, opened: w.opened };
+    });
+    expect(kept.copied).toEqual(['Here’s the graduation gate checklist: [link]. The security review and the support runbook are the two still open for you.']);
+    expect(kept.opened).toHaveLength(1);
+    await expect(next.locator('[data-followup]')).toHaveCount(2);
+
+    // The next To Do, from the row under Done today: written at once.
+    const later = page.getByRole('region', { name: 'Later' }).getByRole('region', { name: 'To do' });
+    await later.getByRole('button', { name: '2 done today' }).click();
+    const done = later.locator('[data-todo-status="done"]', { hasText: 'Share the graduation' });
+    await done.getByRole('button', { name: 'Add this To Do', exact: true }).click();
+    await expect(page.locator('[data-todo][data-todo-status="open"]', { hasText: 'Book the security review for the Labs prototype' })).toBeVisible();
+    // Not this one: closing the item.
+    await done.getByRole('button', { name: 'Not this: Mark the item done' }).click();
+    await expect(done.locator('[data-followup]')).toHaveCount(0);
+  });
 });
 
 test.describe('list layout', () => {

@@ -206,6 +206,26 @@ Press the ✓ on a To Do's row when it's done. Or press `g` then `d` to go to th
 - **Undo** on the toast, or `z`, opens the To Do again and unticks its line. A To Do done today
   also has **Open again** (↶) on its row under **N done today**.
 
+### After Done
+
+A moment after you mark a To Do done, here or in Obsidian, Claude suggests what usually comes
+next, up to three things. They show under the Done toast ("Suggesting follow-ups…" while they
+come) and on the To Do's row under **N done today** until you answer each. The toast stays while
+your pointer is on it.
+
+- **Copy reply & open**: a reply to whoever asked, in your voice. Work OS copies it and opens the
+  conversation; paste it and send it yourself. **Edit** changes it first. Work OS never sends a
+  message for you. Where a link belongs, the reply says [link] for you to fill in.
+- **Mark the item done**: when this was the last thing the item asked of you. Undo puts it back.
+- **Add this To Do**: the next step it leads to, written to your Tasks note at once. The card shows
+  the line, so the click is your approval.
+- **File a vault note**: starts the usual vault draft and opens the item, for you to approve.
+
+Press `1`, `2` or `3` while the toast shows, or click. **×** dismisses one. Work OS keeps your
+answers, and notices when you do one of these yourself soon after (reply on the item within two
+hours, or close it or add a to-do within half an hour), so the suggestions can get better. The
+prompt is **Follow-ups on Done** in [Settings › Prompts](/settings/prompts).
+
 ## This week, low priority, snoozed and done
 
 On a wide screen these live in Later. In a narrower window, below the groups, **Low priority** opens everything that needs nothing and holds nothing worth

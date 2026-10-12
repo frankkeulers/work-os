@@ -58,6 +58,7 @@ import { routeTopics } from './pipeline/topics';
 import { meetingsToday, runTriage, type TriageDeps } from './pipeline/triage';
 import { runFinish } from './pipeline/finish';
 import { runSchedule, type ScheduleDeps } from './pipeline/schedule';
+import { runFollowups, type FollowupDeps } from './pipeline/followup';
 import { runSettle, settleCheckOf, type SettleDeps } from './pipeline/settle';
 import { confirmTriage, correctTriage } from './pipeline/corrections';
 import { Evals, runEval } from './pipeline/eval';
@@ -79,6 +80,8 @@ import { TodoPlanner } from './todos/planner';
 import { TodoService } from './todos/service';
 import { TasksNoteWatcher } from './todos/tasksNote';
 import { ScheduleLabelStore } from './store/scheduleLabels';
+import { FollowupLabelStore } from './store/followupLabels';
+import { FollowupWatch } from './todos/followupWatch';
 import { ActionService } from './actions/service';
 import type { Notice } from '@work-os/shared';
 import { ClaudeError } from './claude/errors';
@@ -145,6 +148,7 @@ export type RunResult =
       todoPlanner: TodoPlanner;
       todoService: TodoService;
       scheduleLabels: ScheduleLabelStore;
+      followupLabels: FollowupLabelStore;
       recovery: RecoveryReport;
       token: string;
       logger: Logger;
@@ -468,13 +472,17 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Done from the inbox (FR-16.4–16.5): its line ticked in the Tasks note, and how long it took labelled.
   const scheduleLabels = await ScheduleLabelStore.open(paths(config.dataDir).scheduleLabels);
   lifecycle.onStop('schedule-labels', () => scheduleLabels.close());
+  const followupLabels = await FollowupLabelStore.open(paths(config.dataDir).followupLabels);
+  lifecycle.onStop('followup-labels', () => followupLabels.close());
+  const followupWatch = new FollowupWatch({ store, texts: todoTexts, labels: followupLabels, now, logger });
   const todoMirror = new TodoMirror({ store, todos: todoTexts, targets: () => actions.targets(), path: () => settings.editable.settings.tasksNote, canWrite: () => runtime.canUseClaude(), now, logger });
   // When Frank will do each To Do (FR-16.8): placed in free time on every tick, after each calendar poll and after a To Do changes.
   const todoPlanner = new TodoPlanner({ store, now, config: () => ({ settings: settings.editable.settings }), calendar: () => ({ on: Boolean(calendarMe()), snapshot: calendar.snapshot }), logger });
   calendar.onPublish(() => void todoPlanner.plan());
-  const todoService = new TodoService({ store, texts: todoTexts, mirror: todoMirror, planner: todoPlanner, labels: scheduleLabels, now, logger });
+  const todoService = new TodoService({ store, texts: todoTexts, mirror: todoMirror, planner: todoPlanner, labels: scheduleLabels, followupLabels, now, logger });
   // Each new To Do's estimate and ideal deadline (FR-16.6), after the settle checks.
   const scheduleDeps: ScheduleDeps = { ...triageDeps, texts: todoTexts, prompt: () => loadPromptFile(config.dataDir, 'schedule'), calendar: () => (calendarMe() ? calendar.snapshot?.events : undefined) };
+  const followupDeps: FollowupDeps = { ...triageDeps, texts: todoTexts, prompt: () => loadPromptFile(config.dataDir, 'followup') };
   const alerts = new HealthAlerts({
     notifier,
     settings: () => settings.editable.settings,
@@ -502,7 +510,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     logger,
     sources: () => buildSources(settings.settings, factories),
     // After triage, the settle checks on Frank's replies (cockpit CK-2.2), the checks on topics
-    // others' messages may have finished (CK-2.10), then new To Dos' plans (FR-16.6): the same
+    // others' messages may have finished (CK-2.10), then new To Dos' plans (FR-16.6) and done
+    // ones' follow-ups (FR-16.11): the same
     // run, so they share its breaker, its one-at-a-time and its timing after every poll.
     triage: async (signal, only) => {
       const r = await runTriage(triageDeps, signal, { only });
@@ -510,7 +519,8 @@ export async function run(deps: RunDeps): Promise<RunResult> {
       const settled = await runSettle(settleDeps, signal);
       const finished = await runFinish(finishDeps, signal);
       const planned = await runSchedule(scheduleDeps, signal);
-      return { ...r, calls: r.calls + settled.calls + finished.calls + planned.calls };
+      const followed = await runFollowups(followupDeps, signal);
+      return { ...r, calls: r.calls + settled.calls + finished.calls + planned.calls + followed.calls };
     },
     regroup: (signal, conversation) => routeTopics({ ...triageDeps, topicsPrompt: triageDeps.topicsPrompt! }, signal, { regroup: conversation }),
     onTick: () => Promise.all([actions.pump(), notifications.tick(), alerts.tick(), retention.tick(), tasksNote.check(), todoMirror.pump(), todoPlanner.plan()]),
@@ -529,9 +539,11 @@ export async function run(deps: RunDeps): Promise<RunResult> {
     clearSafeMode: () => clearCrashes(config.dataDir),
     tokenPersisted: persisted,
   });
-  // A new To Do is planned soon after it is written, not at the next poll (FR-16.6).
+  // A new To Do is planned soon after it is written, not at the next poll (FR-16.6); a done one's
+  // follow-ups are asked for at once (FR-16.11), and what Frank did himself after it is watched (FR-16.13).
   store.subscribe((es) => {
-    if (es.some((e) => e.type === 'todo.created')) runtime.wantTriage();
+    if (es.some((e) => e.type === 'todo.created' || e.type === 'todo.done')) runtime.wantTriage();
+    void followupWatch.see(es);
     // A To Do new, done, reopened or re-estimated: the others move at once. The plan's own slots change nothing more.
     if (es.some((e) => e.type.startsWith('todo.') && e.type !== 'todo.scheduled' && e.type !== 'todo.unscheduled' && e.type !== 'todo.mirrored' && e.type !== 'todo.mirrorFailed')) void todoPlanner.plan();
   });
@@ -617,5 +629,5 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   // Read the inbox's short texts after the server is up, so a cold start stays fast (NF-11).
   const listed = Object.values(store.projection.items).filter((i) => i.status !== 'done');
   items.preload(listed).catch((err) => logger.warn({ err }, 'Could not preload item texts'));
-  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, filingEvals, proposing, proposals, filingLabels, actions, notifications, alerts, retention, todoTexts, tasksNote, todoMirror, todoService, todoPlanner, scheduleLabels, recovery, token, logger, lifecycle, flush };
+  return { running: true, url, config, server, store, items, settings, runtime, labels, evals, filingEvals, proposing, proposals, filingLabels, actions, notifications, alerts, retention, todoTexts, tasksNote, todoMirror, todoService, todoPlanner, scheduleLabels, followupLabels, recovery, token, logger, lifecycle, flush };
 }

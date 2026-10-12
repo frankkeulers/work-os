@@ -21,6 +21,7 @@ import {
   summaryOf,
   planOf,
   slotOf,
+  followupsOf,
   type SlotResult,
   type TodoState,
   type TodoSummary,
@@ -422,14 +423,14 @@ export function inboxView(d: ViewDeps): InboxView {
 /** E15 (FR-16.2): the To Dos the inbox shows, with their words. One whose words are gone isn't shown. */
 export function todoSummaries(d: Pick<ViewDeps, 'store' | 'todos'>, now: Date): TodoSummary[] {
   const slots = d.todos?.planner?.slots();
-  return shownTodos(Object.values(d.store.projection.todos ?? {}), now).flatMap((t) => todoSummary(d, t, slots?.[t.id]) ?? []);
+  return shownTodos(Object.values(d.store.projection.todos ?? {}), now).flatMap((t) => todoSummary(d, t, slots?.[t.id], now) ?? []);
 }
 
 /**
  * One To Do as a row shows it, or undefined once its words are gone. `slot`: the planner's place
  * for it (FR-16.8), as slots() gives it.
  */
-export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState, slot?: SlotResult): TodoSummary | undefined {
+export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState, slot?: SlotResult, now = new Date()): TodoSummary | undefined {
   const words = d.todos?.texts.get(t.id);
   if (!words) return undefined;
   const inNote = d.todos!.inNote(t.id);
@@ -439,6 +440,7 @@ export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState, slot?: Slo
     step: words.step,
     source: words.source.source,
     sourceTitle: words.source.title,
+    ...(words.source.permalink && { permalink: words.source.permalink }),
     status: t.status,
     ...(t.deadline && { deadline: t.deadline }),
     deadlineFrom: t.deadlineFrom,
@@ -450,6 +452,7 @@ export function todoSummary(d: Pick<ViewDeps, 'todos'>, t: TodoState, slot?: Slo
     ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
     ...planOf(t, words.plan),
     ...(t.status === 'open' && slotOf(slot)),
+    ...followupsOf(t, words.followups?.suggestions, now),
   };
 }
 

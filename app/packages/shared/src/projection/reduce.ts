@@ -110,8 +110,8 @@ export function applyActionEvent(actions: Record<string, ActionState>, e: WorkEv
 }
 
 /** The To Do events (E15). todo.dismissed is the item's suggestion, not a To Do. */
-const TODO_EVENTS = new Set(['todo.created', 'todo.done', 'todo.reopened', 'todo.mirrored', 'todo.mirrorFailed', 'todo.timed', 'todo.planned', 'todo.planFailed', 'todo.edited', 'todo.scheduled', 'todo.unscheduled']);
-export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' | 'todo.mirrored' | 'todo.mirrorFailed' | 'todo.timed' | 'todo.planned' | 'todo.planFailed' | 'todo.edited' | 'todo.scheduled' | 'todo.unscheduled' }> =>
+const TODO_EVENTS = new Set(['todo.created', 'todo.done', 'todo.reopened', 'todo.mirrored', 'todo.mirrorFailed', 'todo.timed', 'todo.planned', 'todo.planFailed', 'todo.edited', 'todo.scheduled', 'todo.unscheduled', 'todo.followups', 'todo.followupsFailed', 'todo.followupAnswered']);
+export const isTodoEvent = (e: WorkEvent): e is Extract<WorkEvent, { type: 'todo.created' | 'todo.done' | 'todo.reopened' | 'todo.mirrored' | 'todo.mirrorFailed' | 'todo.timed' | 'todo.planned' | 'todo.planFailed' | 'todo.edited' | 'todo.scheduled' | 'todo.unscheduled' | 'todo.followups' | 'todo.followupsFailed' | 'todo.followupAnswered' }> =>
   TODO_EVENTS.has(e.type);
 
 /**
@@ -189,6 +189,22 @@ export function applyTodoEvent(todos: Record<string, TodoState>, e: WorkEvent): 
     case 'todo.unscheduled':
       if (t.slot?.by === e.data.by) delete t.slot;
       return;
+    case 'todo.followups':
+      // Once: a replay changes nothing.
+      if (t.followups) return;
+      t.followups = { kinds: e.data.kinds };
+      delete t.followupFailures;
+      return;
+    case 'todo.followupsFailed':
+      if (!t.followups) t.followupFailures = e.data.attempts;
+      return;
+    case 'todo.followupAnswered': {
+      // One answer each.
+      const f = t.followups;
+      if (!f || e.data.index >= f.kinds.length || f.answers?.[e.data.index]) return;
+      (f.answers ??= {})[e.data.index] = e.data.answer;
+      return;
+    }
   }
 }
 

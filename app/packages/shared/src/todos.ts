@@ -3,6 +3,7 @@ import type { TodoState } from './projection/state';
 import { SCHEDULE_MAX_ATTEMPTS, type Confidence } from './schedule';
 import type { SourceId } from './schemas';
 import { planSlots, type BusyEvent, type NoSlot, type Slot, type SlotResult } from './slots';
+import { FOLLOWUP_MAX_ATTEMPTS, FOLLOWUP_WINDOW_HOURS, type Followup, type FollowupAnswered } from './followup';
 import { londonParts } from './time';
 import type { DeadlineFrom } from './todo';
 
@@ -16,6 +17,8 @@ export interface TodoSummary {
   step: string;
   source: SourceId;
   sourceTitle: string;
+  /** The conversation it came from, to reply in (FR-16.11). */
+  permalink?: string;
   status: 'open' | 'done';
   deadline?: string;
   deadlineFrom: DeadlineFrom;
@@ -45,6 +48,10 @@ export interface TodoSummary {
   slot?: Slot & { clash?: true; passed?: true };
   /** Open with no slot: why, and when it would first fit after its deadline. */
   noSlot?: { reason: NoSlot; firstAfter?: { start: string; end: string } };
+  /** FR-16.11–16.12: once done, what usually comes next, each with Frank's answer once given. */
+  followups?: (Followup & { answer?: FollowupAnswered })[];
+  /** Done, and its follow-ups still to come. */
+  followupsPending?: boolean;
 }
 
 /** Why an open To Do has no slot, in words (FR-16.8). */
@@ -136,4 +143,15 @@ export function slotOf(r: SlotResult | undefined): Pick<TodoSummary, 'slot' | 'n
   if (!r) return {};
   if (r.kind === 'none') return { noSlot: { reason: r.reason, ...(r.firstAfter && { firstAfter: r.firstAfter }) } };
   return { slot: { start: r.start, end: r.end, by: r.by, ...(r.clash && { clash: r.clash }), ...(r.passed && { passed: r.passed }) } };
+}
+
+/** Done within FOLLOWUP_WINDOW_HOURS, with no follow-ups yet and not given up on (FR-16.11). Not one made at start from an old to-do. */
+export const followupWanted = (t: TodoState, now: Date) =>
+  t.status === 'done' && !t.backfilled && !t.followups && (t.followupFailures ?? 0) < FOLLOWUP_MAX_ATTEMPTS && !!t.doneAt && now.getTime() - Date.parse(t.doneAt) < FOLLOWUP_WINDOW_HOURS * 3_600_000;
+
+/** A done To Do's follow-ups as a row shows them, from their words in todos/ (FR-16.11). */
+export function followupsOf(t: TodoState, words: readonly Followup[] | undefined, now: Date): Pick<TodoSummary, 'followups' | 'followupsPending'> {
+  if (t.status !== 'done') return {};
+  if (t.followups && words) return t.followups.kinds.length ? { followups: words.map((f, i) => ({ ...f, ...(t.followups?.answers?.[i] && { answer: t.followups.answers[i] }) })) } : {};
+  return followupWanted(t, now) ? { followupsPending: true } : {};
 }

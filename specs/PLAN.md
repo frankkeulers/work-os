@@ -270,6 +270,7 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
       topics.md
       settle.md               does Frank's reply settle the asks (cockpit CK-2.2)
       schedule.md             a To Do's estimate and ideal deadline (E15, FR-16.6)
+      followup.md             what comes next once a To Do is done (E15, FR-16.11)
       pick-confluence.md
       draft-vault.md
       draft-confluence.md
@@ -292,6 +293,7 @@ All runtime data lives outside the repo, default `~/WorkOS-data/` (configurable 
     triage.jsonl              labelled set + corrections from the UI
     settle.jsonl              settle checks Frank showed wrong: an Undo, or a Done soon after "not settled" (cockpit CK-2.6)
     schedule.jsonl            a To Do's Done and how long it took, later edits to its plan (E15, FR-16.5)
+    followup.jsonl            Frank's answers to follow-ups, and those he did himself (E15, FR-16.12–16.13)
   logs/
     app-2026-10-20.log
     usage-2026-10-20.jsonl    one line per Claude call
@@ -403,6 +405,7 @@ Every change to inbox or action state is an event, so replaying the log rebuilds
 | Triage | Haiku 4.5 (`haiku`) | One batched call per poll, only when threads are eligible. No tools, no MCP, short custom system prompt, single turn, JSON output. |
 | Settle (cockpit CK-2.2) | The triage model | After a poll brings in Frank's reply to an open item that awaits one: does the reply settle the open asks? Batched, at most 20 per call. No tools, no MCP, its own short prompt (`config/prompts/settle.md`), JSON output. Counts towards the triage budget. |
 | Schedule (E15, FR-16.6) | The triage model | After triage, and soon after a to-do is written: each new To Do's effort, confidence and ideal deadline. Batched, at most 20 per call. No tools, no MCP, its own short prompt (`config/prompts/schedule.md`), JSON output. Counts towards the triage budget. |
+| Follow-up (E15, FR-16.11) | The triage model | After triage, and soon after a To Do is done: up to three follow-ups for each To Do done in the last day. Batched, at most 10 per call. No tools, no MCP, its own short prompt (`config/prompts/followup.md`), JSON output. Counts towards the triage budget. Never sends anything. |
 | Draft vault note | Sonnet 5.5 (`sonnet`) | Per click. Read-only vault access to find related notes. Output is the final markdown file. |
 | Draft Confluence entry | Sonnet 5.5 (`sonnet`) | Per click. Read-only Confluence access to choose the page and section. Output is a structured patch. |
 | Multi-source synthesis (later) | Opus 5.5 (`opus`) | Rare. Briefs and weekly reviews. |
@@ -1149,7 +1152,7 @@ The stages:
 - **1b:** Done from the inbox, which ticks the line, and the time chips (FR-16.4–16.5).
 - **2:** the estimate and deadline (FR-16.6–16.7).
 - **3:** the slot finder and the time column (FR-16.8–16.10).
-- **4:** follow-ups.
+- **4:** follow-ups (FR-16.11–16.13).
 - **5:** the learning loops and evals.
 
 **FR-16.1 To Dos.**
@@ -1216,12 +1219,30 @@ The stages:
 - **Order.** Today's To Dos run in the order of their slots, then those without one. A slot moves no To Do between groups: those stay by their dates (FR-16.2).
 - **The time column.** In the cockpit, each open To Do with a slot on the day shown is a block in the meetings' lane, violet, dashed or solid as on the row. One on a meeting (Frank's own only) takes the right half, with a red edge. A click focuses its row and opens the editor.
 
+**FR-16.11 Follow-ups on Done.** Once a To Do is done, in Work OS or ticked in Obsidian, the `followup` prompt (§5.1) suggests what usually comes next. It runs after triage, and soon after a Done, for To Dos done in the last day.
+- **What it sends.** The step, how long it took when Frank said, the item's source, kind, title, summary and open asks, the end of the conversation (up to 3,000 characters, Frank's own messages as "me") while it is kept, whether the item is still open, and the item's other open To Dos.
+- **What it answers.** Up to three suggestions, each with a one-line why: `reply` (a message for Frank to send), `mark_source_done`, `add_todo` (a step, with a date when the conversation names one) or `file_note`.
+- **The clamp (code).** A reply only for Slack, Outlook or Teams items with a link to open; closing the item only while it is open with no other To Do on it open; a To Do only as a clean step, its date dropped when it has passed; a note only when the vault is set up. One of each kind. Replies are cut to 1,200 characters.
+- **Logging.** The suggestions and the input go to `todos/<todoId>.json` first, then `todo.followups` logs their kinds. A failed try logs `todo.followupsFailed`; after two, none are asked for.
+- **Never sends.** *NF-4 and non-negotiable 8 stand:* Work OS copies a reply and opens the conversation; Frank pastes it and sends it himself.
+
+**FR-16.12 Doing a follow-up.** They show under the Done toast, which stays while the pointer or focus is on it, with keys `1` to `3`; and on the To Do's row under Done today until each is answered. "Suggesting follow-ups…" shows while they come.
+- **Copy reply & open** copies the reply (or Frank's edit of it: **Edit**) and opens the conversation.
+- **Mark the item done** is the item's own Done, with Undo.
+- **Add this To Do** writes the line to the Tasks note at once: the card shows the exact line, so the click is the approval (as Done is for its tick, FR-16.4).
+- **File a vault note** starts the usual vault draft and opens the item; Frank still approves the note.
+- **×** dismisses one.
+- **Logging.** Frank's answer is logged first (`todo.followupAnswered`: accepted, edited or dismissed), once each, then the follow-up is done. Each answer is a line in `labels/followup.jsonl` (`answered`), written before its event, with the suggestion, Frank's words when he edited it, and the input.
+
+**FR-16.13 Follow-ups missed.** What Frank does himself soon after a To Do is done, that a follow-up would have offered, is a `missed` label in `labels/followup.jsonl`, once per To Do and kind: Done on its item within 30 minutes (`mark_source_done`), a to-do added on its item within 30 minutes (`add_todo`), or his own message on it within two hours (`reply`). A suggestion of that kind he used means nothing was missed.
+
 > **Story 16.1** As Frank, I want the to-dos I filed to stay in front of me until they are done.
 >
 > - Given I approved a to-do with two lines, when the write lands, then the inbox's To do group shows both, each with its source and deadline.
 > - Given I tick one in Obsidian, when I look at the inbox within a minute, then it shows as done today, ticked in Obsidian.
 > - Given a To Do on the inbox, when I press its Done, then its line in the Tasks note is ticked and the toast asks how long it took; when I press Undo, then the line is unticked again.
 > - Given a new To Do, when the next triage run ends, then its row shows an estimate, and an ideal deadline when its source gives a reason to do it sooner; when I set my own, then the plan never overrides it.
+> - Given I mark a To Do done that someone asked me for, when the follow-ups arrive, then the toast offers a reply I can copy and send myself; when I press `1`, then it is copied and the thread opens, and nothing is sent for me.
 > - Given Outlook Calendar is on and a To Do is due today, when I look at the cockpit, then the time column shows it in free time before it is due, around my meetings; when a meeting is added on that time, then it moves and the others stay; when I set my own time, then it stays there.
 
 ---

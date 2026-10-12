@@ -1,4 +1,4 @@
-import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, FilingFeedbackBody, GuideFilesView, EarlierView, EvalReport, FilingEvalReport, HealthView, InboxView, ItemView, TodoEdit, TodoSummary, LearningLoop, Notice, OutlookStatusView, PersonOption, PolicyProposal, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
+import type { Action, ActionType, AgendaView, ApiErrorBody, AttentionView, ConfluenceCatalogueView, CorrectionInput, FiledView, FilingFeedbackBody, GuideFilesView, EarlierView, EvalReport, FilingEvalReport, HealthView, InboxView, ItemView, FollowupAnswerBody, TodoEdit, TodoSummary, LearningLoop, Notice, OutlookStatusView, PersonOption, PolicyProposal, PromptFileId, PromptFileView, Rule, Settings, SettingsSaved, SettingsView, SourceId, SourceItemsView, UsageView, WeekView, WisprConnectView, WisprStatusView, WorkOsApi } from '@work-os/shared';
 import { ApiError } from './errors';
 
 // The real client: HTTP to the local server plus a server-sent event stream for change notices
@@ -170,6 +170,7 @@ export class HttpApi implements WorkOsApi {
   reopenTodo = (id: string) => this.post<TodoSummary | null>(`/api/todos/${encodeURIComponent(id)}/reopen`);
   setTodoActual = (id: string, minutes: number | null) => this.post(`/api/todos/${encodeURIComponent(id)}/actual`, { minutes });
   editTodo = (id: string, edit: TodoEdit) => this.post<TodoSummary | null>(`/api/todos/${encodeURIComponent(id)}/edit`, edit);
+  answerFollowup = (id: string, index: number, body: FollowupAnswerBody) => this.post<TodoSummary | null>(`/api/todos/${encodeURIComponent(id)}/followups/${index}`, body);
   correctTriage = (id: string, input: CorrectionInput) => this.post<{ labelCount: number }>(`${this.item(id)}/correction`, input);
   confirmTriage = (id: string) => this.post<{ labelCount: number }>(`${this.item(id)}/confirm`);
   notFinished = (id: string) => this.post<{ labelCount: number }>(`${this.item(id)}/not-finished`);

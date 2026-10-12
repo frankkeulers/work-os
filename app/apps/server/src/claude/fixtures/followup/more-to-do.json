@@ -1,0 +1,24 @@
+{
+  "about": "Another To Do on the thread is still open: closing the item is dropped; the review leads to a next step.",
+  "now": "2026-10-12T15:10:00.000Z",
+  "todo": {
+    "id": "todo-0000000000bb",
+    "step": "Review the IMO STR wording with Legal's notes",
+    "source": "slack",
+    "kind": "thread",
+    "title": "#mvi-launch",
+    "canReply": true,
+    "summary": "Release notes are blocked on your sign-off of the data-licensing wording.",
+    "itemOpen": true,
+    "otherTodos": ["Confirm the IMO STR wording with Legal"]
+  },
+  "context": { "source": "slack", "permalink": true, "itemOpen": true, "otherOpenTodos": 1, "vault": true },
+  "answer": {
+    "id": "todo-0000000000bb",
+    "suggestions": [
+      { "kind": "mark_source_done", "why": "The review was asked for here." },
+      { "kind": "add_todo", "why": "The review leads to confirming the wording.", "todo": { "step": "Send Legal the two wording changes" } }
+    ]
+  },
+  "kinds": ["add_todo"]
+}

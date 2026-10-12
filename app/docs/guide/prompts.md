@@ -18,6 +18,7 @@ can read and edit them all in [Settings › Prompts](/settings/prompts).
 | Settle check | closing an item when your reply settles it |
 | Looks finished | suggesting Done when others' messages settled what was asked of you |
 | To Do estimates | how long each of your To Dos takes, and when it would ideally be done ([To do](inbox.md#estimates)) |
+| Follow-ups on Done | what comes next once a To Do is done ([After Done](inbox.md#after-done)) |
 | Draft vault note | vault drafts |
 | Pick Confluence page | the first step of a Confluence draft |
 | Draft Confluence entry | the second step of a Confluence draft |

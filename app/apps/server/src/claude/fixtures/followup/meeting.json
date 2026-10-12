@@ -1,0 +1,24 @@
+{
+  "about": "A step from a Wispr Flow meeting: there's no conversation to reply in, so the reply is dropped; the decision is worth filing.",
+  "now": "2026-10-12T15:10:00.000Z",
+  "todo": {
+    "id": "todo-0000000000cc",
+    "step": "Write up the decision on bulk export first",
+    "source": "wispr",
+    "kind": "meeting",
+    "title": "MVI V2 planning",
+    "canReply": false,
+    "summary": "The team agreed bulk export ships before the API.",
+    "itemOpen": false,
+    "otherTodos": []
+  },
+  "context": { "source": "wispr", "permalink": false, "itemOpen": false, "otherOpenTodos": 0, "vault": true },
+  "answer": {
+    "id": "todo-0000000000cc",
+    "suggestions": [
+      { "kind": "reply", "why": "The team will want to know.", "reply": { "text": "Written up: bulk export goes first." } },
+      { "kind": "file_note", "why": "A product decision worth keeping with the MVI notes." }
+    ]
+  },
+  "kinds": ["file_note"]
+}

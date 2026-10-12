@@ -169,6 +169,27 @@ export function scheduleFor(todos: PlanTodo[], now: Date) {
   };
 }
 
+type DoneTodo = { id: string; step: string; canReply?: boolean; itemOpen?: boolean; otherTodos?: string[] };
+
+/**
+ * Follow-ups (FR-16.11): a reply where Frank can answer and the step sent, shared or confirmed
+ * something; closing the item when it was the last thing on it; a review leads to sending the
+ * comments; a decision or a written piece is worth filing.
+ */
+export function followupFor(todos: DoneTodo[]) {
+  return {
+    todos: todos.map((t) => ({
+      id: t.id,
+      suggestions: [
+        ...(t.canReply && /^(send|share|reply|confirm)\b/i.test(t.step) ? [{ kind: 'reply', why: 'They asked for it, by the fake.', reply: { text: `Done: ${t.step.replace(/^\w+\s/, '').replace(/\.$/, '')}.` } }] : []),
+        ...(t.itemOpen && !t.otherTodos?.length ? [{ kind: 'mark_source_done', why: 'Nothing else is open on it, by the fake.' }] : []),
+        ...(/^review\b/i.test(t.step) ? [{ kind: 'add_todo', why: 'A review leads to comments, by the fake.', todo: { step: `Send comments on ${t.step.replace(/^review\s+/i, '')}` } }] : []),
+        ...(/\b(decide|decision|spec|write)\b/i.test(t.step) ? [{ kind: 'file_note', why: 'Worth keeping, by the fake.' }] : []),
+      ],
+    })),
+  };
+}
+
 const PEOPLE_RE = /\b(lazy|unreliable|performance issue|attitude|behaviour)\b/i;
 
 export function fakeClaude(): FakeClaude {
@@ -190,6 +211,7 @@ export function fakeClaude(): FakeClaude {
         const convs = /<conversations>\n([\s\S]*)\n<\/conversations>/.exec(prompt);
         const checks = /<checks>\n([\s\S]*)\n<\/checks>/.exec(prompt);
         const todos = /<todos>\n([\s\S]*)\n<\/todos>/.exec(prompt);
+        const done = /<done>\n([\s\S]*)\n<\/done>/.exec(prompt);
         const now = /^Now: (\S+)/.exec(prompt)?.[1];
         // A tuner request quotes a whole prompt, so it is recognised first.
         const answer = prompt.startsWith('<policy>')
@@ -198,6 +220,8 @@ export function fakeClaude(): FakeClaude {
           ? topicsFor(JSON.parse(convs[1]) as Conversation[])
           : checks
           ? settleFor(JSON.parse(checks[1]) as Check[])
+          : done
+          ? followupFor(JSON.parse(done[1]) as DoneTodo[])
           : todos
           ? scheduleFor(JSON.parse(todos[1]) as PlanTodo[], new Date(now ?? Date.now()))
           : prompt.includes('<vault-conventions>')

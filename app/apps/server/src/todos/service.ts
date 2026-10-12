@@ -1,5 +1,6 @@
-import { slotMinutes, type EventDraft, type TodoEdit, type TodoState } from '@work-os/shared';
+import { slotMinutes, type EventDraft, type FollowupAnswerBody, type TodoEdit, type TodoState } from '@work-os/shared';
 import type { Logger } from '../log';
+import type { FollowupLabelStore } from '../store/followupLabels';
 import type { ScheduleLabelRecord, ScheduleLabelStore } from '../store/scheduleLabels';
 import type { Store } from '../store/store';
 import type { TodoTextStore } from '../store/todos';
@@ -17,6 +18,7 @@ export interface TodoServiceDeps {
   texts: TodoTextStore;
   mirror: TodoMirror;
   labels?: ScheduleLabelStore;
+  followupLabels?: FollowupLabelStore;
   /** Places the other To Dos again once Frank changes one. */
   planner?: TodoPlanner;
   now: () => Date;
@@ -43,6 +45,12 @@ export class TodoNotFoundError extends Error {
 export class TodoNotDoneError extends Error {
   constructor() {
     super('Only a To Do that is done has a time taken.');
+  }
+}
+
+export class FollowupNotFoundError extends Error {
+  constructor() {
+    super('That follow-up isn’t there. It may not have been suggested yet.');
   }
 }
 
@@ -109,6 +117,39 @@ export class TodoService {
     await this.d.store.append(...events);
     // The rest move around it at once, not at the next tick.
     await this.d.planner?.plan();
+  }
+
+  /**
+   * Frank's answer to one follow-up (FR-16.12): used as suggested, used after changing it (`text`,
+   * his words), or dismissed. Once each. The web does the follow-up itself, after this, so the
+   * missed-follow-up watch sees it answered first.
+   */
+  async answerFollowup(id: string, index: number, body: FollowupAnswerBody): Promise<void> {
+    const t = this.get(id);
+    const words = this.d.texts.get(id);
+    const suggestion = words?.followups?.suggestions[index];
+    if (!t.followups || index >= t.followups.kinds.length || !suggestion) throw new FollowupNotFoundError();
+    if (t.followups.answers?.[index]) return;
+    await this.d.followupLabels
+      ?.append({
+        schemaVersion: 1,
+        at: this.d.now().toISOString(),
+        origin: 'answered',
+        todoId: id,
+        itemId: t.itemId,
+        source: words.source.source,
+        input: words.followups!.input,
+        kind: suggestion.kind,
+        index,
+        suggestion: { ...suggestion },
+        answer: body.answer,
+        ...(body.answer === 'edited' && body.text && { text: body.text }),
+        suggested: t.followups.kinds,
+        model: words.followups!.model,
+        promptVersion: words.followups!.promptVersion,
+      })
+      .catch((err: unknown) => this.d.logger?.warn({ err }, 'Writing a follow-up label failed'));
+    await this.d.store.append({ type: 'todo.followupAnswered', itemId: t.itemId, actionId: t.actionId, data: { todoId: id, index, answer: body.answer } });
   }
 
   private async once(id: string, write: () => Promise<unknown>) {

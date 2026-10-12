@@ -338,6 +338,22 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     l.add('todo.scheduled', 7, slot(300, 'plan'), ids).add('todo.done', 8, { todoId, by: 'you' }, ids).add('todo.scheduled', 9, slot(400, 'plan'), ids);
     expect(replay(l.events).todos?.[todoId].slot).toEqual({ start: at(300), end: at(330), by: 'plan' });
   });
+
+  it('keeps the first follow-ups only, and one answer to each (FR-16.11, FR-16.12)', () => {
+    const l = log();
+    const todoId = created.todoId;
+    l.add('item.upserted', 0, upserted(1)).add('todo.created', 1, created, ids).add('todo.done', 2, { todoId, by: 'you' }, ids);
+    l.add('todo.followupsFailed', 3, { todoId, attempts: 1, reason: 'claude' }, ids);
+    expect(replay(l.events).todos?.[todoId].followupFailures).toBe(1);
+    l.add('todo.followups', 4, { todoId, kinds: ['reply', 'mark_source_done'] }, ids);
+    l.add('todo.followups', 5, { todoId, kinds: ['file_note'] }, ids); // a replay: the first stands
+    l.add('todo.followupAnswered', 6, { todoId, index: 1, answer: 'dismissed' }, ids);
+    l.add('todo.followupAnswered', 7, { todoId, index: 1, answer: 'accepted' }, ids); // answered already
+    l.add('todo.followupAnswered', 8, { todoId, index: 2, answer: 'accepted' }, ids); // no third
+    const p = replay(l.events).todos?.[todoId];
+    expect(p?.followups).toEqual({ kinds: ['reply', 'mark_source_done'], answers: { 1: 'dismissed' } });
+    expect(p).not.toHaveProperty('followupFailures');
+  });
 });
 
 describe('events that arrive too late', () => {

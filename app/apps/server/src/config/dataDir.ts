@@ -25,6 +25,7 @@ export const paths = (dataDir: string) => ({
   finishLabels: join(dataDir, 'labels/finish.jsonl'),
   filingLabels: join(dataDir, 'labels/filing.jsonl'),
   scheduleLabels: join(dataDir, 'labels/schedule.jsonl'),
+  followupLabels: join(dataDir, 'labels/followup.jsonl'),
   proposals: join(dataDir, 'proposals'),
   todos: join(dataDir, 'todos'),
 });

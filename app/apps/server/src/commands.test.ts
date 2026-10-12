@@ -1246,6 +1246,53 @@ describe('To Dos (E15, FR-16.1–16.3)', () => {
     expect(labels[2]).toMatchObject({ set: { slot: null }, was: { slot: { start: slot.start, by: 'you' } } });
   });
 
+  describe('follow-ups on Done (FR-16.11–16.13)', () => {
+    const followLabels = async () => {
+      await res.followupLabels.close();
+      return (await readFile(join(dir, 'labels/followup.jsonl'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
+    };
+    const answer = (id: string, index: number, body: object) => call<TodoSummary>('POST', `/api/todos/${id}/followups/${index}`, body);
+
+    it('suggests what comes next once a To Do is done, and labels Frank’s answers; nothing is sent', async () => {
+      await write(['Send the tier comparison']);
+      const [todo] = await inboxTodos();
+      const r = await call<TodoSummary>('POST', `/api/todos/${todo.id}/done`);
+      expect(r.body.followupsPending).toBe(true);
+      await res.runtime.settled();
+      const [after] = await inboxTodos();
+      expect(after.followups?.map((f) => f.kind)).toEqual(['reply', 'mark_source_done']);
+      expect(after.followups?.[0].reply?.text).toBe('Done: the tier comparison.');
+      expect((await answer(todo.id, 0, { answer: 'edited', text: 'Done: the tier comparison is in the deck.' })).body.followups?.[0]).toMatchObject({ answer: 'edited' });
+      expect((await answer(todo.id, 1, { answer: 'dismissed' })).status).toBe(200);
+      expect((await answer(todo.id, 2, { answer: 'accepted' })).status).toBe(404);
+      expect((await answer(todo.id, 0, { answer: 'nope' })).status).toBe(422);
+      expect(slack.calls.filter((c) => /^chat\./.test(c.method))).toEqual([]); // Work OS never posts (NF-4)
+      const labels = await followLabels();
+      expect(labels.map((l) => [l.origin, l.kind, l.answer])).toEqual([
+        ['answered', 'reply', 'edited'],
+        ['answered', 'mark_source_done', 'dismissed'],
+      ]);
+      expect(labels[0]).toMatchObject({ text: 'Done: the tier comparison is in the deck.', suggested: ['reply', 'mark_source_done'], input: { step: 'Send the tier comparison', canReply: true }, promptVersion: expect.stringMatching(/^followup v1/) });
+    });
+
+    it('labels what Frank did himself that a follow-up would have offered, once; not what he used', async () => {
+      await write(['Send the tier comparison']);
+      const [todo] = await inboxTodos();
+      await call('POST', `/api/todos/${todo.id}/done`);
+      await res.runtime.settled();
+      // He closes the item himself, having dismissed the suggestion.
+      await answer(todo.id, 1, { answer: 'dismissed' });
+      expect((await call('POST', `/api/items/${encodeURIComponent(PROD)}/done`)).status).toBeLessThan(300);
+      await call('POST', `/api/items/${encodeURIComponent(PROD)}/reopen`);
+      await call('POST', `/api/items/${encodeURIComponent(PROD)}/done`);
+      // He used the reply: his own message on it later is not a miss.
+      await answer(todo.id, 0, { answer: 'accepted' });
+      await res.store.append({ type: 'item.upserted', itemId: PROD, data: { ...res.store.projection.items[PROD], source: 'slack', kind: 'thread', title: '#product', permalink: 'https://x/p', participants: [], lastActivityAt: new Date(wall).toISOString(), revision: 9, messageCount: 4, fromMeOnly: true } });
+      const labels = await followLabels();
+      expect(labels.filter((l) => l.origin === 'missed').map((l) => l.kind)).toEqual(['mark_source_done']);
+    });
+  });
+
   describe('Done from the inbox (FR-16.4, FR-16.5)', () => {
     const done = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/done`);
     const reopen = (id: string) => call<TodoSummary>('POST', `/api/todos/${id}/reopen`);

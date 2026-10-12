@@ -3,7 +3,7 @@ import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type { FilingPlans } from './policy';
 import type { LearningLoop, LearningView, PolicyProposal } from './learning';
-import type { FilingFeedbackBody, TodoEdit } from './requests';
+import type { FilingFeedbackBody, FollowupAnswerBody, TodoEdit } from './requests';
 import type { DoneBy } from './projection/state';
 import type { TodoSummary } from './todos';
 import type {
@@ -620,6 +620,8 @@ export interface WorkOsApi {
   setTodoActual(todoId: string, minutes: number | null): Promise<void>;
   /** FR-16.7: Frank's own estimate or deadline for a To Do, which its plan never overrides. Answers with the To Do. */
   editTodo(todoId: string, edit: TodoEdit): Promise<TodoSummary | null>;
+  /** FR-16.12: Frank's answer to one follow-up; the web does the follow-up itself (copy and open, Done, a to-do). */
+  answerFollowup(todoId: string, index: number, body: FollowupAnswerBody): Promise<TodoSummary | null>;
   correctTriage(itemId: string, input: CorrectionInput): Promise<{ labelCount: number }>;
   /** "Not finished" on a topic that looks finished (cockpit CK-2.10): back to Today, and a label for the finish eval. */
   notFinished(itemId: string): Promise<{ labelCount: number }>;

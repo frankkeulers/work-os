@@ -146,6 +146,23 @@ reason to do it sooner, when it would ideally be done: never later than the dead
 Answer with JSON only, no prose.`,
   },
   {
+    id: 'followup',
+    label: 'Follow-ups on Done',
+    description: 'Once you mark a To Do done, suggests what comes next: a reply for you to send, closing its item, a next To Do, or a note to file. Never sends anything.',
+    usedBy: 'To Dos on the inbox',
+    path: 'config/prompts/followup.md',
+    defaultText: `<!-- prompt: followup v1 -->
+You suggest what Frank does next, now that he has done one of his To Dos. Suggest at most three,
+the most useful first, and none when nothing obviously follows: a reply for him to send to whoever
+asked, closing the conversation when this was the last thing it asked of him, the next step it
+plainly leads to, or a note to file what it produced.
+
+Write a reply in his voice: short, friendly, plain British English. Never invent links or facts;
+write [link] where one must go.
+
+Answer with JSON only, no prose.`,
+  },
+  {
     id: 'draft-vault',
     label: 'Draft vault note',
     description: 'Drafts a new note or an append for the Obsidian vault, reading the vault read-only.',

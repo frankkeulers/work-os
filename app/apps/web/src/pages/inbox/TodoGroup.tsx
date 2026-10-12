@@ -9,6 +9,7 @@ import { useNow } from '../../hooks/useNow';
 import { fmtTime, fmtWhen } from '../../lib/format';
 import { dueInfo } from '../../lib/next';
 import { DueChip } from './chips';
+import { DoneFollowups, FollowupList } from './Followups';
 import { EstimateChip, LENGTHS, durLabel, nearestLength, slotLabel } from './TodoPlan';
 
 // To Dos on the inbox (E15, FR-16.2): every line Frank wrote to the Tasks note, with where it came
@@ -16,7 +17,8 @@ import { EstimateChip, LENGTHS, durLabel, nearestLength, slotLabel } from './Tod
 // what is overdue or due today in Needs you and the rest in Later. A row opens its source item;
 // its ✓, or `e` on it, marks it done and ticks its line in the Tasks note (FR-16.4). Its estimate,
 // and when it would ideally be done, come from the model (FR-16.6); Frank can set both (FR-16.7).
-// When he'll do it is free time code found in his calendar (FR-16.8), or his own (FR-16.9).
+// When he'll do it is free time code found in his calendar (FR-16.8), or his own (FR-16.9). Once
+// done, what usually comes next is suggested under the toast and on the row (FR-16.11).
 
 const HEAD: Record<Exclude<Group, 'done'>, string> = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming' };
 
@@ -94,16 +96,22 @@ function TookChips({ todoId, initial, estimate }: { todoId: string; initial?: nu
 
 /**
  * Done on a To Do (FR-16.4): its line ticked in the Tasks note, a toast that says so, with how
- * long it took to pick (FR-16.5) and Undo, which unticks it.
+ * long it took to pick (FR-16.5), what comes next once suggested (FR-16.11), and Undo, which
+ * unticks it.
  */
-export async function markTodoDone(todo: TodoSummary) {
+export async function markTodoDone(todo: TodoSummary, onOpen?: (itemId: string) => void) {
   try {
     const now = await api.markTodoDone(todo.id);
     const failed = now?.mirror?.failed;
     toast(`Done · ${todo.step}`, {
       description: failed ? `Not ticked: ${MIRROR_FAILURE[failed]}` : now?.mirror ? 'Ticking it in the Tasks note…' : 'Ticked in the Tasks note',
-      ttl: 12_000,
-      body: <TookChips todoId={todo.id} initial={now?.actualMinutes} estimate={todo.effortMinutes} />,
+      ttl: 20_000,
+      body: (
+        <>
+          <TookChips todoId={todo.id} initial={now?.actualMinutes} estimate={todo.effortMinutes} />
+          <DoneFollowups todoId={todo.id} onOpen={onOpen} />
+        </>
+      ),
       action: { label: 'Undo', run: () => void api.reopenTodo(todo.id).catch(errorToast) },
     });
   } catch (e) {
@@ -140,7 +148,7 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
   // Keys on a focused row are its own (`g d` focuses the first): the item panel's don't see them.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget || e.metaKey || e.ctrlKey || e.altKey) return;
-    if ((e.key === 'e' || e.key === 'E') && !done) void markTodoDone(todo);
+    if ((e.key === 'e' || e.key === 'E') && !done) void markTodoDone(todo, onOpen);
     else if (e.key === 'p' && !done) setOpen(true);
     else if (e.key === 'Enter') onOpen(todo.itemId);
     else return;
@@ -187,6 +195,7 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
             )
           )}
         </div>
+        {done && todo.followups && <FollowupList todo={todo} onOpen={onOpen} />}
       </div>
       {!done && <EstimateChip todo={todo} {...pop} />}
       {due && <DueChip due={due} />}
@@ -194,7 +203,7 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
       {done ? (
         <IconButton label={`Open again: ${todo.step}`} title="Open again, and untick it in the Tasks note" icon="undo" size={32} className="-mr-2 text-muted opacity-60 hover:text-ink hover:opacity-100 focus-visible:opacity-100 group-hover/todo:opacity-100" onClick={() => void reopenTodo(todo)} />
       ) : (
-        <IconButton label={`Done: ${todo.step}`} title="Done, and tick it in the Tasks note (e)" icon="check" size={32} className="-mr-2 text-muted opacity-60 hover:text-ink hover:opacity-100 focus-visible:opacity-100 group-hover/todo:opacity-100 group-focus-visible/todo:opacity-100" onClick={() => void markTodoDone(todo)} />
+        <IconButton label={`Done: ${todo.step}`} title="Done, and tick it in the Tasks note (e)" icon="check" size={32} className="-mr-2 text-muted opacity-60 hover:text-ink hover:opacity-100 focus-visible:opacity-100 group-hover/todo:opacity-100 group-focus-visible/todo:opacity-100" onClick={() => void markTodoDone(todo, onOpen)} />
       )}
     </div>
   );

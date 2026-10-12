@@ -25,6 +25,7 @@ export const PURPOSE_LABEL: Record<UsagePurpose, string> = {
   settle: 'Settle check',
   tune: 'Policy proposal',
   schedule: 'To Do estimates',
+  followup: 'Follow-ups on Done',
 };
 
 export const evalPath = (id: string) => `/usage/eval/${encodeURIComponent(id)}`;

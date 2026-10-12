@@ -218,6 +218,19 @@ describe('To Dos (E15, FR-16.1, FR-16.2)', () => {
     expect((await settle(server.editTodo(late.id, { slot: null })))?.slot).toMatchObject({ by: 'plan' });
   });
 
+  it('suggests follow-ups a moment after Done, clamped as the server clamps them, and takes one answer each (FR-16.11, FR-16.12)', async () => {
+    server.seedTodos();
+    const share = (await settle(server.getInbox())).todos.find((t) => t.step.startsWith('Share the graduation'))!;
+    expect(await settle(server.markTodoDone(share.id))).toMatchObject({ followupsPending: true });
+    await run(2000);
+    const done = (await settle(server.getInbox())).todos.find((t) => t.id === share.id)!;
+    expect(done.followups?.map((f) => f.kind)).toEqual(['reply', 'add_todo', 'mark_source_done']);
+    expect(done.permalink).toMatch(/^https:/);
+    expect((await settle(server.answerFollowup(share.id, 0, { answer: 'accepted' })))?.followups?.[0].answer).toBe('accepted');
+    expect((await settle(server.answerFollowup(share.id, 0, { answer: 'dismissed' })))?.followups?.[0].answer).toBe('accepted');
+    expect(await settle(server.answerFollowup(share.id, 5, { answer: 'accepted' }).catch((e: unknown) => e))).toMatchObject({ status: 404 });
+  });
+
   it('has no time to plan with the calendar off', async () => {
     server.seedTodos();
     await settle(server.disconnectOutlook());

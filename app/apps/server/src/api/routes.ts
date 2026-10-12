@@ -1,4 +1,4 @@
-import { ApproveRequest, TodoActual, TodoEdit, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, TodoActual, TodoEdit, FollowupAnswerBody, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -10,7 +10,7 @@ import { RebuildError } from '../store/store';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { TodoNotDoneError, TodoNotFoundError } from '../todos/service';
+import { FollowupNotFoundError, TodoNotDoneError, TodoNotFoundError } from '../todos/service';
 import { agendaView, attentionView, budgets, filedView, healthView, inboxView, itemView, knownCategories, loopLabels, settingsView, sourceView, todoSummary, usageView, weekView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
@@ -109,12 +109,13 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     } catch (e) {
       if (e instanceof TodoNotFoundError) throw new HttpError('not_found', e.message);
       if (e instanceof TodoNotDoneError) throw new HttpError('conflict', e.message);
+      if (e instanceof FollowupNotFoundError) throw new HttpError('not_found', e.message);
       throw e;
     }
   };
   const todoNow = (id: string) => {
     const t = d.store.projection.todos?.[id];
-    return (t && todoSummary(d, t, d.todos?.planner?.slots()?.[id])) ?? null;
+    return (t && todoSummary(d, t, d.todos?.planner?.slots()?.[id], d.now())) ?? null;
   };
   app.post<{ Params: { id: string } }>('/api/todos/:id/done', async (req) => {
     await todoCall(() => todos().markDone(req.params.id));
@@ -134,6 +135,14 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const body = TodoEdit.safeParse(req.body);
     if (!body.success) throw new HttpError('validation', 'Send { effortMinutes } in minutes, { deadline } as an ISO time or null, { slot: { start, end } } as ISO times or null, or several.', body.error.issues.map((i) => ({ path: i.path.join('.') || 'edit', message: i.message })));
     await todoCall(() => todos().edit(req.params.id, body.data));
+    return todoNow(req.params.id);
+  });
+
+  app.post<{ Params: { id: string; index: string } }>('/api/todos/:id/followups/:index', async (req) => {
+    const body = FollowupAnswerBody.safeParse(req.body);
+    const index = Number(req.params.index);
+    if (!body.success || !Number.isInteger(index) || index < 0) throw new HttpError('validation', 'Send { answer: accepted, edited or dismissed }, with { text } when edited, to a follow-up by its place.', body.success ? [{ path: 'index', message: 'A whole number from 0' }] : body.error.issues.map((i) => ({ path: i.path.join('.') || 'answer', message: i.message })));
+    await todoCall(() => todos().answerFollowup(req.params.id, index, body.data));
     return todoNow(req.params.id);
   });
 

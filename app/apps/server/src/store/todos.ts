@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { SourceId } from '@work-os/shared';
+import { FollowupKind, SourceId } from '@work-os/shared';
 import { z } from 'zod';
 import { writeJsonAtomic } from './atomic';
 import { fileNameFor } from './items';
@@ -32,6 +32,26 @@ export const TodoText = z.object({
       input: z.record(z.string(), z.unknown()),
       estimateWhy: z.string(),
       deadlineWhy: z.string().optional(),
+    })
+    .optional(),
+  /**
+   * FR-16.11: the follow-ups suggested once it was done, after the clamp, in the order of
+   * `todo.followups`, with the input the prompt saw, for their labels.
+   */
+  followups: z
+    .object({
+      at: z.iso.datetime(),
+      model: z.string(),
+      promptVersion: z.string(),
+      input: z.record(z.string(), z.unknown()),
+      suggestions: z.array(
+        z.object({
+          kind: FollowupKind,
+          why: z.string(),
+          reply: z.object({ text: z.string() }).optional(),
+          todo: z.object({ step: z.string(), dueAt: z.string().optional() }).optional(),
+        }),
+      ),
     })
     .optional(),
 });

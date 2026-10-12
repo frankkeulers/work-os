@@ -171,7 +171,7 @@ export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', '
 export type FailureReason = z.infer<typeof FailureReason>;
 
 /** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
-export const PromptFileId = z.enum(['triage', 'filing-policy', 'tune-policy', 'topics', 'settle', 'finish', 'schedule', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export const PromptFileId = z.enum(['triage', 'filing-policy', 'tune-policy', 'topics', 'settle', 'finish', 'schedule', 'followup', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
 export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
@@ -575,7 +575,7 @@ export function pollIntervalMinutes(settings: Pick<Settings, 'schedule' | 'sourc
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------
 
-export const UsagePurpose = z.enum(['triage', 'draft_vault', 'confluence_pick', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing', 'settle', 'tune', 'schedule']); // tune: a proposed filing policy (FR-15.9); fetch: connector relay (CL-9); routing: topics; confluence_pick: the page picker before a Confluence draft; settle: whether Frank's reply settles an item (cockpit CK-2.2); schedule: a To Do's estimate and ideal deadline (FR-16.6)
+export const UsagePurpose = z.enum(['triage', 'draft_vault', 'confluence_pick', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing', 'settle', 'tune', 'schedule', 'followup']); // tune: a proposed filing policy (FR-15.9); fetch: connector relay (CL-9); routing: topics; confluence_pick: the page picker before a Confluence draft; settle: whether Frank's reply settles an item (cockpit CK-2.2); schedule: a To Do's estimate and ideal deadline (FR-16.6); followup: what comes next once a To Do is done (FR-16.11)
 export type UsagePurpose = z.infer<typeof UsagePurpose>;
 
 export const UsageRecord = z.object({

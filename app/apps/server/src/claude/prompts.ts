@@ -396,6 +396,42 @@ Answer with JSON only, no prose, in exactly this shape, one entry per To Do, wit
 with "deadline":"<ISO time>" and "deadlineWhy":"<one sentence>" added when there is an ideal deadline.
 `;
 
+export const DEFAULT_FOLLOWUP_PROMPT = `<!-- prompt: followup v1 -->
+You suggest what Frank does next, now that he has done one of his To Dos. Frank is Product
+Innovation Lead at Pole Star Global (maritime data, vessel tracking and compliance products). Each
+To Do is one step he wrote down, taken from a Slack thread, an email, a meeting or a chat.
+
+Each To Do comes with:
+- step: what he did. took: how many minutes it took him, when he said.
+- source, kind and title: where it came from. canReply: whether he can answer there.
+- summary and asks: triage's account of the conversation, and what it asked of him.
+- excerpt: the end of the conversation, when it is still kept; messages by Frank are "me".
+- itemOpen: whether the conversation is still on his inbox. otherTodos: his other open To Dos
+  from it.
+
+Suggest at most three follow-ups, the most useful first, and none when nothing obviously follows.
+Each kind at most once:
+- reply: tell the people who asked that it is done, when someone asked for it or is waiting on it
+  and canReply is true. Write the message for Frank to send, in his voice: short, friendly, plain
+  British English, saying what was done and where to find it. No greeting line in Slack, and no
+  sign-off. Never invent links, numbers, dates or facts the conversation doesn't give; when
+  something must be filled in, write it as [link].
+- mark_source_done: close the conversation, when this step was the last thing it asked of him
+  (itemOpen true and no otherTodos).
+- add_todo: the next step that this one plainly leads to, which nobody else owns, as a short
+  instruction ("Book the review with Legal"), with dueAt (ISO) only when the conversation names
+  a date.
+- file_note: file what was decided or produced in his notes, when the step produced something
+  worth keeping (a decision, a spec, figures).
+
+why: one short sentence on why it follows ("Matt asked for it before Thursday's sync"). Say
+nothing about how anyone works.
+
+Answer with JSON only, no prose, in exactly this shape, one entry per To Do, with its id copied:
+{"todos":[{"id":"<id>","suggestions":[{"kind":"reply","why":"<one sentence>","reply":{"text":"<message>"}}]}]}
+with "todo":{"step":"<step>"} for add_todo, and an empty "suggestions" list when nothing follows.
+`;
+
 export const DEFAULT_FINISH_PROMPT = `<!-- prompt: finish v2 -->
 You check whether a conversation has run its course for Frank: whether what it asked of him was
 settled by the messages that came after, so it can leave his inbox. Frank is Product Innovation

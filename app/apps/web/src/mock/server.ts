@@ -17,6 +17,10 @@ import {
   clampPlan,
   planOf,
   slotMinutes,
+  clampFollowups,
+  followupWanted,
+  followupsOf,
+  type FollowupAnswerBody,
   slotOf,
   todoSlots,
   SLOT_BUFFER_MINUTES,
@@ -142,7 +146,7 @@ import { ApiError, type FieldIssue } from '../api/errors';
 import { MIN, addMins, buildDecision, makeEvent, newRec, recActivity, slackTs, upserted, type EventIds } from './build';
 import type { MockControls, PollOutcome, SettleOutcome, StateFlag } from './controls';
 import { asFiled, buildDraft, withPossibleDuplicate } from './drafts';
-import { mockPlan } from './plans';
+import { mockFollowups, mockPlan } from './plans';
 import { CALENDAR, CALENDAR_CATEGORIES, CALENDAR_WEEK } from './seed/calendar';
 import { inMockScope, mockCatalogue } from './seed/catalogue';
 import { ME } from './me';
@@ -156,6 +160,8 @@ const STORAGE_KEY = 'workos.mock';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const QUERY_MS = 30;
 const COMMAND_MS = 160;
+/** Follow-ups arrive this long after Done, as after the server's next triage run (FR-16.11). */
+const FOLLOWUP_MS = 1200;
 const STAGE_MS = 1500;
 
 const DRAFT_STAGES: Record<ActionType, string[]> = {
@@ -284,7 +290,7 @@ export class MockServer implements WorkOsApi, MockControls {
   private makeTodos(actionId: string, d: TodoDraft, rec: ItemRec, backfilled = false) {
     const known = this.s.todos ?? {};
     for (const t of newTodos(actionId, d, (id) => !!known[id], backfilled)) {
-      (this.s.todoTexts ??= {})[t.todoId] = { step: t.step, line: t.line, source: rec.item.source, sourceTitle: rec.item.title };
+      (this.s.todoTexts ??= {})[t.todoId] = { step: t.step, line: t.line, source: rec.item.source, sourceTitle: rec.item.title, permalink: rec.item.permalink };
       this.event('todo.created', { todoId: t.todoId, ...(t.lineId && { lineId: t.lineId }), ...(t.deadline && { deadline: t.deadline }), deadlineFrom: t.deadlineFrom, ...(backfilled && { backfilled: true as const }) }, { itemId: rec.item.id, actionId });
       // As the server's schedule run after it (FR-16.6), at once.
       const plan = clampPlan({ id: t.todoId, ...mockPlan(t.step, this.now()) }, { now: this.now(), ...(t.deadline && { deadline: t.deadline }) });
@@ -316,6 +322,7 @@ export class MockServer implements WorkOsApi, MockControls {
       step: words.step,
       source: words.source,
       sourceTitle: words.sourceTitle,
+      ...(words.permalink && { permalink: words.permalink }),
       status: t.status,
       ...(t.deadline && { deadline: t.deadline }),
       deadlineFrom: t.deadlineFrom,
@@ -327,6 +334,7 @@ export class MockServer implements WorkOsApi, MockControls {
       ...(t.actualMinutes && { actualMinutes: t.actualMinutes }),
       ...planOf(t, words.estimateWhy ? { estimateWhy: words.estimateWhy, ...(words.deadlineWhy && { deadlineWhy: words.deadlineWhy }) } : undefined),
       ...(t.status === 'open' && slotOf(slots[id])),
+      ...followupsOf(t, words.followups, this.now()),
     };
   }
 
@@ -1170,6 +1178,33 @@ export class MockServer implements WorkOsApi, MockControls {
       this.event('todo.done', { todoId, by: 'you' }, { itemId: t.itemId, actionId: t.actionId });
       this.mirrorTodo(todoId);
       this.emit({ topic: 'inbox' }, { topic: 'item', id: t.itemId });
+      // As the server's follow-ups after the next triage run (FR-16.11): a moment later.
+      setTimeout(() => this.suggestFollowups(todoId), FOLLOWUP_MS);
+    }
+    return this.todoSummary(todoId) ?? null;
+  }
+
+  /** As the server's runFollowups (FR-16.11): the mock's suggestions, clamped as the server clamps them. */
+  private suggestFollowups(todoId: string) {
+    const t = this.s.todos?.[todoId];
+    const words = this.s.todoTexts?.[todoId];
+    if (!t || !words || !followupWanted(t, this.now())) return;
+    const rec = this.s.items[t.itemId];
+    const others = Object.values(this.s.todos ?? {}).filter((o) => o.itemId === t.itemId && o.id !== t.id && o.status === 'open').length;
+    const canReply = !!words.permalink && ['slack', 'outlook', 'teams'].includes(words.source);
+    const suggestions = clampFollowups(mockFollowups(words.step, canReply), { now: this.now(), source: words.source, permalink: !!words.permalink, itemOpen: !!rec && rec.status !== 'done', otherOpenTodos: others, vault: !!this.s.settings.vaultPath });
+    words.followups = suggestions;
+    this.event('todo.followups', { todoId, kinds: suggestions.map((f) => f.kind) }, { itemId: t.itemId, actionId: t.actionId });
+    this.emit({ topic: 'inbox' });
+  }
+
+  async answerFollowup(todoId: string, index: number, body: FollowupAnswerBody) {
+    await this.gate(COMMAND_MS);
+    const t = this.todo(todoId);
+    if (!t.followups || index >= t.followups.kinds.length) throw new ApiError('not_found', 'That follow-up isn’t there. It may not have been suggested yet.');
+    if (!t.followups.answers?.[index]) {
+      this.event('todo.followupAnswered', { todoId, index, answer: body.answer }, { itemId: t.itemId, actionId: t.actionId });
+      this.emit({ topic: 'inbox' });
     }
     return this.todoSummary(todoId) ?? null;
   }
