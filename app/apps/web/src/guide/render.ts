@@ -56,5 +56,10 @@ export function renderGuide(body: string, currentSlug: string): string {
       },
     },
   });
-  return md.parse(body, { async: false });
+  // Tables sit in a wrapper that scrolls sideways, so the table itself can take the article's width.
+  // Raw HTML in a page is escaped, so every <table> here is one Marked made.
+  return md
+    .parse(body, { async: false })
+    .replace(/<table>/g, '<div class="wos-guide-table"><table>')
+    .replace(/<\/table>/g, '</table></div>');
 }

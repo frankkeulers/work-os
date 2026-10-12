@@ -221,20 +221,37 @@ select:not([multiple]) {
 .wos-guide-copy:hover {
   color: var(--ink);
 }
-.wos-guide table {
-  display: block;
+.wos-guide-table {
   max-width: 100%;
   overflow-x: auto;
+}
+.wos-guide table {
+  width: 100%;
   border-collapse: collapse;
   font-size: 14px;
   line-height: 1.5;
 }
+/* Words stay whole in a cell: with the article's "anywhere", a column could shrink to a few letters. */
 .wos-guide th,
 .wos-guide td {
   border-bottom: 1px solid var(--line-soft);
   padding: 7px 16px 7px 0;
   text-align: left;
   vertical-align: top;
+  overflow-wrap: normal;
+}
+.wos-guide th:last-child,
+.wos-guide td:last-child {
+  padding-right: 0;
+}
+/* The first column names the row (a loop, a key, a state): it reads better on one or two lines. */
+.wos-guide td:first-child {
+  min-width: 7.5em;
+}
+/* A key or a command in a cell stays on one line: `--purpose` broken at its hyphens can't be read
+   or copied. The table's wrapper scrolls if a cell can't fit. */
+.wos-guide td code {
+  white-space: nowrap;
 }
 .wos-guide th {
   border-bottom-color: var(--line);

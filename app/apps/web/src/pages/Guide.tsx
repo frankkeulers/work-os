@@ -237,7 +237,7 @@ function GuideBody({ page, pages, problems }: { page: GuidePage; pages: GuidePag
 
   return (
     <>
-      <div className="flex min-w-0 max-w-[720px] flex-1 flex-col" aria-label={page.title}>
+      <div className="flex min-w-0 max-w-[760px] flex-1 flex-col" aria-label={page.title}>
         {problems.length > 0 && (
           <div className="mb-5">
             <Banner tone="warn" icon="alert">
@@ -301,21 +301,20 @@ export function GuidePage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      {/* 64px, like the other top bars, lined up with the sidebar's header. It stays put; the body below scrolls. */}
-      <header className="flex h-16 shrink-0 items-center border-b border-line px-8">
-        <div className="flex max-w-[1240px] flex-1 items-center gap-x-6">
+      {/* 64px, like the other top bars, lined up with the sidebar's header. It stays put; the body below scrolls.
+          Centred with the body, as Usage is, so a wide window has even margins rather than a gap on the right. */}
+      <header className="shrink-0 border-b border-line">
+        <div className="mx-auto flex h-16 max-w-[1320px] items-center gap-x-6 px-8">
           <h1 className="m-0 flex-1 text-xl font-semibold tracking-[-0.01em]">Guide</h1>
           <GuideSearch pages={pages} />
-        </div>
-        <div className="ml-auto pl-4">
           <NotificationBell />
         </div>
       </header>
       <div data-page-scroll className="min-h-0 flex-1 overflow-y-auto">
-        <div className="max-w-[1304px] px-8 pt-6 empty:hidden">
+        <div className="mx-auto max-w-[1320px] px-8 pt-6 empty:hidden">
           <HealthBanner />
         </div>
-        <div className="flex max-w-[1304px] items-start gap-12 px-8 pb-24 pt-8">
+        <div className="mx-auto flex max-w-[1320px] items-start gap-12 px-8 pb-24 pt-8">
           <nav aria-label="Guide pages" className="sticky top-8 flex w-[200px] shrink-0 flex-col gap-6">
             {GROUPS.filter((g) => pages.some((p) => p.group === g)).map((g) => (
               <div key={g} className="flex flex-col gap-0.5">

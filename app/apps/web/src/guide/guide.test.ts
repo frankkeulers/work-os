@@ -131,6 +131,12 @@ describe('renderGuide', () => {
     expect(html).toContain('<button type="button" class="wos-guide-copy" data-copy>Copy</button>');
     expect(html).toContain('-w &quot;$(pbpaste)&quot;');
   });
+
+  it('puts each table in a wrapper that scrolls, so the table can take the full width', () => {
+    const html = renderGuide('| Key | Does |\n|---|---|\n| `e` | Done |\n\n| A |\n|---|\n| b |', 'x');
+    expect(html.match(/<div class="wos-guide-table"><table>/g)).toHaveLength(2);
+    expect(html.match(/<\/table><\/div>/g)).toHaveLength(2);
+  });
 });
 
 describe('search', () => {

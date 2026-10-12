@@ -28,8 +28,8 @@ Everything on this page lives in [Settings › Learning](/settings/learning).
 |---|---|---|---|
 | **Filing policy** | what goes to To file, what is drafted ahead, what is ready to approve, which to-dos to suggest | **Filing…** on an item, corrections, **Triage was right**, approving and discarding drafts, Done with nothing filed, suggested to-dos | **Run filing eval**, here |
 | **Triage attention** | whether a topic is Now, Today, Follow or nothing for you | **Correct triage** (`c`) and **Triage was right** (`y`) | **Run eval** in [Usage](/usage) |
-| **Settle on reply** | whether your reply settles what was asked, so the item closes by itself | **Undo**, or reopening from Done, on an item that closed on your reply; Done on an item your reply settled that the check left open | `npm run eval -- --purpose settle` |
-| **Looks finished** | whether others' messages settled what was asked of you | **Done** or **Not finished** on a Looks finished item | `npm run eval -- --purpose finish` |
+| **Settle on reply** | whether your reply settles what was asked, so the item closes by itself | **Undo**, or reopening from Done, on an item that closed on your reply; Done on an item your reply settled that the check left open | `npm run eval`, with `--purpose settle` ([how](#the-other-evals)) |
+| **Looks finished** | whether others' messages settled what was asked of you | **Done** or **Not finished** on a Looks finished item | `npm run eval`, with `--purpose finish` ([how](#the-other-evals)) |
 
 Each loop works the same way:
 
