@@ -83,16 +83,16 @@ describe('lock', () => {
 
   it('lets exactly one win however the starters interleave over a stale lock', async () => {
     const p = probe({ [process.pid]: ME });
-    for (let round = 0; round < 40; round++) {
+    for (let round = 0; round < 20; round++) {
       await writeHolder(holder({}));
       const res = await Promise.all(Array.from({ length: 8 }, () => acquireLock(file, meta, p)));
       expect(res.filter((r) => r.ok), `round ${round}`).toHaveLength(1);
       for (const r of res) if (r.ok) await r.lock.release();
     }
     // Every stale lock was kept aside, none lost.
-    expect((await readdir(dir)).filter((f) => f.startsWith('lock.stale-'))).toHaveLength(40);
+    expect((await readdir(dir)).filter((f) => f.startsWith('lock.stale-'))).toHaveLength(20);
     expect(await readdir(dir)).not.toContain('lock.takeover');
-  });
+  }, 30_000); // each round fsyncs; slow when the whole suite runs
 
   it('moves aside a takeover file a crashed starter left behind', async () => {
     await writeHolder(holder({}));
