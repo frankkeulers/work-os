@@ -118,7 +118,7 @@ export const JOURNEYS: Journey[] = [
   { id: 'J92', group: 'Cockpit', title: 'Proposals for the other loops', start: (c) => (c.applyFilingPolicy(), '/settings/learning') },
   { id: 'J98', group: 'Cockpit', title: 'Learning from To Dos', start: (c) => (c.applyFilingPolicy(), '/settings/learning') },
   // To Dos on the inbox (E15).
-  { id: 'J93', group: 'Cockpit', title: 'To Dos on the inbox', start: (c) => (c.seedTodos(), '/') },
+  { id: 'J99', group: 'Cockpit', title: 'To Dos on the inbox', start: (c) => (c.seedTodos(), '/') },
   { id: 'J94', group: 'Cockpit', title: 'Done on a To Do', start: (c) => (c.seedTodos(), '/') },
   { id: 'J95', group: 'Cockpit', title: 'Estimates on To Dos', start: (c) => (c.seedTodos(), '/') },
   { id: 'J96', group: 'Cockpit', title: 'Time for To Dos', start: (c) => (c.seedTodos(), '/') },

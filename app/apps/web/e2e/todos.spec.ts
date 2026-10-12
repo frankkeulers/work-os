@@ -30,7 +30,7 @@ const shoot = async (page: Page, el: ReturnType<Page['locator']>, name: string) 
 test.describe('wide window (cockpit)', () => {
   test.use({ viewport: { width: 1680, height: 1050 } });
 
-  test('J93 To Dos due today sit in Needs you, the rest in Later, and each opens its source (FR-16.2)', async ({ page }) => {
+  test('J99 To Dos due today sit in Needs you, the rest in Later, and each opens its source (FR-16.2)', async ({ page }) => {
     await withTodos(page);
     const needs = page.getByRole('region', { name: 'To do today' });
     await expect(needs.locator('[data-todo]')).toHaveCount(3);
@@ -52,7 +52,7 @@ test.describe('wide window (cockpit)', () => {
     await expect(page.locator('.item-panel')).toContainText('graduation gate checklist');
   });
 
-  test('J93 Done on a To Do ticks it in the Tasks note, asks how long it took, and Undo opens it again (FR-16.4, FR-16.5)', async ({ page }) => {
+  test('J94 Done on a To Do ticks it in the Tasks note, asks how long it took, and Undo opens it again (FR-16.4, FR-16.5)', async ({ page }) => {
     await withTodos(page);
     const needs = page.getByRole('region', { name: 'To do today' });
     const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
@@ -242,7 +242,7 @@ test.describe('wide window (cockpit)', () => {
 test.describe('list layout', () => {
   test.use({ viewport: { width: 1280, height: 1600 } });
 
-  test('J93 a To do group after Needs you: overdue, today, upcoming, then done today, folded (FR-16.2)', async ({ page }) => {
+  test('J99 a To do group after Needs you: overdue, today, upcoming, then done today, folded (FR-16.2)', async ({ page }) => {
     await withTodos(page);
     // The list opens on its first item: close the panel to see the whole group.
     await expect(page.locator('.item-panel')).toBeVisible();
