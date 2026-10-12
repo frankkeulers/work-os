@@ -552,7 +552,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
   const team = d.slackTeamId?.();
   const web = d.settings.editable.settings.slack.openLinksIn !== 'app' && team;
   const pieces = topic && topicPiecesView(id, [topic.anchor.item, ...topic.parts], (p, kind) => (web && p.source === 'slack' ? webClientUrl(web, p.id, kind) : undefined));
-  const acts = d.actions ? await d.actions.view(id) : { actions: actionsByItem(d).get(id) ?? [], drafts: {}, progress: {}, results: {} };
+  const acts = d.actions ? await d.actions.view(id) : { actions: actionsByItem(d).get(id) ?? [], drafts: {}, progress: {}, results: {}, additionalInfo: {} };
   const actions = acts.actions;
   const text = stored?.text;
   const summary = withOpenUrl(
@@ -594,6 +594,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
     drafts: acts.drafts,
     progress: acts.progress,
     results: acts.results,
+    additionalInfo: acts.additionalInfo,
     excludedPageIds: s.confluence.exclude.map((p) => p.id),
     closesOnReply: closesOnReply(s, it.source),
     dryRun: d.settings.settings?.dryRun ?? true,
@@ -607,7 +608,7 @@ export async function itemView(d: ViewDeps, requested: string): Promise<ItemView
   };
 }
 
-const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence';
+const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence' || p === 'draft_todo';
 
 /** Today and the last seven days from the usage log (FR-7.2), against the baseline. */
 export function usageView(d: ViewDeps): UsageView {

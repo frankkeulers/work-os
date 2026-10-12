@@ -52,6 +52,12 @@ move" becomes "the export work may move to after launch", and "<name> decided" b
 Products team decided". If the people check still blocks a draft, choose **Re-draft**, or edit the
 name out. The observations themselves belong in your vault.
 
+To give the draft something the thread lacks, such as more on the approach or the timeline, use
+**Draft with additional information…** in the menu beside the button (see
+[Drafting with additional information](inbox.md#drafting-with-additional-information)). Both the
+page pick and the draft read it. Names you give only help Claude tell who said what: the entry still
+names no one, and the people check reads the entry alone.
+
 The routing guidance (which business unit, which kind of fact goes where) is a file you can edit:
 see [Prompts and guidance](prompts.md).
 

@@ -1,4 +1,4 @@
-import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, RedraftBody, FilingFeedbackBody, ItemIds, LearningLoop, PROPOSAL_MIN_LABELS, STAGE_OF, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -212,11 +212,16 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
   app.post<{ Params: { id: string } }>('/api/items/:id/actions', async (req, reply) => {
     const id = item(req.params.id);
     const body = DraftRequest.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { type: "vault_note" | "confluence_entry" | "todo" }, { quiet } for a draft made ahead in a batch, and { steps } for a to-do’s lines or { suggested: true } for the to-do triage suggested.');
+    if (!body.success)
+      throw new HttpError(
+        'validation',
+        'Send { type: "vault_note" | "confluence_entry" | "todo" }, { quiet } for a draft made ahead in a batch, { additionalInfo } (up to 2000 characters) for what the drafter should take into account, and { steps } for a to-do’s lines or { suggested: true } for the to-do triage suggested.',
+      );
+    const { type, quiet, steps, suggested, additionalInfo } = body.data;
     return reply
       .code(201)
       .headers(noStore)
-      .send(await actions().request(id, body.data.type, { quiet: body.data.quiet, steps: body.data.steps, suggested: body.data.suggested }));
+      .send(await actions().request(id, type, { quiet, steps, suggested, additionalInfo }));
   });
   app.post<{ Params: { id: string } }>('/api/actions/:id/cancel', async (req, reply) => {
     await actions().cancel(req.params.id);
@@ -228,12 +233,14 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     await actions().edit(req.params.id, body.data.content, body.data.part);
     return reply.code(204).send();
   });
-  app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) =>
-    reply
+  app.post<{ Params: { id: string } }>('/api/actions/:id/redraft', async (req, reply) => {
+    const body = RedraftBody.safeParse(req.body ?? {});
+    if (!body.success) throw new HttpError('validation', 'Send nothing to keep the draft’s additional information, { additionalInfo } (up to 2000 characters) to replace it, or { additionalInfo: null } to drop it.');
+    return reply
       .code(201)
       .headers(noStore)
-      .send(await actions().redraft(req.params.id)),
-  );
+      .send(await actions().redraft(req.params.id, body.data));
+  });
   app.post<{ Params: { id: string } }>('/api/actions/:id/discard', async (req, reply) => {
     await actions().discard(req.params.id);
     return reply.code(204).send();

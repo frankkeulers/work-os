@@ -162,7 +162,7 @@ export function budgetsOf(
   for (const u of usage) {
     if (londonParts(u.at).dateKey !== today) continue;
     if (u.purpose === 'triage' || u.purpose === 'routing' || u.purpose === 'settle') triage += 1; // routing and settle checks count as triage
-    else if (u.purpose === 'draft_vault' || u.purpose === 'draft_confluence') drafts += 1;
+    else if (u.purpose === 'draft_vault' || u.purpose === 'draft_confluence' || u.purpose === 'draft_todo') drafts += 1; // a to-do with Frank's information is a model draft (FR-9.12)
     cost += u.costEquivalent;
   }
   const b = settings.budgets;

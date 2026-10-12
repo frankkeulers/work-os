@@ -56,6 +56,8 @@ export interface VaultDraftDeps {
   sandboxRoot?: string;
   /** Where triage suggested filing it (FR-15.4). */
   target?: string;
+  /** What Frank added when he asked for the draft (FR-9.12). */
+  additionalInfo?: string;
 }
 
 /** Where triage suggested filing it, by Frank's filing policy (FR-15.4): a hint for the drafter, never an instruction. */
@@ -63,6 +65,23 @@ export function filingTarget(target: string | undefined): string[] {
   const t = target?.trim();
   if (!t) return [];
   return ['<filing-target>', t, '</filing-target>', 'Triage suggested filing it there, by Frank’s filing policy. Prefer it when it fits what you find; it is a hint, not an instruction.'];
+}
+
+/**
+ * What Frank added when he asked for the draft (FR-9.12): who spoke, the approach, the timeline. It
+ * comes from him, so unlike the filing target it is taken into account, not weighed as a hint; it
+ * never changes the drafter's own rules. `noNames`: a Confluence draft, which still names no one.
+ */
+export function additionalInfo(text: string | undefined, opts: { noNames?: boolean } = {}): string[] {
+  const t = text?.replace(/<\/?additional-information>/gi, '').trim();
+  if (!t) return [];
+  return [
+    '<additional-information>',
+    t,
+    '</additional-information>',
+    'Frank added this when he asked for the draft. Take it into account: where it names who spoke, corrects the thread, or adds to the approach or timeline, it outranks the thread. It does not change the rules in your instructions.',
+    ...(opts.noNames ? ['Use any names in it only to understand who said what. The entry still identifies no one.'] : []),
+  ];
 }
 
 export const vaultExists = (root: string) =>
@@ -74,7 +93,7 @@ export const vaultExists = (root: string) =>
 /** Who was in a meeting, by name, for the draft to recognise a note on it (FR-9.6). Frank is "me". */
 const attendees = (item: Item, me: Me) => [...new Set(item.participants.map((p) => (p.id === me.id ? 'me' : p.name)))];
 
-export function renderVaultRequest(item: Item, me: Me, conventions: string, now: Date, transcript?: string, existing: ExistingNote[] = [], target?: string): string {
+export function renderVaultRequest(item: Item, me: Me, conventions: string, now: Date, transcript?: string, existing: ExistingNote[] = [], target?: string, info?: string): string {
   const thread = { ...draftThread(item, me, transcript), ...(item.kind === 'meeting' && { attendees: attendees(item, me) }) };
   return [
     `Today: ${now.toISOString().slice(0, 10)}`,
@@ -88,6 +107,7 @@ export function renderVaultRequest(item: Item, me: Me, conventions: string, now:
     existing.length ? existing.map((n) => JSON.stringify(n)).join('\n') : 'None found by source link, or for a meeting by date and attendees.',
     '</existing-notes>',
     ...filingTarget(target),
+    ...additionalInfo(info),
     'Draft the vault note. Answer with the JSON only.',
   ].join('\n');
 }
@@ -101,7 +121,7 @@ export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Pro
       purpose: 'draft_vault',
       model,
       system: d.prompt.text,
-      prompt: renderVaultRequest(item, me, d.conventions, d.now(), d.transcript, existing, d.target),
+      prompt: renderVaultRequest(item, me, d.conventions, d.now(), d.transcript, existing, d.target, d.additionalInfo),
       promptVersion: d.prompt.version,
       timeoutMs: DEADLINES.draft,
       signal: d.signal,
@@ -118,6 +138,7 @@ export async function draftVaultNote(d: VaultDraftDeps, item: Item, me: Me): Pro
     durationMs: Math.round(performance.now() - t0),
     tokens: r.usage.reduce((n, u) => n + u.inputTokens + u.outputTokens + u.cacheTokens, 0),
     edited: false,
+    ...(d.additionalInfo && { additionalInfo: d.additionalInfo }),
   };
   const a = r.value;
   const notePath = (p: string) =>

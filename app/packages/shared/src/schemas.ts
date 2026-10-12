@@ -171,7 +171,7 @@ export const FailureReason = z.enum(['conflict', 'people_check', 'allow_list', '
 export type FailureReason = z.infer<typeof FailureReason>;
 
 /** The prompt and guidance files under config/ that Settings can edit (FR-1.7). */
-export const PromptFileId = z.enum(['triage', 'filing-policy', 'tune-policy', 'topics', 'settle', 'finish', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'vault-conventions', 'confluence-routing']);
+export const PromptFileId = z.enum(['triage', 'filing-policy', 'tune-policy', 'topics', 'settle', 'finish', 'draft-vault', 'pick-confluence', 'draft-confluence', 'people-check', 'draft-todo', 'vault-conventions', 'confluence-routing']);
 export type PromptFileId = z.infer<typeof PromptFileId>;
 
 export const ActionTarget = z.object({
@@ -201,12 +201,18 @@ export const Action = z.object({
 });
 export type Action = z.infer<typeof Action>;
 
+/** What Frank adds when he asks for a draft: who spoke, the approach, the timeline (FR-9.12). */
+export const ADDITIONAL_INFO_MAX = 2000;
+export const AdditionalInfo = z.string().trim().min(1).max(ADDITIONAL_INFO_MAX);
+
 const DraftMeta = z.object({
   model: z.string(),
   promptVersion: z.string(),
   durationMs: z.number().int().nonnegative(),
   tokens: z.number().int().nonnegative(),
   edited: z.boolean(),
+  /** What Frank added when he asked for it, which the drafter took into account (FR-9.12). */
+  additionalInfo: z.string().optional(),
 });
 
 /** A note or section that may already hold what a draft files (FR-9.6, FR-10.7). */
@@ -571,7 +577,7 @@ export function pollIntervalMinutes(settings: Pick<Settings, 'schedule' | 'sourc
 
 // ---------- Usage (CL-5) and eval (FR-6.x) ----------
 
-export const UsagePurpose = z.enum(['triage', 'draft_vault', 'confluence_pick', 'draft_confluence', 'people_check', 'eval', 'startup_check', 'fetch', 'routing', 'settle', 'tune']); // tune: a proposed filing policy (FR-15.9); fetch: connector relay (CL-9); routing: topics; confluence_pick: the page picker before a Confluence draft; settle: whether Frank's reply settles an item (cockpit CK-2.2)
+export const UsagePurpose = z.enum(['triage', 'draft_vault', 'confluence_pick', 'draft_confluence', 'people_check', 'draft_todo', 'eval', 'startup_check', 'fetch', 'routing', 'settle', 'tune']); // tune: a proposed filing policy (FR-15.9); fetch: connector relay (CL-9); routing: topics; confluence_pick: the page picker before a Confluence draft; draft_todo: a to-do drafted with Frank's additional information (FR-9.12); settle: whether Frank's reply settles an item (cockpit CK-2.2)
 export type UsagePurpose = z.infer<typeof UsagePurpose>;
 
 export const UsageRecord = z.object({

@@ -18,6 +18,7 @@ export const PURPOSE_LABEL: Record<UsagePurpose, string> = {
   confluence_pick: 'Pick Confluence page',
   draft_confluence: 'Draft Confluence entry',
   people_check: 'People check',
+  draft_todo: 'Draft to-do',
   eval: 'Eval run',
   startup_check: 'Startup check',
   fetch: 'Connector fetch',

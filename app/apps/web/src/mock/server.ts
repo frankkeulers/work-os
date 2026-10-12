@@ -1,4 +1,5 @@
 import {
+  AdditionalInfo,
   filingSettings,
   Rules,
   SETTLE_MAX_ATTEMPTS,
@@ -146,10 +147,18 @@ const STAGE_MS = 1500;
 const DRAFT_STAGES: Record<ActionType, string[]> = {
   vault_note: ['Reading the thread', 'Finding related notes in the vault', 'Drafting the note'],
   confluence_entry: ['Reading the thread', 'Reading the Confluence catalogue', 'Picking the page', 'Drafting the entry', 'People check (Haiku)'],
-  todo: ['Writing the to-do'],
+  // Only a to-do with Frank's information is ever drafting (FR-9.12): a plain one is ready at once.
+  todo: ['Reading the thread', 'Writing the to-do (Haiku)'],
 };
 
 const ACTIVE: Action['status'][] = ['drafting', 'ready', 'approved', 'executing'];
+
+/** As the server's AdditionalInfo (FR-9.12): trimmed, not empty, at most 2000 characters. */
+function checkInfo(text: string): string {
+  const r = AdditionalInfo.safeParse(text);
+  if (!r.success) throw new ApiError('validation', 'Send the additional information as text, up to 2000 characters.');
+  return r.data;
+}
 const RANK = { none: 0, follow: 1, today: 2, now: 3 } as const;
 
 /** The Microsoft 365 connector's ID on the mock's claude.ai. */
@@ -705,6 +714,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const drafts = Object.fromEntries(actions.filter((a) => this.s.drafts[a.id]).map((a) => [a.id, this.s.drafts[a.id]]));
     const progress = Object.fromEntries(actions.filter((a) => this.progress[a.id]).map((a) => [a.id, this.progress[a.id]]));
     const results = Object.fromEntries(actions.filter((a) => this.s.results[a.id]).map((a) => [a.id, this.s.results[a.id]]));
+    const additionalInfo = Object.fromEntries(actions.filter((a) => this.s.additionalInfo?.[a.id]).map((a) => [a.id, this.s.additionalInfo![a.id]]));
     return {
       summary,
       item: this.withCalendarShown(structuredClone(topicItem(rec.item, parts).item)),
@@ -716,6 +726,7 @@ export class MockServer implements WorkOsApi, MockControls {
       drafts: structuredClone(drafts),
       progress: { ...progress },
       results,
+      additionalInfo,
       excludedPageIds: this.s.settings.confluence.exclude.map((p) => p.id),
       closesOnReply: closesOnReply(this.s.settings, rec.item.source),
       dryRun: this.s.settings.dryRun,
@@ -733,7 +744,7 @@ export class MockServer implements WorkOsApi, MockControls {
     const todayKey = londonParts(now).dateKey;
     const today = this.s.usage.filter((u) => londonParts(u.at).dateKey === todayKey);
     const budgets = this.budgets();
-    const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence';
+    const isDraft = (p: UsagePurpose) => p === 'draft_vault' || p === 'draft_confluence' || p === 'draft_todo';
 
     const days: UsageView['days'] = [];
     for (let i = 6; i >= 0; i--) {
@@ -1231,11 +1242,22 @@ export class MockServer implements WorkOsApi, MockControls {
     return 'normal';
   }
 
-  async requestDraft(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean } = {}): Promise<Action> {
+  async requestDraft(itemId: string, type: ActionType, opts: { quiet?: boolean; steps?: string[]; suggested?: boolean; additionalInfo?: string } = {}): Promise<Action> {
     await this.gate(COMMAND_MS);
     const rec = this.rec(itemId);
     if ((opts.steps || opts.suggested) && type !== 'todo') throw new ApiError('validation', 'Only a to-do takes steps.');
+    const info = opts.additionalInfo === undefined ? undefined : checkInfo(opts.additionalInfo);
+    if (info && (opts.steps || opts.suggested)) throw new ApiError('validation', 'Additional information goes with a draft from the thread, not with given steps.');
     const existing = this.actionsFor(itemId).find((a) => a.type === type && ACTIVE.includes(a.status));
+    // As the server (FR-9.12): information replaces a ready draft, and waits for one being made.
+    if (info) {
+      if (existing?.status === 'drafting') throw new ApiError('conflict', 'A draft is already being made. Cancel it, or re-draft with your information once it’s ready.');
+      if (existing && existing.status !== 'ready') throw new ApiError('conflict', 'This one is already being written.');
+      if (this.budgets().drafts.hit) throw new ApiError('budget', 'Drafts budget reached for today. Drafting resumes tomorrow, or raise the budget in Settings.');
+      if (existing) this.event('action.discarded', { reason: 'redraft' }, { itemId, actionId: existing.id });
+      const outcome = this.takeOutcome((o) => DRAFT_TIME_OUTCOMES.includes(o) || (type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
+      return structuredClone(this.createAction(rec, type, outcome, existing?.id, opts.quiet, info));
+    }
     const from = opts.steps ?? (opts.suggested ? 'suggested' : undefined);
     // As the server: picked steps, or the suggested to-do, replace a to-do still waiting for review.
     if (existing && type === 'todo' && from && existing.status === 'ready') {
@@ -1273,9 +1295,10 @@ export class MockServer implements WorkOsApi, MockControls {
     return this.s.actions[id];
   }
 
-  private createAction(rec: ItemRec, type: ActionType, outcome: DraftOutcome, supersedes?: string, quiet?: boolean): Action {
-    if (type === 'todo') return this.createTodo(rec, undefined, supersedes);
-    const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : 'c'}${this.s.seq + 1}`;
+  private createAction(rec: ItemRec, type: ActionType, outcome: DraftOutcome, supersedes?: string, quiet?: boolean, info?: string): Action {
+    if (type === 'todo' && !info) return this.createTodo(rec, undefined, supersedes);
+    const id = `act-${rec.key}-${type === 'vault_note' ? 'v' : type === 'confluence_entry' ? 'c' : 't'}${this.s.seq + 1}`;
+    if (info) this.s.additionalInfo = { ...this.s.additionalInfo, [id]: info };
     this.event('action.requested', { type, revision: rec.item.revision, ...(supersedes && { supersedes }), ...(quiet && { quiet: true as const }) }, { itemId: rec.item.id, actionId: id });
     const action = this.s.actions[id];
     this.startDrafting(action, outcome);
@@ -1316,9 +1339,32 @@ export class MockServer implements WorkOsApi, MockControls {
     const rec = this.s.items[action.itemId];
     if (!rec) return;
     const now = this.iso();
-    const model = action.type === 'vault_note' ? this.s.settings.models.draftVault : this.s.settings.models.draftConfluence;
-    const purpose: UsagePurpose = action.type === 'vault_note' ? 'draft_vault' : 'draft_confluence';
+    const model = action.type === 'todo' ? 'haiku-5.5' : action.type === 'vault_note' ? this.s.settings.models.draftVault : this.s.settings.models.draftConfluence;
+    const purpose: UsagePurpose = action.type === 'todo' ? 'draft_todo' : action.type === 'vault_note' ? 'draft_vault' : 'draft_confluence';
+    const info = this.s.additionalInfo?.[actionId];
     let ready = false;
+
+    // A to-do with Frank's information (FR-9.12): the open steps, and one more from what he added.
+    if (action.type === 'todo') {
+      const steps = [...todoSteps(rec.decision, rec.asksDone), ...(info ? [{ step: `From Frank: ${info.split('\n')[0]}` }] : [])];
+      const draft: Draft = {
+        kind: 'todo',
+        path: this.s.settings.tasksNote,
+        content: todoContent(steps.slice(0, 20), { title: rec.item.title, permalink: rec.item.permalink }),
+        model,
+        promptVersion: 'draft-todo v1',
+        durationMs: 2400,
+        tokens: 3100,
+        edited: false,
+        ...(info && { additionalInfo: info }),
+      };
+      this.recordUsage(purpose, model, 2900, 200, [rec.item.id], draft.promptVersion, draft.durationMs);
+      this.s.drafts[actionId] = draft;
+      this.event('action.drafted', { type: 'todo', revision: rec.item.revision, draftRef: action.draftRef, tokens: draft.tokens, target: draftTarget(draft) }, { itemId: rec.item.id, actionId });
+      this.emit({ topic: 'item', id: rec.item.id }, { topic: 'inbox' }, { topic: 'usage' });
+      this.emit({ topic: 'draft_ready', itemId: rec.item.id, actionId, type: 'todo', title: rec.item.title });
+      return;
+    }
 
     if (outcome === 'model_error') {
       this.recordUsage(purpose, model, 21000, 900, [rec.item.id], 'draft v2', 44000);
@@ -1333,7 +1379,8 @@ export class MockServer implements WorkOsApi, MockControls {
     } else {
       const attempt = this.actionsFor(rec.item.id).filter((a) => a.type === action.type).length;
       const built = buildDraft(rec, action.type, this.s.settings, now, { attempt, forceOffList: outcome === 'allow_list' });
-      const draft = outcome === 'already_filed' ? asFiled(built) : outcome === 'possible_duplicate' ? withPossibleDuplicate(built) : built;
+      const shaped = outcome === 'already_filed' ? asFiled(built) : outcome === 'possible_duplicate' ? withPossibleDuplicate(built) : built;
+      const draft: Draft = info ? { ...shaped, additionalInfo: info } : shaped;
       if (action.type === 'confluence_entry') this.recordUsage('confluence_pick', model, 9000, 90, [rec.item.id], 'pick-confluence v1', 9000);
       this.recordUsage(purpose, model, Math.round(draft.tokens * 0.93), Math.round(draft.tokens * 0.07), [rec.item.id], draft.promptVersion, draft.durationMs);
       if (action.type === 'confluence_entry') this.recordUsage('people_check', 'haiku-5.5', 2100, 60, [rec.item.id], 'people-check v3', 1900);
@@ -1388,10 +1435,12 @@ export class MockServer implements WorkOsApi, MockControls {
     this.emit({ topic: 'item', id: a.itemId });
   }
 
-  async redraft(actionId: string): Promise<Action> {
+  /** As the server (FR-9.12): keeps the information unless `additionalInfo` replaces it, or null drops it. */
+  async redraft(actionId: string, opts: { additionalInfo?: string | null } = {}): Promise<Action> {
     await this.gate(COMMAND_MS);
     const a = this.action(actionId);
-    if (this.budgets().drafts.hit && a.type !== 'todo') throw new ApiError('budget', 'Drafts budget reached for today.');
+    const info = opts.additionalInfo === undefined ? this.s.additionalInfo?.[actionId] : opts.additionalInfo === null ? undefined : checkInfo(opts.additionalInfo);
+    if (this.budgets().drafts.hit && (a.type !== 'todo' || info)) throw new ApiError('budget', 'Drafts budget reached for today.');
     if (ACTIVE.includes(a.status) || a.status === 'failed') {
       this.clearDraftTimers(actionId);
       if (a.status !== 'failed') {
@@ -1400,7 +1449,7 @@ export class MockServer implements WorkOsApi, MockControls {
     }
     const rec = this.rec(a.itemId);
     const outcome = this.takeOutcome((o) => DRAFT_TIME_OUTCOMES.includes(o) || (a.type === 'confluence_entry' && (o === 'people_check' || o === 'allow_list' || o === 'no_fit')));
-    return structuredClone(this.createAction(rec, a.type, outcome, a.id));
+    return structuredClone(this.createAction(rec, a.type, outcome, a.id, undefined, info));
   }
 
   async discardAction(actionId: string) {

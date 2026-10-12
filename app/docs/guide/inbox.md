@@ -283,6 +283,24 @@ those stay yours. A draft you discard isn't drafted ahead again. What was alread
 you opened Work OS waits until you land on it. Where triage suggested filing it goes to the drafter
 as a hint.
 
+### Drafting with additional information
+
+Every draft button has a menu beside it (the arrow). **Draft with additional information…** (for a
+to-do, **Add with additional information…**) opens a box for what you know that the thread doesn't:
+
+- who spoke, when a Wispr Flow note says "Speaker 1" and "Speaker 2";
+- more on the suggested approach or timeline, or a correction to the thread.
+
+Up to 2,000 characters. The drafter takes it into account and, where it disagrees with the thread,
+goes with you. It never changes the drafter's own rules: a [Confluence entry](confluence.md#drafting)
+still names no one, so names there only help it tell who said what.
+
+The draft shows **Drafted with your information**; open it to see the text. **Re-draft** keeps the
+text, and **Re-draft with additional information…** in the menu beside it opens the box with it, to
+change or clear. Asking again with information replaces a draft that is waiting for review; one still
+being drafted has to finish, or be cancelled, first. The text stays with the draft and is removed
+with it; it is never in the event log.
+
 ### Ready to approve
 
 Some filings are routine: a meeting's vault note, say. When your filing policy marks a filing
