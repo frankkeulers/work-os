@@ -42,14 +42,31 @@ describe('inbox commands', () => {
   });
 
   it('takes filing feedback: Not for filing corrects the item out of To file, the rest only count (FR-15.7)', async () => {
-    server.applyFilingPolicy();
+    server.applyFilingPolicy(); // with 24 labelled items already
     expect(await lane('f1')).toBe('file');
-    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_ready', type: 'vault_note' }))).toEqual({ labelCount: 1 });
+    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_ready', type: 'vault_note' }))).toEqual({ labelCount: 25 });
     expect(await lane('f1')).toBe('file');
-    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_for_filing' }))).toEqual({ labelCount: 2 });
+    expect(await settle(server.filingFeedback(id('f1'), { signal: 'not_for_filing' }))).toEqual({ labelCount: 26 });
     expect(await lane('f1')).not.toBe('file');
     const err = (await settle(server.filingFeedback(id('f1'), { signal: 'no_predraft' }).catch((e) => e))) as ApiError;
     expect(err).toMatchObject({ status: 409, message: 'This item has nothing to file.' });
+  });
+
+  it('proposes a better filing policy once there are labels, and applies it as a prompt edit (FR-15.9)', async () => {
+    const tooFew = (await settle(server.proposePolicy().catch((e) => e))) as ApiError;
+    expect(tooFew).toMatchObject({ status: 409, message: 'A proposal needs 10 labelled items to learn from and to test on; there are 0.' });
+    server.applyFilingPolicy();
+    await settle(server.proposePolicy());
+    await run(3000);
+    const [p] = await settle(server.getProposals());
+    expect(p).toMatchObject({ status: 'open', promptId: 'filing-policy', better: true });
+    expect((await settle(server.getSettings())).learning?.filing).toMatchObject({ proposing: false, newLabels: 0, proposal: { id: p.id } });
+    expect((await settle(server.getAttention())).entries.find((e) => e.kind === 'policy_proposed')).toMatchObject({ to: '/settings/prompts#filing-policy' });
+    const saved = await settle(server.applyProposal(p.id));
+    expect(saved.version).toMatch(/^filing-policy v2#/);
+    expect(server.getEvents()[0]).toMatchObject({ type: 'prompt.changed', data: { id: 'filing-policy', proposalId: p.id } });
+    const again = (await settle(server.dismissProposal(p.id).catch((e) => e))) as ApiError;
+    expect(again.status).toBe(409);
   });
 
   it('drafts Confluence for a thread that mentions people (FR-10.1, amended)', async () => {

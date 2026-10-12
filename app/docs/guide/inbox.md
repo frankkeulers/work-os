@@ -274,7 +274,7 @@ Some filings are routine: a meeting's vault note, say. When your filing policy m
 so (**Ready · R1**) and where it goes. Its draft has started ahead, so **Approve ready** opens each
 one in turn, on that filing only: press `⌘↵` to approve it and move on, or `→` to skip. Nothing is
 written until you approve it. The rest of To file follows under **Other filings**. You can turn the
-group off in Settings › Learning.
+group off in [Settings › Learning](/settings/learning).
 
 An item in To file is done once everything triage suggested for it is written: approve its last
 filing and it closes by itself, with **Undo** in the toast. An item with something left to do, such
@@ -393,7 +393,8 @@ whether it was right. A correction that turns a filing on or off, and **Triage w
 as your word. Where you've said something yourself, it wins over what your actions suggest.
 
 These are kept, with the thread, as filing labels. Nothing changes the policy on its own: the
-filing eval scores the policy against them, and a proposed change waits for you to apply it.
+filing eval scores the policy against them, and a proposed change waits for you to apply it (see
+[Learning](/guide/learning)).
 Run the filing eval with `npm run eval -- --purpose filing` while Work OS is stopped. It reports
 precision and recall for To file, pre-draft, ready and to-dos, from your word and from your
 actions separately; a field's score counts once it has 30 labels.

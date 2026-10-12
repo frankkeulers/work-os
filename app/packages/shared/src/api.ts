@@ -2,6 +2,7 @@ import type { CategoryTag } from './categories';
 import type { DepId, DepState, PollReason } from './events';
 import type { EffectiveTriage, ItemStatus, Lane, TriageState } from './lanes';
 import type { FilingPlans } from './policy';
+import type { LearningView, PolicyProposal } from './learning';
 import type { FilingFeedbackBody } from './requests';
 import type { DoneBy } from './projection/state';
 import type {
@@ -359,6 +360,8 @@ export interface SettingsView {
   labelCount: number;
   correctionCount: number;
   vaultConventionsLoaded: boolean;
+  /** Settings › Learning (FR-15.10). */
+  learning?: LearningView;
 }
 
 /** PUT /api/settings: the files as saved, with any change made meanwhile kept (FR-1.5). */
@@ -481,7 +484,8 @@ export type AttentionKind =
   | 'looks_finished' // others' messages settled what it asked of Frank (CK-2.10)
   | 'reply_unsettled' // Frank replied, and the check found asks still open (CK-2.3)
   | 'eval_done' // a triage eval finished (FR-6.1)
-  | 'guidance_changed'; // a guidance file's sources changed since it was distilled (FR-1.7)
+  | 'guidance_changed' // a guidance file's sources changed since it was distilled (FR-1.7)
+  | 'policy_proposed'; // a proposed filing policy waits for Frank (FR-15.9)
 
 export interface AttentionEntry {
   /** Names this occurrence: what dismissing remembers, so a new one shows again. */
@@ -638,6 +642,12 @@ export interface WorkOsApi {
   runEval(): Promise<void>;
   /** E14 (FR-15.8): runs the filing eval in the background; Settings › Learning says when it is done. */
   runFilingEval(): Promise<void>;
+  /** E14 (FR-15.9): proposals, newest first; starting a run; applying or dismissing one. */
+  getProposals(): Promise<PolicyProposal[]>;
+  proposePolicy(): Promise<void>;
+  /** Saves the proposed text as the policy file; refuses when the file changed since the proposal. */
+  applyProposal(id: string): Promise<PromptFileView>;
+  dismissProposal(id: string): Promise<void>;
   rebuildState(): Promise<{ events: number }>;
   /** `base`: the files the form had when the change was made; only what changed from it is applied. */
   saveSettings(settings: Settings, rules: Rule[], base?: { settings: Settings; rules: Rule[] }): Promise<SettingsSaved>;

@@ -126,7 +126,7 @@ export const EventPayloads = {
   'source.failed': z.object({ source: SourceId, error: z.string().min(1), retryAfterSeconds: z.number().nonnegative().optional() }),
   'settings.changed': z.object({ dryRun: z.boolean() }),
   'rules.changed': z.object({ count: z.number().int().nonnegative() }),
-  'prompt.changed': z.object({ id: PromptFileId, version: z.string().min(1), reset: z.boolean() }),
+  'prompt.changed': z.object({ id: PromptFileId, version: z.string().min(1), reset: z.boolean(), proposalId: z.string().min(1).optional() }), // proposalId: applied from a proposal (FR-15.9)
   'system.started': z.object({ version: z.string().min(1), instance: z.enum(['prod', 'dev']) }),
   'system.stopped': z.object({ reason: z.string().min(1) }),
   'system.woke': z.object({ sleptSeconds: z.number().nonnegative() }),

@@ -34,6 +34,7 @@ const KIND: Record<AttentionKind, { icon: IconName; tone: string }> = {
   reply_unsettled: { icon: 'dm', tone: 'bg-amber-wash text-amber-fg' },
   eval_done: { icon: 'sparkle', tone: 'bg-bg text-ink-2' },
   guidance_changed: { icon: 'book', tone: 'bg-bg text-ink-2' },
+  policy_proposed: { icon: 'sparkle', tone: 'bg-teal-wash text-green-fg' },
 };
 
 

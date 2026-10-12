@@ -18,8 +18,8 @@ import { estimateTokens, packBatches, threadTokens } from './truncate';
 
 /** What the policy said for one labelled item, after code's clamps. */
 export interface FilingPrediction {
-  confluence: Record<FilingField, boolean>;
-  vault: Record<FilingField, boolean>;
+  confluence: Record<FilingField, boolean> & { rule?: string };
+  vault: Record<FilingField, boolean> & { rule?: string };
   todo: boolean;
 }
 
@@ -105,7 +105,7 @@ export async function predictFiling(d: FilingEvalDeps, labels: readonly MergedFi
           failed++;
           continue;
         }
-        const flags = (f: ReturnType<typeof clampFiling>) => ({ toFile: f.suggested, predraft: !!f.predraft, ready: !!f.ready });
+        const flags = (f: ReturnType<typeof clampFiling>) => ({ toFile: f.suggested, predraft: !!f.predraft, ready: !!f.ready, ...(f.rule && { rule: f.rule }) });
         rows.push({ label: l, predicted: { confluence: flags(clampFiling(a.confluence)), vault: flags(clampFiling(a.vault)), todo: !!clampTodo(a.todo, a.attention, a.next) } });
       }
     } catch (err) {

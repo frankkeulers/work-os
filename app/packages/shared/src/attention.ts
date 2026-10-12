@@ -1,5 +1,6 @@
 import type { AttentionEntry, AttentionView, AttentionWork, BudgetState, DraftProgress, HealthView, ItemSummary } from './api';
 import type { DepId } from './events';
+import type { PolicyProposal } from './learning';
 import type { ActionState } from './projection/state';
 import { currentAction } from './projection/views';
 import type { ActionType, EvalReport, FailureReason, PromptFileId } from './schemas';
@@ -35,6 +36,8 @@ export interface AttentionInput {
   budgets: Pick<BudgetState, 'drafts'>;
   lastEval?: Pick<EvalReport, 'id' | 'at' | 'labelCount'>;
   guidance: readonly GuidanceChange[];
+  /** Proposed policies waiting for Frank (FR-15.9). */
+  proposals?: readonly Pick<PolicyProposal, 'id' | 'at' | 'promptId' | 'better'>[];
   dismissed: Record<string, string>;
 }
 
@@ -214,6 +217,20 @@ export function buildAttention(input: AttentionInput): AttentionView {
       subject: g.label,
       detail: `Changed since it was distilled: ${g.changed.join(', ')}.`,
       to: `/settings/prompts#${g.id}`,
+      cta: 'Review',
+      dismissible: true,
+    });
+  }
+
+  for (const p of input.proposals ?? []) {
+    entries.push({
+      key: `policy_proposed:${p.id}`,
+      kind: 'policy_proposed',
+      at: p.at,
+      title: 'A filing policy change is proposed',
+      subject: 'Filing policy',
+      detail: p.better ? 'It scores better on labels it hasn’t seen.' : 'It scores no better on labels it hasn’t seen.',
+      to: `/settings/prompts#${p.promptId}`,
       cta: 'Review',
       dismissible: true,
     });

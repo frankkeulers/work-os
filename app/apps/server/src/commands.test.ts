@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import type { Action, ApiErrorBody, AttentionView, EvalReport, FiledView, FilingEvalReport, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
+import type { Action, ApiErrorBody, AttentionView, EvalReport, FiledView, FilingEvalReport, PolicyProposal, PromptFileView, HealthView, InboxView, ItemView, SettingsView, UsageView } from '@work-os/shared';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fakeClaude, type FakeClaude } from './claude/fakeClaude';
 import { CONFLUENCE_TOKEN_ACCOUNT, memoryKeychain, SLACK_TOKEN_ACCOUNT } from './config/keychain';
@@ -1307,6 +1307,84 @@ describe('filing eval (FR-15.8)', () => {
     expect((await readdir(join(dir, 'logs'))).filter((f) => f.startsWith('filing-eval-'))).toHaveLength(1);
     // The triage eval's reports are its own.
     expect((await call<EvalReport[]>('GET', '/api/evals')).body).toEqual([]);
+  });
+});
+
+describe('policy proposals (FR-15.9)', () => {
+  const POLICY = '/api/prompts/filing-policy';
+  // Twelve labelled items the current policy gets wrong: launch talk it files to Confluence only,
+  // labelled as worth a vault note too.
+  const seed = async (n = 12) => {
+    for (let i = 0; i < n; i++) {
+      const id = `slack:C09SYN:${1791000000 + i}.000100`;
+      await res.filingLabels.append({
+        at: new Date(START).toISOString(),
+        origin: 'explicit',
+        signal: 'corrected',
+        itemId: id,
+        itemRevision: 1,
+        source: 'slack',
+        label: { vault: { toFile: true } },
+        thread: { id, kind: 'thread', title: '#synthetic', messages: [{ author: 'Sam', at: new Date(START).toISOString(), text: `Launch plan number ${i} for the synthetic product` }], omitted: 0 },
+      });
+    }
+  };
+  const proposals = async () => (await call<PolicyProposal[]>('GET', '/api/proposals')).body;
+  const run = async () => {
+    expect((await call('POST', '/api/learning/filing/propose')).status).toBe(202);
+    await res.proposing.settled();
+    return (await proposals())[0];
+  };
+
+  it('needs ten labelled items', async () => {
+    await seed(9);
+    const r = await call<ApiErrorBody>('POST', '/api/learning/filing/propose');
+    expect(r.status).toBe(409);
+    expect(r.body.message).toBe('A proposal needs 10 labelled items to learn from and to test on; there are 9.');
+  });
+
+  it('proposes a revision scored on held-out labels; Apply saves it through the prompt path and records the proposal', async () => {
+    await seed();
+    const p = await run();
+    expect(p).toMatchObject({ status: 'open', loop: 'filing', promptId: 'filing-policy', train: expect.any(Number), heldOut: expect.any(Number), model: 'opus-5.5' });
+    expect(p.train + p.heldOut).toBe(12);
+    expect(p.text).toMatch(/^<!-- prompt: filing-policy v2 -->/);
+    expect(p.diff?.filter((d) => d.op === 'add').map((d) => d.text)).toContain('- [R9] A decision on a named product, stated as settled by its owner: its Confluence entry.');
+    expect(p.scores?.before.toFile).toBeDefined();
+    expect(claude.calls.at(-3)!.prompt).toMatch(/^<policy>\n<!-- prompt: filing-policy v1 -->/);
+    // Learning shows it, and the bell offers it.
+    const learning = (await call<SettingsView>('GET', '/api/settings')).body.learning!.filing;
+    expect(learning).toMatchObject({ labels: { items: 12, explicit: 12, implicit: 0 }, newLabels: 0, proposing: false, proposal: { id: p.id, status: 'open' } });
+    const bell = (await call<AttentionView>('GET', '/api/attention')).body.entries.find((e) => e.kind === 'policy_proposed');
+    expect(bell).toMatchObject({ key: `policy_proposed:${p.id}`, to: '/settings/prompts#filing-policy', cta: 'Review' });
+
+    const seen: string[] = [];
+    res.store.subscribe((es) => seen.push(...es.filter((e) => e.type === 'prompt.changed').map((e) => JSON.stringify(e.data))));
+    const applied = await call<PromptFileView>('POST', `/api/proposals/${p.id}/apply`);
+    expect(applied.status).toBe(200);
+    expect(applied.body.version).toMatch(/^filing-policy v2#/);
+    expect(await readFile(join(dir, 'config/prompts/filing-policy.md'), 'utf8')).toBe(`${p.text}\n`);
+    expect(seen.map((s) => JSON.parse(s))).toEqual([{ id: 'filing-policy', version: applied.body.version, reset: false, proposalId: p.id }]);
+    expect((await proposals())[0]).toMatchObject({ status: 'applied', appliedVersion: applied.body.version });
+    expect((await call<AttentionView>('GET', '/api/attention')).body.entries.find((e) => e.kind === 'policy_proposed')).toBeUndefined();
+    // Once applied, it is no longer open.
+    expect((await call('POST', `/api/proposals/${p.id}/apply`)).status).toBe(409);
+    expect((await call('POST', `/api/proposals/${p.id}/dismiss`)).status).toBe(409);
+    expect((await call('POST', '/api/proposals/proposal-nope/apply')).status).toBe(404);
+  });
+
+  it('refuses to apply over a policy edited since, and Dismiss leaves the policy alone', async () => {
+    await seed();
+    const p = await run();
+    const current = (await call<PromptFileView[]>('GET', '/api/prompts')).body.find((f) => f.id === 'filing-policy')!;
+    expect((await call('PUT', POLICY, { text: `${current.text}\n- [T3] Mine.`, baseVersion: current.version })).status).toBe(200);
+    const r = await call<ApiErrorBody>('POST', `/api/proposals/${p.id}/apply`);
+    expect(r.status).toBe(409);
+    expect(r.body.message).toMatch(/^Filing policy changed since this was proposed \(now filing-policy v1#[0-9a-f]{8}\)\. Propose again from the policy as it is now\.$/);
+    expect(await readFile(join(dir, 'config/prompts/filing-policy.md'), 'utf8')).toContain('[T3] Mine.');
+    expect((await call('POST', `/api/proposals/${p.id}/dismiss`)).status).toBe(204);
+    expect((await proposals())[0]).toMatchObject({ status: 'dismissed' });
+    expect(await readFile(join(dir, 'config/prompts/filing-policy.md'), 'utf8')).toContain('[T3] Mine.');
   });
 });
 

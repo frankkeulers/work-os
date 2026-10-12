@@ -130,11 +130,11 @@ test('J90 the Filing… menu: feedback for the policy, and Not for filing takes 
   await page.evaluate(() => (document.documentElement.dataset.theme = 'light'));
 
   await menu.getByRole('group', { name: 'Vault note' }).getByRole('menuitem', { name: 'Shouldn’t be ready to approve' }).click();
-  await expect(page.getByText(/Noted: not ready to approve · filing labels now 1/)).toBeVisible();
+  await expect(page.getByText(/Noted: not ready to approve · filing labels now 25/)).toBeVisible();
   await expect(row(page, F1)).toContainText('Ready · R1'); // feedback teaches the policy; the item stays put
 
   await trigger.click();
   await page.getByRole('menu', { name: 'Filing feedback' }).getByRole('menuitem', { name: 'Not for filing' }).click();
-  await expect(page.getByText(/Taken out of To file · filing labels now 2/)).toBeVisible();
+  await expect(page.getByText(/Taken out of To file · filing labels now 26/)).toBeVisible();
   await expect(row(page, F1)).toHaveCount(0, { timeout: 10_000 });
 });

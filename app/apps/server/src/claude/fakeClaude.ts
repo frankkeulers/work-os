@@ -14,7 +14,8 @@ import type { QueryFn } from './adapter';
 // first section; the people check flags words about how someone works.
 // A settle check settles every ask unless Frank's reply only holds it ("later", "on it", a question)
 // or hands it on ("over to you", "can you take this"), which leaves it open and handed on; a finish
-// check (CK-2.10) likewise, judged on the latest message since.
+// check (CK-2.10) likewise, judged on the latest message since. The policy tuner (FR-15.9) adds a
+// ready rule [R9] for settled decisions and raises the policy's version.
 
 export interface FakeClaude {
   query: QueryFn;
@@ -176,6 +177,8 @@ export function fakeClaude(): FakeClaude {
             ? confluencePickFor(prompt)
             : prompt.includes('<confluence-pages>')
             ? confluenceEntryFor(prompt)
+            : prompt.startsWith('<policy>')
+            ? tuneFor(prompt)
             : prompt.startsWith('<entry>')
               ? { containsPeopleObservations: PEOPLE_RE.test(prompt), reason: PEOPLE_RE.test(prompt) ? 'Describes how a named person works.' : 'Facts only.' }
               : answerFor(m ? (JSON.parse(m[1]) as Thread[]) : []);
@@ -192,6 +195,14 @@ export function fakeClaude(): FakeClaude {
     },
   };
   return fake;
+}
+
+/** A revised filing policy: one rule added under Ready to approve, the version raised. */
+export function tuneFor(prompt: string) {
+  const policy = /^<policy>\n([\s\S]*?)\n<\/policy>/.exec(prompt)?.[1] ?? '';
+  const rule = '- [R9] A decision on a named product, stated as settled by its owner: its Confluence entry.';
+  const revised = policy.replace(/(<!-- prompt: [\w-]+ v)(\d+)/, (_m, a: string, v: string) => `${a}${Number(v) + 1}`).replace('## To-dos', `${rule}\n\n## To-dos`);
+  return { policy: revised, changes: [{ rule: 'R9', kind: 'added', what: 'Settled product decisions from their owner are ready to approve.' }] };
 }
 
 /** For runs that must never reach Claude: any call fails loudly. */

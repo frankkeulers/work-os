@@ -6,7 +6,7 @@ import { writeFileAtomic, writeJsonAtomic } from '../store/atomic';
 
 // The data directory layout (PLAN.md §4.3). Created on first run with owner-only permissions (FR-1.1).
 
-export const DIRS = ['config', 'config/prompts', 'state', 'events', 'events/quarantine', 'items', 'drafts', 'labels', 'logs', 'sandbox'] as const;
+export const DIRS = ['config', 'config/prompts', 'state', 'events', 'events/quarantine', 'items', 'drafts', 'labels', 'logs', 'sandbox', 'proposals'] as const;
 
 export const paths = (dataDir: string) => ({
   settings: join(dataDir, 'config/settings.json'),
@@ -24,6 +24,7 @@ export const paths = (dataDir: string) => ({
   settleLabels: join(dataDir, 'labels/settle.jsonl'),
   finishLabels: join(dataDir, 'labels/finish.jsonl'),
   filingLabels: join(dataDir, 'labels/filing.jsonl'),
+  proposals: join(dataDir, 'proposals'),
 });
 
 const exists = (p: string) =>

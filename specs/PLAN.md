@@ -1081,7 +1081,7 @@ Code rejects a proposal that:
 - drops a rule ID without saying so;
 - is over twice the current length.
 
-The proposal is saved under `proposals/` with its diff, changes and scores, and the bell offers it. A proposal that scores no better is kept, marked as such. Settings › Prompts shows it on the policy file with **Apply** and **Dismiss**. Applying saves it as any prompt edit is saved (FR-1.7), refusing when the policy changed since the proposal was made, and `prompt.changed` records the proposal. Nothing is applied without Frank. The calls log as `tune` and count towards the cost budget. Runs start only when Frank asks; the section says when 10 or more labels have arrived since the last run.
+The proposal is saved under `proposals/` with its diff, changes and scores, and the bell offers it. A proposal that scores no better is kept, marked as such. Settings › Prompts shows it on the policy file with **Apply** and **Dismiss**. Applying saves it as any prompt edit is saved (FR-1.7), refusing when the policy changed since the proposal was made, and `prompt.changed` records the proposal. Nothing is applied without Frank. The calls log as `tune` and count towards the cost budget; a run doesn't start once the day's cost budget is reached. A run needs 10 labelled items. Runs start only when Frank asks; the section says when 10 or more labels have arrived since the last run. A proposal code turns down is kept with the reason but without its text or changes, as they may hold a thread's words.
 
 **FR-15.10 Settings › Learning.** A section in the Claude group, replacing the "Learning loop" placeholder:
 - per loop, its labels (explicit and implicit) and its last eval against the targets;

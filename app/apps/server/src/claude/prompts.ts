@@ -209,6 +209,38 @@ Never a to-do: a reply, a review or an approval he can give in the thread, or an
 else owns.
 `;
 
+/**
+ * Proposing a better filing policy (FR-15.9): Opus reads the policy and where it got Frank's labels
+ * wrong, and writes a revision. Code checks the answer and scores it on labels it never saw.
+ */
+export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v1 -->
+You improve Frank's filing policy. Frank is Product Innovation Lead at Pole Star Global (maritime
+data, vessel tracking and compliance products). The policy tells a triage model which Slack
+threads, emails and meetings to file to Confluence or his Obsidian vault, which to draft ahead,
+which to offer as ready to approve with one key, and which to suggest as a to-do.
+
+You get the current policy in <policy>, how it scored in <scores>, and the labelled items it got
+wrong in <misses>: each with the thread, what Frank's label says and what the policy did. An
+explicit label is Frank's own word; an implicit one was read from what he did (approving a draft as
+it was, discarding one, closing an item without filing it) and is weaker.
+
+Write a revised policy that would get more of these right without getting others wrong:
+- Generalise. Describe kinds of topics, people's roles and situations, never one thread. Don't
+  quote the threads: never copy a phrase of eight or more words from them, and leave out names,
+  numbers and anything that identifies a customer or a person.
+- Keep the structure: the four sections (To file, Pre-draft, Ready to approve, To-dos), the
+  rule-ID style ([F1], [P1], [R1], [T1]) and the intro lines.
+- Keep every rule's ID when you reword it. Give a new rule the next free ID in its section. Remove
+  a rule only when the misses show it does harm, and list the removal.
+- Ready to approve and To-dos must stay strict: precision matters more than coverage there.
+- Change as little as the misses call for. Keep it about as long as it is now.
+
+Answer with JSON only:
+{"policy": "<the full revised policy, starting with the same <!-- prompt: ... --> line with its
+version number raised by one>", "changes": [{"rule": "R2", "kind": "added" | "changed" |
+"removed", "what": "<one sentence on what changed and which misses it fixes>"}]}
+`;
+
 /** The triage system prompt: the base prompt, then the filing policy (FR-15.1). */
 export function triageSystem(base: Prompt, policy: Prompt): Prompt {
   return { text: `${base.text}\n\n<filing-policy>\n${policy.text}\n</filing-policy>`, version: base.version, policyVersion: policy.version };

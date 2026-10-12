@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { PromptFileId, PromptFileView, PromptSourceView } from '@work-os/shared';
 import { writeFileAtomic } from '../store/atomic';
 import { DEFAULT_CONFLUENCE_ROUTING, DEFAULT_VAULT_CONVENTIONS } from './guidance';
-import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_FILING_POLICY, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_VAULT_PROMPT, promptVersion, triageSystem, type Prompt } from './prompts';
+import { DEFAULT_CONFLUENCE_PROMPT, DEFAULT_FILING_POLICY, DEFAULT_PEOPLE_CHECK_PROMPT, DEFAULT_PICK_CONFLUENCE_PROMPT, DEFAULT_FINISH_PROMPT, DEFAULT_SETTLE_PROMPT, DEFAULT_TOPICS_PROMPT, DEFAULT_TRIAGE_PROMPT, DEFAULT_TUNE_POLICY, DEFAULT_VAULT_PROMPT, promptVersion, triageSystem, type Prompt } from './prompts';
 
 // Every text file Claude calls read from config/ (FR-1.1, FR-1.7): the eight prompts and the two
 // filing guidance files. Each is written on first run, read on every call (empty or missing → the
@@ -40,6 +40,15 @@ export const PROMPT_FILES: readonly PromptFile[] = [
     description: 'Your rules for what triage files, drafts ahead, offers as ready to approve and suggests as a to-do. Sent with the triage prompt.',
     usedBy: 'Triage, drafts ahead and the filing eval',
     defaultText: DEFAULT_FILING_POLICY,
+    previousDefaults: [],
+  },
+  {
+    id: 'tune-policy',
+    file: 'prompts/tune-policy.md',
+    label: 'Policy tuner',
+    description: 'How Opus revises the filing policy from the labels it got wrong. Its proposals wait in Settings › Prompts for you to apply.',
+    usedBy: 'Propose a better policy, in Settings › Learning',
+    defaultText: DEFAULT_TUNE_POLICY,
     previousDefaults: [],
   },
   {

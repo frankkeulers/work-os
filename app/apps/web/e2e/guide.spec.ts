@@ -23,6 +23,7 @@ test('J43 the guide opens from the sidebar, in groups, with an outline and Previ
     'Filing to Confluence',
     'Filing to the vault',
     'Prompts and guidance',
+    'Learning',
     'Troubleshooting',
     'Keyboard shortcuts',
   ]);

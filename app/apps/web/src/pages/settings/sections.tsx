@@ -17,6 +17,7 @@ import { usePrefs, type Theme } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { GuideLink } from '../../components/GuideLink';
 import { FutureRow, Group, Meter, NumInput, Row, SectionHeader } from './parts';
+import { LearningSection, ProposalBanner } from './learning';
 import { CategoryDot } from '../../components/item';
 
 export interface Confirm {
@@ -120,9 +121,6 @@ function RulesSection({ s, rules, view, full, set, setRules, ruleError }: Ctx) {
         <>
           <FutureRow title="More conditions" phase="P2" marks={['outlook', 'teams']}>
             For email and meetings: sender domain, importance, sent only to you, and meeting organiser.
-          </FutureRow>
-          <FutureRow title="Learning loop" phase="P4" cta="Review examples">
-            Use your corrections as few-shot examples, chosen by similarity. Every prompt change is gated by the eval. {view.correctionCount} corrections available.
           </FutureRow>
         </>
       )}
@@ -1272,6 +1270,8 @@ const kb = (text: string) => `${(new TextEncoder().encode(text).length / 1024).t
  */
 function PromptsSection({ confirm, setUnsaved }: Ctx) {
   const q = useApiQuery(() => api.getPrompts(), onTopics('settings'), []);
+  const proposals = useApiQuery(() => api.getProposals(), onTopics('settings'), []);
+  const proposalFor = (id: PromptFileId) => proposals.data?.find((p) => p.status === 'open' && p.promptId === id);
   const [edit, setEditState] = useState<PromptEdit | null>(null);
   const files = q.data;
   const open = files?.find((f) => f.id === edit?.id);
@@ -1334,7 +1334,25 @@ function PromptsSection({ confirm, setUnsaved }: Ctx) {
       },
     });
 
-  const row = (f: PromptFileView) =>
+  /** A proposed revision waits above its file (FR-15.9); applying it closes an edit of the same file. */
+  const row = (f: PromptFileView) => {
+    const p = proposalFor(f.id);
+    if (!p) return fileRow(f);
+    return (
+      <div key={f.id} className="flex flex-col gap-3 pt-5">
+        <ProposalBanner
+          proposal={p}
+          onDone={() => {
+            if (edit?.id === f.id && !dirty) setEdit(null);
+            q.reload();
+            proposals.reload();
+          }}
+        />
+        {fileRow(f)}
+      </div>
+    );
+  };
+  const fileRow = (f: PromptFileView) =>
     edit?.id === f.id ? (
       <div key={f.id} className="flex flex-col gap-3 border-b border-line-soft py-5 last:border-b-0" data-prompt={f.id}>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -1697,6 +1715,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'writing', label: 'Write targets', group: 'Actions', View: WritingSection, owns: under('settings.dryRun', 'settings.vaultPath', 'settings.tasksNote', 'settings.confluence') },
   { id: 'models', label: 'Models', group: 'Claude', View: ModelsSection, owns: under('settings.models', 'settings.claudeBackend', 'settings.triage.maxThreadsPerCall', 'settings.triage.maxInputTokens', 'settings.triage.keepLastMessages') },
   { id: 'prompts', label: 'Prompts', group: 'Claude', View: PromptsSection, owns: () => false },
+  { id: 'learning', label: 'Learning', group: 'Claude', View: LearningSection, owns: under('settings.triage.filing') },
   { id: 'budgets', label: 'Budgets', group: 'Claude', View: BudgetsSection, owns: under('settings.budgets', 'settings.baselineCostPerDay') },
   { id: 'storage', label: 'Storage & data', group: 'System', View: StorageSection, owns: under('settings.retentionDays', 'settings.dataDir') },
   { id: 'profile', label: 'Profile', group: 'Account', View: ProfileSection, owns: () => false },

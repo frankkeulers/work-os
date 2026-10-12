@@ -4,6 +4,7 @@ import type {
   Draft,
   EvalReport,
   FilingEvalReport,
+  PolicyProposal,
   Item,
   ItemFlags,
   NextStep,
@@ -135,6 +136,10 @@ export interface MockState {
   /** Filing eval reports (FR-15.8), oldest first. */
   filingEvals?: FilingEvalReport[];
   filingEvalRunning?: boolean;
+  /** Proposed filing policies (FR-15.9), oldest first. */
+  proposals?: PolicyProposal[];
+  proposing?: boolean;
+  filingLabelsSinceProposal?: number;
   settings: Settings;
   rules: Rule[];
   ruleHits: Record<string, number>;

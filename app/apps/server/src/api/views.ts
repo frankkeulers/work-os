@@ -51,6 +51,8 @@ import {
   type StartupCheck,
   type DecisionText,
   type FilingEvalReport,
+  type LearningView,
+  type PolicyProposal,
   type LoggedDecision,
   type TriageDecision,
   type UsagePurpose,
@@ -71,7 +73,8 @@ import type { WisprLink } from '../sources/wispr/link';
 import type { Runtime } from '../runtime/runtime';
 import type { ItemFiles } from '../store/items';
 import type { FilingFeedback } from '../pipeline/filingFeedback';
-import type { MergedFilingLabel } from '../store/filingLabels';
+import type { FilingLabelStore, MergedFilingLabel } from '../store/filingLabels';
+import type { ProposalStore } from '../learning/proposals';
 import type { LabelStore } from '../store/labels';
 import type { SettleLabelStore } from '../store/settleLabels';
 import type { RecoveryReport, Store } from '../store/store';
@@ -116,6 +119,10 @@ export interface ViewDeps {
   evals?: Evals;
   /** The filing eval (FR-15.8), over labels/filing.jsonl. */
   filingEvals?: Evals<MergedFilingLabel, FilingEvalReport>;
+  /** Proposed filing policies (FR-15.9): the store, and the run Frank starts. */
+  filingLabels?: FilingLabelStore;
+  proposals?: ProposalStore;
+  proposing?: Evals<MergedFilingLabel, PolicyProposal>;
   /** The Slack workspace ID, once the first poll has asked Slack: for links to the web client. */
   slackTeamId?: () => string | undefined;
   /** A group DM's title from its members, when Slack has said who they are. */
@@ -160,7 +167,7 @@ export function inExcludedChannel(i: { id: string; source: string; kind: string;
   return channelListed(exclude, { id: i.id.split(':')[1], name: i.title.replace(/^#/, '') });
 }
 
-function budgets(d: ViewDeps): BudgetState {
+export function budgets(d: ViewDeps): BudgetState {
   return budgetsOf(d.usage?.() ?? [], d.settings.editable.settings, d.now());
 }
 
@@ -465,6 +472,7 @@ export async function attentionView(d: ViewDeps, guidance: GuidanceChange[] = []
     budgets: b,
     ...(last && { lastEval: last }),
     guidance,
+    proposals: ((await d.proposals?.list()) ?? []).filter((x) => x.status === 'open'),
     dismissed: p.dismissed ?? {},
   });
 }
@@ -699,5 +707,27 @@ export async function settingsView(d: ViewDeps): Promise<SettingsView> {
     labelCount: d.labels?.counts.labels ?? 0,
     correctionCount: d.labels?.counts.corrections ?? 0,
     vaultConventionsLoaded: conventions,
+    ...(await learningView(d)),
+  };
+}
+
+/** Settings › Learning (FR-15.10): the filing loop's labels, last eval and latest proposal. */
+async function learningView(d: ViewDeps): Promise<{ learning?: LearningView }> {
+  const labels = d.filingLabels;
+  if (!labels) return {};
+  const proposal = (await d.proposals?.list())?.[0];
+  const lines = await labels.all();
+  const last = d.filingEvals?.last;
+  return {
+    learning: {
+      filing: {
+        labels: { items: labels.counts.labels, explicit: labels.counts.explicit, implicit: labels.counts.implicit },
+        newLabels: proposal ? lines.filter((l) => l.at > proposal.at).length : lines.length,
+        ...(last && { lastEval: last }),
+        evalRunning: d.filingEvals?.running ?? false,
+        proposing: d.proposing?.running ?? false,
+        ...(proposal && { proposal }),
+      },
+    },
   };
 }

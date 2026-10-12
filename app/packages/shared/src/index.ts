@@ -14,3 +14,4 @@ export * from './attention';
 export * from './filed';
 export * from './policy';
 export type * from './api';
+export * from './learning';

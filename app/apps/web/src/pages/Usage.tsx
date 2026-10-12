@@ -23,6 +23,7 @@ export const PURPOSE_LABEL: Record<UsagePurpose, string> = {
   fetch: 'Connector fetch',
   routing: 'Topic routing',
   settle: 'Settle check',
+  tune: 'Policy proposal',
 };
 
 export const evalPath = (id: string) => `/usage/eval/${encodeURIComponent(id)}`;

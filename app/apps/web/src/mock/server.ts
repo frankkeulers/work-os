@@ -19,6 +19,8 @@ import {
   finishChecked,
   budgetsOf,
   buildAttention,
+  lineDiff,
+  PROPOSAL_MIN_LABELS,
   buildFiled,
   dismiss,
   confirm,
@@ -78,6 +80,8 @@ import {
   type EventData,
   type EvalReport,
   type FilingEvalReport,
+  type LearningView,
+  type PolicyProposal,
   type EventType,
   type HealthView,
   type InboxView,
@@ -847,6 +851,24 @@ export class MockServer implements WorkOsApi, MockControls {
       labelCount: this.s.labelCount,
       correctionCount: this.s.correctionCount,
       vaultConventionsLoaded: true,
+      learning: this.learning(),
+    };
+  }
+
+  /** Settings › Learning (FR-15.10), as the server builds it. */
+  private learning(): LearningView {
+    const proposal = this.s.proposals?.at(-1);
+    const items = this.s.filingLabelCount ?? 0;
+    const lastEval = this.s.filingEvals?.at(-1);
+    return {
+      filing: {
+        labels: { items, explicit: Math.round(items * 0.4), implicit: items - Math.round(items * 0.4) },
+        newLabels: proposal ? (this.s.filingLabelsSinceProposal ?? 0) : items,
+        ...(lastEval && { lastEval }),
+        evalRunning: !!this.s.filingEvalRunning,
+        proposing: !!this.s.proposing,
+        ...(proposal && { proposal }),
+      },
     };
   }
 
@@ -1103,6 +1125,8 @@ export class MockServer implements WorkOsApi, MockControls {
     if (body.signal === 'not_for_filing') await this.correctTriage(itemId, { attention: eff.attention, confluence: eff.confluence && !on('confluence_entry'), vault: eff.vault && !on('vault_note') });
     else await this.gate(COMMAND_MS);
     this.s.filingLabelCount = (this.s.filingLabelCount ?? 0) + 1;
+    this.s.filingLabelsSinceProposal = (this.s.filingLabelsSinceProposal ?? 0) + 1;
+    this.emit({ topic: 'settings' });
     return { labelCount: this.s.filingLabelCount };
   }
 
@@ -1642,6 +1666,7 @@ export class MockServer implements WorkOsApi, MockControls {
       budgets,
       ...(last && { lastEval: last }),
       guidance,
+      proposals: (this.s.proposals ?? []).filter((p) => p.status === 'open'),
       dismissed: this.s.dismissed ?? {},
     });
   }
@@ -1671,12 +1696,13 @@ export class MockServer implements WorkOsApi, MockControls {
     return SEED_PROMPT_FILES.map((f) => this.promptView(f.id));
   }
 
-  private writePrompt(id: PromptFileId, baseVersion: string, text: string, reset: boolean): PromptFileView {
+  private writePrompt(id: PromptFileId, baseVersion: string, text: string, reset: boolean, proposalId?: string): PromptFileView {
     const current = this.promptView(id);
-    if (current.version !== baseVersion) throw new ApiError('conflict', `${current.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`);
+    if (current.version !== baseVersion)
+      throw new ApiError('conflict', proposalId ? `${current.label} changed since this was proposed (now ${current.version}). Propose again from the policy as it is now.` : `${current.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`);
     this.s.prompts = { ...this.s.prompts, [id]: text.trim() };
     const saved = this.promptView(id);
-    this.event('prompt.changed', { id, version: saved.version, reset });
+    this.event('prompt.changed', { id, version: saved.version, reset, ...(proposalId && { proposalId }) });
     this.emit({ topic: 'settings' });
     return saved;
   }
@@ -1696,6 +1722,78 @@ export class MockServer implements WorkOsApi, MockControls {
     this.event('prompt.changed', { id, version: current.version, reset: false });
     this.emit({ topic: 'settings' });
     return this.promptView(id);
+  }
+
+  async getProposals(): Promise<PolicyProposal[]> {
+    await this.gate(QUERY_MS);
+    return [...(this.s.proposals ?? [])].reverse();
+  }
+
+  /** Propose a better policy (FR-15.9): after a few seconds, one that adds a ready rule and scores better. */
+  async proposePolicy() {
+    await this.gate(COMMAND_MS);
+    if (this.s.proposing) return;
+    const n = this.s.filingLabelCount ?? 0;
+    if (n < PROPOSAL_MIN_LABELS) throw new ApiError('conflict', `A proposal needs ${PROPOSAL_MIN_LABELS} labelled items to learn from and to test on; there are ${n}.`);
+    this.s.proposing = true;
+    this.emit({ topic: 'settings' });
+    setTimeout(() => {
+      const current = this.promptView('filing-policy');
+      const text = current.text
+        .replace(/filing-policy v(\d+)/, (_m, v: string) => `filing-policy v${Number(v) + 1}`)
+        .replace('## To-dos', '- [R2] A settled decision on a named product, stated in one message by its owner: its Confluence entry.\n\n## To-dos')
+        .replace('ideas, learnings, partner insight, follow-ups worth keeping.', 'ideas, learnings and partner insight worth keeping; not status updates.');
+      const score = (p: number, r: number, n: number) => ({ precision: p, recall: r, support: Math.round(n * 0.6), predicted: Math.round((n * 0.6 * r) / p), n });
+      const proposal: PolicyProposal = {
+        id: `proposal-${this.iso().replace(/[:.]/g, '-')}`,
+        at: this.iso(),
+        loop: 'filing',
+        promptId: 'filing-policy',
+        baseVersion: current.version,
+        status: 'open',
+        text,
+        changes: [
+          { rule: 'R2', kind: 'added', what: 'Settled product decisions from their owner are ready to approve: you approved six of seven unedited.' },
+          { rule: 'F2', kind: 'changed', what: 'Status updates no longer go to the vault: you closed four without filing them.' },
+        ],
+        diff: lineDiff(current.text, text),
+        train: Math.round(n * 0.7),
+        heldOut: n - Math.round(n * 0.7),
+        scores: {
+          before: { toFile: score(0.78, 0.9, 12), predraft: score(0.7, 0.8, 9), ready: score(0.9, 0.5, 6), todo: score(1, 0.5, 2) },
+          after: { toFile: score(0.86, 0.88, 12), predraft: score(0.8, 0.8, 9), ready: score(0.95, 0.67, 6), todo: score(1, 0.5, 2) },
+        },
+        better: true,
+        model: 'opus-5.5',
+        promptVersion: 'tune-policy v1',
+      };
+      this.s.proposals = [...(this.s.proposals ?? []), proposal];
+      this.s.proposing = false;
+      this.s.filingLabelsSinceProposal = 0;
+      this.emit({ topic: 'settings' }, { topic: 'attention' });
+    }, 3000);
+  }
+
+  private openProposal(id: string): PolicyProposal {
+    const p = this.s.proposals?.find((x) => x.id === id);
+    if (!p) throw new ApiError('not_found', 'There is no such proposal.');
+    if (p.status !== 'open' || !p.text) throw new ApiError('conflict', 'This proposal is no longer open.');
+    return p;
+  }
+
+  async applyProposal(id: string) {
+    await this.gate(COMMAND_MS);
+    const p = this.openProposal(id);
+    const saved = this.writePrompt(p.promptId, p.baseVersion, p.text!, false, p.id);
+    Object.assign(p, { status: 'applied', decidedAt: this.iso(), appliedVersion: saved.version });
+    this.emit({ topic: 'settings' }, { topic: 'attention' });
+    return saved;
+  }
+
+  async dismissProposal(id: string) {
+    await this.gate(COMMAND_MS);
+    Object.assign(this.openProposal(id), { status: 'dismissed', decidedAt: this.iso() });
+    this.emit({ topic: 'settings' }, { topic: 'attention' });
   }
 
   async resetPrompt(id: PromptFileId, baseVersion: string) {
@@ -1773,6 +1871,8 @@ export class MockServer implements WorkOsApi, MockControls {
         policyVersion: 'filing-policy v1#mock',
       };
     }
+    // Two weeks of feedback, enough to propose a change (FR-15.9).
+    this.s.filingLabelCount = 24;
     this.emitAll();
   }
 

@@ -58,6 +58,19 @@ Answer with JSON only, no prose.`,
 - [T1] A meeting action item that falls to Frank.`,
   },
   {
+    id: 'tune-policy',
+    label: 'Policy tuner',
+    description: 'How Opus revises the filing policy from the labels it got wrong. Its proposals wait in Settings › Prompts for you to apply.',
+    usedBy: 'Propose a better policy, in Settings › Learning',
+    path: 'config/prompts/tune-policy.md',
+    defaultText: `<!-- prompt: tune-policy v1 -->
+You improve Frank's filing policy. You get the current policy, how it scored, and the labelled
+items it got wrong. Write a revised policy that would get more of these right without getting
+others wrong. Generalise; never quote the threads. Keep every rule's ID.
+
+Answer with JSON only.`,
+  },
+  {
     id: 'topics',
     label: 'Topics',
     description: 'Puts each new thread or stretch of chat in the open topic it continues, or starts a new one.',

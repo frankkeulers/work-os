@@ -8,6 +8,7 @@ export const HELP = {
   noFit: 'confluence#no-fit',
   refusedWrites: 'confluence#refused-writes',
   prompts: 'prompts',
+  learning: 'learning',
   outlook: 'outlook',
   wispr: 'wispr-flow',
   health: 'troubleshooting#health',

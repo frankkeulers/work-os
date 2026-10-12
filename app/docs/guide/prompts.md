@@ -51,6 +51,11 @@ Each rule has an ID, and each decision records the rule it applied, so keep a ru
 reword it and give a new rule a new one. Triage sends the policy with every call, so an edit takes
 effect from the next triage.
 
+The policy can also improve from your feedback: **Propose a better policy** in
+[Settings › Learning](/settings/learning) asks Opus for a revision, which shows here, above the
+Filing policy, with what it changes and how it scores. **Apply** saves it; **Dismiss** keeps yours.
+How Opus revises it is the **Policy tuner** prompt. See [Learning](/guide/learning).
+
 ## Source changed
 
 The two guidance files are distilled from sources that keep moving: the psg-context-builder and

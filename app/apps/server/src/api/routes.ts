@@ -1,4 +1,4 @@
-import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
+import { ApproveRequest, AttentionDismiss, CorrectionBody, DraftEdit, DraftRequest, FilingFeedbackBody, ItemIds, PROPOSAL_MIN_LABELS, effectiveTriage, SourceId, mergeEdit, OutlookConnect, PromptReset, PromptSave, SettingsSave, SnoozeInput, anchorOf, seenChanges, sourceSchedule, type ConfluenceCatalogueView, type EarlierView, type GuidanceChange, type Notice, type OutlookStatusView, type PersonOption, type SettingsSaved, type WisprConnectView, type WisprStatusView } from '@work-os/shared';
 import type { FastifyInstance } from 'fastify';
 import { ConfluenceError, SEARCH_MAX } from '../actions/confluenceApi';
 import type { CatalogueEntry } from '../actions/confluenceCatalogue';
@@ -10,7 +10,7 @@ import { RebuildError } from '../store/store';
 import { HttpError } from './errors';
 import { readGuide } from './guide';
 import { sendJson } from './send';
-import { agendaView, attentionView, filedView, healthView, inboxView, itemView, knownCategories, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
+import { agendaView, attentionView, budgets, filedView, healthView, inboxView, itemView, knownCategories, settingsView, sourceView, usageView, weekView, type ViewDeps } from './views';
 
 // One route per WorkOsApi method (PLAN.md API table).
 
@@ -488,14 +488,17 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     return f;
   };
   const env = () => d.promptSources?.();
-  const writePrompt = async (f: PromptFile, baseVersion: string, text: string | ((current: string) => Promise<string>), reset: boolean) => {
+  const writePrompt = async (f: PromptFile, baseVersion: string, text: string | ((current: string) => Promise<string>), reset: boolean, proposalId?: string) => {
     const current = await promptFileView(dataDir, f);
     if (current.version !== baseVersion) {
-      throw new HttpError('conflict', `${f.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`);
+      throw new HttpError(
+        'conflict',
+        proposalId ? `${f.label} changed since this was proposed (now ${current.version}). Propose again from the policy as it is now.` : `${f.label} changed since you opened it (now ${current.version}). Reload it, then make your change again.`,
+      );
     }
     await writePromptFile(dataDir, f, typeof text === 'string' ? text : await text(current.text));
     const saved = await promptFileView(dataDir, f, env());
-    await d.store.append({ type: 'prompt.changed', data: { id: f.id, version: saved.version, reset } });
+    await d.store.append({ type: 'prompt.changed', data: { id: f.id, version: saved.version, reset, ...(proposalId && { proposalId }) } });
     return saved;
   };
 
@@ -523,6 +526,44 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const e = env();
     if (!e) throw new HttpError('unavailable', 'This server can’t read the sources (tests or fakes).');
     return reply.headers(noStore).send(await writePrompt(f, body.data.baseVersion, (text) => withCurrentSourceHashes(text, e), false));
+  });
+
+  // Proposed filing policies (FR-15.9): started only on Frank's request; applied only by him, through
+  // the prompt save path, so a policy edited since the proposal is never overwritten.
+  const proposalsOf = () => {
+    if (!d.proposals || !d.proposing || !d.filingLabels) throw new HttpError('unavailable', 'Policy proposals are not available.');
+    return { store: d.proposals, run: d.proposing, labels: d.filingLabels };
+  };
+  app.get('/api/proposals', async (_req, reply) => reply.headers(noStore).send(d.proposals ? await d.proposals.list() : []));
+  app.post('/api/learning/filing/propose', async (_req, reply) => {
+    const { run, labels } = proposalsOf();
+    if (!run.running && d.runtime && !d.runtime.claudeReady()) {
+      throw new HttpError('unavailable', d.runtime.health.get('claude').fix ?? 'Claude can’t be called right now. Try again later.');
+    }
+    if (!run.running && budgets(d).cost.hit) throw new HttpError('budget', 'Today’s cost budget is reached. Propose again tomorrow, or raise the budget in Settings › Budgets.');
+    const n = labels.counts.labels;
+    if (!run.running && n < PROPOSAL_MIN_LABELS) throw new HttpError('conflict', `A proposal needs ${PROPOSAL_MIN_LABELS} labelled items to learn from and to test on; there are ${n}.`);
+    await run.start();
+    return reply.code(202).send();
+  });
+  const openProposal = async (id: string) => {
+    const p = await proposalsOf().store.get(id);
+    if (!p) throw new HttpError('not_found', 'There is no such proposal.');
+    if (p.status !== 'open' || !p.text) throw new HttpError('conflict', 'This proposal is no longer open.');
+    return p;
+  };
+  app.post<{ Params: { id: string } }>('/api/proposals/:id/apply', async (req, reply) => {
+    const p = await openProposal(req.params.id);
+    const saved = await writePrompt(promptOf(p.promptId), p.baseVersion, p.text!, false, p.id);
+    await proposalsOf().store.update(p.id, (x) => ({ ...x, status: 'applied', decidedAt: d.now().toISOString(), appliedVersion: saved.version }));
+    d.publish?.({ topic: 'settings' }, { topic: 'attention' });
+    return reply.headers(noStore).send(saved);
+  });
+  app.post<{ Params: { id: string } }>('/api/proposals/:id/dismiss', async (req, reply) => {
+    const p = await openProposal(req.params.id);
+    await proposalsOf().store.update(p.id, (x) => ({ ...x, status: 'dismissed', decidedAt: d.now().toISOString() }));
+    d.publish?.({ topic: 'settings' }, { topic: 'attention' });
+    return reply.code(204).send();
   });
 
   // The bell (FR-11.3–11.5): what needs Frank, and dismissing an entry.
