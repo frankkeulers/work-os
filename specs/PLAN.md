@@ -1048,7 +1048,7 @@ The triage prompt (v10) keeps the fundamentals: what Confluence and the vault ar
 **FR-15.7 Filing labels.** `labels/filing.jsonl` holds one line per signal: the item, revision and source; `origin` (`explicit` or `implicit`); `signal`; `label`, which sets some of `toFile`, `predraft` and `ready` per filing (`confluence`, `vault`), and `todo`; what a field implies is filled in (`ready` implies `predraft` implies `toFile`, and the reverse for false); `was` (the decision's filing fields, `policyVersion` and rules); and the thread as the model saw it, as in `labels/triage.jsonl` (FR-6.2). For each item and field, the latest explicit line wins, else the latest implicit one. Labels follow the retention rule for `labels/triage.jsonl`.
 
 Explicit signals come from the item panel's **Filing…** menu beside the decision, per filing where it has two:
-- **Not for filing:** `toFile` false. It also corrects the item out of To file (FR-6.2).
+- **Not for filing:** `toFile` false. It also corrects the item out of To file (FR-6.2). It asks why first: a quick reason (**Not my product area**, **Not worth keeping**, **Already written up elsewhere**), Frank's own (up to 200 characters), or **Skip**. The line keeps it as `reason`; any explicit signal may carry one, and an item's merged label keeps the latest.
 - **Should be filed to the vault / to Confluence:** `toFile` true, as a correction. Any correction that turns a filing on or off labels it the same way.
 - **Don't draft items like this ahead:** `predraft` false.
 - **Should be ready to approve** and **Shouldn't be ready:** `ready` true or false.
@@ -1077,7 +1077,7 @@ The last two also move the filing at once, without a triage correction and witho
 **FR-15.9 Policy proposals.** **Propose a better policy** in Settings › Learning:
 1. Splits the labels by a hash of the item ID: 70% to learn from, 30% held out.
 2. Scores the current policy and collects its misses on the 70%.
-3. Asks Opus, with an editable prompt file (`tune-policy`), for a revised policy and a list of changes.
+3. Asks Opus, with an editable prompt file (`tune-policy`), for a revised policy and a list of changes. Each miss carries Frank's reason when he gave one, and `tune-policy` tells Opus to generalise along it rather than the channel or the sender.
 4. Scores the current and proposed policies on the held-out 30%.
 
 Code rejects a proposal that:

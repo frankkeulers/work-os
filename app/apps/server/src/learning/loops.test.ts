@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Predicted } from '../pipeline/eval';
+import type { FilingScored } from '../pipeline/evalFiling';
 import type { SettlePredicted } from '../pipeline/evalSettle';
 import type { LabelRecord } from '../store/labels';
 import type { SettleLabelRecord } from '../store/settleLabels';
 import { checkMiss, checkRows, strings } from './checkLoop';
+import { filingMiss } from './filingLoop';
 import { triageMiss, triageRows } from './triageLoop';
 
 // The triage, settle and finish loops' adapters (FR-15.11): their scores as rows with the spec's
@@ -37,6 +39,19 @@ describe('the triage loop', () => {
     expect(triageMiss(predicted('now', 'now'))).toBeUndefined();
     expect(triageMiss(predicted('now', 'today'))).toEqual({ thread, wrong: ['attention: label now (Frank corrected it); the prompt said today'] });
     expect(triageMiss(predicted('none', 'today', 'confirmed'))).toMatchObject({ wrong: ['attention: label none (Frank said triage was right); the prompt said today'] });
+  });
+});
+
+describe('the filing loop', () => {
+  const off = { toFile: false, predraft: false, ready: false };
+  const scored = (reason?: string): FilingScored => ({
+    label: { itemId: thread.id, source: 'slack', itemRevision: 1, thread, confluence: {}, vault: { toFile: { value: false, origin: 'explicit', signal: 'corrected' } }, ...(reason && { reason }) },
+    predicted: { confluence: off, vault: { toFile: true, predraft: false, ready: false, rule: 'F2' }, todo: false },
+  });
+
+  it('shows the tuner Frank’s reason with the miss when he gave one', () => {
+    expect(filingMiss(scored())).toEqual({ thread, wrong: ['vault to file: label no (Frank said so); the policy said yes (rule F2)'] });
+    expect(filingMiss(scored('Not my product area'))).toEqual({ thread, wrong: ['vault to file: label no (Frank said so); the policy said yes (rule F2)'], reason: 'Not my product area' });
   });
 });
 

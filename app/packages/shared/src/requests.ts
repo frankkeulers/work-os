@@ -42,11 +42,12 @@ export const DraftRequest = z
 /**
  * POST /api/items/:id/filing-feedback (E14, FR-15.7): Frank's word on the filing policy's call.
  * "Not for filing" also takes the item out of To file; the others only teach the policy. Without
- * `type`, it is about every filing the item has.
+ * `type`, it is about every filing the item has. `reason` is Frank's why, in his words, so the
+ * tuner learns from the reason rather than from the channel or the sender.
  */
 export const FilingFeedbackSignal = z.enum(['not_for_filing', 'no_predraft', 'should_be_ready', 'not_ready']);
 export type FilingFeedbackSignal = z.infer<typeof FilingFeedbackSignal>;
-export const FilingFeedbackBody = z.object({ signal: FilingFeedbackSignal, type: z.enum(['confluence_entry', 'vault_note']).optional() }).strict();
+export const FilingFeedbackBody = z.object({ signal: FilingFeedbackSignal, type: z.enum(['confluence_entry', 'vault_note']).optional(), reason: z.string().trim().min(1).max(200).optional() }).strict();
 export type FilingFeedbackBody = z.infer<typeof FilingFeedbackBody>;
 
 /** POST /api/attention/dismiss (FR-11.5): an entry in the bell, by its key. */

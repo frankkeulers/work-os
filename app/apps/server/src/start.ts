@@ -341,7 +341,7 @@ export async function run(deps: RunDeps): Promise<RunResult> {
   const keepLastMessages = () => settings.editable.settings.triage.keepLastMessages;
   const filingFeedback = new FilingFeedback({ store, items, labels: filingLabels, now, me: triageDeps.me, keepLastMessages, filing: () => filingSettings(settings.editable.settings) });
   const correctionDeps = { store, items, labels, now, me: triageDeps.me, keepLastMessages, filing: filingFeedback };
-  const correct = (id: string, input: Parameters<typeof correctTriage>[2]) => correctTriage(correctionDeps, id, input);
+  const correct = (id: string, input: Parameters<typeof correctTriage>[2], reason?: string) => correctTriage(correctionDeps, id, input, reason);
   const confirm = (id: string) => confirmTriage(correctionDeps, id);
   const evals = await Evals.open({
     logsDir: paths(config.dataDir).logs,

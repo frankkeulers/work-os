@@ -216,7 +216,7 @@ else owns.
  * Proposing a better filing policy (FR-15.9): Opus reads the policy and where it got Frank's labels
  * wrong, and writes a revision. Code checks the answer and scores it on labels it never saw.
  */
-export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v2 -->
+export const DEFAULT_TUNE_POLICY = `<!-- prompt: tune-policy v3 -->
 You improve one of the prompts that run Frank's inbox. Frank is Product Innovation Lead at Pole
 Star Global (maritime data, vessel tracking and compliance products).
 
@@ -230,6 +230,10 @@ Write a revised prompt that would get more of these right without getting others
 - Generalise. Describe kinds of topics, people's roles and situations, never one thread. Don't
   quote the threads: never copy a phrase of eight or more words from them, and leave out names,
   numbers and anything that identifies a customer or a person.
+- Some misses carry Frank's reason, in his own words. Generalise along that reason, not along the
+  channel, the sender or anything else the thread happens to share with others. A channel is where
+  something was said, not why: never write a rule about a channel or a person unless a reason says
+  so. Product names already in the prompt stay.
 - Keep the structure: the headings, any rule IDs such as [F1] or [R1], and the intro lines. Keep
   every rule's ID when you reword it; give a new rule the next free ID in its section. Remove a rule
   only when the misses show it does harm, and list the removal.

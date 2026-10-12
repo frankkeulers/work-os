@@ -44,7 +44,8 @@ ones are left alone.
 The triage prompt holds the fundamentals: what Confluence and the vault are for, the people rule
 and the shape of the answer. The **Filing policy** holds your rules for filing, in four sections:
 
-- **To file** (`F1`, `F2`, …): what is worth filing at all, and where.
+- **To file** (`F1`, `F2`, …): what is worth filing at all, and where. `F6` keeps out product
+  context for the products you aren't PM for (the Shipping & Offshore ones).
 - **Pre-draft** (`P1`, …): what is worth drafting ahead, which spends a draft before you've looked.
 - **Ready to approve** (`R1`, …): what you can approve after a glance, with where it goes.
 - **To-dos** (`T1`, …): when a step should be suggested as a to-do.

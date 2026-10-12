@@ -1226,13 +1226,31 @@ describe('filing feedback (FR-15.7)', () => {
     expect((await feedback({ signal: 'not_for_filing' })).status).toBe(200);
     expect(res.store.projection.items[PROD].correction).toMatchObject({ confluence: false, vault: false });
     expect(await lines()).toEqual([expect.objectContaining({ origin: 'explicit', signal: 'corrected', label: { vault: { toFile: false, predraft: false, ready: false } } })]);
+    expect((await lines())[0]).not.toHaveProperty('reason');
     // Now there is nothing to file, so nothing to say about it.
     expect((await feedback({ signal: 'no_predraft' })).status).toBe(409);
     expect((await feedback({ signal: 'not_ready', type: 'confluence_entry' })).status).toBe(409);
   });
 
+  it('keeps Frank’s reason with the label, for the tuner to generalise along', async () => {
+    expect((await feedback({ signal: 'not_for_filing', reason: '  Not my product area ' })).status).toBe(200);
+    expect(res.store.projection.items[PROD].correction).toMatchObject({ confluence: false, vault: false });
+    expect(await lines()).toEqual([expect.objectContaining({ signal: 'corrected', reason: 'Not my product area', label: { vault: { toFile: false, predraft: false, ready: false } } })]);
+    // The triage label stays as it was: the reason is about filing.
+    const triage = (await readFile(join(dir, 'labels/triage.jsonl'), 'utf8')).trim().split('\n');
+    expect(triage).toHaveLength(1);
+    expect(JSON.parse(triage[0])).not.toHaveProperty('reason');
+  });
+
+  it('keeps a reason on the other signals too', async () => {
+    expect((await feedback({ signal: 'no_predraft', type: 'vault_note', reason: 'Only after the call' })).status).toBe(200);
+    expect(await lines()).toEqual([expect.objectContaining({ signal: 'no_predraft', reason: 'Only after the call' })]);
+  });
+
   it('refuses a malformed body and an unknown item', async () => {
     expect((await feedback({ signal: 'file_it' })).status).toBe(422);
+    expect((await feedback({ signal: 'not_for_filing', reason: '   ' })).status).toBe(422);
+    expect((await feedback({ signal: 'not_for_filing', reason: 'x'.repeat(201) })).status).toBe(422);
     expect((await feedback({ signal: 'no_predraft', extra: 1 })).status).toBe(422);
     expect((await feedback({ signal: 'no_predraft' }, 'slack:nope')).status).toBe(404);
     expect(await lines()).toHaveLength(0);

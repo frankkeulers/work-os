@@ -9,7 +9,7 @@ import { CategoryTags, CorrectForm, ItemMarkers, OnCalendar, SnoozeMenu, itemPat
 import { Icon, MoreIcon } from '../../components/icons';
 import { useEarlierToggle } from '../../components/Earlier';
 import { MessageText, Recipients } from '../../components/SlackText';
-import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, phaseToast, usePopover } from '../../components/ui';
+import { Button, IconButton, Kbd, MenuItem, PhaseTag, PopoverPanel, Spinner, cx, inputClass, phaseToast, usePopover } from '../../components/ui';
 import { useNow } from '../../hooks/useNow';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime, fmtWhen, plural } from '../../lib/format';
 import { TYPE_LABEL, TYPE_NOUN, canFile, draftButton, draftState } from '../../lib/lanes';
@@ -609,14 +609,19 @@ function TriageRight({ item }: { item: ItemSummary }) {
 type FilingType = Exclude<ActionType, 'todo'>;
 const FILING_TYPES: FilingType[] = ['vault_note', 'confluence_entry'];
 const FIELD: Record<FilingType, 'vault' | 'confluence'> = { vault_note: 'vault', confluence_entry: 'confluence' };
+/** Quick reasons for "Not for filing"; Frank can also type his own. */
+const NOT_FOR_FILING_REASONS = ['Not my product area', 'Not worth keeping', 'Already written up elsewhere'];
 
 /**
  * Beside the decision (E14, FR-15.7): Frank's word on the filing policy's call, for the filing eval
  * and the policy proposals. "Not for filing" and "Should be filed" correct the item as well; the
- * rest only teach the policy.
+ * rest only teach the policy. "Not for filing" asks why first, so the tuner learns the reason rather
+ * than the channel or the sender; Skip sends it without one.
  */
 function FilingFeedback({ item }: { item: ItemSummary }) {
   const { open, setOpen, close, trigger, panel } = usePopover();
+  const [why, setWhy] = useState(false);
+  const [reason, setReason] = useState('');
   const t = item.triage;
   if (item.triageState !== 'triaged' || !t || item.status !== 'open') return null;
   const on = FILING_TYPES.filter((f) => t[FIELD[f]]);
@@ -638,15 +643,47 @@ function FilingFeedback({ item }: { item: ItemSummary }) {
         aria-expanded={open}
         title="Tell the filing policy what it got wrong"
         className="inline-flex min-h-7 items-center gap-1.5 rounded-md px-1.5 text-[13px] text-muted hover:bg-track hover:text-ink cursor-pointer"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setWhy(false);
+          setReason('');
+          setOpen(!open);
+        }}
       >
         <Icon name="flask" size={13} /> Filing…
       </button>
-      {open && (
+      {open && why && (
+        <PopoverPanel panelRef={panel} label="Why not for filing?" align="left" className="w-[280px]">
+          <div className="flex flex-col">
+            <span className="px-2.5 pb-0.5 pt-1 text-[13px] font-medium text-ink">Why not for filing?</span>
+            <span className="px-2.5 pb-1 text-xs text-muted">The filing policy learns from the reason, not from the channel or who posted it.</span>
+            {NOT_FOR_FILING_REASONS.map((r) => (
+              <MenuItem key={r} onClick={() => send({ signal: 'not_for_filing', reason: r }, 'Taken out of To file')}>
+                {r}
+              </MenuItem>
+            ))}
+            <form
+              className="flex gap-1.5 px-2.5 py-1.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (reason.trim()) send({ signal: 'not_for_filing', reason: reason.trim() }, 'Taken out of To file');
+              }}
+            >
+              <input className={cx(inputClass, 'min-h-8 flex-1 text-[13px]')} aria-label="Another reason" placeholder="Another reason…" maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} />
+              <Button type="submit" size="sm" disabled={!reason.trim()}>
+                Send
+              </Button>
+            </form>
+            <div className="mt-1 border-t border-line-soft pt-1">
+              <MenuItem onClick={() => send({ signal: 'not_for_filing' }, 'Taken out of To file')}>
+                <span className="text-muted">Skip, no reason</span>
+              </MenuItem>
+            </div>
+          </div>
+        </PopoverPanel>
+      )}
+      {open && !why && (
         <PopoverPanel panelRef={panel} label="Filing feedback" role="menu" align="left" className="w-[260px]">
-          {on.length > 0 && (
-            <MenuItem onClick={() => send({ signal: 'not_for_filing' }, 'Taken out of To file')}>Not for filing</MenuItem>
-          )}
+          {on.length > 0 && <MenuItem onClick={() => setWhy(true)}>Not for filing…</MenuItem>}
           {on.map((f) => {
             const plan = item.filing?.[f];
             return (

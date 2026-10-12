@@ -405,14 +405,20 @@ ahead and what is ready to approve. When it got an item wrong:
 2. Click **Filing…** beside the decision. The menu lists each filing triage suggested (**Vault
    note**, **Confluence entry**), with the rule that applied, such as **Vault note · R1**.
 3. Choose what was wrong. A toast confirms it, and the item moves at once.
+   **Not for filing…** first asks why: pick a reason, type your own, or choose **Skip, no reason**.
 
 | Choice | Shown | What happens to the item |
 |---|---|---|
-| **Not for filing** | when triage suggested a filing | It leaves To file, as a correction does |
+| **Not for filing…** | when triage suggested a filing | It leaves To file, as a correction does |
 | **Don't draft items like this ahead** | per filing, when it is drafted ahead | No draft starts until you press `f` or `v`; it leaves Ready to approve |
 | **Should be ready to approve** | per filing, when it isn't ready | It joins Ready to approve and is drafted ahead |
 | **Shouldn't be ready to approve** | per filing, when it is ready | It goes back with the other filings; a draft already made stays |
 | **Should be filed to the vault** / **to Confluence** | for a filing triage didn't suggest | The filing is added, as a correction does |
+
+The reason matters because of how the policy learns. Without one, Opus sees only the thread, and
+the channel is the most visible thing the threads you turned down share: a few
+**Not for filing** answers on #product-signals could read as "don't file #product-signals". **Not
+my product area** tells it the real reason. See [Learning](learning.md#on-filing).
 
 Your word on the item holds until new messages bring a new triage, which decides afresh. The
 switches in [Settings › Learning](/settings/learning) still apply: with Ready to approve off,

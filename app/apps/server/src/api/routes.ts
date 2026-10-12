@@ -185,7 +185,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     const f = d.filingFeedback;
     if (!f) throw new HttpError('unavailable', 'Filing feedback is not available.');
     const body = FilingFeedbackBody.safeParse(req.body);
-    if (!body.success) throw new HttpError('validation', 'Send { signal: "not_for_filing" | "no_predraft" | "should_be_ready" | "not_ready" }, and { type } for one filing.');
+    if (!body.success) throw new HttpError('validation', 'Send { signal: "not_for_filing" | "no_predraft" | "should_be_ready" | "not_ready" }, { type } for one filing, and { reason } of up to 200 characters if you like.');
     const it = d.store.projection.items[id];
     const eff = effectiveTriage(it.decision, it.correction);
     const off = (t: 'confluence_entry' | 'vault_note') => !body.data.type || body.data.type === t;
@@ -200,7 +200,7 @@ export function registerRoutes(app: FastifyInstance, d: ViewDeps & { lifecycle: 
     }
     if (!d.correct) throw new HttpError('unavailable', 'Corrections are not available.');
     if (!eff || (!eff.confluence && !eff.vault)) throw new HttpError('conflict', 'This item has nothing to file.');
-    await d.correct(id, { attention: eff.attention, confluence: eff.confluence && !off('confluence_entry'), vault: eff.vault && !off('vault_note') });
+    await d.correct(id, { attention: eff.attention, confluence: eff.confluence && !off('confluence_entry'), vault: eff.vault && !off('vault_note') }, body.data.reason);
     return reply.headers(noStore).send({ labelCount: f.counts.labels });
   });
 
