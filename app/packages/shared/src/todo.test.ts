@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { askId } from './projection/topics';
 import { lineIdFor, newTodos, parseTaskLine, taskKey, todoContent, todoDeadline, todoDues, todoIdFor, todoLine, todoLines, todoSteps, todoWriteLines, withLineId, withTick } from './todo';
 import type { TodoState } from './projection/state';
-import { slotOf, todoGroups, todoSlots, type TodoSummary } from './todos';
+import { needsLook, slotOf, todoGroup, todoGroups, todoSlots, type TodoSummary } from './todos';
 
 const SRC = { title: '#mvi-launch', permalink: 'https://polestar.slack.com/archives/C06/p1791' };
 
@@ -96,51 +96,58 @@ describe('To Dos’ lines (E15, FR-16.1)', () => {
 describe('To Do groups (E15, FR-16.2)', () => {
   const now = new Date('2026-10-05T12:48:00.000Z'); // Mon 13:48 London
   const t = (id: string, over: Partial<TodoSummary>): TodoSummary => ({ id, itemId: 'i', step: id, source: 'slack', sourceTitle: '#x', status: 'open', deadlineFrom: 'none', createdAt: '2026-10-01T09:00:00.000Z', ...over });
+  const slot = (start: string, over: Partial<NonNullable<TodoSummary['slot']>> = {}) => ({ start, end: start.replace(':00.000Z', ':30.000Z'), by: 'plan' as const, ...over });
+  const ids = (g: Record<string, TodoSummary[]>) => Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v.map((x) => x.id)]));
 
-  it('sorts To Dos into overdue, today, upcoming and done today, soonest first', () => {
+  it('groups by when Frank will do it, not when it is due: planned today but due Thursday is today (Frank, 13 Oct)', () => {
     const g = todoGroups(
       [
-        t('later', { deadline: '2026-10-08T11:00:00.000Z', deadlineFrom: 'triage' }),
-        t('none', {}),
-        t('late', { deadline: '2026-10-02T16:30:00.000Z', deadlineFrom: 'line' }),
-        t('eod', { deadline: '2026-10-05T16:30:00.000Z', deadlineFrom: 'line' }),
-        t('four', { deadline: '2026-10-05T15:00:00.000Z', deadlineFrom: 'triage' }),
+        t('thursday', { deadline: '2026-10-08T16:00:00.000Z', deadlineFrom: 'triage', slot: slot('2026-10-05T12:15:00.000Z') }),
+        t('dueToday', { ideal: '2026-10-05T08:00:00.000Z', slot: slot('2026-10-06T08:00:00.000Z') }),
+        t('friday', { slot: slot('2026-10-09T08:45:00.000Z') }),
+        t('wednesday', { slot: slot('2026-10-07T11:00:00.000Z') }),
+        t('nine', { slot: slot('2026-10-05T08:00:00.000Z') }),
         t('doneToday', { status: 'done', doneAt: '2026-10-05T09:00:00.000Z' }),
         t('doneBefore', { status: 'done', doneAt: '2026-10-04T09:00:00.000Z' }),
       ],
       now,
     );
-    expect(Object.fromEntries(Object.entries(g).map(([k, v]) => [k, v.map((x) => x.id)]))).toEqual({ overdue: ['late'], today: ['four', 'eod'], upcoming: ['later', 'none'], done: ['doneToday'] });
+    // Today in the order of their slots; one due today but planned tomorrow is tomorrow's.
+    expect(ids(g)).toEqual({ look: [], today: ['nine', 'thursday'], tomorrow: ['dueToday'], later: ['wednesday', 'friday'], done: ['doneToday'] });
   });
 
-  it('goes by the ideal date when there is one: due today ideally is today, and past it is not overdue (FR-16.6)', () => {
+  it('puts what needs a look first: overdue, own time gone by or on a meeting, no free time before it is due', () => {
     const g = todoGroups(
       [
-        t('idealToday', { deadline: '2026-10-08T11:00:00.000Z', deadlineFrom: 'triage', ideal: '2026-10-05T15:30:00.000Z' }),
-        t('idealPast', { ideal: '2026-10-05T08:00:00.000Z' }),
-        t('idealLater', { ideal: '2026-10-06T11:00:00.000Z' }),
-        t('deadlineLater', { deadline: '2026-10-07T11:00:00.000Z', deadlineFrom: 'line' }),
+        t('overdue', { deadline: '2026-10-02T16:30:00.000Z', deadlineFrom: 'line', slot: slot('2026-10-05T14:00:00.000Z') }),
+        t('passed', { slot: slot('2026-10-05T09:00:00.000Z', { by: 'you', passed: true }) }),
+        t('clash', { deadline: '2026-10-06T16:00:00.000Z', deadlineFrom: 'triage', slot: slot('2026-10-05T15:00:00.000Z', { by: 'you', clash: true }) }),
+        t('noFit', { deadline: '2026-10-05T16:00:00.000Z', deadlineFrom: 'triage', noSlot: { reason: 'no_fit_before_deadline', firstAfter: { start: '2026-10-06T08:00:00.000Z', end: '2026-10-06T08:30:00.000Z' } } }),
+        t('tooLong', { noSlot: { reason: 'too_long' } }),
       ],
       now,
     );
-    expect(g.overdue).toEqual([]);
-    expect(g.today.map((x) => x.id)).toEqual(['idealPast', 'idealToday']);
-    expect(g.upcoming.map((x) => x.id)).toEqual(['idealLater', 'deadlineLater']);
+    expect(ids(g).look).toEqual(['overdue', 'noFit', 'clash', 'passed', 'tooLong']); // soonest due first
+    expect(g.look.every((x) => needsLook(x, now))).toBe(true);
   });
 
-  it('orders today’s To Dos by slot, then those without one; a slot moves none between groups (FR-16.8)', () => {
-    const slot = (start: string) => ({ start, end: start.replace(':00.000Z', ':30.000Z'), by: 'plan' as const });
+  it('keeps those without a slot and nothing wrong for later: waiting for a plan, or the calendar off', () => {
     const g = todoGroups(
       [
-        t('dueToday', { deadline: '2026-10-05T16:30:00.000Z', deadlineFrom: 'line' }),
-        t('four', { deadline: '2026-10-05T17:00:00.000Z', deadlineFrom: 'line', slot: slot('2026-10-05T15:00:00.000Z') }),
-        t('two', { ideal: '2026-10-05T16:00:00.000Z', slot: slot('2026-10-05T13:00:00.000Z') }),
-        t('later', { deadline: '2026-10-09T11:00:00.000Z', deadlineFrom: 'triage', slot: slot('2026-10-05T14:00:00.000Z') }),
+        t('noCalendar', { deadline: '2026-10-05T16:00:00.000Z', deadlineFrom: 'triage', noSlot: { reason: 'no_calendar' } }),
+        t('planning', { planning: true }),
+        t('planned', { slot: slot('2026-10-12T08:00:00.000Z') }),
       ],
       now,
     );
-    expect(g.today.map((x) => x.id)).toEqual(['two', 'four', 'dueToday']);
-    expect(g.upcoming.map((x) => x.id)).toEqual(['later']);
+    expect(ids(g)).toEqual({ look: [], today: [], tomorrow: [], later: ['planned', 'noCalendar', 'planning'], done: [] });
+    expect(needsLook(g.later[1], now)).toBe(false);
+  });
+
+  it('knows tomorrow across a clock change', () => {
+    const sat = new Date('2026-10-24T22:30:00.000Z'); // Sat 23:30 BST; the clocks go back that night
+    expect(todoGroup(t('sun', { slot: slot('2026-10-25T23:00:00.000Z') }), sat)).toBe('tomorrow'); // Sun 23:00 GMT
+    expect(todoGroup(t('mon', { slot: slot('2026-10-26T00:00:00.000Z') }), sat)).toBe('later');
   });
 });
 

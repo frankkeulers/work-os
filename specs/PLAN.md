@@ -1174,11 +1174,14 @@ The stages:
 - **Words.** The step's words and the line live in `todos/<todoId>.json`, never in the log. Retention removes them once the To Do has been done for longer than `retentionDays` and its item has expired.
 - **Backfill.** At start, to-dos written before E15 get their To Dos from their drafts (`backfilled`), found again by their task since their lines have no id. A draft retention removed is skipped.
 
-**FR-16.2 On the inbox.**
-- **The list layout.** It has a **To do** group after Needs you, still shown at Inbox Zero:
-  - **Overdue** (red), **Today** and **Upcoming** (later, or no deadline), soonest first;
-  - then **N done today**, folded.
-- **The cockpit.** It shows what is overdue or due today under Needs you as **TO DO**, and the rest under Later after This week.
+**FR-16.2 On the inbox.** *Amended 13 Oct 2026 (Frank):* To Dos were in three places on the cockpit (Needs you, Later and the time column), and the lists went by due date while the column went by planned time, so a To Do planned for today but due Thursday sat in Later. Now they are in one place on the cockpit, grouped by when Frank will do them.
+- **Groups.** Everywhere, in this order (`todoGroups`, shared):
+  - **Needs a look** (red): past its deadline, Frank's own time gone by undone, a meeting on Frank's own time, or no free time before it is due (FR-16.8). Soonest due first.
+  - **Today**, **Tomorrow**: by the London day of its slot, in the order of their slots.
+  - **Later**: a slot after tomorrow, then those with no slot and nothing wrong (still planning, or Outlook Calendar off), soonest due first.
+  - Then **N done today**, folded.
+- **The list layout.** It has a **To do** group after Needs you, still shown at Inbox Zero.
+- **The cockpit.** No To Do rows in Needs you or Later. The time column has them: as blocks on the day (FR-16.10), and as a list under the **To Dos** tab beside Today and Tomorrow, in place of the next meeting and the timeline. The tab shows how many are open, or in red how many need a look; so does the folded rail. The list's rows are compact: the step on up to two lines, the rest under it. `g d` opens the tab on its first To Do, `t` goes back to the day, and the tab is kept in this browser.
 - **A row.** Each row shows the step, its source (click to open the item), its deadline chip, and "not in the Tasks note" when its line has gone.
 - **Scope.** To Dos from preview sources show only in Full scope, as items do.
 - **The item panel.** Add to-do says how many of the item's To Dos are open and done today.
@@ -1206,7 +1209,7 @@ The stages:
 - **What it answers.** `effortMinutes` (5 to 480), `confidence` (low, medium or high), and optionally a `deadline`: when it would ideally be done. A one-line why comes with each.
 - **The clamp (code).** The deadline the To Do already has (triage's, the line's, or Frank's) is a ceiling: an ideal deadline at or after it is dropped, as is one already past or more than 30 days off. Whys are cut to one line.
 - **Logging.** The whys and the input go to `todos/<todoId>.json` first, then `todo.planned` is logged with the estimate, the confidence and the ideal deadline. A failed try logs `todo.planFailed`. After two, the To Do shows without an estimate.
-- **What Frank sees.** An estimate chip on the row ("~30m"), dimmed when the model was unsure, with its why on hover; "Planning…" until it arrives. "ideally Tue 12:00" sits beside the source, with its why on hover. A To Do ideally due today shows under Today. Only its own deadline makes it overdue.
+- **What Frank sees.** An estimate chip on the row ("~30m"), dimmed when the model was unsure, with its why on hover; "Planning…" until it arrives. "ideally Tue 12:00" sits beside the source, with its why on hover. Only its own deadline makes it overdue; the ideal date only orders it (FR-16.2).
 
 **FR-16.7 Frank's own estimate and deadline.** The estimate chip, or `p` on a focused row, opens the editor. It offers the lengths (15m to Half day, or a number of minutes) and a deadline (date and time, or None).
 - **Logging.** `todo.edited` sets them. A plan never overrides them, and a deadline Frank sets replaces the ideal one.
@@ -1226,8 +1229,8 @@ The stages:
 
 **FR-16.10 On the inbox and the time column.**
 - **A row.** The slot shows after the source: "Today 15:15–15:45", or "Tue 09:00–09:30". It has a dashed outline when Work OS found it and a solid one when it is Frank's own. Clicking it opens the editor.
-- **Order.** Today's To Dos run in the order of their slots, then those without one. A slot moves no To Do between groups: those stay by their dates (FR-16.2).
-- **The time column.** In the cockpit, each open To Do with a slot on the day shown is a block in the meetings' lane, violet, dashed or solid as on the row. One on a meeting (Frank's own only) takes the right half, with a red edge. A click focuses its row and opens the editor.
+- **Order.** A To Do sits by the day of its slot, Today, Tomorrow or Later, in the order of the slots (FR-16.2, amended 13 Oct).
+- **The time column.** In the cockpit, each open To Do with a slot on the day shown is a block in the meetings' lane, violet, dashed or solid as on the row. One on a meeting (Frank's own only) takes the right half, with a red edge. A click opens the To Dos tab with its row focused and the editor open.
 
 **FR-16.11 Follow-ups on Done.** Once a To Do is done, in Work OS or ticked in Obsidian, the `followup` prompt (§5.1) suggests what usually comes next. It runs after triage, and soon after a Done, for To Dos done in the last day.
 - **What it sends.** The step, how long it took when Frank said, the item's source, kind, title, summary and open asks, the end of the conversation (up to 3,000 characters, Frank's own messages as "me") while it is kept, whether the item is still open, and the item's other open To Dos.

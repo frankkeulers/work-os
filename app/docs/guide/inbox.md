@@ -3,7 +3,7 @@ title: The inbox
 group: Inbox
 order: 30
 summary: The three zones on a wide screen, Needs you, Waiting on others, To file and Ready to approve, your To Dos, closing on reply, the bell, the item panel, batches and the sweep, topics, and how to correct a decision or give feedback on filing.
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 ## Three zones on a wide screen
@@ -15,7 +15,7 @@ The Work OS mark at the top of the sidebar, and the browser tab's icon, have a s
 while something is in Now, briefly teal after a filing is written.
 
 - **Time**, on the left: the clock and the date, then your next meeting, then the day as a
-  timeline. See [The time column](#the-time-column).
+  timeline, or your To Dos under its **To Dos** tab. See [The time column](#the-time-column).
 - **Needs you**, in the middle: **NOW** then **TODAY**, each under its own header. Each row is two
   lines: where it happened, what it needs and when it's due, then the summary in large type.
 - **Later**, on the right, for once a day: **Waiting on others** when something is, **To file** with where each should go (its **Ready to approve** group first), **This week**
@@ -52,10 +52,12 @@ described below; nothing is lost.
   item.
 - **To Dos** sit in the meetings' lane, in violet, at the time Work OS found for them (see
   [Time to do it](#time-to-do-it)): dashed when Work OS picked the time, solid when you did. Click
-  one to change its time.
+  one to change its time: the **To Dos** tab opens on it.
+- **To Dos**, beside Today and Tomorrow, lists all your To Dos in place of the day; see
+  [To do](#to-do). Its count is red when some need a look. `t` goes back to the day.
 - **Tomorrow** (or `t`) shows tomorrow's meetings, with pins for This week items due then.
 - **Fold it away** with the arrow at the right of its header: it becomes a narrow rail with the
-  clock. The arrow on the rail opens it. Either way, the sidebar shows a meeting that's on now or
+  clock, and the To Dos count, which opens them. The arrow on the rail opens it. Either way, the sidebar shows a meeting that's on now or
   about to start, as on every other page. **Drag its right edge** to make it wider or narrower (360 to 600 px; with the
   edge focused, the arrow keys move it too), and double-click the edge to put it back to 400 px.
   Both choices are kept in this browser.
@@ -132,11 +134,19 @@ see [Invites](outlook.md#invites).
 Every to-do you add (`a`) and approve becomes a **To Do** here, one per line it wrote to your
 [Tasks note](vault.md#to-dos). It stays on the inbox until it's done.
 
-- **In a narrower window**, the **To do** group sits after Needs you, even at Inbox Zero. It is split
-  into **Overdue** (in red), **Today** and **Upcoming** (later, or with no date), soonest first.
-  **N done today** at its foot opens what you finished today.
-- **On a wide screen**, what is overdue or due today shows at the foot of Needs you, under **TO DO**.
-  The rest shows in Later, after This week.
+They are grouped by when you'll do them, the time Work OS found or the one you set
+([Time to do it](#time-to-do-it)):
+
+- **Needs a look**, in red: past its deadline, your own time for it gone by, a meeting on your own
+  time, or no free time before it's due.
+- **Today**, **Tomorrow** and **Later**, each in the order you'll do them. Later also holds those
+  waiting for a time, or all of them while Outlook Calendar is off.
+- **N done today** at the foot opens what you finished today.
+
+- **On a wide screen** they are in one place, the time column: as blocks on the day, and all of
+  them under its **To Dos** tab, whose count turns red when some need a look. `g d` opens it on the
+  first. Needs you and Later hold items only.
+- **In a narrower window**, the **To do** group sits after Needs you, even at Inbox Zero.
 - **Each row** shows the step and the item it came from: click the source to open that item. It
   also shows the deadline, which is triage's when the step had one, or 17:30 on the date in the line.
 - **Tick a line in Obsidian** and its To Do shows as done within a minute, "ticked in Obsidian".

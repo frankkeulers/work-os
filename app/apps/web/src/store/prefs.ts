@@ -29,6 +29,8 @@ interface Prefs extends Profile {
   timeCollapsed: boolean;
   /** The cockpit's time column width in px, dragged at its right edge (TIME_WIDTH bounds it). */
   timeWidth: number;
+  /** The cockpit's time column lists the To Dos instead of the day (FR-16.2). */
+  timeTodos: boolean;
   /** The cockpit's Later column width in px, dragged at its left edge (LATER_WIDTH bounds it). */
   laterWidth: number;
   /** When Frank last opened the bell (FR-11.5): entries since then count as new. Server time. */
@@ -51,6 +53,7 @@ interface Prefs extends Profile {
   setSourceHidden: (source: SourceId, hidden: string[]) => void;
   setTimeCollapsed: (collapsed: boolean) => void;
   setTimeWidth: (px: number) => void;
+  setTimeTodos: (on: boolean) => void;
   setLaterWidth: (px: number) => void;
   setBellSeenAt: (at: string) => void;
 }
@@ -83,6 +86,7 @@ export const usePrefs = create<Prefs>()(
       sourceHidden: {},
       timeCollapsed: false,
       timeWidth: TIME_WIDTH.default,
+      timeTodos: false,
       laterWidth: LATER_WIDTH.default,
       setTheme: (theme) => set({ theme }),
       setPanelOpen: (panelOpen) => set({ panelOpen }),
@@ -118,6 +122,7 @@ export const usePrefs = create<Prefs>()(
       setTriageDetailsOpen: (triageDetailsOpen) => set({ triageDetailsOpen }),
       setSourceHidden: (source, hidden) => set((s) => ({ sourceHidden: { ...s.sourceHidden, [source]: hidden } })),
       setTimeCollapsed: (timeCollapsed) => set({ timeCollapsed }),
+      setTimeTodos: (timeTodos) => set({ timeTodos }),
       setTimeWidth: (timeWidth) => set({ timeWidth }),
       setLaterWidth: (laterWidth) => set({ laterWidth }),
       setBellSeenAt: (bellSeenAt) => set({ bellSeenAt }),

@@ -2,8 +2,9 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 // To Dos on the inbox (PLAN E15, FR-16.1–16.3): every line written to the Tasks note shows on the
-// inbox, with where it came from and when it is due. The list layout has a To do group after Needs
-// you; the cockpit puts what is overdue or due today in Needs you and the rest in Later.
+// inbox, with where it came from and when it is due, grouped by when Frank will do it. The list
+// layout has a To do group after Needs you; the cockpit has them in one place, the time column: as
+// blocks on the day, and as a list under its To Dos tab.
 
 const APP = join(import.meta.dirname, '../../..');
 const HIDE = '[data-testid="os-notification"], [data-scenarios], [aria-label="Notifications"][aria-live] { display: none !important; }';
@@ -18,6 +19,12 @@ async function withTodos(page: Page) {
   await page.keyboard.press('Backquote');
 }
 
+/** The cockpit's To Dos: the time column's To Dos tab, opened. */
+async function todosTab(page: Page) {
+  await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: /^To Dos/ }).click();
+  return page.getByTestId('todo-drawer');
+}
+
 const shoot = async (page: Page, el: ReturnType<Page['locator']>, name: string) => {
   const hide = await page.addStyleTag({ content: HIDE });
   await el.screenshot({ path: join(APP, `screenshots/${name}-light.png`), animations: 'disabled' });
@@ -30,52 +37,71 @@ const shoot = async (page: Page, el: ReturnType<Page['locator']>, name: string) 
 test.describe('wide window (cockpit)', () => {
   test.use({ viewport: { width: 1680, height: 1050 } });
 
-  test('J99 To Dos due today sit in Needs you, the rest in Later, and each opens its source (FR-16.2)', async ({ page }) => {
+  test('J99 To Dos are in one place, the time column: blocks on the day, and all of them under To Dos, by when you’ll do them (FR-16.2)', async ({ page }) => {
     await withTodos(page);
-    const needs = page.getByRole('region', { name: 'To do today' });
-    await expect(needs.locator('[data-todo]')).toHaveCount(3);
-    await expect(needs.getByRole('heading', { name: 'TO DO · 3' })).toBeVisible();
-    // Overdue first, in red; then today's, soonest first.
-    await expect(needs.locator('[data-todo]').first()).toContainText('Send Matt the one-line MVI V2 go/no-go reason');
-    await expect(needs.locator('[data-todo]').first()).toContainText('overdue');
-    await expect(needs.locator('[data-todo]').nth(1)).toContainText('Share the graduation gate checklist');
+    // None in Needs you or Later.
+    await expect(page.locator('[data-cockpit-zone="needs"] [data-todo], [data-cockpit-zone="later"] [data-todo]')).toHaveCount(0);
+    // The tab says, in red, how many need a look: the overdue one, and one with no time before it's due.
+    const time = page.locator('[data-cockpit-zone="time"]');
+    await expect(time.getByTestId('todo-count')).toHaveText('2');
+    await expect(time.getByTestId('todo-count')).toHaveAttribute('data-look', 'true');
+    const blocks = await time.locator('[data-timeline-todo]').evaluateAll((els) => els.map((e) => e.getAttribute('data-timeline-todo')));
 
-    const later = page.getByRole('region', { name: 'Later' }).getByRole('region', { name: 'To do' });
-    await expect(later.locator('[data-todo][data-todo-status="open"]')).toHaveCount(2);
-    await expect(later.locator('[data-todo]').last()).toContainText('Book a kick-off with the Data team');
-    await later.getByRole('button', { name: '1 done today' }).click();
-    await expect(later.locator('[data-todo-status="done"]')).toContainText('ticked in Obsidian');
-    await shoot(page, page.locator('[data-cockpit-zone="needs"]'), 'todos-cockpit-needs');
-    await shoot(page, page.locator('[data-cockpit-zone="later"]'), 'todos-cockpit-later');
+    const drawer = await todosTab(page);
+    await expect(drawer.locator('[data-todo-head]')).toHaveText(['NEEDS A LOOK · 2', 'TODAY · 1', 'TOMORROW · 2']);
+    const look = drawer.locator('[data-todo-group="look"] [data-todo]');
+    await expect(look.first()).toContainText('Send Matt the one-line MVI V2 go/no-go reason');
+    await expect(look.first()).toContainText('overdue');
+    await expect(look.nth(1)).toContainText('Add the imo_str deprecation');
+    await expect(look.nth(1)).toContainText('No free time before it is due');
+    // Today's are the day's blocks: planned today, whatever their date.
+    const today = await drawer.locator('[data-todo-group="today"] [data-todo]').evaluateAll((els) => els.map((e) => e.getAttribute('data-todo')));
+    expect(today.every((id) => blocks.includes(id))).toBe(true);
+    await expect(drawer.locator('[data-todo-group="today"]')).toContainText('Share the graduation gate checklist');
+    await expect(drawer.locator('[data-todo-group="tomorrow"]')).toContainText('Book a kick-off with the Data team');
+    await drawer.getByRole('button', { name: '1 done today' }).click();
+    await expect(drawer.locator('[data-todo-status="done"]')).toContainText('ticked in Obsidian');
+    await shoot(page, time, 'todos-cockpit-drawer');
 
-    await needs.locator('[data-todo]').nth(1).getByRole('button', { name: '#pole-star-labs' }).click();
+    await drawer.locator('[data-todo]', { hasText: 'Share the graduation' }).getByRole('button', { name: '#pole-star-labs' }).click();
     await expect(page.locator('.item-panel')).toContainText('graduation gate checklist');
+
+    // Back to the day, and folded: the rail still says how many need a look, and opens them.
+    await time.getByRole('button', { name: 'Today', exact: true }).click();
+    await expect(drawer).toHaveCount(0);
+    await time.getByRole('button', { name: 'Collapse the time column' }).click();
+    await expect(time.getByTestId('todo-count')).toHaveText('2');
+    await time.getByRole('button', { name: 'Show the To Dos' }).click();
+    await expect(drawer.locator('[data-todo]').first()).toBeVisible();
   });
 
   test('J94 Done on a To Do ticks it in the Tasks note, asks how long it took, and Undo opens it again (FR-16.4, FR-16.5)', async ({ page }) => {
     await withTodos(page);
-    const needs = page.getByRole('region', { name: 'To do today' });
-    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
+    const drawer = await todosTab(page);
+    const open = drawer.locator('[data-todo][data-todo-status="open"]');
+    await expect(open).toHaveCount(5);
+    const share = drawer.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
     await share.getByRole('button', { name: 'Done: Share the graduation gate checklist' }).click();
     const toast = page.getByRole('status').filter({ hasText: 'Done · Share the graduation gate checklist' });
     await expect(toast).toContainText('Ticked in the Tasks note');
-    await expect(needs.locator('[data-todo]')).toHaveCount(2);
+    await expect(open).toHaveCount(4);
     await toast.getByRole('button', { name: '30m' }).click();
     await expect(toast.getByRole('button', { name: '30m' })).toHaveAttribute('aria-pressed', 'true');
     await shoot(page, toast, 'todos-done-toast');
-    const later = page.getByRole('region', { name: 'Later' }).getByRole('region', { name: 'To do' });
-    await later.getByRole('button', { name: '2 done today' }).click();
-    await expect(later.locator('[data-todo-status="done"]', { hasText: 'Share the graduation' })).toContainText('took 30m');
+    await drawer.getByRole('button', { name: '2 done today' }).click();
+    await expect(drawer.locator('[data-todo-status="done"]', { hasText: 'Share the graduation' })).toContainText('took 30m');
 
     // z undoes it, as any toast's Undo.
     await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('z');
-    await expect(needs.locator('[data-todo]')).toHaveCount(3);
+    await expect(open).toHaveCount(5);
 
-    // g then d: the first To Do, and e on it is its Done, not the open item's.
+    // g then d, from the day: the To Dos tab and its first To Do, and e on it is its Done, not the open item's.
+    await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Today', exact: true }).click();
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('g');
     await page.keyboard.press('d');
-    await expect(needs.locator('[data-todo]').first()).toBeFocused();
+    await expect(open.first()).toBeFocused();
     const item = page.locator('.item-panel');
     const hadPanel = await item.count();
     await page.keyboard.press('e');
@@ -83,23 +109,23 @@ test.describe('wide window (cockpit)', () => {
     await expect(item).toHaveCount(hadPanel);
 
     // A line not in the Tasks note: done all the same, and it says it couldn't be ticked.
-    await later.locator('[data-todo]', { hasText: 'Book a kick-off' }).getByRole('button', { name: /^Done:/ }).click();
+    await drawer.locator('[data-todo]', { hasText: 'Book a kick-off' }).getByRole('button', { name: /^Done:/ }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Done · Book a kick-off' })).toContainText('Not ticked: its line isn’t in the Tasks note');
-    await expect(later.locator('[data-todo]', { hasText: 'Book a kick-off' })).toContainText('not ticked in the Tasks note');
+    await drawer.getByRole('button', { name: /done today/ }).click();
+    await expect(drawer.locator('[data-todo]', { hasText: 'Book a kick-off' })).toContainText('not ticked in the Tasks note');
   });
 
   test('J95 each To Do shows its estimate and when it would ideally be done, and you can set your own (FR-16.6, FR-16.7)', async ({ page }) => {
     await withTodos(page);
-    const needs = page.getByRole('region', { name: 'To do today' });
-    const later = page.getByRole('region', { name: 'Later' }).getByRole('region', { name: 'To do' });
-    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
+    const drawer = await todosTab(page);
+    const share = drawer.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
     await expect(share.getByRole('button', { name: /^Plan:/ })).toHaveText('~15m');
     // Unsure: dimmed, and says so.
-    const kickoff = later.locator('[data-todo]', { hasText: 'Book a kick-off' }).getByRole('button', { name: /^Plan:/ });
+    const kickoff = drawer.locator('[data-todo]', { hasText: 'Book a kick-off' }).getByRole('button', { name: /^Plan:/ });
     await expect(kickoff).toHaveText('~20m');
     await expect(kickoff).toHaveAttribute('title', /^A rough estimate: Finding a time/);
     // Ideally sooner than its deadline, with why.
-    const legal = later.locator('[data-todo]', { hasText: 'Confirm the IMO STR wording with Legal' });
+    const legal = drawer.locator('[data-todo]', { hasText: 'Confirm the IMO STR wording with Legal' });
     await expect(legal.locator('[data-todo-ideal]')).toContainText('ideally');
     await expect(legal.locator('[data-todo-ideal]')).toHaveAttribute('title', /Legal review wording on Tuesdays/);
 
@@ -122,33 +148,31 @@ test.describe('wide window (cockpit)', () => {
     await expect(first).toBeVisible();
     await first.getByRole('button', { name: 'None' }).click();
     await first.getByRole('button', { name: 'Save' }).click();
-    // No deadline now: no longer overdue, so it leaves Needs you for Later.
-    await expect(later.locator('[data-todo]', { hasText: 'Send Matt the one-line' })).toBeVisible();
-    await expect(needs.locator('[data-todo]', { hasText: 'Send Matt the one-line' })).toHaveCount(0);
+    // No deadline now: no longer overdue, so it needs no look, and goes by its time, today.
+    await expect(drawer.locator('[data-todo-group="today"] [data-todo]', { hasText: 'Send Matt the one-line' })).toBeVisible();
+    await expect(drawer.locator('[data-todo-group="look"] [data-todo]', { hasText: 'Send Matt the one-line' })).toHaveCount(0);
+    await expect(page.locator('[data-cockpit-zone="time"]').getByTestId('todo-count')).toHaveText('1');
   });
 
   test('J96 each To Do gets free time around the meetings, shown in the time column, and you can keep your own time (FR-16.8, FR-16.9)', async ({ page }) => {
     await withTodos(page);
-    const needs = page.getByRole('region', { name: 'To do today' });
-    // 13:48, the renewal call 14:00–15:00: the overdue one first, at 15:15, then today's.
-    const send = needs.locator('[data-todo]', { hasText: 'Send Matt the one-line' });
-    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
-    await expect(send.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:15–15:30');
-    await expect(share.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:30–15:45');
-    // Today's run in the order of their slots.
-    await expect(needs.locator('[data-todo]').nth(1)).toContainText('Share the graduation gate checklist');
-
+    const time = page.locator('[data-cockpit-zone="time"]');
+    // 13:48, the renewal call 14:00–15:00: the overdue one first, at 15:15, then the checklist.
     const column = page.getByRole('list', { name: 'To Dos planned today' });
     const blocks = column.locator('[data-timeline-todo]');
     await expect(blocks.first()).toContainText('15:15 Send Matt the one-line');
-    const shareBlock = column.locator(`[data-timeline-todo="${await share.getAttribute('data-todo')}"]`);
+    const shareBlock = blocks.filter({ hasText: 'Share the graduation gate checklist' });
+    await expect(shareBlock).toContainText('15:30');
     await expect(shareBlock).toHaveAttribute('data-slot-by', 'plan');
-    await shoot(page, page.locator('[data-cockpit-zone="time"]'), 'todos-time-column');
+    const shareId = await shareBlock.getAttribute('data-timeline-todo');
+    await shoot(page, time, 'todos-time-column');
 
-    // A block opens its plan: keep your own time, tomorrow at 09:00.
+    // A block opens its plan, under the To Dos tab: keep your own time, tomorrow at 09:00.
     await shareBlock.getByRole('button').click();
     const editor = page.getByRole('dialog', { name: 'Plan: Share the graduation gate checklist' });
     await expect(editor.locator('[data-slot-note]')).toContainText('Free time Work OS found in your calendar. Nothing is booked.');
+    const drawer = page.getByTestId('todo-drawer');
+    await expect(time.getByRole('button', { name: /^To Dos/ })).toHaveAttribute('aria-pressed', 'true');
     // The mock's day is Mon 5 Oct 2026: 09:00 London on the Tuesday, in the browser's own zone.
     const tomorrow9 = await page.evaluate(() => {
       const t = new Date('2026-10-06T08:00:00.000Z');
@@ -157,14 +181,18 @@ test.describe('wide window (cockpit)', () => {
     await editor.getByLabel('When you’ll do it').fill(tomorrow9);
     await shoot(page, editor, 'todos-slot-editor');
     await editor.getByRole('button', { name: 'Save' }).click();
+    const share = drawer.locator(`[data-todo="${shareId}"]`);
     await expect(share.locator('[data-todo-slot="you"]')).toHaveText('Tue 09:00–09:15');
-    await expect(shareBlock).toHaveCount(0);
+    await expect(drawer.locator(`[data-todo-group="tomorrow"] [data-todo="${shareId}"]`)).toBeVisible();
+    await expect(drawer.locator('[data-todo]', { hasText: 'Send Matt the one-line' }).locator('[data-todo-slot="plan"]')).toHaveText('Today 15:15–15:30');
     // Tomorrow's column has it, solid: Frank's own time. (Those that don't fit before 17:00 today are there too.)
-    await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Tomorrow' }).click();
-    await expect(page.getByRole('list', { name: 'To Dos planned tomorrow' }).locator(`[data-timeline-todo="${await share.getAttribute('data-todo')}"]`)).toHaveAttribute('data-slot-by', 'you');
-    await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Today', exact: true }).click();
+    await time.getByRole('button', { name: 'Tomorrow' }).click();
+    await expect(page.getByRole('list', { name: 'To Dos planned tomorrow' }).locator(`[data-timeline-todo="${shareId}"]`)).toHaveAttribute('data-slot-by', 'you');
+    await time.getByRole('button', { name: 'Today', exact: true }).click();
+    await expect(column.locator(`[data-timeline-todo="${shareId}"]`)).toHaveCount(0);
 
     // Hand it back.
+    await todosTab(page);
     await share.locator('[data-todo-slot]').click();
     await editor.getByRole('button', { name: 'Let Work OS plan' }).click();
     await editor.getByRole('button', { name: 'Save' }).click();
@@ -173,7 +201,7 @@ test.describe('wide window (cockpit)', () => {
 
   test('J100 To Dos are planned in their own hours, 09:00–17:00 unless you set others in Settings › Schedule (FR-16.8)', async ({ page }) => {
     await withTodos(page);
-    const send = page.getByRole('region', { name: 'To do today' }).locator('[data-todo]', { hasText: 'Send Matt the one-line' });
+    const send = (await todosTab(page)).locator('[data-todo]', { hasText: 'Send Matt the one-line' });
     await expect(send.locator('[data-todo-slot="plan"]')).toHaveText('Today 15:15–15:30');
 
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
@@ -203,8 +231,8 @@ test.describe('wide window (cockpit)', () => {
       window.open = (url?: string | URL) => (w.opened.push(String(url)), null);
     });
     await withTodos(page);
-    const needs = page.getByRole('region', { name: 'To do today' });
-    const share = needs.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
+    const drawer = await todosTab(page);
+    const share = drawer.locator('[data-todo]', { hasText: 'Share the graduation gate checklist' });
     await share.getByRole('button', { name: 'Done: Share the graduation gate checklist' }).click();
     const toast = page.getByRole('status').filter({ hasText: 'Done · Share the graduation gate checklist' });
     await expect(toast).toContainText('Suggesting follow-ups…');
@@ -228,9 +256,8 @@ test.describe('wide window (cockpit)', () => {
     await expect(next.locator('[data-followup]')).toHaveCount(2);
 
     // The next To Do, from the row under Done today: written at once.
-    const later = page.getByRole('region', { name: 'Later' }).getByRole('region', { name: 'To do' });
-    await later.getByRole('button', { name: '2 done today' }).click();
-    const done = later.locator('[data-todo-status="done"]', { hasText: 'Share the graduation' });
+    await drawer.getByRole('button', { name: '2 done today' }).click();
+    const done = drawer.locator('[data-todo-status="done"]', { hasText: 'Share the graduation' });
     await done.getByRole('button', { name: 'Add this To Do', exact: true }).click();
     await expect(page.locator('[data-todo][data-todo-status="open"]', { hasText: 'Book the security review for the Labs prototype' })).toBeVisible();
     // Not this one: closing the item.
@@ -242,14 +269,14 @@ test.describe('wide window (cockpit)', () => {
 test.describe('list layout', () => {
   test.use({ viewport: { width: 1280, height: 1600 } });
 
-  test('J99 a To do group after Needs you: overdue, today, upcoming, then done today, folded (FR-16.2)', async ({ page }) => {
+  test('J99 a To do group after Needs you: what needs a look, today, tomorrow, later, then done today, folded (FR-16.2)', async ({ page }) => {
     await withTodos(page);
     // The list opens on its first item: close the panel to see the whole group.
     await expect(page.locator('.item-panel')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('.item-panel')).toHaveCount(0);
     const group = page.getByRole('region', { name: 'To do', exact: true });
-    await expect(group.locator('[data-todo-head]')).toHaveText(['OVERDUE · 1', 'TODAY · 2', 'UPCOMING · 2']);
+    await expect(group.locator('[data-todo-head]')).toHaveText(['NEEDS A LOOK · 2', 'TODAY · 1', 'TOMORROW · 2']);
     await expect(group.locator('[data-todo-status="done"]')).toHaveCount(0);
     await group.getByRole('button', { name: '1 done today' }).click();
     await expect(group.locator('[data-todo-status="done"]')).toHaveCount(1);

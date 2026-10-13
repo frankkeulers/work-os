@@ -3,7 +3,7 @@ title: Keyboard shortcuts
 group: Help
 order: 90
 summary: Every key Work OS listens for.
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 Shortcuts work anywhere except while you are typing in a field. Press `?` to see the keys for
@@ -24,8 +24,8 @@ where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` c
 | `j` / `k` | Next / previous item: Now, Today, Waiting on others, To file, then This week |
 | `g` then `n` | The first item in Needs you |
 | `g` then `l` | The first item in Later (To file, or This week) |
-| `g` then `d` | The first To Do |
-| `t` | Today or tomorrow in the time column (on a wide screen) |
+| `g` then `d` | The first To Do (on a wide screen, under the time column's To Dos tab) |
+| `t` | Today or tomorrow in the time column; from its To Dos tab, back to the day (on a wide screen) |
 | `o` | Open the item as a full page |
 | `Esc` | Close the item panel; with it closed, go back from a list opened in Later |
 

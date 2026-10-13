@@ -33,7 +33,7 @@ import { LOWER, LaterZone, NeedsYouZone, RepliesLine, type Lower } from './inbox
 import { BatchDone, ItemPanel, SweepDone } from './inbox/ItemPanel';
 import { counted, newSweep, nextInSweep, type Sweep } from './inbox/sweep';
 import { FiledToday } from './inbox/FiledToday';
-import { TodoGroup, TodoLater, TodoNeeds } from './inbox/TodoGroup';
+import { TodoGroup, focusFirstTodo } from './inbox/TodoGroup';
 import { batchable, filingFor, needsDraft, type Batch } from './inbox/batch';
 import { useDraftAhead } from './inbox/draftAhead';
 import { LeaveDialog, PanelSlide } from './inbox/PanelSlide';
@@ -911,12 +911,15 @@ export function InboxPage() {
         e.preventDefault();
         pick(e.key === 'n' ? firstNeeds : firstLater);
       } else if (afterG && e.key === 'd') {
-        // The first open To Do (FR-16.4): its keys are its own, e for Done.
-        const row = document.querySelector<HTMLElement>('[data-todo][data-todo-status="open"]');
-        if (!row) return;
+        // The first open To Do (FR-16.4): its keys are its own, e for Done. On the cockpit, under the
+        // time column's To Dos tab (FR-16.2).
         e.preventDefault();
-        row.focus();
-        row.scrollIntoView({ block: 'nearest' });
+        if (wide) focusFirstTodo();
+        else {
+          const row = document.querySelector<HTMLElement>('[data-todo][data-todo-status="open"]');
+          row?.focus();
+          row?.scrollIntoView({ block: 'nearest' });
+        }
       } else if (e.key === 'g') {
         gAt.current = Date.now();
       } else if (e.key === 'j') {
@@ -940,7 +943,9 @@ export function InboxPage() {
         setOpen(null);
       } else if (e.key === 't' && wide) {
         e.preventDefault();
-        setDay((d) => (d === 'today' ? 'tomorrow' : 'today'));
+        // From the To Dos tab, back to the day shown; else today and tomorrow in turn.
+        if (usePrefs.getState().timeTodos) usePrefs.getState().setTimeTodos(false);
+        else setDay((d) => (d === 'today' ? 'tomorrow' : 'today'));
       } else if (e.key === 'o' && sel) {
         e.preventDefault();
         navigate(itemPath(sel));
@@ -1108,7 +1113,6 @@ export function InboxPage() {
               empty={inbox.firstRun ? <FirstRun inbox={inbox} /> : undefined}
               footer={<RepliesLine closed={inbox.closedByReply} onReview={() => setOpen('replied')} className="h-12" />}
             >
-              <TodoNeeds todos={todos} onOpen={openItem} />
               {full && <CommitmentsGroup />}
             </NeedsYouZone>
             <LaterZone
@@ -1124,7 +1128,6 @@ export function InboxPage() {
               pill={<NewPill group="file" items={pillItems('file')} above={stable.pending.file.every((p) => p.above)} onGo={() => goNew('file')} />}
               fileAction={batchButton}
               filedToday={<FiledToday onOpen={openItem} />}
-              todos={<TodoLater todos={todos} onOpen={openItem} />}
               scrollerRef={laterRef}
             />
           </>

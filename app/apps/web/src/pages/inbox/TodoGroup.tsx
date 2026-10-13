@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { MIRROR_FAILURE, NO_SLOT, todoGroups, type TodoGroup as Group, type TodoSummary } from '@work-os/shared';
 import { api } from '../../api';
+import { usePrefs } from '../../store/prefs';
 import { errorToast, toast } from '../../store/toasts';
 import { SourceMark } from '../../components/BrandIcon';
 import { Icon } from '../../components/icons';
@@ -13,19 +14,52 @@ import { DoneFollowups, FollowupList } from './Followups';
 import { EstimateChip, LENGTHS, durLabel, nearestLength, slotLabel } from './TodoPlan';
 
 // To Dos on the inbox (E15, FR-16.2): every line Frank wrote to the Tasks note, with where it came
-// from and when it is due. The list layout has a To do group after Needs you; the cockpit puts
-// what is overdue or due today in Needs you and the rest in Later. A row opens its source item;
+// from and when it is due, grouped by when he'll do it: what needs a look, then today, tomorrow
+// and later. The list layout has a To do group after Needs you; the cockpit has them in one place,
+// the time column, as blocks on the day and as a list under its To Dos tab. A row opens its source item;
 // its ✓, or `e` on it, marks it done and ticks its line in the Tasks note (FR-16.4). Its estimate,
 // and when it would ideally be done, come from the model (FR-16.6); Frank can set both (FR-16.7).
 // When he'll do it is free time code found in his calendar (FR-16.8), or his own (FR-16.9). Once
 // done, what usually comes next is suggested under the toast and on the row (FR-16.11).
 
-const HEAD: Record<Exclude<Group, 'done'>, string> = { overdue: 'Overdue', today: 'Today', upcoming: 'Upcoming' };
+const HEAD: Record<Exclude<Group, 'done'>, string> = { look: 'Needs a look', today: 'Today', tomorrow: 'Tomorrow', later: 'Later' };
+const OPEN: readonly Exclude<Group, 'done'>[] = ['look', 'today', 'tomorrow', 'later'];
 
 const PLAN_EVENT = 'workos:todo-plan';
+/** A plan asked for before its row was there: the row opens it once it mounts. */
+let pendingPlan: string | undefined;
 
-/** Opens a To Do's plan from elsewhere (the time column): its row takes focus and opens the editor. */
-export const openTodoPlan = (todoId: string) => window.dispatchEvent(new CustomEvent<string>(PLAN_EVENT, { detail: todoId }));
+/**
+ * Opens a To Do's plan from its block in the time column: the column turns to its To Dos, and the
+ * row takes focus and opens the editor.
+ */
+export function openTodoPlan(todoId: string) {
+  pendingPlan = todoId;
+  const prefs = usePrefs.getState();
+  prefs.setTimeCollapsed(false);
+  prefs.setTimeTodos(true);
+  window.dispatchEvent(new CustomEvent<string>(PLAN_EVENT, { detail: todoId }));
+}
+
+/** On the cockpit, `g d`: the time column turns to its To Dos, and the first open one takes focus. */
+export function focusFirstTodo() {
+  const prefs = usePrefs.getState();
+  prefs.setTimeCollapsed(false);
+  prefs.setTimeTodos(true);
+  const focus = () => {
+    const row = document.querySelector<HTMLElement>('[data-todo][data-todo-status="open"]');
+    row?.focus();
+    row?.scrollIntoView({ block: 'nearest' });
+    return !!row;
+  };
+  if (!focus()) requestAnimationFrame(focus);
+}
+
+/** How many To Dos are open, and how many of those need a look, for the To Dos tab. */
+export function todoCounts(todos: readonly TodoSummary[], now: Date) {
+  const g = todoGroups(todos, now);
+  return { open: OPEN.reduce((n, k) => n + g[k].length, 0), look: g.look.length };
+}
 
 /** When Frank will do it (FR-16.8, FR-16.9): the slot, or why there is none and when it would first fit. */
 function SlotNote({ todo, now, onPlan }: { todo: TodoSummary; now: Date; onPlan: () => void }) {
@@ -49,7 +83,7 @@ function SlotNote({ todo, now, onPlan }: { todo: TodoSummary; now: Date; onPlan:
   const none = todo.noSlot;
   if (!none || none.reason === 'no_calendar') return null;
   return (
-    <span data-todo-noslot={none.reason} className="flex min-w-0 shrink-0 items-center gap-1 text-amber-fg">
+    <span data-todo-noslot={none.reason} className="flex min-w-0 shrink-0 flex-wrap items-center gap-x-1 text-amber-fg">
       · {NO_SLOT[none.reason]}
       {none.firstAfter && (
         <>
@@ -129,21 +163,24 @@ async function reopenTodo(todo: TodoSummary) {
   }
 }
 
-function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: (itemId: string) => void }) {
+/** A To Do's row. Compact in the time column, which is narrow: its step on two lines, and its chips with the rest under it. */
+function TodoRow({ todo, now, onOpen, compact }: { todo: TodoSummary; now: Date; onOpen: (itemId: string) => void; compact?: boolean }) {
   const done = todo.status === 'done';
   const due = !done && todo.deadline ? dueInfo({ dueAt: todo.deadline }, now) : undefined;
   const pop = usePopover();
   const { setOpen } = pop;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const on = (e: Event) => {
-      if ((e as CustomEvent<string>).detail !== todo.id || done) return;
+    const plan = () => {
+      if (pendingPlan !== todo.id || done) return;
+      pendingPlan = undefined;
       ref.current?.scrollIntoView({ block: 'nearest' });
       ref.current?.focus();
       setOpen(true);
     };
-    window.addEventListener(PLAN_EVENT, on);
-    return () => window.removeEventListener(PLAN_EVENT, on);
+    plan(); // asked for before this row was there
+    window.addEventListener(PLAN_EVENT, plan);
+    return () => window.removeEventListener(PLAN_EVENT, plan);
   }, [todo.id, done, setOpen]);
   // Keys on a focused row are its own (`g d` focuses the first): the item panel's don't see them.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -167,15 +204,17 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
     >
       <Icon name="commit" size={16} aria-hidden className={cx('shrink-0', done ? 'text-green-fg' : 'text-violet-fg')} />
       <div className="min-w-0 flex-1">
-        <div className={cx('truncate text-[13px]', done ? 'text-muted line-through' : 'font-medium text-ink')} title={todo.step}>
+        <div className={cx('text-[13px]', compact ? 'line-clamp-2' : 'truncate', done ? 'text-muted line-through' : 'font-medium text-ink')} title={todo.step}>
           {todo.step}
         </div>
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
-          <button type="button" data-open-item onClick={() => onOpen(todo.itemId)} title="Open the item it came from" className="inline-flex min-w-0 items-center gap-1 truncate cursor-pointer hover:text-ink-2 hover:underline">
+        <div className={cx('flex min-w-0 items-center gap-2 text-xs text-muted', compact && 'mt-1 flex-wrap gap-y-1')}>
+          <button type="button" data-open-item onClick={() => onOpen(todo.itemId)} title="Open the item it came from" className={cx('inline-flex min-w-0 items-center gap-1 truncate cursor-pointer hover:text-ink-2 hover:underline', compact && 'max-w-full')}>
             <SourceMark source={todo.source} size={12} decorative />
             <span className="truncate">{todo.sourceTitle}</span>
           </button>
           {!done && <SlotNote todo={todo} now={now} onPlan={() => setOpen(true)} />}
+          {compact && !done && <EstimateChip todo={todo} {...pop} />}
+          {compact && due && <DueChip due={due} />}
           {done && todo.doneAt && <span className="shrink-0">· {todo.doneBy === 'tasks_note' ? 'ticked in Obsidian' : 'done'} {fmtTime(todo.doneAt)}</span>}
           {done && todo.actualMinutes && <span className="shrink-0">· took {durLabel(todo.actualMinutes)}</span>}
           {!done && todo.ideal && (
@@ -197,8 +236,8 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
         </div>
         {done && todo.followups && <FollowupList todo={todo} onOpen={onOpen} />}
       </div>
-      {!done && <EstimateChip todo={todo} {...pop} />}
-      {due && <DueChip due={due} />}
+      {!compact && !done && <EstimateChip todo={todo} {...pop} />}
+      {!compact && due && <DueChip due={due} />}
       {/* As an item row's Done: faint until the row is hovered or focused. */}
       {done ? (
         <IconButton label={`Open again: ${todo.step}`} title="Open again, and untick it in the Tasks note" icon="undo" size={32} className="-mr-2 text-muted opacity-60 hover:text-ink hover:opacity-100 focus-visible:opacity-100 group-hover/todo:opacity-100" onClick={() => void reopenTodo(todo)} />
@@ -210,7 +249,7 @@ function TodoRow({ todo, now, onOpen }: { todo: TodoSummary; now: Date; onOpen: 
 }
 
 /** "3 done today", folded until clicked. */
-function DoneToday({ done, now, onOpen }: { done: TodoSummary[]; now: Date; onOpen: (itemId: string) => void }) {
+function DoneToday({ done, now, onOpen, compact }: { done: TodoSummary[]; now: Date; onOpen: (itemId: string) => void; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   if (!done.length) return null;
   return (
@@ -220,26 +259,26 @@ function DoneToday({ done, now, onOpen }: { done: TodoSummary[]; now: Date; onOp
         {done.length} done today
         <Icon name="down" size={12} className={cx('transition-transform', !open && '-rotate-90')} />
       </button>
-      {open && done.map((t) => <TodoRow key={t.id} todo={t} now={now} onOpen={onOpen} />)}
+      {open && done.map((t) => <TodoRow key={t.id} todo={t} now={now} onOpen={onOpen} compact={compact} />)}
     </>
   );
 }
 
 function SubHead({ group, count }: { group: Exclude<Group, 'done'>; count: number }) {
   return (
-    <h3 data-todo-head={group} className={cx('m-0 border-t px-6 py-1.5 text-xs font-semibold tracking-[0.04em]', group === 'overdue' ? 'border-red-line bg-red-wash text-red-fg' : 'border-line-soft bg-surface-2 text-violet-fg')}>
+    <h3 data-todo-head={group} className={cx('m-0 border-t px-6 py-1.5 text-xs font-semibold tracking-[0.04em]', group === 'look' ? 'border-red-line bg-red-wash text-red-fg' : 'border-line-soft bg-surface-2 text-violet-fg')}>
       {HEAD[group].toUpperCase()} · {count}
     </h3>
   );
 }
 
-function Groups({ g, show, now, onOpen }: { g: Record<Group, TodoSummary[]>; show: readonly Exclude<Group, 'done'>[]; now: Date; onOpen: (itemId: string) => void }) {
+function Groups({ g, show, now, onOpen, compact }: { g: Record<Group, TodoSummary[]>; show: readonly Exclude<Group, 'done'>[]; now: Date; onOpen: (itemId: string) => void; compact?: boolean }) {
   return show.map((k) =>
     g[k].length ? (
-      <div key={k}>
+      <div key={k} data-todo-group={k}>
         <SubHead group={k} count={g[k].length} />
         {g[k].map((t) => (
-          <TodoRow key={t.id} todo={t} now={now} onOpen={onOpen} />
+          <TodoRow key={t.id} todo={t} now={now} onOpen={onOpen} compact={compact} />
         ))}
       </div>
     ) : null,
@@ -257,54 +296,33 @@ function Head({ count, children }: { count: number; children?: ReactNode }) {
   );
 }
 
-/** The list layout's To do group: overdue, today, upcoming, then those done today, folded. */
+/** The list layout's To do group: what needs a look, today, tomorrow, later, then those done today, folded. */
 export function TodoGroup({ todos, onOpen }: { todos: readonly TodoSummary[]; onOpen: (itemId: string) => void }) {
   const now = useNow(30_000);
   const g = todoGroups(todos, now);
-  const open = g.overdue.length + g.today.length + g.upcoming.length;
+  const open = OPEN.reduce((n, k) => n + g[k].length, 0);
   if (!open && !g.done.length) return null;
   return (
     <section aria-label="To do" data-group="todo" className="flex flex-col pb-3">
       <Head count={open} />
       <div className="border-b border-line-soft">
-        {open ? <Groups g={g} show={['overdue', 'today', 'upcoming']} now={now} onOpen={onOpen} /> : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing left to do.</div>}
+        {open ? <Groups g={g} show={OPEN} now={now} onOpen={onOpen} /> : <div className="border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing left to do.</div>}
         <DoneToday done={g.done} now={now} onOpen={onOpen} />
       </div>
     </section>
   );
 }
 
-/** The cockpit's Needs you (CK-3.8): To Dos overdue or due today, under Now and Today. */
-export function TodoNeeds({ todos, onOpen }: { todos: readonly TodoSummary[]; onOpen: (itemId: string) => void }) {
+/** The cockpit's To Dos (FR-16.2): every one, under the time column's To Dos tab, grouped as the list layout's. */
+export function TodoDrawer({ todos, onOpen }: { todos: readonly TodoSummary[]; onOpen: (itemId: string) => void }) {
   const now = useNow(30_000);
   const g = todoGroups(todos, now);
-  const count = g.overdue.length + g.today.length;
-  if (!count) return null;
+  const open = OPEN.reduce((n, k) => n + g[k].length, 0);
   return (
-    <section aria-label="To do today" data-group="todo-today" className="flex flex-col">
-      <h3 className="m-0 border-t border-violet-line bg-violet-wash px-6 py-1.5 text-xs font-semibold tracking-[0.04em] text-violet-fg">TO DO · {count}</h3>
-      {[...g.overdue, ...g.today].map((t) => (
-        <TodoRow key={t.id} todo={t} now={now} onOpen={onOpen} />
-      ))}
+    <section aria-label="To Dos" data-testid="todo-drawer" className="-mx-5 -mt-4 min-h-0 flex-1 overflow-y-auto pb-4">
+      {open ? <Groups g={g} show={OPEN} now={now} onOpen={onOpen} compact /> : <p className="m-0 px-6 py-3 text-[13px] text-muted">Nothing to do.</p>}
+      <DoneToday done={g.done} now={now} onOpen={onOpen} compact />
       <div className="border-t border-line-soft" />
-    </section>
-  );
-}
-
-/** The cockpit's Later (CK-3.11): upcoming To Dos, and those done today. */
-export function TodoLater({ todos, onOpen }: { todos: readonly TodoSummary[]; onOpen: (itemId: string) => void }) {
-  const now = useNow(30_000);
-  const g = todoGroups(todos, now);
-  if (!g.upcoming.length && !g.done.length) return null;
-  return (
-    <section aria-label="To do" data-group="todo" className="mt-2 flex flex-col">
-      <div className="flex min-h-11 items-center border-t border-line px-6 py-2">
-        <span aria-hidden className="mr-2 size-2 shrink-0 rounded-full" style={{ background: 'var(--violet-dot)' }} />
-        <h3 className="m-0 text-[13px] font-semibold">To do</h3>
-        <span className="ml-1.5 text-xs text-muted tabular-nums">{g.upcoming.length}</span>
-      </div>
-      {g.upcoming.length ? g.upcoming.map((t) => <TodoRow key={t.id} todo={t} now={now} onOpen={onOpen} />) : <p className="m-0 border-t border-line-soft px-6 py-3 text-[13px] text-muted">Nothing due later.</p>}
-      <DoneToday done={g.done} now={now} onOpen={onOpen} />
     </section>
   );
 }

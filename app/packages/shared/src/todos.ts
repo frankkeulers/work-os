@@ -4,7 +4,7 @@ import { SCHEDULE_MAX_ATTEMPTS, type Confidence } from './schedule';
 import type { SourceId } from './schemas';
 import { planSlots, type BusyEvent, type NoSlot, type Slot, type SlotResult } from './slots';
 import { FOLLOWUP_MAX_ATTEMPTS, FOLLOWUP_WINDOW_HOURS, type Followup, type FollowupAnswered } from './followup';
-import { londonParts } from './time';
+import { londonAt, londonParts } from './time';
 import type { DeadlineFrom } from './todo';
 
 // To Dos on the inbox (E15, FR-16.2): what a row shows, and which group it sits in. Shared by the
@@ -70,21 +70,32 @@ export const MIRROR_FAILURE: Record<MirrorFailure, string> = {
   write_failed: 'writing the Tasks note failed; trying again',
 };
 
-export type TodoGroup = 'overdue' | 'today' | 'upcoming' | 'done';
-export const TODO_GROUPS: readonly TodoGroup[] = ['overdue', 'today', 'upcoming', 'done'];
+export type TodoGroup = 'look' | 'today' | 'tomorrow' | 'later' | 'done';
+export const TODO_GROUPS: readonly TodoGroup[] = ['look', 'today', 'tomorrow', 'later', 'done'];
 
 /**
- * Where a To Do sits: done (today; older ones aren't shown), overdue once its deadline has passed,
- * today when it is due today in London (ideally, or by its deadline), else upcoming, with To Dos
- * that have no date. A slot (FR-16.8) orders today's, but moves none between groups.
+ * An open To Do Frank should look at (FR-16.2): past its deadline, its own time gone by undone, a
+ * meeting on his own time, or no free time before it is due. Not one waiting for the calendar.
  */
-export function todoGroup(t: Pick<TodoSummary, 'status' | 'deadline' | 'ideal'>, now: Date): TodoGroup {
+export function needsLook(t: Pick<TodoSummary, 'status' | 'deadline' | 'slot' | 'noSlot'>, now: Date): boolean {
+  if (t.status !== 'open') return false;
+  if (t.deadline && t.deadline < now.toISOString()) return true;
+  if (t.slot?.clash || t.slot?.passed) return true;
+  return !!t.noSlot && t.noSlot.reason !== 'no_calendar';
+}
+
+/**
+ * Where a To Do sits (FR-16.2): by when Frank will do it, as the time column shows it. Done (today;
+ * older ones aren't shown); one to look at (needsLook); else the London day of its slot, today,
+ * tomorrow or later; later too while it has no slot and nothing is wrong (planning, or no calendar).
+ */
+export function todoGroup(t: Pick<TodoSummary, 'status' | 'deadline' | 'slot' | 'noSlot'>, now: Date): TodoGroup {
   if (t.status === 'done') return 'done';
-  if (t.deadline && t.deadline < now.toISOString()) return 'overdue';
-  // Ideally done by today, or already: today. Past an ideal date is not overdue.
-  const due = todoDue(t);
-  if (!due) return 'upcoming';
-  return due < now.toISOString() || londonParts(due).dateKey === londonParts(now).dateKey ? 'today' : 'upcoming';
+  if (needsLook(t, now)) return 'look';
+  if (!t.slot) return 'later';
+  const day = londonParts(t.slot.start).dateKey;
+  if (day <= londonParts(now).dateKey) return 'today';
+  return day === londonParts(londonAt(now, '12:00', 1)).dateKey ? 'tomorrow' : 'later';
 }
 
 /** When a To Do is due: its ideal date when it has one (always before its deadline), else its deadline. */
@@ -96,18 +107,20 @@ const byDue = (a: TodoSummary, b: TodoSummary) => {
   return Number(!x) - Number(!y) || (x ?? '').localeCompare(y ?? '') || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
 };
 
+/** In the order Frank will do them: by slot, then those without one, soonest due first. */
+const bySlot = (a: TodoSummary, b: TodoSummary) => Number(!a.slot) - Number(!b.slot) || (a.slot?.start ?? '').localeCompare(b.slot?.start ?? '') || byDue(a, b);
+
 /** To Dos by group, each in the order it shows. Done ones are those done today. */
 export function todoGroups(todos: readonly TodoSummary[], now: Date): Record<TodoGroup, TodoSummary[]> {
   const today = londonParts(now).dateKey;
-  const out: Record<TodoGroup, TodoSummary[]> = { overdue: [], today: [], upcoming: [], done: [] };
+  const out: Record<TodoGroup, TodoSummary[]> = { look: [], today: [], tomorrow: [], later: [], done: [] };
   for (const t of todos) {
     const g = todoGroup(t, now);
     if (g === 'done' && (!t.doneAt || londonParts(t.doneAt).dateKey !== today)) continue;
     out[g].push(t);
   }
-  for (const g of ['overdue', 'upcoming'] as const) out[g].sort(byDue);
-  // Today runs in the order Frank will do them: by slot, then those without one.
-  out.today.sort((a, b) => Number(!a.slot) - Number(!b.slot) || (a.slot?.start ?? '').localeCompare(b.slot?.start ?? '') || byDue(a, b));
+  out.look.sort(byDue);
+  for (const g of ['today', 'tomorrow', 'later'] as const) out[g].sort(bySlot);
   out.done.sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''));
   return out;
 }

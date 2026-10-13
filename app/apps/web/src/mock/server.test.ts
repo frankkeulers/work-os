@@ -171,7 +171,9 @@ describe('To Dos (E15, FR-16.1, FR-16.2)', () => {
     server.seedTodos();
     const todos = (await settle(server.getInbox())).todos;
     const g = todoGroups(todos, server.now());
-    expect([g.overdue.length, g.today.length, g.upcoming.length, g.done.length]).toEqual([1, 2, 2, 1]);
+    const words = (k: keyof typeof g) => g[k].map((t) => t.step.split(' ').slice(0, 2).join(' '));
+    // The overdue one and the one with no time before it's due need a look; the rest go by their time (FR-16.2).
+    expect({ look: words('look'), today: words('today'), tomorrow: words('tomorrow'), later: words('later') }).toEqual({ look: ['Send Matt', 'Add the'], today: ['Share the'], tomorrow: ['Confirm the', 'Book a'], later: [] });
     expect(g.done[0]).toMatchObject({ doneBy: 'tasks_note' });
   });
 

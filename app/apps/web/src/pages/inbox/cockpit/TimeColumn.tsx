@@ -13,7 +13,7 @@ import { fmtAgo, fmtDayDate, fmtIn, fmtTime } from '../../../lib/format';
 import { OUTLOOK_CALENDAR, meetingLink } from '../../../lib/links';
 import { TIME_WIDTH, usePrefs } from '../../../store/prefs';
 import { dayPins, dayStart, dueBefore, hourHeight, minuteOf, nextMeeting, placeMeetings, placeTodos, shortTitle, timelineSpan, workSpan, type Pin, type PinTone } from '../../../lib/timeline';
-import { openTodoPlan } from '../TodoGroup';
+import { TodoDrawer, openTodoPlan, todoCounts } from '../TodoGroup';
 
 // The cockpit's time column (CK-3.4–3.6): the clock, the next meeting and what's due before it, and
 // the day as a timeline of meetings and deadline pins. A Teams meeting joins in the browser until it
@@ -21,7 +21,8 @@ import { openTodoPlan } from '../TodoGroup';
 // first one's colour down its edge and a light shade of it behind, as on the agenda strip.
 // It folds to a rail, and its right edge drags to widen it; both are kept in prefs. The time Work OS
 // planned for each To Do (FR-16.8) shows in the meetings' lane, dashed (solid when Frank set it);
-// a click opens its plan.
+// a click opens its plan under the To Dos tab, which lists them all in place of the day (FR-16.2):
+// the cockpit's one place for To Dos.
 
 /** Where the timeline's lanes sit: hour labels, then meetings, then pins. The meetings take 60% of
  * the width after the labels (186 px at the default width) and the pins the rest, as the column widens. */
@@ -313,6 +314,15 @@ export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { ite
   const collapsed = usePrefs((s) => s.timeCollapsed);
   const setCollapsed = usePrefs((s) => s.setTimeCollapsed);
   const { width, dragging, handle } = useResizable({ saved: usePrefs((s) => s.timeWidth), save: usePrefs((s) => s.setTimeWidth), bounds: TIME_WIDTH, edge: 'right', label: 'Resize the time column' });
+  const showTodos = usePrefs((s) => s.timeTodos);
+  const setShowTodos = usePrefs((s) => s.setTimeTodos);
+  const count = todoCounts(todos, now);
+  // Red with how many need a look when any do; else how many are open.
+  const countBadge = (count.look || count.open) > 0 && (
+    <span data-testid="todo-count" data-look={count.look > 0 || undefined} title={count.look ? `${count.look} To Do${count.look === 1 ? '' : 's'} need${count.look === 1 ? 's' : ''} a look` : undefined} className={cx('rounded-full px-1.5 text-[11px] font-semibold tabular-nums leading-[18px]', count.look ? 'bg-red text-white' : 'bg-violet-wash text-violet-fg')}>
+      {count.look || count.open}
+    </span>
+  );
 
   if (collapsed)
     return (
@@ -323,9 +333,16 @@ export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { ite
           </IconButton>
         </div>
         <div className="flex w-full flex-1 justify-center border-t border-line">
-          <span data-testid="clock" className="mt-3 text-[13px] font-semibold tabular-nums">
-            {fmtTime(now)}
-          </span>
+          <div className="mt-3 flex flex-col items-center gap-2">
+            <span data-testid="clock" className="text-[13px] font-semibold tabular-nums">
+              {fmtTime(now)}
+            </span>
+            {countBadge && (
+              <button type="button" aria-label="Show the To Dos" title="To Dos" onClick={() => (setShowTodos(true), setCollapsed(false))} className="cursor-pointer">
+                {countBadge}
+              </button>
+            )}
+          </div>
         </div>
       </section>
     );
@@ -344,11 +361,12 @@ export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { ite
         <Segmented
           size="sm"
           label="Day"
-          value={day}
-          onChange={setDay}
+          value={showTodos ? 'todos' : day}
+          onChange={(v) => (v === 'todos' ? setShowTodos(true) : (setShowTodos(false), setDay(v)))}
           options={[
             { value: 'today', label: 'Today' },
             { value: 'tomorrow', label: 'Tomorrow' },
+            { value: 'todos', label: <>To Dos{countBadge}</> },
           ]}
         />
         <IconButton label="Collapse the time column" size={32} aria-expanded onClick={() => setCollapsed(true)}>
@@ -356,9 +374,15 @@ export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { ite
         </IconButton>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 border-t border-line px-5 pt-4">
-        {calendar && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
-        <CalendarNote v={agenda} now={now} />
-        <Timeline v={agenda} items={items} todos={todos} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
+        {showTodos ? (
+          <TodoDrawer todos={todos} onOpen={onOpenItem} />
+        ) : (
+          <>
+            {calendar && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
+            <CalendarNote v={agenda} now={now} />
+            <Timeline v={agenda} items={items} todos={todos} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
+          </>
+        )}
       </div>
       {handle}
     </section>
