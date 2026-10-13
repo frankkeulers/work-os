@@ -1,14 +1,14 @@
-import { OUTLOOK_COLORS, type AgendaEvent, type AgendaView, type TodoSummary } from '@work-os/shared';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { OUTLOOK_COLORS, londonAt, mondayOf, type AgendaEvent, type AgendaView, type TodoSummary } from '@work-os/shared';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type ItemSummary } from '../../../api';
 import { BrandIcon } from '../../../components/BrandIcon';
 import { Icon } from '../../../components/icons';
-import { IconButton, Segmented, cx } from '../../../components/ui';
+import { Button, IconButton, Segmented, cx } from '../../../components/ui';
 import { useResizable } from '../../../components/useResizable';
 import { onTopics, useApiQuery } from '../../../hooks/useApiQuery';
 import { useNow } from '../../../hooks/useNow';
-import { dayEvents, type AgendaDay } from '../../../lib/agenda';
+import { dayEvents } from '../../../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtTime } from '../../../lib/format';
 import { OUTLOOK_CALENDAR, meetingLink } from '../../../lib/links';
 import { TIME_WIDTH, usePrefs } from '../../../store/prefs';
@@ -16,7 +16,9 @@ import { dayPins, dayStart, dueBefore, hourHeight, minuteOf, nextMeeting, placeM
 import { TodoDrawer, openTodoPlan, todoCounts } from '../TodoGroup';
 
 // The cockpit's time column (CK-3.4–3.6): the clock, the next meeting and what's due before it, and
-// the day as a timeline of meetings and deadline pins. A Teams meeting joins in the browser until it
+// the day as a timeline of meetings and deadline pins. As in Outlook, Today and the arrows under the
+// header step through the days the calendar holds; Calendar and To Dos in the header switch what
+// the column shows. A Teams meeting joins in the browser until it
 // ends; other meetings open in Outlook; pins open the item. A meeting with Outlook categories has the
 // first one's colour down its edge and a light shade of it behind, as on the agenda strip.
 // It folds to a rail, and its right edge drags to widen it; both are kept in prefs. The time Work OS
@@ -37,6 +39,14 @@ const PIN_TONE: Record<PinTone, { pin: string; dot: string }> = {
   now: { pin: 'bg-orange-wash text-orange-fg', dot: 'bg-orange' },
   today: { pin: 'bg-accent-wash text-accent-ink', dot: 'bg-accent' },
 };
+
+/** How many days the arrows go without a calendar: the To Dos' planning horizon (FR-16.8). */
+const DAYS_WITHOUT_CALENDAR = 13;
+
+/** "today", "tomorrow" or "on Thu 15 Oct", for the timeline's lists. */
+const dayWords = (day: number, now: Date) => (day === 0 ? 'today' : day === 1 ? 'tomorrow' : `on ${fmtDayDate(londonAt(now, '12:00', day))}`);
+
+const isTyping = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"], [data-no-shortcuts]');
 
 const categoryHex = (e: AgendaEvent) => (e.categories?.length ? OUTLOOK_COLORS[e.categories[0].color] : undefined);
 
@@ -131,7 +141,7 @@ function pinTops(pins: Pin[], top: (minute: number) => number): number[] {
 
 const fmtHour = (minute: number) => `${String(Math.floor(minute / 60) % 24).padStart(2, '0')}:00`;
 
-function Timeline({ v, items, todos, now, day, workHours, onOpenItem }: { v: AgendaView | undefined; items: readonly ItemSummary[]; todos: readonly TodoSummary[]; now: Date; day: AgendaDay; workHours: string; onOpenItem: (id: string) => void }) {
+function Timeline({ v, items, todos, now, day, workHours, onOpenItem }: { v: AgendaView | undefined; items: readonly ItemSummary[]; todos: readonly TodoSummary[]; now: Date; day: number; workHours: string; onOpenItem: (id: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(0);
@@ -156,7 +166,7 @@ function Timeline({ v, items, todos, now, day, workHours, onOpenItem }: { v: Age
   const pins = dayPins(items, now, day);
   const planned = placeTodos(todos, start, now);
   const nowMin = minuteOf(now.getTime(), start);
-  const span = timelineSpan(workSpan(workHours), [...meetings.flatMap((m) => [m.from, m.to]), ...planned.flatMap((t) => [t.from, t.to]), ...pins.map((p) => p.at), ...(day === 'today' ? [nowMin] : [])]);
+  const span = timelineSpan(workSpan(workHours), [...meetings.flatMap((m) => [m.from, m.to]), ...planned.flatMap((t) => [t.from, t.to]), ...pins.map((p) => p.at), ...(day === 0 ? [nowMin] : [])]);
   // A little room above the first hour and below the last, so their labels and pins aren't cut off.
   const pad = 12;
   const ph = hourHeight(available - 2 * pad, span);
@@ -195,8 +205,8 @@ function Timeline({ v, items, todos, now, day, workHours, onOpenItem }: { v: Age
               <span className="absolute -top-2 left-0 bg-surface pr-1.5 font-mono text-xs text-faint">{fmtHour(m)}</span>
             </div>
           ))}
-          {day === 'today' && <div aria-hidden className="absolute bg-past" style={{ left: MEETINGS_LEFT, width: meetingsWidth, top: 0, height: top(nowMin) }} />}
-          <ol aria-label={day === 'today' ? 'Today’s meetings' : 'Tomorrow’s meetings'} className="m-0 list-none p-0">
+          {day === 0 && <div aria-hidden className="absolute bg-past" style={{ left: MEETINGS_LEFT, width: meetingsWidth, top: 0, height: top(nowMin) }} />}
+          <ol aria-label={day === 0 ? 'Today’s meetings' : day === 1 ? 'Tomorrow’s meetings' : `Meetings ${dayWords(day, now)}`} className="m-0 list-none p-0">
             {meetings.map((m) => {
               const hex = categoryHex(m.event);
               const w = meetingsWidth / m.cols;
@@ -231,7 +241,7 @@ function Timeline({ v, items, todos, now, day, workHours, onOpenItem }: { v: Age
               );
             })}
           </ol>
-          <ol aria-label={day === 'today' ? 'To Dos planned today' : 'To Dos planned tomorrow'} className="m-0 list-none p-0">
+          <ol aria-label={`To Dos planned ${dayWords(day, now)}`} className="m-0 list-none p-0">
             {planned.map((p) => {
               const s = p.todo.slot!;
               const h = Math.max(MEETING_MIN_HEIGHT, top(p.to) - top(p.from) - 2);
@@ -259,7 +269,7 @@ function Timeline({ v, items, todos, now, day, workHours, onOpenItem }: { v: Age
             })}
           </ol>
           {/* Under the pins: an overdue pin sits on it. */}
-          {day === 'today' && (
+          {day === 0 && (
             <div data-testid="now-line" aria-hidden className="absolute right-0 border-t-2 border-red" style={{ left: 36, top: top(nowMin) - 1 }}>
               <span className="absolute -left-9 -top-[9px] rounded-[3px] bg-red px-[3px] py-px font-mono text-[11px] font-medium text-on-solid">{fmtTime(now)}</span>
             </div>
@@ -306,17 +316,49 @@ function CalendarNote({ v, now }: { v: AgendaView | undefined; now: Date }) {
   return null;
 }
 
-export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { items: readonly ItemSummary[]; todos?: readonly TodoSummary[]; day: AgendaDay; setDay: (d: AgendaDay) => void; onOpenItem: (id: string) => void }) {
+export function TimeColumn({ items, todos = [], onOpenItem }: { items: readonly ItemSummary[]; todos?: readonly TodoSummary[]; onOpenItem: (id: string) => void }) {
   const now = useNow(15_000);
   const agenda = useApiQuery(() => api.getAgenda(), onTopics('inbox', 'settings', 'health'), []).data;
   const workHours = useApiQuery(() => api.getSettings(), onTopics('settings'), []).data?.settings.schedule.workHours ?? '';
   const calendar = agenda && agenda.state !== 'off' && agenda.state !== 'never';
+  // The day shown, in days from today. The agenda has today's and tomorrow's meetings; other days
+  // come from the week (CK-5.6), which also says which days the calendar holds.
+  const [day, setDay] = useState(0);
+  const monday = mondayOf(new Date(londonAt(now, '12:00', day)));
+  const week = useApiQuery(() => (calendar ? api.getWeek(monday) : Promise.resolve(undefined)), onTopics('inbox', 'settings', 'health'), [calendar, monday]).data;
+  const held = week?.held;
+  const canGo = useCallback(
+    (to: number) => (held ? londonAt(now, '00:00', to) >= held.from && londonAt(now, '00:00', to) < held.to : to >= 0 && to <= DAYS_WITHOUT_CALENDAR),
+    [held, now],
+  );
+  const go = useCallback((to: number) => {
+    if (canGo(to)) setDay(to);
+  }, [canGo]);
+  const shown: AgendaView | undefined =
+    day === 0 || day === 1 || !agenda || !calendar ? agenda : { ...agenda, events: (week?.events ?? []).filter((e) => !e.cancelled && e.response !== 'declined') };
   const collapsed = usePrefs((s) => s.timeCollapsed);
   const setCollapsed = usePrefs((s) => s.setTimeCollapsed);
   const { width, dragging, handle } = useResizable({ saved: usePrefs((s) => s.timeWidth), save: usePrefs((s) => s.setTimeWidth), bounds: TIME_WIDTH, edge: 'right', label: 'Resize the time column' });
   const showTodos = usePrefs((s) => s.timeTodos);
   const setShowTodos = usePrefs((s) => s.setTimeTodos);
   const count = todoCounts(todos, now);
+
+  // t: today's calendar, from any day or the To Dos; [ and ]: the day before and after.
+  useEffect(() => {
+    if (collapsed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      if (e.key === 't') {
+        setShowTodos(false);
+        setDay(0);
+      } else if (e.key === '[' && !usePrefs.getState().timeTodos) go(day - 1);
+      else if (e.key === ']' && !usePrefs.getState().timeTodos) go(day + 1);
+      else return;
+      e.preventDefault();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [collapsed, day, go, setShowTodos]);
   // Red with how many need a look when any do; else how many are open.
   const countBadge = (count.look || count.open) > 0 && (
     <span data-testid="todo-count" data-look={count.look > 0 || undefined} title={count.look ? `${count.look} To Do${count.look === 1 ? '' : 's'} need${count.look === 1 ? 's' : ''} a look` : undefined} className={cx('rounded-full px-1.5 text-[11px] font-semibold tabular-nums leading-[18px]', count.look ? 'bg-red text-white' : 'bg-violet-wash text-violet-fg')}>
@@ -353,19 +395,17 @@ export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { ite
           as theirs is, so the three lines are one. */}
       <div className="flex h-14 shrink-0 items-center gap-2.5 pl-5 pr-3">
         <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
-          <span data-testid="clock" className="text-glance-xl tabular-nums">
+          <span data-testid="clock" className="text-glance-xl tabular-nums" title={fmtDayDate(now)}>
             {fmtTime(now)}
           </span>
-          <span className="truncate text-sm text-muted">{fmtDayDate(now)}</span>
         </div>
         <Segmented
           size="sm"
-          label="Day"
-          value={showTodos ? 'todos' : day}
-          onChange={(v) => (v === 'todos' ? setShowTodos(true) : (setShowTodos(false), setDay(v)))}
+          label="Show"
+          value={showTodos ? 'todos' : 'calendar'}
+          onChange={(v) => setShowTodos(v === 'todos')}
           options={[
-            { value: 'today', label: 'Today' },
-            { value: 'tomorrow', label: 'Tomorrow' },
+            { value: 'calendar', label: 'Calendar' },
             { value: 'todos', label: <>To Dos{countBadge}</> },
           ]}
         />
@@ -378,9 +418,20 @@ export function TimeColumn({ items, todos = [], day, setDay, onOpenItem }: { ite
           <TodoDrawer todos={todos} onOpen={onOpenItem} />
         ) : (
           <>
-            {calendar && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
+            <div role="group" aria-label="Day" className="-mt-1 flex items-center gap-1">
+              <Button size="sm" onClick={() => setDay(0)} title="Today (t)" aria-pressed={day === 0}>
+                Today
+              </Button>
+              <IconButton label="Previous day" title="Previous day ([)" icon="back" size={28} disabled={!canGo(day - 1)} onClick={() => go(day - 1)} />
+              <IconButton label="Next day" title="Next day (])" icon="forward" size={28} disabled={!canGo(day + 1)} onClick={() => go(day + 1)} />
+              <h3 data-testid="day-shown" className="m-0 ml-1.5 min-w-0 truncate text-[15px] font-semibold">
+                {fmtDayDate(londonAt(now, '12:00', day))}
+                {day >= -1 && day <= 1 && <span className="ml-1.5 text-sm font-normal text-muted">{day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : 'Yesterday'}</span>}
+              </h3>
+            </div>
+            {calendar && day === 0 && <NextMeetingCard v={agenda} items={items} now={now} onOpenItem={onOpenItem} />}
             <CalendarNote v={agenda} now={now} />
-            <Timeline v={agenda} items={items} todos={todos} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
+            <Timeline v={shown} items={items} todos={todos} now={now} day={day} workHours={workHours} onOpenItem={onOpenItem} />
           </>
         )}
       </div>

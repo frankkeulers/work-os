@@ -94,6 +94,14 @@ describe('dayPins (CK-3.6)', () => {
     expect(dayPins(items, now, 'tomorrow').map((p) => p.label)).toEqual(['10:00 Step for wk']);
   });
 
+  it('steps to any day, as the day bar does: 1 is tomorrow, a later day has its own, a day gone by none (CK-3.4)', () => {
+    const items = [item('wk', 'week', at('10:00', 10)), item('wk2', 'week', at('10:00', 12)), item('late', 'today', at('11:00'))];
+    expect(dayPins(items, now, 1)).toEqual(dayPins(items, now, 'tomorrow'));
+    expect(dayPins(items, now, 3).map((p) => p.label)).toEqual(['10:00 Step for wk2']);
+    expect(dayPins(items, now, -1)).toEqual([]);
+    expect(dayStart(now, 3)).toBe('2026-10-11T23:00:00.000Z'); // Mon 12 Oct, 00:00 in London
+  });
+
   it('cuts a short title at 28 characters', () => {
     expect(shortTitle({ summary: 's', next: { need: 'reply', step: 'Confirm the data-licensing wording in the doc', why: '' } })).toBe('Confirm the data-licensing…');
   });

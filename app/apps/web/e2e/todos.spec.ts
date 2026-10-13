@@ -66,8 +66,8 @@ test.describe('wide window (cockpit)', () => {
     await drawer.locator('[data-todo]', { hasText: 'Share the graduation' }).getByRole('button', { name: '#pole-star-labs' }).click();
     await expect(page.locator('.item-panel')).toContainText('graduation gate checklist');
 
-    // Back to the day, and folded: the rail still says how many need a look, and opens them.
-    await time.getByRole('button', { name: 'Today', exact: true }).click();
+    // Back to the calendar, and folded: the rail still says how many need a look, and opens them.
+    await time.getByRole('button', { name: 'Calendar', exact: true }).click();
     await expect(drawer).toHaveCount(0);
     await time.getByRole('button', { name: 'Collapse the time column' }).click();
     await expect(time.getByTestId('todo-count')).toHaveText('2');
@@ -96,8 +96,8 @@ test.describe('wide window (cockpit)', () => {
     await page.keyboard.press('z');
     await expect(open).toHaveCount(5);
 
-    // g then d, from the day: the To Dos tab and its first To Do, and e on it is its Done, not the open item's.
-    await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Today', exact: true }).click();
+    // g then d, from the calendar: the To Dos and the first, and e on it is its Done, not the open item's.
+    await page.locator('[data-cockpit-zone="time"]').getByRole('button', { name: 'Calendar', exact: true }).click();
     await page.locator('body').click({ position: { x: 5, y: 5 } });
     await page.keyboard.press('g');
     await page.keyboard.press('d');
@@ -186,7 +186,8 @@ test.describe('wide window (cockpit)', () => {
     await expect(drawer.locator(`[data-todo-group="tomorrow"] [data-todo="${shareId}"]`)).toBeVisible();
     await expect(drawer.locator('[data-todo]', { hasText: 'Send Matt the one-line' }).locator('[data-todo-slot="plan"]')).toHaveText('Today 15:15–15:30');
     // Tomorrow's column has it, solid: Frank's own time. (Those that don't fit before 17:00 today are there too.)
-    await time.getByRole('button', { name: 'Tomorrow' }).click();
+    await time.getByRole('button', { name: 'Calendar', exact: true }).click();
+    await time.getByRole('button', { name: 'Next day' }).click();
     await expect(page.getByRole('list', { name: 'To Dos planned tomorrow' }).locator(`[data-timeline-todo="${shareId}"]`)).toHaveAttribute('data-slot-by', 'you');
     await time.getByRole('button', { name: 'Today', exact: true }).click();
     await expect(column.locator(`[data-timeline-todo="${shareId}"]`)).toHaveCount(0);

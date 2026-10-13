@@ -18,6 +18,10 @@ describe('the agenda', () => {
   it('lists a day’s meetings in London time, all-day ones first', () => {
     expect(dayEvents(events, NOW, 'today').map((e) => e.id)).toEqual(['Away', 'Stand-up', 'Lunch', 'Late']);
     expect(dayEvents(events, NOW, 'tomorrow').map((e) => e.id)).toEqual(['Late', 'Review']);
+    // Days from today, as the time column's day bar steps (CK-3.4).
+    expect(dayEvents(events, NOW, 1)).toEqual(dayEvents(events, NOW, 'tomorrow'));
+    expect(dayEvents(events, NOW, 0)).toEqual(dayEvents(events, NOW, 'today'));
+    expect(dayEvents(events, NOW, 5)).toEqual([]);
   });
 
   it('knows what is over, what is on now, and what is to come', () => {

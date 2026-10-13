@@ -142,16 +142,28 @@ test('J57: clear what’s due before the meeting — pins open the item; j/k, g 
   const runs = lanes.filter((l, n) => l !== lanes[n - 1]);
   expect(runs).toEqual(['now', 'failed', 'today', 'follow', 'file', 'week']);
 
-  // Esc closes the panel; t shows tomorrow.
+  // Esc closes the panel. As Outlook's day view: ] and [ step through the days the calendar holds,
+  // from this Monday (today, so there's none before it), and t comes back to today.
   await page.keyboard.press('Escape');
   await expect(panel(page)).toHaveCount(0);
-  await page.keyboard.press('t');
-  await expect(zone(page, 'Time').getByRole('button', { name: 'Tomorrow' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(zone(page, 'Time').getByRole('list', { name: 'All day' })).toContainText('Sales kick-off');
-  await expect(zone(page, 'Time').getByRole('list', { name: 'Tomorrow’s meetings' }).getByRole('listitem')).toHaveText([/10:00 Q4 roadmap review/, /15:00 Insights APIs sync/]);
+  const time = zone(page, 'Time');
+  await expect(time.getByRole('button', { name: 'Today', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(time.getByRole('button', { name: 'Previous day' })).toBeDisabled();
+  await page.keyboard.press(']');
+  await expect(time.getByTestId('day-shown')).toHaveText('Tue 6 OctTomorrow');
+  await expect(time.getByRole('list', { name: 'All day' })).toContainText('Sales kick-off');
+  await expect(time.getByRole('list', { name: 'Tomorrow’s meetings' }).getByRole('listitem')).toHaveText([/10:00 Q4 roadmap review/, /15:00 Insights APIs sync/]);
   await expect(page.getByTestId('now-line')).toHaveCount(0);
+  await expect(time.getByTestId('next-meeting')).toHaveCount(0); // the next meeting is today's only
+  // Wednesday, from the week: the meeting declined is left out.
+  await time.getByRole('button', { name: 'Next day' }).click();
+  await expect(time.getByTestId('day-shown')).toHaveText('Wed 7 Oct');
+  await expect(time.getByRole('list', { name: 'Meetings on Wed 7 Oct' }).getByRole('listitem')).toHaveText([/11:00 1:1 with Head of Product/]);
+  await page.keyboard.press('[');
+  await expect(time.getByTestId('day-shown')).toHaveText('Tue 6 OctTomorrow');
   await page.keyboard.press('t');
-  await expect(zone(page, 'Time').getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(time.getByRole('button', { name: 'Today', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(time.getByTestId('next-meeting')).toBeVisible();
 
   // Low priority opens in the Later zone in place of its lists; Esc comes back.
   const later = zone(page, 'Later');

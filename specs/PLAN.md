@@ -1181,7 +1181,7 @@ The stages:
   - **Later**: a slot after tomorrow, then those with no slot and nothing wrong (still planning, or Outlook Calendar off), soonest due first.
   - Then **N done today**, folded.
 - **The list layout.** It has a **To do** group after Needs you, still shown at Inbox Zero.
-- **The cockpit.** No To Do rows in Needs you or Later. The time column has them: as blocks on the day (FR-16.10), and as a list under the **To Dos** tab beside Today and Tomorrow, in place of the next meeting and the timeline. The tab shows how many are open, or in red how many need a look; so does the folded rail. The list's rows are compact: the step on up to two lines, the rest under it. `g d` opens the tab on its first To Do, `t` goes back to the day, and the tab is kept in this browser.
+- **The cockpit.** No To Do rows in Needs you or Later. The time column has them: as blocks on the day (FR-16.10), and as a list under **To Dos**, the other side of the header's **Calendar | To Dos** switch (cockpit CK-3.4, amended 13 Oct), in place of the day bar, the next meeting and the timeline. The tab shows how many are open, or in red how many need a look; so does the folded rail. The list's rows are compact: the step on up to two lines, the rest under it. `g d` opens the tab on its first To Do, `t` goes back to today's calendar, and the tab is kept in this browser.
 - **A row.** Each row shows the step, its source (click to open the item), its deadline chip, and "not in the Tasks note" when its line has gone.
 - **Scope.** To Dos from preview sources show only in Full scope, as items do.
 - **The item panel.** Add to-do says how many of the item's To Dos are open and done today.

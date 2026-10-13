@@ -14,8 +14,9 @@ the desk. The sidebar folds to a narrow rail (`[` opens it; the choice is kept f
 The Work OS mark at the top of the sidebar, and the browser tab's icon, have a status light: orange
 while something is in Now, briefly teal after a filing is written.
 
-- **Time**, on the left: the clock and the date, then your next meeting, then the day as a
-  timeline, or your To Dos under its **To Dos** tab. See [The time column](#the-time-column).
+- **Time**, on the left: the clock, then the day as in Outlook (**Today**, ‹ › and the date), your
+  next meeting and the day as a timeline; or, with **To Dos** at the top, your To Dos. See
+  [The time column](#the-time-column).
 - **Needs you**, in the middle: **NOW** then **TODAY**, each under its own header. Each row is two
   lines: where it happened, what it needs and when it's due, then the summary in large type.
 - **Later**, on the right, for once a day: **Waiting on others** when something is, **To file** with where each should go (its **Ready to approve** group first), **This week**
@@ -32,7 +33,11 @@ described below; nothing is lost.
 
 ### The time column
 
-- **The next meeting.** The first meeting today you're going to (accepted, tentative or your own,
+At the top, **Calendar** and **To Dos** switch what the column shows. Under Calendar, as in
+Outlook's day view, **Today** comes back to today, and ‹ and › step a day at a time (`[` and `]`),
+from this Monday to two weeks ahead, as far as the calendar is read. The day shown is beside them.
+
+- **The next meeting**, on today. The first meeting today you're going to (accepted, tentative or your own,
   not shown as Free) that hasn't ended: **NEXT · IN 12 MIN**, amber in the last two minutes, or
   **NOW · UNTIL 14:30** while it's on. Under it, **Due before it** lists what in Needs you is due
   by the time it starts, so you can clear it in the gap. **+1 at the same time** means another
@@ -53,9 +58,10 @@ described below; nothing is lost.
 - **To Dos** sit in the meetings' lane, in violet, at the time Work OS found for them (see
   [Time to do it](#time-to-do-it)): dashed when Work OS picked the time, solid when you did. Click
   one to change its time: the **To Dos** tab opens on it.
-- **To Dos**, beside Today and Tomorrow, lists all your To Dos in place of the day; see
-  [To do](#to-do). Its count is red when some need a look. `t` goes back to the day.
-- **Tomorrow** (or `t`) shows tomorrow's meetings, with pins for This week items due then.
+- **Other days** show their meetings, without those cancelled or declined, with pins for This
+  week items due then. `t` comes back to today, from any day or from To Dos.
+- **To Dos** lists all your To Dos in place of the calendar; see [To do](#to-do). Its count is red
+  when some need a look.
 - **Fold it away** with the arrow at the right of its header: it becomes a narrow rail with the
   clock, and the To Dos count, which opens them. The arrow on the rail opens it. Either way, the sidebar shows a meeting that's on now or
   about to start, as on every other page. **Drag its right edge** to make it wider or narrower (360 to 600 px; with the

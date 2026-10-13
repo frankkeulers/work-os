@@ -5,10 +5,13 @@ import { londonAt, type AgendaEvent } from '@work-os/shared';
 
 export type AgendaDay = 'today' | 'tomorrow';
 
+/** A day as days from today: 0 today, 1 tomorrow, -1 yesterday. The time column steps through any (CK-3.4). */
+export const dayOffset = (day: AgendaDay | number) => (typeof day === 'number' ? day : day === 'today' ? 0 : 1);
+
 /** The day's meetings: those overlapping it, all-day ones first, then by start. */
-export function dayEvents(events: readonly AgendaEvent[], now: Date, day: AgendaDay): AgendaEvent[] {
-  const from = londonAt(now, '00:00', day === 'today' ? 0 : 1);
-  const to = londonAt(now, '00:00', day === 'today' ? 1 : 2);
+export function dayEvents(events: readonly AgendaEvent[], now: Date, day: AgendaDay | number): AgendaEvent[] {
+  const from = londonAt(now, '00:00', dayOffset(day));
+  const to = londonAt(now, '00:00', dayOffset(day) + 1);
   return events.filter((e) => e.end > from && e.start < to).sort((a, b) => Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
 }
 

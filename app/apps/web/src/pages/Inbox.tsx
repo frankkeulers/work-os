@@ -18,7 +18,6 @@ import { useStableGroups, type ShownRow } from '../hooks/useStableGroups';
 import { useNow } from '../hooks/useNow';
 import type { OpenItemState } from '../hooks/useOpenItem';
 import { closedByReply, useRepliedHold } from '../hooks/useRepliedHold';
-import type { AgendaDay } from '../lib/agenda';
 import { fmtAgo, fmtDayDate, fmtIn, fmtMoney, fmtTime, fmtWhen, plural } from '../lib/format';
 import { isReady, targetChip } from '../lib/lanes';
 import { INBOX_SORT_LABEL, SOURCE_NAME, byDue, channelKey, dueInfo, groupByChannel, isLive, laneCounts, needLabel, sortItems, topicAsks, type InboxSort, type LaneCounts } from '../lib/next';
@@ -711,7 +710,6 @@ export function InboxPage() {
   const grouped = usePrefs((s) => s.groupByChannel);
   // The three-zone cockpit on a wide window (CK-3.1); today's list below 1600 px.
   const wide = useWideLayout();
-  const [day, setDay] = useState<AgendaDay>('today');
 
   // Items Frank's reply just closed stay where they were for 5 s as "You replied" (CK-2.5).
   const replied = useRepliedHold(all, !!inbox);
@@ -941,11 +939,6 @@ export function InboxPage() {
         // A list open in the Later zone goes back to its default view.
         e.preventDefault();
         setOpen(null);
-      } else if (e.key === 't' && wide) {
-        e.preventDefault();
-        // From the To Dos tab, back to the day shown; else today and tomorrow in turn.
-        if (usePrefs.getState().timeTodos) usePrefs.getState().setTimeTodos(false);
-        else setDay((d) => (d === 'today' ? 'tomorrow' : 'today'));
       } else if (e.key === 'o' && sel) {
         e.preventDefault();
         navigate(itemPath(sel));
@@ -1098,7 +1091,7 @@ export function InboxPage() {
       <div className="relative flex min-h-0 flex-1">
         {wide ? (
           <>
-            <TimeColumn items={all} todos={todos} day={day} setDay={setDay} onOpenItem={openItem} />
+            <TimeColumn items={all} todos={todos} onOpenItem={openItem} />
             <NeedsYouZone
               rows={needsRows}
               render={(r, n, list) => row(r, n, list, 'needs')}

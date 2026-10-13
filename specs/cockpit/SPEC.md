@@ -293,11 +293,11 @@ The layout matches artboards 1 and 2 of the design: `Main.dc.html` and `Panel.dc
 
 **CK-3.2 The panel** slides over from the right as today, 640 px wide, below the top bar, covering Later and part of Needs you. The scrim covers the visible zones. The selected row keeps its accent wash and 3 px bar. A click on a row in any zone switches the item. *Amended 11 Oct 2026 (BACKLOG UX-13):* the cockpit opens with the panel closed, so Later is in view; today's list below 1600 px still opens on its first item until Frank closes it.
 
-**CK-3.3 Keyboard.** `j`/`k` walk Now → Today → To file → This week, then any open footer list (Snoozed, Low priority, Done). New: `g n` goes to the first Needs you item, `g l` to the first Later item, and `t` toggles Today/Tomorrow in the time column. Update `shortcuts.md`.
+**CK-3.3 Keyboard.** `j`/`k` walk Now → Today → To file → This week, then any open footer list (Snoozed, Low priority, Done). New: `g n` goes to the first Needs you item, `g l` to the first Later item, and `t` toggles Today/Tomorrow in the time column. Update `shortcuts.md`. *Amended 13 Oct 2026 (Frank), with CK-3.4:* `t` goes to today, and `[` and `]` to the day before and after.
 
 ### 6.2 Time column
 
-**CK-3.4 Header:** the clock (`--text-glance-xl`, tabular figures), the date, and a Today / Tomorrow switch. 56 px, the height of the Needs you and Later headers, so the three end on one line. A button folds the column to a 56 px rail with the clock (the sidebar's Now/Next cues show either way, CK-3.7 amended), and its right edge drags it between 360 and 600 px, 400 by default. Later's left edge drags the same way, 360 to 600 px, 440 by default. These are kept in client prefs.
+**CK-3.4 Header:** the clock (`--text-glance-xl`, tabular figures), the date, and a Today / Tomorrow switch. *Amended 13 Oct 2026 (Frank):* the switch mixed picking a day with what the column shows, once To Dos joined it (PLAN FR-16.2). Now the header has the clock and a **Calendar | To Dos** switch; the date moved under it. Under the header, Calendar has a day bar as Outlook's: **Today**, ‹ and ›, and the day shown ("Wed 7 Oct", with Today, Tomorrow or Yesterday beside those). The arrows step through every day the calendar snapshot holds, this Monday to two weeks ahead (13 days ahead without a calendar). Days other than today and tomorrow come from the week (CK-5.6), without cancelled or declined meetings. The next meeting card shows on today only. 56 px, the height of the Needs you and Later headers, so the three end on one line. A button folds the column to a 56 px rail with the clock (the sidebar's Now/Next cues show either way, CK-3.7 amended), and its right edge drags it between 360 and 600 px, 400 by default. Later's left edge drags the same way, 360 to 600 px, 440 by default. These are kept in client prefs.
 
 **CK-3.5 Next-meeting card.**
 - **Which meeting:** the first timed meeting today that Frank accepted, accepted tentatively or organised, isn't shown as Free, and hasn't ended. These are the same rules as the R2.8 sidebar cues, which move here.
@@ -318,7 +318,7 @@ The layout matches artboards 1 and 2 of the design: `Main.dc.html` and `Panel.dc
   - blue later today;
   - red when overdue, pinned at the now-line and labelled "Overdue".
 - Pins within 30 minutes of each other stack into one: "2 due 17:30", and a hover lists them. A click opens the item in the panel.
-- **Tomorrow:** shows tomorrow's agenda and pins for This week items due tomorrow.
+- **Tomorrow:** shows tomorrow's agenda and pins for This week items due tomorrow. *Amended 13 Oct 2026:* so does any later day, with its own; a day gone by has no pins.
 
 **CK-3.7 The sidebar Now/Next cues** (R2.8) are hidden while the time column is on screen. They return in the narrow layouts. *Amended 12 Oct 2026 (Frank):* the cues show on every page, the cockpit included: hiding them only on the inbox made the sidebar jump between pages.
 

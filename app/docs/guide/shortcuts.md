@@ -25,7 +25,8 @@ where you are: a batch, a draft, the item, the list or the guide. `Esc` or `?` c
 | `g` then `n` | The first item in Needs you |
 | `g` then `l` | The first item in Later (To file, or This week) |
 | `g` then `d` | The first To Do (on a wide screen, under the time column's To Dos tab) |
-| `t` | Today or tomorrow in the time column; from its To Dos tab, back to the day (on a wide screen) |
+| `t` | Today in the time column, from any day or its To Dos (on a wide screen) |
+| `[` / `]` | The day before / after in the time column (on a wide screen) |
 | `o` | Open the item as a full page |
 | `Esc` | Close the item panel; with it closed, go back from a list opened in Later |
 

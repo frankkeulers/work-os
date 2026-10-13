@@ -1,6 +1,6 @@
 import { londonAt, type AgendaEvent, type TodoSummary } from '@work-os/shared';
 import type { ItemSummary } from '../api';
-import { headsUp, IMMINENT_MINUTES, type AgendaDay } from './agenda';
+import { dayOffset, headsUp, IMMINENT_MINUTES, type AgendaDay } from './agenda';
 import { fmtTime } from './format';
 
 // The cockpit's time column (CK-3.4–3.6): the day as a timeline of meetings and deadline pins, the
@@ -45,7 +45,7 @@ export function hourHeight(available: number, span: Span): number {
 }
 
 /** The London midnight that starts the day shown. */
-export const dayStart = (now: Date, day: AgendaDay) => londonAt(now, '00:00', day === 'today' ? 0 : 1);
+export const dayStart = (now: Date, day: AgendaDay | number) => londonAt(now, '00:00', dayOffset(day));
 
 /** Minutes after the day's midnight, clamped to the day. */
 export const minuteOf = (iso: string | number, start: string) => Math.max(0, Math.min(DAY, ((typeof iso === 'number' ? iso : Date.parse(iso)) - Date.parse(start)) / MIN));
@@ -140,17 +140,21 @@ export function shortTitle(i: Pick<ItemSummary, 'next' | 'summary'>): string {
  * the now-line in red. Tomorrow: This week items due tomorrow. Colours follow the chips (9 Oct):
  * orange within about 4 hours, blue later, red when overdue. Pins within 30 minutes stack.
  */
-export function dayPins(items: readonly ItemSummary[], now: Date, day: AgendaDay): Pin[] {
-  const start = dayStart(now, day);
-  const end = londonAt(now, '00:00', day === 'today' ? 1 : 2);
+export function dayPins(items: readonly ItemSummary[], now: Date, day: AgendaDay | number): Pin[] {
+  const offset = dayOffset(day);
+  // A day gone by has none: what was due then and is still open is overdue, on today.
+  if (offset < 0) return [];
+  const today = offset === 0;
+  const start = dayStart(now, offset);
+  const end = londonAt(now, '00:00', offset + 1);
   const t = now.getTime();
   const due = items
     .filter((i) => i.status === 'open' && i.next?.dueAt)
-    .filter((i) => (day === 'today' ? NEEDS.has(i.lane) && i.next!.dueAt! < end : i.lane === 'week' && i.next!.dueAt! >= start && i.next!.dueAt! < end))
+    .filter((i) => (today ? NEEDS.has(i.lane) && i.next!.dueAt! < end : i.lane === 'week' && i.next!.dueAt! >= start && i.next!.dueAt! < end))
     .map((item) => {
       const dueMs = Date.parse(item.next!.dueAt!);
-      const overdue = day === 'today' && dueMs < t;
-      const tone: PinTone = overdue ? 'late' : day === 'today' && dueMs - t <= 4 * 60 * MIN ? 'now' : 'today';
+      const overdue = today && dueMs < t;
+      const tone: PinTone = overdue ? 'late' : today && dueMs - t <= 4 * 60 * MIN ? 'now' : 'today';
       return { item, dueMs, overdue, tone, pos: overdue ? t : dueMs };
     })
     .sort((a, b) => Number(b.overdue) - Number(a.overdue) || a.pos - b.pos || a.dueMs - b.dueMs);
